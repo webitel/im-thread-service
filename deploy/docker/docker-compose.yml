@@ -1,0 +1,206 @@
+networks:
+  webitel:
+    driver: bridge
+
+volumes:
+  postgres-master-data:
+    driver: local
+  postgres-replica-data:
+    driver: local
+  rabbitmq-data:
+  redis-data:
+  consul-data:
+
+services:
+  postgres-master:
+    image: registry-1.docker.io/bitnami/postgresql:latest
+    container_name: postgres-im-contact-master
+    networks:
+      - webitel
+    ports:
+      - "6432:5432"
+    volumes:
+      - postgres-master-data:/bitnami/postgresql
+    environment:
+    - POSTGRESQL_USERNAME=postgres
+    - POSTGRESQL_PASSWORD=webitel
+    - POSTGRESQL_DATABASE=webitel
+    - POSTGRESQL_REPLICATION_MODE=master
+    - POSTGRESQL_REPLICATION_USER=replication_user
+    - POSTGRESQL_REPLICATION_PASSWORD=rep_password
+    - POSTGRESQL_MAX_CONNECTIONS=100
+    - POSTGRESQL_SHARED_BUFFERS=128MB
+    - POSTGRESQL_SYNCHRONOUS_COMMIT=on
+    - POSTGRESQL_WAL_LEVEL=replica
+    - POSTGRESQL_MAX_WAL_SENDERS=10
+    - POSTGRESQL_WAL_KEEP_SIZE=64
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d webitel"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 4G
+        reservations:
+          cpus: '0.5'
+          memory: 2G
+
+  postgres-replica:
+    image: registry-1.docker.io/bitnami/postgresql:latest
+    container_name: postgres-im-contact-replica
+    networks:
+      - webitel
+    ports:
+      - "6433:5432"
+    volumes:
+      - postgres-replica-data:/bitnami/postgresql
+    environment:
+      - POSTGRESQL_USERNAME=postgres
+      - POSTGRESQL_PASSWORD=webitel
+      - POSTGRESQL_DATABASE=webitel
+      - POSTGRESQL_REPLICATION_MODE=slave
+      - POSTGRESQL_MASTER_HOST=postgres-master
+      - POSTGRESQL_MASTER_PORT_NUMBER=5432
+      - POSTGRESQL_REPLICATION_USER=replication_user
+      - POSTGRESQL_REPLICATION_PASSWORD=rep_password
+      - POSTGRESQL_MAX_CONNECTIONS=100
+      - POSTGRESQL_SHARED_BUFFERS=128MB
+    restart: unless-stopped
+    depends_on:
+      postgres-master:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 4G
+        reservations:
+          cpus: '0.5'
+          memory: 2G
+
+
+  consul-server:
+    image: hashicorp/consul:1.22
+    container_name: consul-server
+    restart: unless-stopped
+    volumes:
+      - consul-data:/consul/data
+      - ./config/consul.json:/consul/config/server.json:ro
+    networks:
+      - webitel
+    ports:
+      - "8500:8500"
+      - "8600:8600/tcp"
+      - "8600:8600/udp"
+    command: "agent -server -bootstrap-expect=1 -ui -client=0.0.0.0 -config-file=/consul/config/server.json"
+    healthcheck:
+      test: ["CMD", "consul", "info"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    container_name: im-contact-rabbit
+    restart: unless-stopped
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    environment:
+      - RABBITMQ_DEFAULT_USER=webitel
+      - RABBITMQ_DEFAULT_PASS=webitel
+    networks:
+      - webitel
+    ports:
+      - "15673:15672"
+      - "5673:5672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 1G
+
+  redis:
+    image: redis:7.4-alpine
+    container_name: im-contact-redis
+    command: redis-server --requirepass webitel --maxmemory 512mb --maxmemory-policy allkeys-lru
+    restart: unless-stopped
+    networks:
+      - webitel
+    ports:
+      - "6380:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "webitel", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+
+  im-thread-service:
+    build:
+      context: ../../
+      dockerfile: ./Dockerfile
+    container_name: im-thread-service
+    restart: unless-stopped
+    command: ["server", "--config_file=/config/config.yaml"]
+    networks:
+      - webitel
+    ports:
+      - "10156:10156"
+    volumes:
+      - ./config/config.yaml:/config/config.yaml:ro
+    depends_on:
+      postgres-master:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      consul-server:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+
+
