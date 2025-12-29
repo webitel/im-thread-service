@@ -1,0 +1,32 @@
+# configuration.yaml
+
+service:
+  id: "webitel-service-01"
+  addr: "127.0.0.1:8080"
+  secret: "your-very-secure-secret-key"
+
+
+log:
+  level: "info"
+  json: true   
+  otel: false  
+  file: "/home/illia/webitel/im-thread-service/service.log"
+  console: true
+
+postgres:
+  dsn: "postgres://postgres:postgres@127.0.0.1:5432/postgres&sslmode=disable&connect_timeout=10"
+
+redis:
+  addr: "localhost:6379"
+  password: ""
+  db: 0
+
+
+consul:
+  addr: "127.0.0.1:8500"
+  grpc_addr: "127.0.0.1:9999"
+
+
+pubsub:
+  broker_url: "amqp://guest:guest@127.0.0.1:5672"
+  broker_driver: "rabbitmq"

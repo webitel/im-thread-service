@@ -1,0 +1,11 @@
+README.md
+.git
+.gitignore
+.vscode
+.ide
+
+deploy/
+test/
+buf/
+.dockerignore
+Dockerfile
