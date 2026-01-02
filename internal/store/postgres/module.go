@@ -1,4 +1,4 @@
-package sql
+package postgres
 
 import "go.uber.org/fx"
 
