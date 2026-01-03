@@ -1,5 +1,14 @@
-package sql
+package postgres
 
-import "go.uber.org/fx"
+import (
+	"github.com/webitel/im-thread-service/internal/store"
+	"go.uber.org/fx"
+)
 
-var Module = fx.Module("store")
+var Module = fx.Module("store",
+	fx.Provide(
+
+		fx.Annotate(
+			NewMessageStore,
+			fx.As(new(store.MessageStore)))),
+)

@@ -1,4 +1,4 @@
-package handler
+package grpc
 
 import "go.uber.org/fx"
 

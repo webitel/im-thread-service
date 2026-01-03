@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"github.com/webitel/im-thread-service/config"
+
 	"go.uber.org/fx"
 )
 
