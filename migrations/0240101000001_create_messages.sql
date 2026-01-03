@@ -12,7 +12,7 @@ CREATE TABLE im_message.messages (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- Оновлений Outbox під Watermill v4
+
 CREATE TABLE im_message.messages_outbox (
     "offset" BIGSERIAL,
     "uuid" UUID NOT NULL,
