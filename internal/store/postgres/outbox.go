@@ -2,10 +2,11 @@ package postgres
 
 import (
 	"context"
-	"encoding/json"
+	"fmt"
 
 	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill-sql/v4/pkg/sql"
+	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/webitel/im-thread-service/infra/db/pg"
 	"github.com/webitel/im-thread-service/internal/store"
 )
@@ -35,38 +36,38 @@ var (
 	_ store.OutboxStore = (*outboxStore)(nil)
 )
 
-// func (o *outboxStore) Add(ctx context.Context, r store.OutboxRecord) error {
-// 	tx, _ := o.db.Tx(ctx)
-
-// 	publisher, err := sql.NewPublisher(
-// 		sql.BeginnerFromPgx(dbExecutor),
-// 		o.config,
-// 		o.logger,
-// 	)
-// 	if err != nil {
-// 		return fmt.Errorf("failed to create watermill publisher: %w", err)
-// 	}
-
-// 	msg := message.NewMessage(r.ID.String(), r.Payload)
-// 	for k, v := range r.Metadata {
-// 		msg.Metadata.Set(k, v)
-// 	}
-
-// 	return publisher.Publish(r.Topic, msg)
-// }
-
 func (o *outboxStore) Add(ctx context.Context, r store.OutboxRecord) error {
-	exec := o.db.Executor(ctx)
+	tx, _ := o.db.Tx(ctx)
 
-	meta, _ := json.Marshal(r.Metadata)
+	publisher, err := sql.NewPublisher(
+		sql.TxFromPgx(tx),
+		o.config,
+		o.logger,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to create watermill publisher: %w", err)
+	}
 
-	_, err := exec.Exec(ctx, `
-        INSERT INTO im_message.messages_outbox (uuid, payload, metadata)
-        VALUES ($1, $2, $3)
-    `, r.ID, r.Payload, meta)
+	msg := message.NewMessage(r.ID.String(), r.Payload)
+	for k, v := range r.Metadata {
+		msg.Metadata.Set(k, v)
+	}
 
-	return err
+	return publisher.Publish(r.Topic, msg)
 }
+
+// func (o *outboxStore) Add(ctx context.Context, r store.OutboxRecord) error {
+// 	exec := o.db.Executor(ctx)
+
+// 	meta, _ := json.Marshal(r.Metadata)
+
+// 	_, err := exec.Exec(ctx, `
+//         INSERT INTO im_message.messages_outbox (uuid, payload, metadata)
+//         VALUES ($1, $2, $3)
+//     `, r.ID, r.Payload, meta)
+
+// 	return err
+// }
 
 func (o *outboxStore) MarkAsPublished(ctx context.Context, id string) error {
 	_, err := o.db.Executor(ctx).Exec(ctx, `
