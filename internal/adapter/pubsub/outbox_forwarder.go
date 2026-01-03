@@ -2,7 +2,7 @@ package pubsub
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"time"
 
 	"github.com/ThreeDotsLabs/watermill"
@@ -22,6 +22,7 @@ func RegisterOutboxForwarder(
 	logger watermill.LoggerAdapter,
 	elector LeadershipElector,
 	outbox store.OutboxStore,
+	slog *slog.Logger,
 ) error {
 	router, err := message.NewRouter(message.RouterConfig{}, logger)
 	if err != nil {
@@ -39,15 +40,13 @@ func RegisterOutboxForwarder(
 		},
 	)
 
-	router.AddMiddleware(OutboxMarkAsPublished(outbox))
-
 	ctx, cancel := context.WithCancel(context.Background())
 
 	lc.Append(fx.Hook{
 		OnStart: func(context.Context) error {
 			go elector.Run(ctx,
 				func(leaderCtx context.Context) error {
-					go StartOutboxCleanupJob(ctx, outbox, 30*time.Minute)
+					go StartOutboxCleanupJob(leaderCtx, outbox, slog)
 					return router.Run(leaderCtx)
 				},
 				func() { _ = router.Close() },
@@ -63,8 +62,8 @@ func RegisterOutboxForwarder(
 	return nil
 }
 
-func StartOutboxCleanupJob(ctx context.Context, outbox store.OutboxStore, interval time.Duration) {
-	ticker := time.NewTicker(interval)
+func StartOutboxCleanupJob(ctx context.Context, outbox store.OutboxStore, logger *slog.Logger) {
+	ticker := time.NewTicker(24 * time.Hour)
 	defer ticker.Stop()
 
 	for {
@@ -72,11 +71,11 @@ func StartOutboxCleanupJob(ctx context.Context, outbox store.OutboxStore, interv
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			n, err := outbox.Cleanup(ctx, 1000)
+			n, err := outbox.Cleanup(ctx, 3)
 			if err != nil {
-				log.Printf("Outbox cleanup failed: %v", err)
+				logger.Error("outbox cleanup failed", slog.Any("error", err))
 			} else if n > 0 {
-				log.Printf("Outbox cleaned %d messages", n)
+				logger.Info("outbox cleaned", slog.Int64("count", n))
 			}
 		}
 	}

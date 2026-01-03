@@ -8,6 +8,7 @@ import (
 	"github.com/ThreeDotsLabs/watermill-sql/v4/pkg/sql"
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/webitel/im-thread-service/infra/db/pg"
+	"github.com/webitel/im-thread-service/internal/domain/events"
 	"github.com/webitel/im-thread-service/internal/store"
 )
 
@@ -36,38 +37,28 @@ var (
 	_ store.OutboxStore = (*outboxStore)(nil)
 )
 
-func (o *outboxStore) Add(ctx context.Context, r store.OutboxRecord) error {
-	tx, _ := o.db.Tx(ctx)
-
-	publisher, err := sql.NewPublisher(
-		sql.TxFromPgx(tx),
-		o.config,
-		o.logger,
-	)
-	if err != nil {
-		return fmt.Errorf("failed to create watermill publisher: %w", err)
+func (o *outboxStore) Publish(ctx context.Context, topic string, event events.Outboxer) error {
+	tx, ok := o.db.Tx(ctx)
+	if !ok {
+		return fmt.Errorf("outbox publish: transaction required")
 	}
 
-	msg := message.NewMessage(r.ID.String(), r.Payload)
-	for k, v := range r.Metadata {
+	ev, err := event.ToOutbox()
+	if err != nil {
+		return fmt.Errorf("outbox publish: %w", err)
+	}
+	publisher, err := sql.NewPublisher(sql.TxFromPgx(tx), o.config, o.logger)
+	if err != nil {
+		return err
+	}
+
+	msg := message.NewMessage(ev.ID.String(), ev.Payload)
+	for k, v := range ev.Metadata {
 		msg.Metadata.Set(k, v)
 	}
 
-	return publisher.Publish(r.Topic, msg)
+	return publisher.Publish(topic, msg)
 }
-
-// func (o *outboxStore) Add(ctx context.Context, r store.OutboxRecord) error {
-// 	exec := o.db.Executor(ctx)
-
-// 	meta, _ := json.Marshal(r.Metadata)
-
-// 	_, err := exec.Exec(ctx, `
-//         INSERT INTO im_message.messages_outbox (uuid, payload, metadata)
-//         VALUES ($1, $2, $3)
-//     `, r.ID, r.Payload, meta)
-
-// 	return err
-// }
 
 func (o *outboxStore) MarkAsPublished(ctx context.Context, id string) error {
 	_, err := o.db.Executor(ctx).Exec(ctx, `
@@ -79,14 +70,22 @@ func (o *outboxStore) MarkAsPublished(ctx context.Context, id string) error {
 	return err
 }
 
-func (o *outboxStore) Cleanup(ctx context.Context, limit int) (int64, error) {
-	cmd, err := o.db.Executor(ctx).Exec(ctx, `
-		DELETE FROM im_message.messages_outbox
-		WHERE published_at < now() - interval '10 minutes'
-		LIMIT $1
-	`, limit)
+func (o *outboxStore) Cleanup(ctx context.Context, retentionDays int) (int64, error) {
+	query := `
+        DELETE FROM im_message.messages_outbox
+        WHERE created_at < now() - ($1 * interval '1 day')
+          AND "offset" <= (
+              SELECT COALESCE(offset_value, 0)
+              FROM im_message.watermill_offsets
+              WHERE consumer_group = 'im-thread-outbox-forwarder'
+                AND topic = 'im.messages'
+          )
+    `
+
+	result, err := o.db.Executor(ctx).Exec(ctx, query, retentionDays)
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("outbox cleanup failed: %w", err)
 	}
-	return cmd.RowsAffected(), nil
+
+	return result.RowsAffected(), nil
 }

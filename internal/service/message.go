@@ -2,10 +2,10 @@ package service
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/webitel/im-thread-service/internal/domain/events"
@@ -34,24 +34,23 @@ func (s *MessageService) SendText(
 	in *dto.SendTextRequest,
 ) (*dto.SendTextResponse, error) {
 	if err := s.validateSendText(in); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("invalid request: %w", err)
 	}
 
 	var resp *dto.SendTextResponse
 
 	err := s.store.WithTx(ctx, func(txCtx context.Context) error {
 		msg := &model.Message{
-			// TODO mocked for now
-			ThreadId: uuid.Nil,
-			From:     model.Peer{Id: in.From.Id},
-			To:       model.Peer{Id: in.To.Id},
-			Text:     in.Body,
-			Type:     model.MessageTypeText,
+			// ThreadId: in.ThreadId,
+			From: model.Peer{Id: in.From.Id},
+			To:   model.Peer{Id: in.To.Id},
+			Text: in.Body,
+			Type: model.MessageTypeText,
 		}
 
 		saved, err := s.store.Messages().SaveMessage(txCtx, msg)
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to save message: %w", err)
 		}
 
 		event := events.MessageCreated{
@@ -61,24 +60,12 @@ func (s *MessageService) SendText(
 			To:         saved.To,
 			Body:       saved.Text,
 			Type:       saved.Type,
-			OccurredAt: saved.CreatedAt,
+			OccurredAt: time.Now().UTC(),
 		}
 
-		payload, err := json.Marshal(event)
+		err = s.store.Outbox().Publish(txCtx, "im.messages", event)
 		if err != nil {
-			return err
-		}
-
-		err = s.store.Outbox().Add(txCtx, store.OutboxRecord{
-			ID:      uuid.New(),
-			Topic:   "im.messages",
-			Payload: payload,
-			Metadata: map[string]string{
-				"event_type": event.EventType(),
-			},
-		})
-		if err != nil {
-			return err
+			return fmt.Errorf("failed to publish to outbox: %w", err)
 		}
 
 		resp = &dto.SendTextResponse{
@@ -89,7 +76,11 @@ func (s *MessageService) SendText(
 		return nil
 	})
 	if err != nil {
-		return nil, fmt.Errorf("send text failed: %w", err)
+		s.logger.ErrorContext(ctx, "failed to send text message",
+			slog.Any("error", err),
+			// slog.String("thread_id", in.ThreadId.String()),
+		)
+		return nil, err
 	}
 
 	return resp, nil
