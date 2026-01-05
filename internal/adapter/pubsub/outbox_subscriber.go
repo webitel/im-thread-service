@@ -28,7 +28,7 @@ func NewOutboxSubscriber(
 
 			OffsetsAdapter: sql.DefaultPostgreSQLOffsetsAdapter{
 				GenerateMessagesOffsetsTableName: func(topic string) string {
-					return "im_message.watermill_offsets"
+					return "im_message.messages_offsets"
 				},
 			},
 			InitializeSchema: false,

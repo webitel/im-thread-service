@@ -34,15 +34,28 @@ func (m *messageStore) SaveMessage(ctx context.Context, msg *model.Message) (*mo
 	args := pgx.NamedArgs{
 		"thread_id": msg.ThreadId,
 		"from_id":   msg.From.Id,
+		"from_type": msg.From.Type,
 		"to_id":     msg.To.Id,
+		"to_type":   msg.To.Type,
 		"body":      msg.Text,
-		"metadata":  msg.Metadata,
+		"type":      msg.Type,
 	}
 
 	query := `
-        INSERT INTO im_message.messages (thread_id, from_id, to_id, body, metadata)
-        VALUES (@thread_id, @from_id, @to_id, @body, @metadata)
-        RETURNING *
+        INSERT INTO im_message.messages (thread_id, from_id, from_type, to_id, to_type, body, type)
+        VALUES (@thread_id, @from_id, @from_type, @to_id, @to_type, @body, @type)
+        RETURNING 
+            id, 
+            thread_id, 
+            from_id AS "from.id", 
+            from_type AS "from.type", 
+            to_id AS "to.id", 
+            to_type AS "to.type", 
+            body, 
+            type, 
+            metadata, 
+            created_at, 
+            updated_at
     `
 
 	var saved model.Message

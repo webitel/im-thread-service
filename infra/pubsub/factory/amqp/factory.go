@@ -69,17 +69,21 @@ func (f *Factory) BuildPublisher(pubConfig *factory.PublisherConfig) (message.Pu
 		},
 		Marshaler: amqp.DefaultMarshaler{},
 		Exchange: amqp.ExchangeConfig{
-			GenerateName: func(s string) string {
+			GenerateName: func(topic string) string {
 				return pubConfig.Exchange.Name
 			},
 			Type:    pubConfig.Exchange.Type,
 			Durable: pubConfig.Exchange.Durable,
 		},
 		Publish: amqp.PublishConfig{
-			GenerateRoutingKey: func(s string) string {
-				return s
+			GenerateRoutingKey: func(topic string) string {
+				return topic
 			},
+			Mandatory: false,
+			Immediate: false,
 		},
+		TopologyBuilder: &amqp.DefaultTopologyBuilder{},
 	}
+
 	return amqp.NewPublisher(conf, f.logger)
 }

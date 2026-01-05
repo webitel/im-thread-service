@@ -20,7 +20,6 @@ func RegisterOutboxForwarder(
 	outboxSub OutboxSubscriber,
 	rabbitPub EventPublisher,
 	logger watermill.LoggerAdapter,
-	elector LeadershipElector,
 	outbox store.OutboxStore,
 	slog *slog.Logger,
 ) error {
@@ -36,53 +35,104 @@ func RegisterOutboxForwarder(
 		"chat.events",
 		rabbitPub,
 		func(msg *message.Message) ([]*message.Message, error) {
+			slog.Info("outbox -> rabbit",
+				"message_uuid", msg.UUID,
+				"payload", string(msg.Payload),
+			)
 			return []*message.Message{msg}, nil
 		},
 	)
 
-	// mainCtx controls the entire lifecycle of the forwarder service
-	mainCtx, cancelMain := context.WithCancel(context.Background())
-
 	lc.Append(fx.Hook{
 		OnStart: func(ctx context.Context) error {
-			slog.Info("starting outbox forwarder leadership election")
+			slog.Info("starting outbox forwarder (NO LEADER MODE)")
 
-			go elector.Run(mainCtx,
-				func(leaderCtx context.Context) error {
-					slog.Info("node promoted to LEADER: starting forwarder jobs")
-
-					// 1. Start Cleanup Job (tied to leaderCtx)
-					go StartOutboxCleanupJob(leaderCtx, outbox, slog)
-
-					// 2. Start Watermill Router (tied to leaderCtx)
-					// When leaderCtx is cancelled (leadership lost), router.Run returns
-					go func() {
-						slog.Info("watermill router: starting")
-						if err := router.Run(leaderCtx); err != nil {
-							slog.Error("watermill router: stopped", "error", err)
-						}
-					}()
-
-					return nil
-				},
-				func() {
-					slog.Warn("node demoted to FOLLOWER: stopping leader-specific tasks")
-					// We don't necessarily need to close the router here if router.Run(leaderCtx)
-					// is used, but it's good practice for an immediate stop.
-				},
-			)
+			go func() {
+				slog.Info("watermill router: starting")
+				if err := router.Run(ctx); err != nil {
+					slog.Error("watermill router stopped", "error", err)
+				}
+			}()
 
 			return nil
 		},
 		OnStop: func(ctx context.Context) error {
-			slog.Info("shutting down outbox forwarder")
-			cancelMain() // Signal LeaderElector and all jobs to stop
+			slog.Info("stopping outbox forwarder")
 			return router.Close()
 		},
 	})
 
 	return nil
 }
+
+// func RegisterOutboxForwarder(
+// 	lc fx.Lifecycle,
+// 	outboxSub OutboxSubscriber,
+// 	rabbitPub EventPublisher,
+// 	logger watermill.LoggerAdapter,
+// 	elector LeadershipElector,
+// 	outbox store.OutboxStore,
+// 	slog *slog.Logger,
+// ) error {
+// 	router, err := message.NewRouter(message.RouterConfig{}, logger)
+// 	if err != nil {
+// 		return err
+// 	}
+
+// 	router.AddHandler(
+// 		"outbox_forwarder",
+// 		"im.messages",
+// 		outboxSub,
+// 		"chat.events",
+// 		rabbitPub,
+// 		func(msg *message.Message) ([]*message.Message, error) {
+// 			return []*message.Message{msg}, nil
+// 		},
+// 	)
+
+// 	// mainCtx controls the entire lifecycle of the forwarder service
+// 	mainCtx, cancelMain := context.WithCancel(context.Background())
+
+// 	lc.Append(fx.Hook{
+// 		OnStart: func(ctx context.Context) error {
+// 			slog.Info("starting outbox forwarder leadership election")
+
+// 			go elector.Run(mainCtx,
+// 				func(leaderCtx context.Context) error {
+// 					slog.Info("node promoted to LEADER: starting forwarder jobs")
+
+// 					// 1. Start Cleanup Job (tied to leaderCtx)
+// 					go StartOutboxCleanupJob(leaderCtx, outbox, slog)
+
+// 					// 2. Start Watermill Router (tied to leaderCtx)
+// 					// When leaderCtx is cancelled (leadership lost), router.Run returns
+// 					go func() {
+// 						slog.Info("watermill router: starting")
+// 						if err := router.Run(leaderCtx); err != nil {
+// 							slog.Error("watermill router: stopped", "error", err)
+// 						}
+// 					}()
+
+// 					return nil
+// 				},
+// 				func() {
+// 					slog.Warn("node demoted to FOLLOWER: stopping leader-specific tasks")
+// 					// We don't necessarily need to close the router here if router.Run(leaderCtx)
+// 					// is used, but it's good practice for an immediate stop.
+// 				},
+// 			)
+
+// 			return nil
+// 		},
+// 		OnStop: func(ctx context.Context) error {
+// 			slog.Info("shutting down outbox forwarder")
+// 			cancelMain() // Signal LeaderElector and all jobs to stop
+// 			return router.Close()
+// 		},
+// 	})
+
+// 	return nil
+// }
 
 func StartOutboxCleanupJob(ctx context.Context, outbox store.OutboxStore, logger *slog.Logger) {
 	const cleanupInterval = 24 * time.Hour
