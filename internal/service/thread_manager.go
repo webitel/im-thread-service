@@ -7,7 +7,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/webitel/im-thread-service/internal/domain/model"
 	"github.com/webitel/im-thread-service/internal/service/dto"
-	"github.com/webitel/im-thread-service/internal/service/guards"
 	"github.com/webitel/im-thread-service/internal/store"
 )
 
@@ -40,11 +39,6 @@ func (t *thread) EnsureDirectThread(ctx context.Context, req *dto.EnsureDirectTh
 		err error
 		directThread *dto.EnsureDirectThreadResponse
 	)
-
-	//INPUT VALIDATION FIRST!
-	if err = guards.EnsureDirectThreadValidationGuard(req); err != nil {
-		return nil, err
-	}
 
 	//RESOLVE DIRECT THREAD BY PEERS!
 	if directThread, err = t.searchDirectThread(ctx, req); err != nil {

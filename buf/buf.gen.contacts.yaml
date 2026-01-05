@@ -1,0 +1,27 @@
+version: v2
+
+managed:
+  enabled: true
+  override:
+    - file_option: go_package_prefix
+      value: github.com/bufbuild/buf-examples/protovalidate/quickstart-go/start/gen
+  disable:
+    - file_option: go_package
+      module: buf.build/bufbuild/protovalidate
+
+plugins:
+  # Base types for Go. Generates message and enum types.
+  - remote: buf.build/protocolbuffers/go:v1.30.0
+    out: ../gen/go/client/contact
+    opt: paths=source_relative
+
+  # Generates Go client and server stubs for the gRPC framework.
+  - remote: buf.build/grpc/go:v1.3.0
+    out: ../gen/go/client/contact
+    opt: paths=source_relative
+
+inputs:
+#  - git_repo: "https://github.com/webitel/protos"
+#    branch: "feat/messaging"
+#    subdir: "im/internal/contact"
+  - directory: ../../protos/im/internal/contact

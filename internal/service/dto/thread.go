@@ -23,6 +23,15 @@ type (
 		From *model.Peer
 		To *model.Peer
 	}
+
+	CanSendRequest struct {
+		FromId string
+		ToId string
+	}
+
+	CanSendResponse struct {
+		CanSend bool
+	}
 )
 
 func NewEnsureDirectThreadResponse(id uuid.UUID) *EnsureDirectThreadResponse {
@@ -37,5 +46,18 @@ func NewSearchThreadRequest(domainId int, kind model.ThreadKind, from, to *model
 		Kind: kind,
 		From: from,
 		To: to,
+	}
+}
+
+func NewCanSendRequestDtoFromPeers(from, to model.Peer) *CanSendRequest {
+	return &CanSendRequest{
+		FromId: from.Id.String(),
+		ToId: to.Id.String(),
+	}
+}
+
+func NewCanSendResponse(canSend bool) *CanSendResponse {
+	return &CanSendResponse{
+		CanSend: canSend,
 	}
 }

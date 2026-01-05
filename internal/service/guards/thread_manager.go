@@ -87,4 +87,13 @@ func emptyPeers() ValidationGuard[*dto.EnsureDirectThreadRequest] {
 		return nil
 	}
 }
+
+func CanSendRightsViolationGuard(canSend bool) error {
+	if !canSend {
+		return errors.New("send message rights violation!")
+	}
+	
+	return nil
+}
+
 //#endregion
