@@ -28,7 +28,7 @@ type Message struct {
 }
 
 type MediaContent struct {
-	ID       string `json:"id"`
+	Id       string `json:"id"`
 	URL      string `json:"url"`
 	MimeType string `json:"mime_type"`
 	Size     int64  `json:"size"`

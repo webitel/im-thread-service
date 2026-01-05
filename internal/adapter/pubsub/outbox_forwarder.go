@@ -40,21 +40,43 @@ func RegisterOutboxForwarder(
 		},
 	)
 
-	ctx, cancel := context.WithCancel(context.Background())
+	// mainCtx controls the entire lifecycle of the forwarder service
+	mainCtx, cancelMain := context.WithCancel(context.Background())
 
 	lc.Append(fx.Hook{
-		OnStart: func(context.Context) error {
-			go elector.Run(ctx,
+		OnStart: func(ctx context.Context) error {
+			slog.Info("starting outbox forwarder leadership election")
+
+			go elector.Run(mainCtx,
 				func(leaderCtx context.Context) error {
+					slog.Info("node promoted to LEADER: starting forwarder jobs")
+
+					// 1. Start Cleanup Job (tied to leaderCtx)
 					go StartOutboxCleanupJob(leaderCtx, outbox, slog)
-					return router.Run(leaderCtx)
+
+					// 2. Start Watermill Router (tied to leaderCtx)
+					// When leaderCtx is cancelled (leadership lost), router.Run returns
+					go func() {
+						slog.Info("watermill router: starting")
+						if err := router.Run(leaderCtx); err != nil {
+							slog.Error("watermill router: stopped", "error", err)
+						}
+					}()
+
+					return nil
 				},
-				func() { _ = router.Close() },
+				func() {
+					slog.Warn("node demoted to FOLLOWER: stopping leader-specific tasks")
+					// We don't necessarily need to close the router here if router.Run(leaderCtx)
+					// is used, but it's good practice for an immediate stop.
+				},
 			)
+
 			return nil
 		},
-		OnStop: func(context.Context) error {
-			cancel()
+		OnStop: func(ctx context.Context) error {
+			slog.Info("shutting down outbox forwarder")
+			cancelMain() // Signal LeaderElector and all jobs to stop
 			return router.Close()
 		},
 	})
@@ -63,20 +85,33 @@ func RegisterOutboxForwarder(
 }
 
 func StartOutboxCleanupJob(ctx context.Context, outbox store.OutboxStore, logger *slog.Logger) {
-	ticker := time.NewTicker(24 * time.Hour)
+	const cleanupInterval = 24 * time.Hour
+
+	// Optional: initial run
+	doCleanup(ctx, outbox, logger)
+
+	ticker := time.NewTicker(cleanupInterval)
 	defer ticker.Stop()
 
 	for {
 		select {
 		case <-ctx.Done():
+			logger.Debug("outbox cleanup job: context cancelled, stopping")
 			return
 		case <-ticker.C:
-			n, err := outbox.Cleanup(ctx, 3)
-			if err != nil {
-				logger.Error("outbox cleanup failed", slog.Any("error", err))
-			} else if n > 0 {
-				logger.Info("outbox cleaned", slog.Int64("count", n))
-			}
+			doCleanup(ctx, outbox, logger)
 		}
+	}
+}
+
+func doCleanup(ctx context.Context, outbox store.OutboxStore, logger *slog.Logger) {
+	// Records older than 3 days
+	n, err := outbox.Cleanup(ctx, 3)
+	if err != nil {
+		logger.Error("outbox cleanup: failed", "error", err)
+		return
+	}
+	if n > 0 {
+		logger.Info("outbox cleanup: successful", "deleted_count", n)
 	}
 }

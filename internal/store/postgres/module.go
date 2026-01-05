@@ -7,6 +7,7 @@ import (
 
 var Module = fx.Module("store",
 	fx.Provide(
+
 		fx.Annotate(
 			NewMessageStore,
 			fx.As(new(store.MessageStore)),
@@ -15,6 +16,11 @@ var Module = fx.Module("store",
 		fx.Annotate(
 			NewOutboxStore,
 			fx.As(new(store.OutboxStore)),
+		),
+
+		fx.Annotate(
+			NewStore,
+			fx.As(new(store.Store)),
 		),
 	),
 )
