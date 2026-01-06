@@ -44,7 +44,6 @@ func RegisterOutboxForwarder(
 		},
 	)
 
-	
 	mainCtx, cancelMain := context.WithCancel(context.Background())
 
 	lc.Append(fx.Hook{
@@ -56,7 +55,7 @@ func RegisterOutboxForwarder(
 					slog.Info("node promoted to LEADER: starting forwarder jobs")
 
 					// 1. Start Cleanup Job (tied to leaderCtx)
-					go StartOutboxCleanupJob(leaderCtx, outbox, slog)
+					// go StartOutboxCleanupJob(leaderCtx, outbox, slog)
 
 					// 2. Start Watermill Router (tied to leaderCtx)
 					// When leaderCtx is cancelled (leadership lost), router.Run returns

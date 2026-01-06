@@ -6,18 +6,20 @@ import (
 
 	"github.com/georgysavva/scany/v2/pgxscan"
 	"github.com/jackc/pgx/v5"
-	"github.com/webitel/im-thread-service/infra/db/pg"
 	"github.com/webitel/im-thread-service/internal/domain/model"
 	"github.com/webitel/im-thread-service/internal/store"
 )
 
 type messageStore struct {
-	db *pg.PgxDB
+	// q is a querier that can be either a connection pool or a transaction
+	q Querier
 }
 
-func NewMessageStore(db *pg.PgxDB) store.MessageStore {
+// NewMessageStore returns a new message store, given a querier.
+// The querier is used to execute queries against the database.
+func NewMessageStore(q Querier) store.MessageStore {
 	return &messageStore{
-		db: db,
+		q: q,
 	}
 }
 
@@ -26,14 +28,15 @@ var (
 	_ store.MessageStore = (*messageStore)(nil)
 )
 
-func (m *messageStore) WithTx(ctx context.Context, fn func(ctx context.Context) error) error {
-	return m.db.WithTx(ctx, fn)
-}
-
+// SaveMessage inserts a new message into the database.
+// It uses pgxscan to map the returning row into the Message model.
 func (m *messageStore) SaveMessage(ctx context.Context, msg *model.Message) (*model.Message, error) {
 	args := pgx.NamedArgs{
-		"thread_id": msg.ThreadId, "sender_id": msg.From.Id,
-		"receiver_id": msg.To.Id, "body": msg.Text, "type": msg.Type,
+		"thread_id":   msg.ThreadId,
+		"sender_id":   msg.From.Id,
+		"receiver_id": msg.To.Id,
+		"body":        msg.Text,
+		"type":        msg.Type,
 	}
 
 	const query = `
@@ -45,7 +48,8 @@ func (m *messageStore) SaveMessage(ctx context.Context, msg *model.Message) (*mo
             receiver_id AS "to.id"`
 
 	var saved model.Message
-	if err := pgxscan.Get(ctx, m.db.Executor(ctx), &saved, query, args); err != nil {
+	// Use the querier m.q instead of db.Executor(ctx)
+	if err := pgxscan.Get(ctx, m.q, &saved, query, args); err != nil {
 		return nil, fmt.Errorf("save_message: %w", err)
 	}
 	return &saved, nil

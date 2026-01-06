@@ -15,6 +15,11 @@ var Module = fx.Module(
 			fx.As(new(Messager)),
 		),
 
+		fx.Annotate(
+			NewThreadService,
+			fx.As(new(ThreadManager)),
+		),
+
 		// PubSub infrastructure
 		fx.Annotate(
 			pubsub.NewOutboxSubscriber,
