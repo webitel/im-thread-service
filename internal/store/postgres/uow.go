@@ -4,17 +4,21 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/ThreeDotsLabs/watermill"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/webitel/im-thread-service/internal/store"
 )
 
 type unitOfWork struct {
-	pool *pgxpool.Pool
+	pool    *pgxpool.Pool
 	querier Querier
-	
-	threadStore store.ThreadStore
+	logger  watermill.LoggerAdapter
+
+	threadStore       store.ThreadStore
 	threadDialogStore store.ThreadDialogStore
+	messageStore      store.MessageStore
+	outboxStore       store.OutboxStore
 }
 
 // NewPgxUnitOfWork returns a new unit of work, given a pgx pool.
@@ -22,7 +26,7 @@ type unitOfWork struct {
 // The thread store and thread dialog store are lazily initialized on first call to ThreadStore or ThreadDialogStore.
 func NewPgxUnitOfWork(pool *pgxpool.Pool) *unitOfWork {
 	return &unitOfWork{
-		pool: pool,
+		pool:    pool,
 		querier: pool,
 	}
 }
@@ -51,6 +55,20 @@ func (u *unitOfWork) ThreadDialogStore() store.ThreadDialogStore {
 	return u.threadDialogStore
 }
 
+func (u *unitOfWork) Messages() store.MessageStore {
+	if u.messageStore == nil {
+		u.messageStore = NewMessageStore(u.querier)
+	}
+	return u.messageStore
+}
+
+func (u *unitOfWork) Outbox() store.OutboxStore {
+	if u.outboxStore == nil {
+		u.outboxStore = NewOutboxStore(u.querier, u.logger)
+	}
+	return u.outboxStore
+}
+
 // WithinTransaction executes a function within a transaction.
 // If the function panics, WithinTransaction will rollback all changes.
 // If the function returns an error, WithinTransaction will rollback all changes
@@ -71,12 +89,12 @@ func (u *unitOfWork) WithinTransaction(ctx context.Context, fn func(ctx context.
 	}
 
 	txUow := &unitOfWork{
-		pool: u.pool,
+		pool:    u.pool,
 		querier: tx, // SET OPENED TRANSACTION AS QUERY CONTEXT
 	}
 
 	// ROLLBACK CHANGES IN CASE OF PANIC
-	defer func ()  {
+	defer func() {
 		if p := recover(); p != nil {
 			_ = tx.Rollback(ctx) // [ROLLBACK]
 			panic(p)
@@ -92,10 +110,9 @@ func (u *unitOfWork) WithinTransaction(ctx context.Context, fn func(ctx context.
 	}
 
 	// [COMMIT]
-	if err := tx.Commit(ctx); err != nil { 
+	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("failed to commit transaction: %w", err)
 	}
-	
+
 	return nil
 }
-

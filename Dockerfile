@@ -32,16 +32,19 @@ RUN --mount=type=cache,target=/var/cache/apk \
         && \
         update-ca-certificates
 
+
 ARG UID=10001
 RUN adduser \
-    --disable-password \
-    --gecos "" \
-    --home "/nonexistent" \
-    --shell "/sbin/nologin" \
-    --no-create-home \
-    --uid "${UID}}" \
+    -D \
+    -g "" \
+    -h "/nonexistent" \
+    -s "/sbin/nologin" \
+    -H \
+    -u "${UID}" \
     webitel
+
 USER webitel
+
 
 COPY --from=build /bin/im-thread-service /bin/
 

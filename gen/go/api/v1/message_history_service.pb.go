@@ -7,7 +7,6 @@
 package threadv1
 
 import (
-	_ "github.com/bufbuild/buf-examples/protovalidate/quickstart-go/start/gen/google/api"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"

@@ -11,19 +11,22 @@ import (
 	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/webitel/im-thread-service/config"
+	"github.com/webitel/im-thread-service/infra/db/pg"
 	"github.com/webitel/im-thread-service/infra/pubsub"
 	"github.com/webitel/im-thread-service/infra/pubsub/factory"
 	"github.com/webitel/im-thread-service/infra/pubsub/factory/amqp"
-	grpc_srv "github.com/webitel/im-thread-service/infra/server/grpc"
 	"github.com/webitel/webitel-go-kit/infra/discovery"
 	_ "github.com/webitel/webitel-go-kit/infra/discovery/consul"
 	otelsdk "github.com/webitel/webitel-go-kit/infra/otel/sdk"
-	"github.com/webitel/wlog"
 	"go.opentelemetry.io/contrib/bridges/otelslog"
 	"go.opentelemetry.io/otel/sdk/resource"
 	semconv "go.opentelemetry.io/otel/semconv/v1.38.0"
 	"go.uber.org/fx"
 )
+
+func ProvideWatermillLogger(l *slog.Logger) watermill.LoggerAdapter {
+	return watermill.NewSlogLogger(l)
+}
 
 func ProvideLogger(cfg *config.Config, lc fx.Lifecycle) (*slog.Logger, error) {
 	logSettings := cfg.Log
@@ -171,25 +174,6 @@ func (h *multiHandler) WithGroup(name string) slog.Handler {
 	return &multiHandler{handlers: newHandlers}
 }
 
-func ProvideGrpcServer(cfg *config.Config, l *slog.Logger, lc fx.Lifecycle) (*grpc_srv.Server, error) {
-	s, err := grpc_srv.New(cfg.Service.Address, l)
-	if err != nil {
-		return nil, err
-	}
-
-	lc.Append(fx.Hook{
-		OnStop: func(ctx context.Context) error {
-			if err := s.Shutdown(); err != nil {
-				l.Error(err.Error(), wlog.Err(err))
-				return err
-			}
-			return nil
-		},
-	})
-
-	return s, nil
-}
-
 //
 //func ProvideCluster(cfg *config.Config, srv *grpc_srv.Server, l *slog.Logger, lc fx.Lifecycle) (*consul.Cluster, error) {
 //	c := consul.NewCluster(model.ServiceName, cfg.Consul.Address, l)
@@ -216,12 +200,11 @@ func ProvideSD(cfg *config.Config, log *slog.Logger, lc fx.Lifecycle) (discovery
 		discovery.WithHeartbeat[discovery.DiscoveryProvider](true),
 		discovery.WithTimeout[discovery.DiscoveryProvider](time.Second*30),
 	)
-
 	if err != nil {
 		return nil, err
 	}
 
-	var si = new(discovery.ServiceInstance)
+	si := new(discovery.ServiceInstance)
 	{
 		si.Id = cfg.Service.Id
 		si.Name = ServiceName
@@ -254,7 +237,6 @@ func ProvideSD(cfg *config.Config, log *slog.Logger, lc fx.Lifecycle) (discovery
 }
 
 func ProvidePubSub(cfg *config.Config, l *slog.Logger, lc fx.Lifecycle) (pubsub.Provider, error) {
-
 	var (
 		pubsubConfig  = cfg.Pubsub
 		loggerAdapter = watermill.NewSlogLogger(l)
@@ -277,13 +259,34 @@ func ProvidePubSub(cfg *config.Config, l *slog.Logger, lc fx.Lifecycle) (pubsub.
 		return nil, err
 	}
 	lc.Append(fx.Hook{
+		OnStart: func(ctx context.Context) error {
+			go func() {
+				if err := router.Run(context.Background()); err != nil {
+					l.Error("watermill router failed", slog.Any("error", err))
+				}
+			}()
+			return nil
+		},
 		OnStop: func(ctx context.Context) error {
 			return router.Close()
-		},
-		OnStart: func(ctx context.Context) error {
-			return router.Run(ctx)
 		},
 	})
 
 	return pubsub.NewDefaultProvider(router, pubsubFactory)
+}
+
+func ProvideNewDBConnection(cfg *config.Config, l *slog.Logger, lc fx.Lifecycle) (*pg.PgxDB, error) {
+	db, err := pg.New(context.Background(), l, cfg.Postgres.DSN)
+	if err != nil {
+		return nil, err
+	}
+
+	lc.Append(fx.Hook{
+		OnStop: func(ctx context.Context) error {
+			db.Master().Close()
+			return nil
+		},
+	})
+
+	return db, err
 }
