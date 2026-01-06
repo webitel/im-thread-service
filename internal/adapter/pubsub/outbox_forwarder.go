@@ -7,6 +7,7 @@ import (
 
 	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill/message"
+	"github.com/webitel/im-thread-service/internal/domain/model"
 	"github.com/webitel/im-thread-service/internal/store"
 	"go.uber.org/fx"
 )
@@ -29,11 +30,13 @@ func RegisterOutboxForwarder(
 		return err
 	}
 
+	// [HANDLER_CONFIG]
+	// Move messages from local DB outbox to external RabbitMQ exchange
 	router.AddHandler(
 		"outbox_forwarder",
-		"im.messages",
+		"im.messages", // Source: Postgres table
 		outboxSub,
-		"chat.events",
+		"chat.events", // Destination: RabbitMQ exchange
 		rabbitPub,
 		func(msg *message.Message) ([]*message.Message, error) {
 			slog.Info("outbox -> rabbit",
@@ -50,15 +53,17 @@ func RegisterOutboxForwarder(
 		OnStart: func(ctx context.Context) error {
 			slog.Info("starting outbox forwarder leadership election")
 
+			// Only the leader node handles outbox forwarding to avoid message duplication
 			go elector.Run(mainCtx,
 				func(leaderCtx context.Context) error {
 					slog.Info("node promoted to LEADER: starting forwarder jobs")
 
-					// 1. Start Cleanup Job (tied to leaderCtx)
-					// go StartOutboxCleanupJob(leaderCtx, outbox, slog)
+					// 1. [HOUSEKEEPING]
+					// Start periodic cleanup of acknowledged messages
+					go StartOutboxCleanupJob(leaderCtx, outbox, slog)
 
-					// 2. Start Watermill Router (tied to leaderCtx)
-					// When leaderCtx is cancelled (leadership lost), router.Run returns
+					// 2. [FORWARDING]
+					// Lifecycle of the router is bound to leaderCtx
 					go func() {
 						slog.Info("watermill router: starting")
 						if err := router.Run(leaderCtx); err != nil {
@@ -70,8 +75,6 @@ func RegisterOutboxForwarder(
 				},
 				func() {
 					slog.Warn("node demoted to FOLLOWER: stopping leader-specific tasks")
-					// We don't necessarily need to close the router here if router.Run(leaderCtx)
-					// is used, but it's good practice for an immediate stop.
 				},
 			)
 
@@ -79,7 +82,7 @@ func RegisterOutboxForwarder(
 		},
 		OnStop: func(ctx context.Context) error {
 			slog.Info("shutting down outbox forwarder")
-			cancelMain() // Signal LeaderElector and all jobs to stop
+			cancelMain() // Graceful stop for LeaderElector and workers
 			return router.Close()
 		},
 	})
@@ -90,7 +93,7 @@ func RegisterOutboxForwarder(
 func StartOutboxCleanupJob(ctx context.Context, outbox store.OutboxStore, logger *slog.Logger) {
 	const cleanupInterval = 24 * time.Hour
 
-	// Optional: initial run
+	// [INITIAL_CLEANUP]
 	doCleanup(ctx, outbox, logger)
 
 	ticker := time.NewTicker(cleanupInterval)
@@ -108,13 +111,21 @@ func StartOutboxCleanupJob(ctx context.Context, outbox store.OutboxStore, logger
 }
 
 func doCleanup(ctx context.Context, outbox store.OutboxStore, logger *slog.Logger) {
-	// Records older than 3 days
-	n, err := outbox.Cleanup(ctx, 3)
+	// [CLEANUP_STRATEGY]
+	// Remove messages that are older than 3 days AND already acknowledged by the consumer.
+	// Batching is handled internally by the store implementation.
+	n, err := outbox.Cleanup(ctx, &model.OutboxCleanupOptions{
+		RetentionDays: 3,
+		BatchSize:     5000,
+		ConsumerGroup: "im-thread-outbox-forwarder",
+		Topic:         "im.messages",
+	})
 	if err != nil {
 		logger.Error("outbox cleanup: failed", "error", err)
 		return
 	}
+
 	if n > 0 {
-		logger.Info("outbox cleanup: successful", "deleted_count", n)
+		logger.Info("outbox cleanup complete", "deleted_count", n)
 	}
 }

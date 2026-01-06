@@ -9,22 +9,22 @@ import (
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/jackc/pgx/v5"
 	"github.com/webitel/im-thread-service/internal/domain/events"
+	"github.com/webitel/im-thread-service/internal/domain/model"
 	"github.com/webitel/im-thread-service/internal/store"
 )
 
 type outboxStore struct {
-	// q is a querier that can be either a connection pool or a transaction
-	q      Querier
-	config sql.PublisherConfig
-	logger watermill.LoggerAdapter
+	// [QUERIER]
+	// Supports both connection pool for cleanup and pgx.Tx for publishing
+	q        Querier
+	config   sql.PublisherConfig
+	wmlogger watermill.LoggerAdapter
 }
 
-// NewOutboxStore returns a new outbox store, given a querier and a logger.
-// The querier is used to execute queries or provide a transaction for the watermill publisher.
-func NewOutboxStore(q Querier, logger watermill.LoggerAdapter) store.OutboxStore {
+func NewOutboxStore(q Querier, wmlogger watermill.LoggerAdapter) store.OutboxStore {
 	return &outboxStore{
-		q:      q,
-		logger: logger,
+		q:        q,
+		wmlogger: wmlogger,
 		config: sql.PublisherConfig{
 			SchemaAdapter: sql.DefaultPostgreSQLSchema{
 				GenerateMessagesTableName: func(topic string) string {
@@ -35,15 +35,12 @@ func NewOutboxStore(q Querier, logger watermill.LoggerAdapter) store.OutboxStore
 	}
 }
 
-// Interface guard
-var (
-	_ store.OutboxStore = (*outboxStore)(nil)
-)
+var _ store.OutboxStore = (*outboxStore)(nil)
 
-// Publish adds an event to the outbox table within the current transaction.
-// It fails if the querier is not an active pgx.Tx.
 func (o *outboxStore) Publish(ctx context.Context, topic string, event events.Outboxer) error {
-	// Watermill SQL publisher requires a transaction to ensure atomicity.
+	// [ATOMICITY_CHECK]
+	// Watermill SQL publisher MUST run within an active transaction
+	// to ensure the business logic and event storage are committed together.
 	tx, ok := o.q.(pgx.Tx)
 	if !ok {
 		return fmt.Errorf("outbox publish: transaction required (querier is not pgx.Tx)")
@@ -54,8 +51,9 @@ func (o *outboxStore) Publish(ctx context.Context, topic string, event events.Ou
 		return fmt.Errorf("outbox publish: %w", err)
 	}
 
-	// sql.TxFromPgx converts pgx.Tx to *sql.Tx compatible with watermill
-	publisher, err := sql.NewPublisher(sql.TxFromPgx(tx), o.config, o.logger)
+	// [TX_ADAPTER]
+	// Wrap pgx.Tx into a Watermill-compatible SQL transaction
+	publisher, err := sql.NewPublisher(sql.TxFromPgx(tx), o.config, o.wmlogger)
 	if err != nil {
 		return fmt.Errorf("failed to create outbox publisher: %w", err)
 	}
@@ -68,23 +66,63 @@ func (o *outboxStore) Publish(ctx context.Context, topic string, event events.Ou
 	return publisher.Publish(topic, msg)
 }
 
-// Cleanup removes processed messages from the outbox table based on retention days.
-func (o *outboxStore) Cleanup(ctx context.Context, retentionDays int) (int64, error) {
-	const query = `
-        DELETE FROM im_message.messages_outbox
-        WHERE created_at < now() - ($1 * interval '1 day')
-          AND "offset" <= (
-              SELECT COALESCE(offset_value, 0)
-              FROM im_message.messages_offsets
-              WHERE consumer_group = 'im-thread-outbox-forwarder'
-                AND topic = 'im.messages'
-          )
-    `
-
-	result, err := o.q.Exec(ctx, query, retentionDays)
-	if err != nil {
-		return 0, fmt.Errorf("outbox cleanup failed: %w", err)
+func (o *outboxStore) Cleanup(ctx context.Context, opt *model.OutboxCleanupOptions) (int64, error) {
+	if opt.BatchSize <= 0 {
+		opt.BatchSize = 5000
 	}
 
-	return result.RowsAffected(), nil
+	args := pgx.NamedArgs{
+		"retention_days": opt.RetentionDays,
+		"batch_size":     opt.BatchSize,
+		"consumer_group": opt.ConsumerGroup,
+		"topic":          opt.Topic,
+	}
+
+	// [CLEANUP_QUERY]
+	// Using CTE and Tuple Comparison (transaction_id, offset) to safely delete
+	// only those records that have been acknowledged by the forwarder.
+	const query = `
+        WITH to_delete AS (
+            SELECT transaction_id, "offset"
+            FROM im_message.messages_outbox
+            WHERE 
+                (transaction_id, "offset") <= (
+                    SELECT last_processed_transaction_id, offset_acked
+                    FROM im_message.messages_offsets
+                    WHERE consumer_group = @consumer_group
+                      AND topic = @topic
+                    LIMIT 1
+                )
+                AND created_at < now() - (@retention_days * interval '1 day')
+            LIMIT @batch_size
+        )
+        DELETE FROM im_message.messages_outbox
+        USING to_delete
+        WHERE im_message.messages_outbox.transaction_id = to_delete.transaction_id
+          AND im_message.messages_outbox."offset" = to_delete."offset"`
+
+	var totalDeleted int64
+	for {
+		// [BATCHED_DELETE]
+		// Loop execution to prevent long-lived locks and WAL bloat
+		result, err := o.q.Exec(ctx, query, args)
+		if err != nil {
+			return totalDeleted, fmt.Errorf("outbox cleanup: %w", err)
+		}
+
+		rowsAffected := result.RowsAffected()
+		totalDeleted += rowsAffected
+
+		if rowsAffected < int64(opt.BatchSize) {
+			break
+		}
+
+		select {
+		case <-ctx.Done():
+			return totalDeleted, ctx.Err()
+		default:
+		}
+	}
+
+	return totalDeleted, nil
 }

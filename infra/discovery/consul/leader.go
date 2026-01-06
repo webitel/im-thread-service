@@ -11,6 +11,7 @@ import (
 )
 
 const (
+	// [CONSUL_KEYS]
 	leaderElectionKey = "service/im-thread-service/leader"
 	sessionTTL        = "15s"
 	renewInterval     = "10s"
@@ -47,6 +48,7 @@ func ProvideLeaderElector(cfg *config.Config, log *slog.Logger) (*LeaderElector,
 	return NewLeaderElector(cfg.Consul.Address, cfg.Service.Id, log)
 }
 
+// Run blocks and continuously tries to acquire leadership
 func (le *LeaderElector) Run(ctx context.Context, onStart func(ctx context.Context) error, onStop func()) {
 	for {
 		select {
@@ -54,12 +56,16 @@ func (le *LeaderElector) Run(ctx context.Context, onStart func(ctx context.Conte
 			le.log.Info("stopping leader election: context cancelled")
 			return
 		default:
+			// [ELECTION_LOOP]
+			// Keep trying to become leader until context is closed
 			le.attemptLeadership(ctx, onStart, onStop)
 		}
 	}
 }
 
 func (le *LeaderElector) attemptLeadership(ctx context.Context, onStart func(ctx context.Context) error, onStop func()) {
+	// 1. [SESSION_INIT]
+	// Create a volatile session in Consul tied to TTL
 	sessionID, err := le.createSession()
 	if err != nil {
 		le.log.Error("failed to create session", "err", err)
@@ -69,6 +75,8 @@ func (le *LeaderElector) attemptLeadership(ctx context.Context, onStart func(ctx
 
 	defer le.destroySession(sessionID)
 
+	// 2. [ACQUIRE_LOCK]
+	// Try to write our NodeID to the leader key using our Session
 	acquired, err := le.acquireLock(sessionID)
 	if err != nil {
 		le.log.Error("error during lock acquisition", "err", err)
@@ -84,11 +92,16 @@ func (le *LeaderElector) attemptLeadership(ctx context.Context, onStart func(ctx
 
 	le.log.Info("node promoted to leader", "node_id", le.nodeID, "session", sessionID)
 
+	// [LEADER_CONTEXT]
+	// Bound to the duration of our leadership
 	leaderCtx, cancelLeader := context.WithCancel(ctx)
 	defer cancelLeader()
 
+	// Keep session alive via background heartbeat
 	go le.client.Session().RenewPeriodic(renewInterval, sessionID, nil, leaderCtx.Done())
 
+	// [START_WORKER]
+	// Execute leader-only tasks (e.g., Outbox Forwarder)
 	go func() {
 		if err := onStart(leaderCtx); err != nil {
 			le.log.Error("leader task execution failed", "err", err)
@@ -96,6 +109,8 @@ func (le *LeaderElector) attemptLeadership(ctx context.Context, onStart func(ctx
 		}
 	}()
 
+	// [WATCHDOG]
+	// Monitor if we are still the leader in Consul KV storage
 	le.monitorLeadership(leaderCtx, sessionID)
 
 	le.log.Warn("node demoted: releasing leadership")
@@ -106,7 +121,7 @@ func (le *LeaderElector) createSession() (string, error) {
 	entry := &api.SessionEntry{
 		Name:     "im-thread-leader-lock",
 		TTL:      sessionTTL,
-		Behavior: api.SessionBehaviorRelease,
+		Behavior: api.SessionBehaviorRelease, // Release the lock if session expires
 	}
 	sessionID, _, err := le.client.Session().Create(entry, nil)
 	return sessionID, err
@@ -131,6 +146,7 @@ func (le *LeaderElector) monitorLeadership(ctx context.Context, sessionID string
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
+			// Check if someone else took the lock or session was invalidated
 			pair, _, err := le.client.KV().Get(le.key, nil)
 			if err != nil || pair == nil || pair.Session != sessionID {
 				le.log.Debug("leadership check failed or session changed")

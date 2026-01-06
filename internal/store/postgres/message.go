@@ -11,26 +11,22 @@ import (
 )
 
 type messageStore struct {
-	// q is a querier that can be either a connection pool or a transaction
+	// [QUERIER]
+	// Supports both pgxpool (standalone) and pgx.Tx (within UoW)
 	q Querier
 }
 
-// NewMessageStore returns a new message store, given a querier.
-// The querier is used to execute queries against the database.
 func NewMessageStore(q Querier) store.MessageStore {
 	return &messageStore{
 		q: q,
 	}
 }
 
-// Interface guard
-var (
-	_ store.MessageStore = (*messageStore)(nil)
-)
+var _ store.MessageStore = (*messageStore)(nil)
 
-// SaveMessage inserts a new message into the database.
-// It uses pgxscan to map the returning row into the Message model.
 func (m *messageStore) SaveMessage(ctx context.Context, msg *model.Message) (*model.Message, error) {
+	// [NAMED_ARGS]
+	// Using named parameters to prevent position-based binding errors
 	args := pgx.NamedArgs{
 		"thread_id":   msg.ThreadId,
 		"sender_id":   msg.From.Id,
@@ -48,9 +44,12 @@ func (m *messageStore) SaveMessage(ctx context.Context, msg *model.Message) (*mo
             receiver_id AS "to.id"`
 
 	var saved model.Message
-	// Use the querier m.q instead of db.Executor(ctx)
+
+	// [SCANNING]
+	// Automated mapping of returning columns into model.Message struct fields
 	if err := pgxscan.Get(ctx, m.q, &saved, query, args); err != nil {
 		return nil, fmt.Errorf("save_message: %w", err)
 	}
+
 	return &saved, nil
 }
