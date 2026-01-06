@@ -76,7 +76,7 @@ func (o *outboxStore) Cleanup(ctx context.Context, retentionDays int) (int64, er
         WHERE created_at < now() - ($1 * interval '1 day')
           AND "offset" <= (
               SELECT COALESCE(offset_value, 0)
-              FROM im_message.watermill_offsets
+              FROM im_message.messages_offsets
               WHERE consumer_group = 'im-thread-outbox-forwarder'
                 AND topic = 'im.messages'
           )

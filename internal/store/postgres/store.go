@@ -6,7 +6,6 @@ import (
 	"github.com/webitel/im-thread-service/internal/store"
 )
 
-// Aggregate store
 type Store struct {
 	ms store.MessageStore
 	os store.OutboxStore

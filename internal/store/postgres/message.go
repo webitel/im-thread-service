@@ -32,35 +32,21 @@ func (m *messageStore) WithTx(ctx context.Context, fn func(ctx context.Context) 
 
 func (m *messageStore) SaveMessage(ctx context.Context, msg *model.Message) (*model.Message, error) {
 	args := pgx.NamedArgs{
-		"thread_id": msg.ThreadId,
-		"from_id":   msg.From.Id,
-		"from_type": msg.From.Type,
-		"to_id":     msg.To.Id,
-		"to_type":   msg.To.Type,
-		"body":      msg.Text,
-		"type":      msg.Type,
+		"thread_id": msg.ThreadId, "sender_id": msg.From.Id,
+		"receiver_id": msg.To.Id, "body": msg.Text, "type": msg.Type,
 	}
 
-	query := `
-        INSERT INTO im_message.messages (thread_id, from_id, from_type, to_id, to_type, body, type)
-        VALUES (@thread_id, @from_id, @from_type, @to_id, @to_type, @body, @type)
+	const query = `
+        INSERT INTO im_message.messages (thread_id, sender_id, receiver_id, body, type)
+        VALUES (@thread_id, @sender_id, @receiver_id, @body, @type)
         RETURNING 
-            id, 
-            thread_id, 
-            from_id AS "from.id", 
-            from_type AS "from.type", 
-            to_id AS "to.id", 
-            to_type AS "to.type", 
-            body, 
-            type, 
-            metadata, 
-            created_at, 
-            updated_at
-    `
+            id, thread_id, body, type, metadata, created_at, updated_at,
+            sender_id   AS "from.id", 
+            receiver_id AS "to.id"`
 
 	var saved model.Message
 	if err := pgxscan.Get(ctx, m.db.Executor(ctx), &saved, query, args); err != nil {
-		return nil, fmt.Errorf("failed to save message: %w", err)
+		return nil, fmt.Errorf("save_message: %w", err)
 	}
 	return &saved, nil
 }

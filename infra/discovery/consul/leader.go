@@ -60,11 +60,6 @@ func (le *LeaderElector) Run(ctx context.Context, onStart func(ctx context.Conte
 }
 
 func (le *LeaderElector) attemptLeadership(ctx context.Context, onStart func(ctx context.Context) error, onStop func()) {
-	if _, err := le.client.Status().Leader(); err != nil {
-		le.log.Warn("consul is not ready yet, retrying...", "err", err)
-		le.wait(ctx, errCooldown)
-		return
-	}
 	sessionID, err := le.createSession()
 	if err != nil {
 		le.log.Error("failed to create session", "err", err)
