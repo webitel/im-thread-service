@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/google/uuid"
 	"github.com/webitel/im-thread-service/internal/domain/events"
 	"github.com/webitel/im-thread-service/internal/domain/model"
 	"github.com/webitel/im-thread-service/internal/service/dto"
@@ -30,31 +31,41 @@ func NewMessageService(uow store.UnitOfWork, logger *slog.Logger, threader Threa
 	}
 }
 
+// [INTERFACE GUARD]
 var _ Messager = (*MessageService)(nil)
 
 func (s *MessageService) SendText(ctx context.Context, in *dto.SendTextRequest) (*dto.SendTextResponse, error) {
+	// [VALIDATE]
 	if err := guards.SendTextGuard(in); err != nil {
 		return nil, fmt.Errorf("validation: %w", err)
 	}
 
-	t, err := s.threader.EnsureDirectThread(ctx, &dto.EnsureDirectThreadRequest{
-		PeerFrom: &in.From,
-		PeerTo:   &in.To,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("ensure direct thread: %w", err)
-	}
+	// // [THREAD_MANAGEMENT]
+	// // Ensure we have a valid communication channel between peers
+	// t, err := s.threader.EnsureDirectThread(ctx, &dto.EnsureDirectThreadRequest{
+	// 	PeerFrom: &in.From,
+	// 	PeerTo:   &in.To,
+	// })
+	// if err != nil {
+	// 	return nil, fmt.Errorf("ensure direct thread: %w", err)
+	// }
 
-	msg := model.NewTextMessage(t.Id, in.From, in.To, in.Body)
+	msg := model.NewTextMessage(uuid.New(), in.From, in.To, in.Body)
 
 	var resp *dto.SendTextResponse
-	err = s.uow.WithinTransaction(ctx, func(txCtx context.Context, uow store.UnitOfWork) error {
+
+	// [ATOMIC_OPERATION]
+	// Save message and record outbox event in a single database transaction
+	err := s.uow.WithinTransaction(ctx, func(txCtx context.Context, uow store.UnitOfWork) error {
+		// 1. Persist message to main storage
 		saved, err := uow.Messages().SaveMessage(txCtx, msg)
 		if err != nil {
 			return err
 		}
 
-		// TODO what we need here
+		// 2. [OUTBOX_PATTERN]
+		// Stage event for async delivery via im-thread-outbox-forwarder.
+		// This guarantees delivery to RabbitMQ even if the broker is down.
 		err = uow.Outbox().Publish(txCtx, "im.messages", events.MessageCreated{
 			MessageID:  saved.Id,
 			ThreadID:   saved.ThreadId,
@@ -72,6 +83,7 @@ func (s *MessageService) SendText(ctx context.Context, in *dto.SendTextRequest) 
 		return nil
 	})
 	if err != nil {
+		// [ERROR_LOG] Transaction failed, state rolled back automatically
 		s.logger.ErrorContext(ctx, "send_text_failed", "err", err)
 		return nil, err
 	}

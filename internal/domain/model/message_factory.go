@@ -11,6 +11,8 @@ import (
 )
 
 var (
+	// [PARSERS]
+	// Basic regex for identifying links and user mentions
 	linkRegex    = regexp.MustCompile(`https?://[^\s/$.?#].[^\s]*`)
 	mentionRegex = regexp.MustCompile(`@[\w]+`)
 )
@@ -18,6 +20,8 @@ var (
 // NewTextMessage performs domain-level enrichment and normalization.
 // It returns a Message object ready to be persisted.
 func NewTextMessage(threadID uuid.UUID, from, to Peer, text string) *Message {
+	// [ENRICHMENT]
+	// Clean and normalize text before processing metadata
 	cleanText := prepareText(text)
 
 	return &Message{
@@ -27,6 +31,8 @@ func NewTextMessage(threadID uuid.UUID, from, to Peer, text string) *Message {
 		Text:     cleanText,
 		Type:     MessageTypeText,
 		Metadata: map[string]any{
+			// [METADATA]
+			// Store pre-calculated entities and real grapheme count for UI/Search
 			"entities":  extractEntities(cleanText),
 			"graphemes": uniseg.GraphemeClusterCount(cleanText),
 		},
@@ -36,9 +42,16 @@ func NewTextMessage(threadID uuid.UUID, from, to Peer, text string) *Message {
 // prepareText handles NFC normalization and UTF-8 safety.
 func prepareText(s string) string {
 	s = strings.TrimSpace(s)
+
+	// [UTF8_SAFETY]
+	// Strip invalid sequences to prevent downstream processing crashes
 	if !utf8.ValidString(s) {
 		s = strings.ToValidUTF8(s, "")
 	}
+
+	// [NORMALIZATION]
+	// Use NFC (Canonical Decomposition, followed by Canonical Composition)
+	// This ensures consistent byte representation for emojis and accents
 	return norm.NFC.String(s)
 }
 

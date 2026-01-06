@@ -23,7 +23,7 @@ type (
 
 	OutboxStore interface {
 		Publish(ctx context.Context, topic string, event events.Outboxer) error
-		Cleanup(ctx context.Context, retentionDays int) (int64, error)
+		Cleanup(ctx context.Context, opt *model.OutboxCleanupOptions) (int64, error)
 	}
 
 	ThreadDialogStore interface {

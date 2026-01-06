@@ -11,9 +11,9 @@ import (
 )
 
 type unitOfWork struct {
-	pool    *pgxpool.Pool
-	querier Querier
-	logger  watermill.LoggerAdapter
+	pool     *pgxpool.Pool
+	querier  Querier
+	wmlogger watermill.LoggerAdapter
 
 	threadStore       store.ThreadStore
 	threadDialogStore store.ThreadDialogStore
@@ -24,10 +24,11 @@ type unitOfWork struct {
 // NewPgxUnitOfWork returns a new unit of work, given a pgx pool.
 // The unit of work contains the pool and a querier which is used to execute queries.
 // The thread store and thread dialog store are lazily initialized on first call to ThreadStore or ThreadDialogStore.
-func NewPgxUnitOfWork(pool *pgxpool.Pool) *unitOfWork {
+func NewPgxUnitOfWork(pool *pgxpool.Pool, wmlogger watermill.LoggerAdapter) *unitOfWork {
 	return &unitOfWork{
-		pool:    pool,
-		querier: pool,
+		pool:     pool,
+		querier:  pool,
+		wmlogger: wmlogger,
 	}
 }
 
@@ -64,7 +65,7 @@ func (u *unitOfWork) Messages() store.MessageStore {
 
 func (u *unitOfWork) Outbox() store.OutboxStore {
 	if u.outboxStore == nil {
-		u.outboxStore = NewOutboxStore(u.querier, u.logger)
+		u.outboxStore = NewOutboxStore(u.querier, u.wmlogger)
 	}
 	return u.outboxStore
 }
