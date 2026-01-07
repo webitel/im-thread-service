@@ -34,7 +34,7 @@ func RegisterOutboxForwarder(
 	// Move messages from local DB outbox to external RabbitMQ exchange
 	router.AddConsumerHandler(
 		"outbox_forwarder",
-		"im.messages", // Читаємо з БД
+		"im.messages",
 		outboxSub,
 		func(msg *message.Message) error {
 			// [DYNAMIC_TOPIC]
