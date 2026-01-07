@@ -50,7 +50,7 @@ func nilPeers() ValidationGuard[*dto.EnsureDirectThreadRequest] {
 
 func emptyDomain() ValidationGuard[*dto.EnsureDirectThreadRequest] {
 	return func(req *dto.EnsureDirectThreadRequest) error {
-		if req.DomainId <= 0 {
+		if req.DomainID <= 0 {
 			return errors.New("domain id required!")
 		}
 
@@ -60,7 +60,7 @@ func emptyDomain() ValidationGuard[*dto.EnsureDirectThreadRequest] {
 
 func selfSend() ValidationGuard[*dto.EnsureDirectThreadRequest] {
 	return func(req *dto.EnsureDirectThreadRequest) error {
-		if req.PeerFrom.Id == req.PeerTo.Id {
+		if req.PeerFrom.ID == req.PeerTo.ID {
 			return errors.New("can not create direct chat with yourself, forbidden!")
 		}
 
@@ -70,7 +70,7 @@ func selfSend() ValidationGuard[*dto.EnsureDirectThreadRequest] {
 
 func emptyMember() ValidationGuard[*dto.EnsureDirectThreadRequest] {
 	return func(req *dto.EnsureDirectThreadRequest) error {
-		if req.MemberId == uuid.Nil {
+		if req.MemberID == uuid.Nil {
 			return errors.New("member is empty!")
 		}
 
@@ -80,7 +80,7 @@ func emptyMember() ValidationGuard[*dto.EnsureDirectThreadRequest] {
 
 func emptyPeers() ValidationGuard[*dto.EnsureDirectThreadRequest] {
 	return func(req *dto.EnsureDirectThreadRequest) error {
-		if req.PeerFrom.Id == uuid.Nil || req.PeerTo.Id == uuid.Nil {
+		if req.PeerFrom.ID == uuid.Nil || req.PeerTo.ID == uuid.Nil {
 			return errors.New("some of peers is empty!")
 		}
 
@@ -92,7 +92,7 @@ func CanSendRightsViolationGuard(canSend bool) error {
 	if !canSend {
 		return errors.New("send message rights violation!")
 	}
-	
+
 	return nil
 }
 

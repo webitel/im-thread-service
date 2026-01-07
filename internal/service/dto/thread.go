@@ -7,26 +7,26 @@ import (
 
 type (
 	EnsureDirectThreadRequest struct {
-		DomainId int
-		MemberId uuid.UUID
+		DomainID int
+		MemberID uuid.UUID
 		PeerFrom *model.Peer
-		PeerTo *model.Peer
+		PeerTo   *model.Peer
 	}
 
 	EnsureDirectThreadResponse struct {
-		Id uuid.UUID
+		ID uuid.UUID
 	}
 
 	SearchThreadDialogRequest struct {
-		DomainId int
-		Kind model.ThreadKind
-		From *model.Peer
-		To *model.Peer
+		DomainID int
+		Kind     model.ThreadKind
+		From     *model.Peer
+		To       *model.Peer
 	}
 
 	CanSendRequest struct {
-		FromId string
-		ToId string
+		FromID string
+		ToID   string
 	}
 
 	CanSendResponse struct {
@@ -36,23 +36,23 @@ type (
 
 func NewEnsureDirectThreadResponse(id uuid.UUID) *EnsureDirectThreadResponse {
 	return &EnsureDirectThreadResponse{
-		Id: id,
+		ID: id,
 	}
 }
 
-func NewSearchThreadRequest(domainId int, kind model.ThreadKind, from, to *model.Peer) *SearchThreadDialogRequest {
+func NewSearchThreadRequest(domainID int, kind model.ThreadKind, from, to *model.Peer) *SearchThreadDialogRequest {
 	return &SearchThreadDialogRequest{
-		DomainId: domainId,
-		Kind: kind,
-		From: from,
-		To: to,
+		DomainID: domainID,
+		Kind:     kind,
+		From:     from,
+		To:       to,
 	}
 }
 
 func NewCanSendRequestDtoFromPeers(from, to model.Peer) *CanSendRequest {
 	return &CanSendRequest{
-		FromId: from.Id.String(),
-		ToId: to.Id.String(),
+		FromID: from.ID.String(),
+		ToID:   to.ID.String(),
 	}
 }
 

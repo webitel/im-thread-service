@@ -1,0 +1,42 @@
+package mapper
+
+import (
+	impb "github.com/webitel/im-thread-service/gen/go/api/v1"
+	"github.com/webitel/im-thread-service/internal/service/dto"
+)
+
+func MapToSendImageRequest(in *impb.SendImageRequest) *dto.SendImageRequest {
+	if in == nil {
+		return nil
+	}
+
+	var imgReq dto.ImageRequest
+	if pbImg := in.GetImage(); pbImg != nil {
+		imgReq.Body = pbImg.GetBody()
+		imgReq.Images = make([]*dto.Image, 0, len(pbImg.GetImages()))
+
+		for _, img := range pbImg.GetImages() {
+			imgReq.Images = append(imgReq.Images, &dto.Image{
+				ID:       img.GetId(),
+				Link:     img.GetLink(),
+				MimeType: img.GetMimeType(),
+			})
+		}
+	}
+
+	return &dto.SendImageRequest{
+		From:  MapPeerFromProto(in.GetFrom()),
+		To:    MapPeerFromProto(in.GetTo()),
+		Image: imgReq,
+	}
+}
+
+func MapToSendImageResponse(out *dto.SendImageResponse) *impb.SendImageResponse {
+	if out == nil {
+		return nil
+	}
+	return &impb.SendImageResponse{
+		Id: out.ID.String(),
+		To: MapPeerToProto(out.To),
+	}
+}

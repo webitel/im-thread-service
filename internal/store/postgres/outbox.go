@@ -63,6 +63,9 @@ func (o *outboxStore) Publish(ctx context.Context, topic string, event events.Ou
 		msg.Metadata.Set(k, v)
 	}
 
+	// [ADD_METADATA] Force store the target routing key in metadata
+	msg.Metadata.Set("x-routing-key", topic)
+
 	return publisher.Publish(topic, msg)
 }
 

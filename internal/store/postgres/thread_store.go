@@ -35,24 +35,22 @@ func (t *threadStore) Create(ctx context.Context, req *model.Thread) (*model.Thr
 			returning id;
 		`
 		args = pgx.NamedArgs{
-			"DomainId": req.DomainId,
-			"CreatedBy": req.CreatedBy,
-			"CreatedAt": req.CreatedAt,
-			"UpdatedBy": req.UpdatedBy,
-			"UpdatedAt": req.UpdatedAt,
-			"Kind": req.Kind,
-			"Owner": req.Owner,
-			"Subject": req.Subject,
+			"DomainId":    req.DomainID,
+			"CreatedBy":   req.CreatedBy,
+			"CreatedAt":   req.CreatedAt,
+			"UpdatedBy":   req.UpdatedBy,
+			"UpdatedAt":   req.UpdatedAt,
+			"Kind":        req.Kind,
+			"Owner":       req.Owner,
+			"Subject":     req.Subject,
 			"Description": req.Description,
 		}
 	)
 
 	// SCAN ONLY ID AS OTHER PARAMS ALREADY HAS BEEN SET ON APP LEVEL
-	if err := t.db.QueryRow(ctx, query, args).Scan(&req.Id); err != nil {
+	if err := t.db.QueryRow(ctx, query, args).Scan(&req.ID); err != nil {
 		return nil, err
 	}
 
-	return req, nil 
+	return req, nil
 }
-
-

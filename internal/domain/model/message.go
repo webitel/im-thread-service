@@ -1,10 +1,10 @@
 package model
 
 import (
-	"net/url"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/webitel/im-thread-service/internal/domain/events" // Дозволено, якщо events не імпортує model
 )
 
 //go:generate stringer -type=MessageType
@@ -18,8 +18,8 @@ const (
 )
 
 type Message struct {
-	Id        uuid.UUID      `json:"id" db:"id"`
-	ThreadId  uuid.UUID      `json:"thread_id" db:"thread_id"`
+	ID        uuid.UUID      `json:"id" db:"id"`
+	ThreadID  uuid.UUID      `json:"thread_id" db:"thread_id"`
 	From      Peer           `json:"from" db:"from"`
 	To        Peer           `json:"to" db:"to"`
 	Text      string         `json:"text" db:"body"`
@@ -27,18 +27,22 @@ type Message struct {
 	Metadata  map[string]any `json:"metadata,omitempty" db:"metadata"`
 	CreatedAt time.Time      `json:"created_at" db:"created_at"`
 	UpdatedAt time.Time      `json:"updated_at" db:"updated_at"`
+
+	Images    []*MessageImage    `json:"images,omitempty" db:"-"`
+	Documents []*MessageDocument `json:"documents,omitempty" db:"-"`
+
+	// [TYPED_QUEUE] Strictly limited to outbox-compatible events
+	domainEvents []events.Outboxer
 }
 
-type MediaContent struct {
-	Id       string   `json:"id"`
-	URL      *url.URL `json:"url"`
-	MimeType string   `json:"mime_type"`
-	Size     int64    `json:"size"`
+// AddEvent ensures only valid outboxers are added to the message
+func (m *Message) AddEvent(event events.Outboxer) {
+	m.domainEvents = append(m.domainEvents, event)
 }
 
-type Entity struct {
-	Type   string `json:"type"`
-	Offset int    `json:"offset"`
-	Length int    `json:"length"`
-	Value  string `json:"value"`
+// Events returns the staged events for the service layer
+func (m *Message) Events() []events.Outboxer {
+	e := m.domainEvents
+	m.domainEvents = nil
+	return e
 }

@@ -7,7 +7,7 @@ import (
 
 type (
 	Image struct {
-		Id       string `json:"id"`
+		ID       string `json:"id"`
 		Link     string `json:"link"`
 		MimeType string `json:"mime_type"`
 	}
@@ -25,6 +25,6 @@ type (
 
 	SendImageResponse struct {
 		To model.Peer `json:"to"`
-		Id uuid.UUID  `json:"id"`
+		ID uuid.UUID  `json:"id"`
 	}
 )

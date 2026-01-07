@@ -32,18 +32,22 @@ func RegisterOutboxForwarder(
 
 	// [HANDLER_CONFIG]
 	// Move messages from local DB outbox to external RabbitMQ exchange
-	router.AddHandler(
+	router.AddConsumerHandler(
 		"outbox_forwarder",
-		"im.messages", // Source: Postgres table
+		"im.messages", // Читаємо з БД
 		outboxSub,
-		"chat.events", // Destination: RabbitMQ exchange
-		rabbitPub,
-		func(msg *message.Message) ([]*message.Message, error) {
-			slog.Info("outbox -> rabbit",
-				"message_uuid", msg.UUID,
-				"payload", string(msg.Payload),
-			)
-			return []*message.Message{msg}, nil
+		func(msg *message.Message) error {
+			// [DYNAMIC_TOPIC]
+			topic := msg.Metadata.Get("x-routing-key")
+			if topic == "" {
+				topic = "chat.events" // Fallback
+			}
+
+			slog.Info("forwarding message to dynamic topic",
+				"topic", topic,
+				"msg_uuid", msg.UUID)
+
+			return rabbitPub.Publish(topic, msg)
 		},
 	)
 

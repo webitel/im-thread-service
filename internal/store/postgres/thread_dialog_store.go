@@ -18,6 +18,7 @@ func NewThreadDialogStore(db Querier) *threadDialogStore {
 		db: db,
 	}
 }
+
 // Resolve resolves a direct thread by peers.
 // It returns the thread id if found, or nil and the error if not found.
 // If the operation succeeds, it returns the resolved thread id.
@@ -33,9 +34,9 @@ func (t *threadDialogStore) Resolve(ctx context.Context, search *dto.SearchThrea
 			limit 1
 		`
 		args = pgx.NamedArgs{
-			"DomainId": search.DomainId,
-			"FromId": search.From.Id,
-			"DirectTo": search.To.Id,
+			"DomainId": search.DomainID,
+			"FromId":   search.From.ID,
+			"DirectTo": search.To.ID,
 		}
 		resolvedId uuid.UUID
 	)
@@ -43,11 +44,9 @@ func (t *threadDialogStore) Resolve(ctx context.Context, search *dto.SearchThrea
 	if err := t.db.QueryRow(ctx, query, args).Scan(&resolvedId); err != nil {
 		return uuid.Nil, err
 	}
-	
+
 	return resolvedId, nil
 }
-
-
 
 // CreateDirectPair creates two new thread dialogs for peers within one transaction.
 // It returns two newly created thread dialogs or an error if the operation fails.
@@ -77,17 +76,17 @@ func (t *threadDialogStore) CreateDirectPair(ctx context.Context, dialog *model.
 				direct_to
 		`
 		args = pgx.NamedArgs{
-			"DomainId": dialog.DomainId,
+			"DomainId":  dialog.DomainID,
 			"CreatedAt": dialog.CreatedAt,
 			"UpdatedAt": dialog.UpdatedAt,
-			"From": dialog.MemberId,
-			"ThreadId": dialog.ThreadId,
-			"To": dialog.DirectTo,
+			"From":      dialog.MemberID,
+			"ThreadId":  dialog.ThreadID,
+			"To":        dialog.DirectTo,
 		}
 		result = make([]*model.ThreadDialog, 0, 2)
 	)
 
-	rows, err := t.db.Query(ctx, query,args)
+	rows, err := t.db.Query(ctx, query, args)
 	if err != nil {
 		return nil, err
 	}
@@ -97,15 +96,14 @@ func (t *threadDialogStore) CreateDirectPair(ctx context.Context, dialog *model.
 	for rows.Next() {
 		createdDialog := &model.ThreadDialog{}
 		err = rows.Scan(
-			&createdDialog.Id,
-			&createdDialog.DomainId,
+			&createdDialog.ID,
+			&createdDialog.DomainID,
 			&createdDialog.CreatedAt,
 			&createdDialog.UpdatedAt,
-			&createdDialog.MemberId,
-			&createdDialog.ThreadId,
+			&createdDialog.MemberID,
+			&createdDialog.ThreadID,
 			&createdDialog.DirectTo,
 		)
-
 		if err != nil {
 			return nil, err
 		}
@@ -119,4 +117,3 @@ func (t *threadDialogStore) CreateDirectPair(ctx context.Context, dialog *model.
 
 	return result, nil
 }
-
