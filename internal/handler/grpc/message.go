@@ -40,8 +40,14 @@ func (m *MessageService) SendImage(ctx context.Context, in *impb.SendImageReques
 }
 
 // SendDocument implements threadv1.MessageServer.
-func (m *MessageService) SendDocument(context.Context, *impb.SendDocumentRequest) (*impb.SendDocumentResponse, error) {
-	panic("unimplemented")
+func (m *MessageService) SendDocument(ctx context.Context, in *impb.SendDocumentRequest) (*impb.SendDocumentResponse, error) {
+	out, err := m.handler.SendDocument(ctx, mapper.MapToSendDocumentRequest(in))
+	if err != nil {
+		m.logger.Error("failed to send document", "error", err)
+		return nil, err
+	}
+
+	return mapper.MapToSendDocumentResponse(out), nil
 }
 
 func NewMessageService(logger *slog.Logger, handler service.Messager) *MessageService {

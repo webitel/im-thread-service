@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strconv"
 	"strings"
 
 	"github.com/google/uuid"
@@ -17,6 +18,7 @@ import (
 type Messager interface {
 	SendText(ctx context.Context, in *dto.SendTextRequest) (*dto.SendTextResponse, error)
 	SendImage(ctx context.Context, in *dto.SendImageRequest) (*dto.SendImageResponse, error)
+	SendDocument(ctx context.Context, in *dto.SendDocumentRequest) (*dto.SendDocumentResponse, error)
 }
 
 type MessageService struct {
@@ -86,18 +88,18 @@ func (s *MessageService) SendImage(ctx context.Context, in *dto.SendImageRequest
 		return nil, fmt.Errorf("validation: %w", err)
 	}
 
-	// [THREAD]
-	t, err := s.threader.EnsureDirectThread(ctx, &dto.EnsureDirectThreadRequest{
-		PeerFrom: &in.From,
-		PeerTo:   &in.To,
-	})
-	if err != nil {
-		return nil, err
-	}
+	// // [THREAD]
+	// t, err := s.threader.EnsureDirectThread(ctx, &dto.EnsureDirectThreadRequest{
+	// 	PeerFrom: &in.From,
+	// 	PeerTo:   &in.To,
+	// })
+	// if err != nil {
+	// 	return nil, err
+	// }
 
 	// [MODEL] Initialize rich media message with mapped inputs
 	msg := model.NewImageMessage(
-		t.ID,
+		uuid.New(),
 		in.From,
 		[]model.Peer{in.To},
 		in.Image.Body,
@@ -107,7 +109,7 @@ func (s *MessageService) SendImage(ctx context.Context, in *dto.SendImageRequest
 	var resp *dto.SendImageResponse
 
 	// [ATOMIC]
-	err = s.uow.WithinTransaction(ctx, func(txCtx context.Context, uow store.UnitOfWork) error {
+	err := s.uow.WithinTransaction(ctx, func(txCtx context.Context, uow store.UnitOfWork) error {
 		saved, err := uow.Messages().SaveMessage(txCtx, msg)
 		if err != nil {
 			return err
@@ -123,6 +125,55 @@ func (s *MessageService) SendImage(ctx context.Context, in *dto.SendImageRequest
 	})
 	if err != nil {
 		s.logger.ErrorContext(ctx, "send_image_failed", "err", err)
+		return nil, err
+	}
+
+	return resp, nil
+}
+
+// SendDocument processes document attachments and ensures transactional integrity.
+func (s *MessageService) SendDocument(ctx context.Context, in *dto.SendDocumentRequest) (*dto.SendDocumentResponse, error) {
+	// [VALIDATE]
+	if err := guards.SendDocumentGuard(in); err != nil {
+		return nil, fmt.Errorf("validation: %w", err)
+	}
+
+	// // [THREAD] Ensure the communication channel exists
+	// t, err := s.threader.EnsureDirectThread(ctx, &dto.EnsureDirectThreadRequest{
+	// 	PeerFrom: &in.From,
+	// 	PeerTo:   &in.To,
+	// })
+	// if err != nil {
+	// 	return nil, err
+	// }
+
+	// [MODEL] Initialize domain entity
+	msg := model.NewDocumentMessage(
+		uuid.New(),
+		in.From,
+		[]model.Peer{in.To},
+		in.Document.Body,
+		s.mapDocumentInputs(in.Document.Documents),
+	)
+
+	var resp *dto.SendDocumentResponse
+
+	// [ATOMIC] Persistence and Outbox staging
+	err := s.uow.WithinTransaction(ctx, func(txCtx context.Context, uow store.UnitOfWork) error {
+		saved, err := uow.Messages().SaveMessage(txCtx, msg)
+		if err != nil {
+			return err
+		}
+
+		if err := s.dispatchEvents(txCtx, uow, msg); err != nil {
+			return err
+		}
+
+		resp = &dto.SendDocumentResponse{ID: saved.ID, To: in.To}
+		return nil
+	})
+	if err != nil {
+		s.logger.ErrorContext(ctx, "SEND_DOCUMENT_FAILED", "err", err)
 		return nil, err
 	}
 
@@ -181,6 +232,20 @@ func (s *MessageService) mapImageInputs(dtoImages []*dto.Image) []model.ImageInp
 			FileID:   img.ID,
 			MimeType: img.MimeType,
 			Name:     "image_attachment",
+		})
+	}
+	return inputs
+}
+
+func (s *MessageService) mapDocumentInputs(dtoDocs []*dto.Document) []model.DocumentInput {
+	inputs := make([]model.DocumentInput, 0, len(dtoDocs))
+	for _, doc := range dtoDocs {
+		inputs = append(inputs, model.DocumentInput{
+			// [CONVERT] int64 to string
+			FileID:   strconv.FormatInt(doc.ID, 10),
+			Name:     doc.Name,
+			MimeType: doc.MimeType,
+			Size:     doc.Size,
 		})
 	}
 	return inputs

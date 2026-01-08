@@ -1,3 +1,13 @@
+// Package guards provides functional validation logic for service-layer DTOs.
+// It implements a pipeline-based validation pattern where multiple specialized
+// guard functions are executed sequentially to ensure data integrity before
+// reaching the business logic.
+//
+// Design Principles:
+//   - Immutability: Guards do not modify the request, only inspect it.
+//   - Fail-fast: The validation stops and returns at the first encountered error.
+//   - Separation of Concerns: Keeps service methods clean by offloading input
+//     sanity checks to dedicated validation functions.
 package guards
 
 import (

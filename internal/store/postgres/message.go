@@ -1,3 +1,18 @@
+// Package postgres implements the store.MessageStore interface using PostgreSQL as the primary storage engine.
+// It leverages the pgx/v5 driver for high-performance database interactions and pgxscan for mapping
+// database rows directly into domain entities.
+//
+// The implementation follows the Unit of Work pattern, allowing multiple store operations to participate
+// in the same transaction by accepting a Querier interface (which can be either a *pgxpool.Pool or a pgx.Tx).
+//
+// Data Integrity:
+//   - All message persistence operations are executed within the provided context.
+//   - Attachments (Images and Documents) are managed using a Master-Detail relationship,
+//     ensuring relational integrity through foreign key constraints on message_id.
+//
+// Schema:
+//   - Master: im_message.messages
+//   - Details: im_message.message_images, im_message.message_documents
 package postgres
 
 import (
@@ -52,7 +67,7 @@ func (m *messageStore) SaveMessage(ctx context.Context, msg *model.Message) (*mo
 		return nil, fmt.Errorf("save_message.messages: %w", err)
 	}
 
-	// 3. Handle image attachments (detail records)
+	// 3. Handle [IMAGE] attachments
 	if len(msg.Images) > 0 {
 		saved.Images = make([]*model.MessageImage, 0, len(msg.Images))
 
@@ -79,6 +94,31 @@ func (m *messageStore) SaveMessage(ctx context.Context, msg *model.Message) (*mo
 			}
 
 			saved.Images = append(saved.Images, &savedImg)
+		}
+	}
+
+	// 4. Handle [DOCUMENT] attachments
+	if len(msg.Documents) > 0 {
+		saved.Documents = make([]*model.MessageDocument, 0, len(msg.Documents))
+		for _, doc := range msg.Documents {
+			docArgs := pgx.NamedArgs{
+				"message_id": saved.ID,
+				"file_id":    doc.FileID,
+				"name":       doc.Name,
+				"mime":       doc.Mime,
+				"size":       doc.Size,
+			}
+
+			const docQuery = `
+                INSERT INTO im_message.message_documents (message_id, file_id, name, mime, size)
+                VALUES (@message_id, @file_id, @name, @mime, @size)
+                RETURNING id, message_id, file_id, name, mime, size, created_at`
+
+			var savedDoc model.MessageDocument
+			if err := pgxscan.Get(ctx, m.q, &savedDoc, docQuery, docArgs); err != nil {
+				return nil, fmt.Errorf("save_message.message_documents: %w", err)
+			}
+			saved.Documents = append(saved.Documents, &savedDoc)
 		}
 	}
 
