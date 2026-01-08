@@ -19,9 +19,9 @@ import (
 const _ = grpc.SupportPackageIsVersion7
 
 const (
-	Message_SendText_FullMethodName     = "/webitel.messaging.thread.v1.Message/SendText"
-	Message_SendDocument_FullMethodName = "/webitel.messaging.thread.v1.Message/SendDocument"
-	Message_SendImage_FullMethodName    = "/webitel.messaging.thread.v1.Message/SendImage"
+	Message_SendText_FullMethodName     = "/webitel.im.internal.thread.v1.Message/SendText"
+	Message_SendDocument_FullMethodName = "/webitel.im.internal.thread.v1.Message/SendDocument"
+	Message_SendImage_FullMethodName    = "/webitel.im.internal.thread.v1.Message/SendImage"
 )
 
 // MessageClient is the client API for Message service.
@@ -172,7 +172,7 @@ func _Message_SendImage_Handler(srv interface{}, ctx context.Context, dec func(i
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
 var Message_ServiceDesc = grpc.ServiceDesc{
-	ServiceName: "webitel.messaging.thread.v1.Message",
+	ServiceName: "webitel.im.internal.thread.v1.Message",
 	HandlerType: (*MessageServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{

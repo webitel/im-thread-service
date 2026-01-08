@@ -14,6 +14,6 @@ type (
 
 	SendTextResponse struct {
 		To model.Peer `json:"to"`
-		Id uuid.UUID  `json:"id"`
+		ID uuid.UUID  `json:"id"`
 	}
 )

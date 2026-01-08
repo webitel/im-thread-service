@@ -13,18 +13,18 @@ import (
 
 type threadWithCanSendDecorator struct {
 	service.ThreadManager
-	
-	logger *slog.Logger
+
+	logger     *slog.Logger
 	imContacts *imcontact.Client
 }
 
-//Return ThreadManager decorator with imcontact.Client gRPC client
+// Return ThreadManager decorator with imcontact.Client gRPC client
 func NewThreadWithCanSendDecorator(logger *slog.Logger, base service.ThreadManager, imContactsClient *imcontact.Client) *threadWithCanSendDecorator {
-	componentLogger := logger.With("component", "thread.decorator.can_send") //ADD SCOPE CONTEXT
+	componentLogger := logger.With("component", "thread.decorator.can_send") // ADD SCOPE CONTEXT
 
 	return &threadWithCanSendDecorator{
-		logger: componentLogger,
-		imContacts: imContactsClient,
+		logger:        componentLogger,
+		imContacts:    imContactsClient,
 		ThreadManager: base,
 	}
 }
@@ -38,33 +38,31 @@ func NewThreadWithCanSendDecorator(logger *slog.Logger, base service.ThreadManag
 // chat with Peer.To), it will return the result of the base implementation's
 // EnsureDirectThread method.
 func (t *threadWithCanSendDecorator) EnsureDirectThread(ctx context.Context, req *dto.EnsureDirectThreadRequest) (*dto.EnsureDirectThreadResponse, error) {
-	var (
-		err error
-	)
+	var err error
 
-	//INPUT VALIDATION FIRST!
+	// INPUT VALIDATION FIRST!
 	if err = guards.EnsureDirectThreadValidationGuard(req); err != nil {
 		t.logger.Warn("direct thread validation violation!", "err", err)
 		return nil, err
 	}
 
-	canSendRequest := dto.NewCanSendRequestDtoFromPeers(*req.PeerFrom, *req.PeerTo) 
+	canSendRequest := dto.NewCanSendRequestDtoFromPeers(*req.PeerFrom, *req.PeerTo)
 
 	//SEND RPC CALL TO IM-CONTACT SERVICE TO VALIDATE THAT Peer.From CAN CHAT WITH Peer.To!
 	//TODO: add can send result cacheability!
-	//? better to cache result centralized on RPC ContactsService implementation or in this wrapper? 
+	//? better to cache result centralized on RPC ContactsService implementation or in this wrapper?
 	resp, err := t.imContacts.ContactsService().CanSend(ctx, canSendRequest)
 	if err != nil {
 		t.logger.Error("error in can send rights validation gRPC request!", "err", err)
 		return nil, err
 	}
 
-	//EARLY RETURN WITH VIOLATION LOG IF CAN`T CHAT!
+	// EARLY RETURN WITH VIOLATION LOG IF CAN`T CHAT!
 	if err = guards.CanSendRightsViolationGuard(resp.CanSend); err != nil {
-		t.logger.Warn("send rights violation", "from", req.PeerFrom.Id, "to", req.PeerTo.Id)
+		t.logger.Warn("send rights violation", "from", req.PeerFrom.ID, "to", req.PeerTo.ID)
 		return nil, err
-	}	
+	}
 
-	//RETURN BASE IMPLEMENTATION RESULT!
+	// RETURN BASE IMPLEMENTATION RESULT!
 	return t.ThreadManager.EnsureDirectThread(ctx, req)
 }

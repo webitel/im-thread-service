@@ -28,13 +28,19 @@ func (m *MessageService) SendText(ctx context.Context, in *impb.SendTextRequest)
 	return mapper.MapToSendTextResponse(out), nil
 }
 
-// SendDocument implements threadv1.MessageServer.
-func (m *MessageService) SendDocument(context.Context, *impb.SendDocumentRequest) (*impb.SendDocumentResponse, error) {
-	panic("unimplemented")
+// SendImage implements threadv1.MessageServer.
+func (m *MessageService) SendImage(ctx context.Context, in *impb.SendImageRequest) (*impb.SendImageResponse, error) {
+	out, err := m.handler.SendImage(ctx, mapper.MapToSendImageRequest(in))
+	if err != nil {
+		m.logger.Error("failed to send image", "error", err)
+		return nil, err
+	}
+
+	return mapper.MapToSendImageResponse(out), nil
 }
 
-// SendImage implements threadv1.MessageServer.
-func (m *MessageService) SendImage(context.Context, *impb.SendImageRequest) (*impb.SendImageResponse, error) {
+// SendDocument implements threadv1.MessageServer.
+func (m *MessageService) SendDocument(context.Context, *impb.SendDocumentRequest) (*impb.SendDocumentResponse, error) {
 	panic("unimplemented")
 }
 

@@ -2,63 +2,139 @@ package model
 
 import (
 	"regexp"
+	"strconv"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"github.com/rivo/uniseg"
+	"github.com/webitel/im-thread-service/internal/domain/events"
 	"golang.org/x/text/unicode/norm"
 )
 
 var (
-	// [PARSERS]
-	// Basic regex for identifying links and user mentions
 	linkRegex    = regexp.MustCompile(`https?://[^\s/$.?#].[^\s]*`)
 	mentionRegex = regexp.MustCompile(`@[\w]+`)
 )
 
-// NewTextMessage performs domain-level enrichment and normalization.
-// It returns a Message object ready to be persisted.
-func NewTextMessage(threadID uuid.UUID, from, to Peer, text string) *Message {
-	// [ENRICHMENT]
-	// Clean and normalize text before processing metadata
-	cleanText := prepareText(text)
-
-	return &Message{
-		ThreadId: threadID,
-		From:     from,
-		To:       to,
-		Text:     cleanText,
-		Type:     MessageTypeText,
-		Metadata: map[string]any{
-			// [METADATA]
-			// Store pre-calculated entities and real grapheme count for UI/Search
-			"entities":  extractEntities(cleanText),
-			"graphemes": uniseg.GraphemeClusterCount(cleanText),
-		},
-	}
+// [INPUT_WRAPPERS] to prevent circular dependencies with DTO
+type ImageInput struct {
+	FileID   string
+	MimeType string
+	Name     string
 }
 
-// prepareText handles NFC normalization and UTF-8 safety.
+type DocumentInput struct {
+	FileID   string
+	MimeType string
+	Name     string
+	Size     int64
+}
+
+func NewTextMessage(threadID uuid.UUID, from Peer, recipients []Peer, text string) *Message {
+	cleanText := prepareText(text)
+
+	msg := &Message{
+		ID:        uuid.New(),
+		ThreadID:  threadID,
+		From:      from,
+		Text:      cleanText,
+		Type:      MessageTypeText,
+		Metadata:  buildMetadata(cleanText),
+		CreatedAt: time.Now().UTC(),
+	}
+
+	for _, to := range recipients {
+		msg.AddEvent(events.MessageCreated{
+			MessageID:  msg.ID,
+			ThreadID:   msg.ThreadID,
+			FromID:     msg.From.ID,
+			FromType:   int(msg.From.Type),
+			ToID:       to.ID,
+			ToType:     int(to.Type),
+			Body:       msg.Text,
+			Type:       int16(msg.Type),
+			OccurredAt: msg.CreatedAt,
+		})
+	}
+
+	return msg
+}
+
+func NewImageMessage(threadID uuid.UUID, from Peer, recipients []Peer, text string, images []ImageInput) *Message {
+	cleanText := prepareText(text)
+
+	domainImages := make([]*MessageImage, 0, len(images))
+	for _, img := range images {
+		fID, _ := strconv.ParseInt(img.FileID, 10, 64)
+		domainImages = append(domainImages, &MessageImage{
+			FileID: fID,
+			Mime:   img.MimeType,
+			Name:   img.Name,
+		})
+	}
+
+	msg := &Message{
+		ID:        uuid.New(),
+		ThreadID:  threadID,
+		From:      from,
+		Text:      cleanText,
+		Type:      MessageTypeImage,
+		Images:    domainImages,
+		Metadata:  buildMetadata(cleanText),
+		CreatedAt: time.Now().UTC(),
+	}
+
+	for _, to := range recipients {
+		msg.AddEvent(events.MessageCreated{
+			MessageID:  msg.ID,
+			ThreadID:   msg.ThreadID,
+			FromID:     msg.From.ID,
+			FromType:   int(msg.From.Type),
+			ToID:       to.ID,
+			ToType:     int(to.Type),
+			Body:       msg.Text,
+			Type:       int16(msg.Type),
+			Images:     mapImagesToPayload(msg.Images),
+			OccurredAt: msg.CreatedAt,
+		})
+	}
+
+	return msg
+}
+
+// [PRIVATE_MAPPERS] Logic to convert domain models to event payloads
+func mapImagesToPayload(imgs []*MessageImage) []events.ImagePayload {
+	res := make([]events.ImagePayload, 0, len(imgs))
+	for _, i := range imgs {
+		res = append(res, events.ImagePayload{
+			FileID: i.FileID,
+			Mime:   i.Mime,
+			Name:   i.Name,
+		})
+	}
+	return res
+}
+
+// [CORE_HELPERS]
 func prepareText(s string) string {
 	s = strings.TrimSpace(s)
-
-	// [UTF8_SAFETY]
-	// Strip invalid sequences to prevent downstream processing crashes
 	if !utf8.ValidString(s) {
 		s = strings.ToValidUTF8(s, "")
 	}
-
-	// [NORMALIZATION]
-	// Use NFC (Canonical Decomposition, followed by Canonical Composition)
-	// This ensures consistent byte representation for emojis and accents
 	return norm.NFC.String(s)
 }
 
-// extractEntities finds links and mentions within the text.
+func buildMetadata(text string) map[string]any {
+	return map[string]any{
+		"entities":  extractEntities(text),
+		"graphemes": uniseg.GraphemeClusterCount(text),
+	}
+}
+
 func extractEntities(text string) []Entity {
 	var entities []Entity
-
 	collect := func(re *regexp.Regexp, entityType string) {
 		matches := re.FindAllStringIndex(text, -1)
 		for _, loc := range matches {
@@ -70,7 +146,6 @@ func extractEntities(text string) []Entity {
 			})
 		}
 	}
-
 	collect(linkRegex, "link")
 	collect(mentionRegex, "mention")
 	return entities

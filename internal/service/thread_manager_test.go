@@ -28,10 +28,10 @@ func Test_thread_EnsureDirectThread(t *testing.T) {
 
 	t.Run("Success_FoundExisting", func(t *testing.T) {
 		req := &dto.EnsureDirectThreadRequest{
-			DomainId: 1,
-			MemberId: uuid.New(),
-			PeerFrom: &model.Peer{Id: uuid.New()},
-			PeerTo:   &model.Peer{Id: uuid.New()},
+			DomainID: 1,
+			MemberID: uuid.New(),
+			PeerFrom: &model.Peer{ID: uuid.New()},
+			PeerTo:   &model.Peer{ID: uuid.New()},
 		}
 		expectedId := uuid.New()
 
@@ -41,15 +41,15 @@ func Test_thread_EnsureDirectThread(t *testing.T) {
 		resp, err := svc.EnsureDirectThread(ctx, req)
 
 		assert.NoError(t, err)
-		assert.Equal(t, expectedId, resp.Id)
+		assert.Equal(t, expectedId, resp.ID)
 	})
 
 	t.Run("Success_CreateNew", func(t *testing.T) {
 		req := &dto.EnsureDirectThreadRequest{
-			DomainId: 1,
-			MemberId: uuid.New(),
-			PeerFrom: &model.Peer{Id: uuid.New()},
-			PeerTo:   &model.Peer{Id: uuid.New()},
+			DomainID: 1,
+			MemberID: uuid.New(),
+			PeerFrom: &model.Peer{ID: uuid.New()},
+			PeerTo:   &model.Peer{ID: uuid.New()},
 		}
 		newThreadID := uuid.New()
 
@@ -65,7 +65,7 @@ func Test_thread_EnsureDirectThread(t *testing.T) {
 		mockUOW.EXPECT().ThreadStore().Return(mockThreadStore)
 		mockThreadStore.EXPECT().Create(gomock.Any(), gomock.Any()).DoAndReturn(
 			func(ctx context.Context, m *model.Thread) (*model.Thread, error) {
-				m.Id = newThreadID
+				m.ID = newThreadID
 				return m, nil
 			},
 		)
@@ -76,6 +76,6 @@ func Test_thread_EnsureDirectThread(t *testing.T) {
 		resp, err := svc.EnsureDirectThread(ctx, req)
 
 		assert.NoError(t, err)
-		assert.Equal(t, newThreadID, resp.Id)
+		assert.Equal(t, newThreadID, resp.ID)
 	})
 }

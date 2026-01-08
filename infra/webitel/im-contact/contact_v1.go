@@ -11,13 +11,13 @@ import (
 // Go client stub for webitel.messaging.contact.v1.Contacts
 type ContactsClient struct {
 	logger *slog.Logger
-  	cc contactv1.ContactsClient
+	cc     contactv1.ContactsClient
 }
 
 func newContactsClient(client *Client) *ContactsClient {
 	return &ContactsClient{
 		logger: client.Logger,
-		cc: contactv1.NewContactsClient(client.Conn),
+		cc:     contactv1.NewContactsClient(client.Conn),
 	}
 }
 
@@ -39,8 +39,8 @@ func (c *ContactsClient) DeleteContact(ctx context.Context, req *contactv1.Delet
 
 func (c *ContactsClient) CanSend(ctx context.Context, req *dto.CanSendRequest) (*dto.CanSendResponse, error) {
 	pb := &contactv1.CanSendRequest{
-		FromId: req.FromId,
-		ToId: req.ToId,
+		FromId: req.FromID,
+		ToId:   req.ToID,
 	}
 
 	resp, err := c.cc.CanSend(ctx, pb)
@@ -48,5 +48,5 @@ func (c *ContactsClient) CanSend(ctx context.Context, req *dto.CanSendRequest) (
 		return nil, err
 	}
 
-  	return dto.NewCanSendResponse(resp.GetCan()), nil
+	return dto.NewCanSendResponse(resp.GetCan()), nil
 }

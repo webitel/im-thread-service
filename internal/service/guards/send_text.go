@@ -35,7 +35,7 @@ func checkNilRequest() MessageGuard {
 
 func checkEmptyPeers() MessageGuard {
 	return func(req *dto.SendTextRequest) error {
-		if req.From.Id == uuid.Nil || req.To.Id == uuid.Nil {
+		if req.From.ID == uuid.Nil || req.To.ID == uuid.Nil {
 			return errors.New("sender and receiver ids are required")
 		}
 		return nil

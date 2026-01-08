@@ -19,7 +19,7 @@ import (
 const _ = grpc.SupportPackageIsVersion7
 
 const (
-	MessageHistory_SearchThreadMessagesHistory_FullMethodName = "/webitel.messaging.thread.v1.MessageHistory/SearchThreadMessagesHistory"
+	MessageHistory_SearchThreadMessagesHistory_FullMethodName = "/webitel.im.internal.thread.v1.MessageHistory/SearchThreadMessagesHistory"
 )
 
 // MessageHistoryClient is the client API for MessageHistory service.
@@ -98,7 +98,7 @@ func _MessageHistory_SearchThreadMessagesHistory_Handler(srv interface{}, ctx co
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
 var MessageHistory_ServiceDesc = grpc.ServiceDesc{
-	ServiceName: "webitel.messaging.thread.v1.MessageHistory",
+	ServiceName: "webitel.im.internal.thread.v1.MessageHistory",
 	HandlerType: (*MessageHistoryServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{

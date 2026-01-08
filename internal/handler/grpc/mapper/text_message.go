@@ -26,13 +26,13 @@ func MapPeerFromProto(pb *impb.Peer) model.Peer {
 	var p model.Peer
 	switch kind := pb.Kind.(type) {
 	case *impb.Peer_UserId:
-		p.Id, _ = uuid.Parse(kind.UserId)
+		p.ID, _ = uuid.Parse(kind.UserId)
 		p.Type = model.PeerUser
 	case *impb.Peer_ChatId:
-		p.Id, _ = uuid.Parse(kind.ChatId)
+		p.ID, _ = uuid.Parse(kind.ChatId)
 		p.Type = model.PeerChat
 	case *impb.Peer_ChannelId:
-		p.Id, _ = uuid.Parse(kind.ChannelId)
+		p.ID, _ = uuid.Parse(kind.ChannelId)
 		p.Type = model.PeerChannel
 	}
 	return p
@@ -43,13 +43,13 @@ func MapToSendTextResponse(out *dto.SendTextResponse) *impb.SendTextResponse {
 		return nil
 	}
 	return &impb.SendTextResponse{
-		Id: out.Id.String(),
+		Id: out.ID.String(),
 		To: MapPeerToProto(out.To),
 	}
 }
 
 func MapPeerToProto(p model.Peer) *impb.Peer {
-	idStr := p.Id.String()
+	idStr := p.ID.String()
 	res := &impb.Peer{}
 	switch p.Type {
 	case model.PeerUser:

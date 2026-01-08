@@ -10,9 +10,7 @@ import (
 	"github.com/webitel/im-thread-service/internal/store"
 )
 
-var (
-	_ ThreadManager = (*thread)(nil)
-)
+var _ ThreadManager = (*thread)(nil)
 
 type (
 	ThreadManager interface {
@@ -36,23 +34,22 @@ func NewThreadService(uow store.UnitOfWork) *thread {
 // If any error occurs during the transaction, it rolls back all operations and returns the error.
 func (t *thread) EnsureDirectThread(ctx context.Context, req *dto.EnsureDirectThreadRequest) (*dto.EnsureDirectThreadResponse, error) {
 	var (
-		err error
+		err          error
 		directThread *dto.EnsureDirectThreadResponse
 	)
 
-	//RESOLVE DIRECT THREAD BY PEERS!
+	// RESOLVE DIRECT THREAD BY PEERS!
 	if directThread, err = t.searchDirectThread(ctx, req); err != nil {
 		return nil, err
 	}
 
-	//SUCCESSFULLY FOUND!
+	// SUCCESSFULLY FOUND!
 	if directThread != nil {
 		return directThread, nil
 	}
 
-
 	// IF NOT FOUND WE NEED TO CREATE NEW THREAD AND TWO NEW THREAD DIALOG FOR PEERS WITHIN ONE TRANSACTION!
-	 err = t.uow.WithinTransaction(ctx, func(ctx context.Context, uow store.UnitOfWork) error {
+	err = t.uow.WithinTransaction(ctx, func(ctx context.Context, uow store.UnitOfWork) error {
 		directThread, err = t.createDirectThread(ctx, req, uow)
 		// ROLLBACK ALL OPERATION IN CAUSE OF ONE FAILURE!
 		if err != nil {
@@ -60,8 +57,7 @@ func (t *thread) EnsureDirectThread(ctx context.Context, req *dto.EnsureDirectTh
 		}
 
 		return nil
-	 })
-	
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -73,7 +69,7 @@ func (t *thread) EnsureDirectThread(ctx context.Context, req *dto.EnsureDirectTh
 // If not found, it returns nil and the error.
 func (t *thread) searchDirectThread(ctx context.Context, req *dto.EnsureDirectThreadRequest) (*dto.EnsureDirectThreadResponse, error) {
 	searchDirectThreadRequest := dto.NewSearchThreadRequest(
-		req.DomainId,
+		req.DomainID,
 		model.ThreadDirect,
 		req.PeerFrom,
 		req.PeerTo,
@@ -93,16 +89,16 @@ func (t *thread) searchDirectThread(ctx context.Context, req *dto.EnsureDirectTh
 // If the operation fails, it returns nil and the error.
 func (t *thread) createDirectThread(ctx context.Context, req *dto.EnsureDirectThreadRequest, uow store.UnitOfWork) (*dto.EnsureDirectThreadResponse, error) {
 	var (
-		err error
-		now = time.Now().UTC()
+		err          error
+		now          = time.Now().UTC()
 		directThread = &model.Thread{
 			BaseModel: model.BaseModel{
-				DomainId: req.DomainId,
+				DomainID:  req.DomainID,
 				CreatedAt: now,
 				UpdatedAt: now,
 			},
 			Kind: model.ThreadDirect,
-			//LEAVE EMPTY SUBJECT FOR DIRECT THREAD!
+			// LEAVE EMPTY SUBJECT FOR DIRECT THREAD!
 		}
 	)
 
@@ -112,19 +108,19 @@ func (t *thread) createDirectThread(ctx context.Context, req *dto.EnsureDirectTh
 
 	dialog := &model.ThreadDialog{
 		BaseModel: model.BaseModel{
-			DomainId: req.DomainId,
+			DomainID:  req.DomainID,
 			CreatedAt: now,
 			UpdatedAt: now,
 		},
-		MemberId: req.MemberId, //member id == peer.from.id or not?
-		ThreadId: directThread.Id,
-		DirectTo: &req.PeerTo.Id,
+		MemberID: req.MemberID, // member id == peer.from.id or not?
+		ThreadID: directThread.ID,
+		DirectTo: &req.PeerTo.ID,
 	}
 
-	//CREATE TWO RECORDS WITH PAIR member_id <-> direct_to AND REVERSED direct_to <-> member_id
+	// CREATE TWO RECORDS WITH PAIR member_id <-> direct_to AND REVERSED direct_to <-> member_id
 	if _, err = uow.ThreadDialogStore().CreateDirectPair(ctx, dialog); err != nil {
 		return nil, err
 	}
 
-	return &dto.EnsureDirectThreadResponse{Id: directThread.Id}, nil
+	return &dto.EnsureDirectThreadResponse{ID: directThread.ID}, nil
 }
