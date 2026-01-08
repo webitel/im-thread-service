@@ -1,0 +1,31 @@
+{
+    "message_id": "01944605-728b-7000-8345-6789abcdef01",
+    "thread_id": "01944605-728b-7111-a123-444455556666",
+    "from_id": "01944605-728b-7222-b456-777788889999",
+    "from_type": 1,
+    "to_id": "01944605-728b-7333-c789-aaaabbbbcccc",
+    "to_type": 1,
+    "body": "Here are the photos from the site and the contract PDF.",
+    "type": 3,
+    "occurred_at": "2026-01-08T18:24:00Z",
+    "images": [
+        {
+            "file_id": 45678,
+            "mime": "image/jpeg",
+            "name": "site_photo_01.jpg"
+        },
+        {
+            "file_id": 45679,
+            "mime": "image/png",
+            "name": "site_photo_02.png"
+        }
+    ],
+    "documents": [
+        {
+            "file_id": 12345,
+            "mime": "application/pdf",
+            "name": "service_agreement.pdf",
+            "size": 1048576
+        }
+    ]
+}

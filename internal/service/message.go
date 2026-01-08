@@ -5,10 +5,8 @@ import (
 	"fmt"
 	"log/slog"
 	"strconv"
-	"strings"
 
 	"github.com/google/uuid"
-	impb "github.com/webitel/im-thread-service/gen/go/api/v1"
 	"github.com/webitel/im-thread-service/internal/domain/model"
 	"github.com/webitel/im-thread-service/internal/service/dto"
 	guards "github.com/webitel/im-thread-service/internal/service/guards"
@@ -201,7 +199,7 @@ func (s *MessageService) dispatchEvents(ctx context.Context, uow store.UnitOfWor
 		topic := fmt.Sprintf("im_message.%s.message.%s.%s",
 			event.RecipientID(),
 			"created",
-			s.getProtoVersion(),
+			event.Version(),
 		)
 
 		if err := uow.Outbox().Publish(ctx, topic, event); err != nil {
@@ -210,18 +208,6 @@ func (s *MessageService) dispatchEvents(ctx context.Context, uow store.UnitOfWor
 	}
 
 	return nil
-}
-
-// getProtoVersion extracts the version (e.g., "v1") from the gRPC ServiceName.
-// ServiceName format: "webitel.im.internal.thread.v1.Message"
-func (s *MessageService) getProtoVersion() string {
-	parts := strings.Split(impb.Message_ServiceDesc.ServiceName, ".")
-	for _, part := range parts {
-		if len(part) >= 2 && part[0] == 'v' && part[1] >= '0' && part[1] <= '9' {
-			return part
-		}
-	}
-	return "v1"
 }
 
 // mapImageInputs transforms transport-layer DTOs into domain-layer inputs.
