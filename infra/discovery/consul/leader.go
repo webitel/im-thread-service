@@ -10,6 +10,10 @@ import (
 	"github.com/webitel/im-thread-service/config"
 )
 
+type LeadershipElector interface {
+	Run(ctx context.Context, onStart func(ctx context.Context) error, onStop func())
+}
+
 const (
 	// [CONSUL_KEYS]
 	leaderElectionKey = "service/im-thread-service/leader"

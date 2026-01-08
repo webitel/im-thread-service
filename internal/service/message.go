@@ -4,8 +4,10 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 
 	"github.com/google/uuid"
+	impb "github.com/webitel/im-thread-service/gen/go/api/v1"
 	"github.com/webitel/im-thread-service/internal/domain/model"
 	"github.com/webitel/im-thread-service/internal/service/dto"
 	guards "github.com/webitel/im-thread-service/internal/service/guards"
@@ -65,8 +67,8 @@ func (s *MessageService) SendText(ctx context.Context, in *dto.SendTextRequest) 
 		if err := s.dispatchEvents(txCtx, uow, msg); err != nil {
 			return err
 		}
-
 		resp = &dto.SendTextResponse{ID: saved.ID, To: in.To}
+
 		return nil
 	})
 	if err != nil {
@@ -145,7 +147,11 @@ func (s *MessageService) dispatchEvents(ctx context.Context, uow store.UnitOfWor
 	// [PUBLISH] Stage each event into the Outbox table within the current transaction.
 	for _, event := range evs {
 		// [ROUTING] Dynamic routing key generation based on the recipient's identity.
-		topic := fmt.Sprintf("im.message.%s", event.RecipientID())
+		topic := fmt.Sprintf("im_message.%s.message.%s.%s",
+			event.RecipientID(),
+			"created",
+			s.getProtoVersion(),
+		)
 
 		if err := uow.Outbox().Publish(ctx, topic, event); err != nil {
 			return fmt.Errorf("failed to stage outbox event for topic [%s]: %w", topic, err)
@@ -153,6 +159,18 @@ func (s *MessageService) dispatchEvents(ctx context.Context, uow store.UnitOfWor
 	}
 
 	return nil
+}
+
+// getProtoVersion extracts the version (e.g., "v1") from the gRPC ServiceName.
+// ServiceName format: "webitel.im.internal.thread.v1.Message"
+func (s *MessageService) getProtoVersion() string {
+	parts := strings.Split(impb.Message_ServiceDesc.ServiceName, ".")
+	for _, part := range parts {
+		if len(part) >= 2 && part[0] == 'v' && part[1] >= '0' && part[1] <= '9' {
+			return part
+		}
+	}
+	return "v1"
 }
 
 // mapImageInputs transforms transport-layer DTOs into domain-layer inputs.
