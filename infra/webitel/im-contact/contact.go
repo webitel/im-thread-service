@@ -17,7 +17,7 @@ type Client struct {
 
 func New(logger *slog.Logger, discovery discovery.DiscoveryProvider) (*Client, error) {
 	// conn, err := webitel.New(logger, discovery, ServiceName)
-	conn, err := webitel.New(logger, discovery, "contacts")
+	conn, err := webitel.New(logger, discovery, ServiceName)
 	if err != nil {
 		return nil, err
 	}
