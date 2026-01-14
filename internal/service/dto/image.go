@@ -7,9 +7,10 @@ import (
 
 type (
 	Image struct {
-		ID       string `json:"id"`
-		Link     string `json:"link"`
+		ID       int64  `json:"id"`
+		URL      string `json:"url"`
 		MimeType string `json:"mime_type"`
+		Name     string `json:"name"`
 	}
 
 	ImageRequest struct {
@@ -18,9 +19,10 @@ type (
 	}
 
 	SendImageRequest struct {
-		From  model.Peer   `json:"from"`
-		To    model.Peer   `json:"to"`
-		Image ImageRequest `json:"image"`
+		From     model.Peer   `json:"from"`
+		To       model.Peer   `json:"to"`
+		Image    ImageRequest `json:"image"`
+		DomainID int64        `json:"domain_id"`
 	}
 
 	SendImageResponse struct {
@@ -28,3 +30,11 @@ type (
 		ID uuid.UUID  `json:"id"`
 	}
 )
+
+func (i *Image) GetID() int64        { return i.ID }
+func (i *Image) GetURL() string      { return i.URL }
+func (i *Image) GetMimeType() string { return i.MimeType }
+func (i *Image) GetName() string     { return "image_attachment" }
+func (i *Image) SetID(id int64)      { i.ID = id }
+func (i *Image) SetMime(mime string) { i.MimeType = mime }
+func (i *Image) SetName(name string) { i.Name = name }

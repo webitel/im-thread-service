@@ -1,6 +1,8 @@
 package mapper
 
 import (
+	"strconv"
+
 	impb "github.com/webitel/im-thread-service/gen/go/api/v1"
 	"github.com/webitel/im-thread-service/internal/service/dto"
 )
@@ -16,18 +18,20 @@ func MapToSendImageRequest(in *impb.SendImageRequest) *dto.SendImageRequest {
 		imgReq.Images = make([]*dto.Image, 0, len(pbImg.GetImages()))
 
 		for _, img := range pbImg.GetImages() {
+			id, _ := strconv.ParseInt(img.GetId(), 10, 64)
 			imgReq.Images = append(imgReq.Images, &dto.Image{
-				ID:       img.GetId(),
-				Link:     img.GetLink(),
+				ID:       id,
+				URL:      img.GetLink(),
 				MimeType: img.GetMimeType(),
 			})
 		}
 	}
 
 	return &dto.SendImageRequest{
-		From:  MapPeerFromProto(in.GetFrom()),
-		To:    MapPeerFromProto(in.GetTo()),
-		Image: imgReq,
+		From:     MapPeerFromProto(in.GetFrom()),
+		To:       MapPeerFromProto(in.GetTo()),
+		Image:    imgReq,
+		DomainID: in.GetDomainId(),
 	}
 }
 

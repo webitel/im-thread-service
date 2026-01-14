@@ -25,8 +25,9 @@ type (
 	}
 
 	CanSendRequest struct {
-		FromID string
-		ToID   string
+		From     model.Peer
+		To       model.Peer
+		DomainID int32
 	}
 
 	CanSendResponse struct {
@@ -49,10 +50,11 @@ func NewSearchThreadRequest(domainID int, kind model.ThreadKind, from, to *model
 	}
 }
 
-func NewCanSendRequestDtoFromPeers(from, to model.Peer) *CanSendRequest {
+func NewCanSendRequestDtoFromPeers(from, to model.Peer, domainID int32) *CanSendRequest {
 	return &CanSendRequest{
-		FromID: from.ID.String(),
-		ToID:   to.ID.String(),
+		From:     from,
+		To:       to,
+		DomainID: domainID,
 	}
 }
 

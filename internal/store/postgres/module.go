@@ -32,7 +32,6 @@ var Module = fx.Module("store",
 		),
 
 		fx.Annotate(
-			
 			NewPgxUnitOfWork,
 			fx.As(new(store.UnitOfWork)),
 		),

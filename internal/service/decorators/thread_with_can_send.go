@@ -46,7 +46,7 @@ func (t *threadWithCanSendDecorator) EnsureDirectThread(ctx context.Context, req
 		return nil, err
 	}
 
-	canSendRequest := dto.NewCanSendRequestDtoFromPeers(*req.PeerFrom, *req.PeerTo)
+	canSendRequest := dto.NewCanSendRequestDtoFromPeers(*req.PeerFrom, *req.PeerTo, int32(req.DomainID))
 
 	//SEND RPC CALL TO IM-CONTACT SERVICE TO VALIDATE THAT Peer.From CAN CHAT WITH Peer.To!
 	//TODO: add can send result cacheability!

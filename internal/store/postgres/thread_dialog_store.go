@@ -2,6 +2,8 @@ package postgres
 
 import (
 	"context"
+	"errors"
+	"fmt"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -26,13 +28,13 @@ func NewThreadDialogStore(db Querier) *threadDialogStore {
 func (t *threadDialogStore) Resolve(ctx context.Context, search *dto.SearchThreadDialogRequest) (uuid.UUID, error) {
 	var (
 		query = `
-			select
-				thread_id
-			from im_thread.thread_dialog
-			where domain_id = @DomainId
-				and (member_id, direct_to) = (@FromId, @DirectTo)
-			limit 1
-		`
+            select thread_id
+            from im_thread.thread_dialog
+            where domain_id = @DomainId
+                and member_id = @FromId
+                and direct_to = @DirectTo
+            limit 1
+        `
 		args = pgx.NamedArgs{
 			"DomainId": search.DomainID,
 			"FromId":   search.From.ID,
@@ -41,8 +43,13 @@ func (t *threadDialogStore) Resolve(ctx context.Context, search *dto.SearchThrea
 		resolvedId uuid.UUID
 	)
 
-	if err := t.db.QueryRow(ctx, query, args).Scan(&resolvedId); err != nil {
-		return uuid.Nil, err
+	err := t.db.QueryRow(ctx, query, args).Scan(&resolvedId)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return uuid.Nil, nil
+		}
+
+		return uuid.Nil, fmt.Errorf("resolve thread dialog: %w", err)
 	}
 
 	return resolvedId, nil

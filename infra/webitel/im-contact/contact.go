@@ -12,16 +12,17 @@ const ServiceName string = "im-contact-service"
 
 type Client struct {
 	Logger *slog.Logger
-	Conn *grpc.ClientConn
+	Conn   *grpc.ClientConn
 }
 
-func New(logger *slog.Logger, discovery discovery.Discovery) (*Client, error) {
-	conn, err := webitel.New(logger, discovery, ServiceName)
+func New(logger *slog.Logger, discovery discovery.DiscoveryProvider) (*Client, error) {
+	// conn, err := webitel.New(logger, discovery, ServiceName)
+	conn, err := webitel.New(logger, discovery, "contacts")
 	if err != nil {
 		return nil, err
 	}
 
-	var client = new(Client) 
+	client := new(Client)
 	{
 		client.Conn = conn
 		client.Logger = logger
@@ -30,8 +31,7 @@ func New(logger *slog.Logger, discovery discovery.Discovery) (*Client, error) {
 	return client, nil
 }
 
-//TODO: add proper shutdown and health checks
-
+// TODO: add proper shutdown and health checks
 func (c *Client) ContactsService() *ContactsClient {
 	return newContactsClient(c)
 }

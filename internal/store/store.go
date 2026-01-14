@@ -18,7 +18,11 @@ type (
 	}
 
 	MessageStore interface {
+		// [MESSAGE] Persistence
 		SaveMessage(ctx context.Context, msg *model.Message) (*model.Message, error)
+		// [ATTACHMENTS] Persistence
+		SaveImages(ctx context.Context, messageID uuid.UUID, images []*model.MessageImage) ([]*model.MessageImage, error)
+		SaveDocuments(ctx context.Context, messageID uuid.UUID, docs []*model.MessageDocument) ([]*model.MessageDocument, error)
 	}
 
 	OutboxStore interface {

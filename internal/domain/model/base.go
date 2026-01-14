@@ -15,6 +15,7 @@ const (
 	PeerUser PeerType = iota
 	PeerChat
 	PeerChannel
+	PeerBot
 )
 
 type Peer struct {

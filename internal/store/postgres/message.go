@@ -1,18 +1,3 @@
-// Package postgres implements the store.MessageStore interface using PostgreSQL as the primary storage engine.
-// It leverages the pgx/v5 driver for high-performance database interactions and pgxscan for mapping
-// database rows directly into domain entities.
-//
-// The implementation follows the Unit of Work pattern, allowing multiple store operations to participate
-// in the same transaction by accepting a Querier interface (which can be either a *pgxpool.Pool or a pgx.Tx).
-//
-// Data Integrity:
-//   - All message persistence operations are executed within the provided context.
-//   - Attachments (Images and Documents) are managed using a Master-Detail relationship,
-//     ensuring relational integrity through foreign key constraints on message_id.
-//
-// Schema:
-//   - Master: im_message.messages
-//   - Details: im_message.message_images, im_message.message_documents
 package postgres
 
 import (
@@ -20,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/georgysavva/scany/v2/pgxscan"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/webitel/im-thread-service/internal/domain/model"
 	"github.com/webitel/im-thread-service/internal/store"
@@ -27,26 +13,22 @@ import (
 
 type messageStore struct {
 	// [QUERIER]
-	// Supports both pgxpool (standalone) and pgx.Tx (within UoW)
+	// Supports both standalone connection pool and active transaction (Unit of Work)
 	q Querier
 }
 
 func NewMessageStore(q Querier) store.MessageStore {
-	return &messageStore{
-		q: q,
-	}
+	return &messageStore{q: q}
 }
 
-var _ store.MessageStore = (*messageStore)(nil)
-
+// [MESSAGE] Persistence implementation
+// SAVES the core message entity including sender, receiver, and text content.
 func (m *messageStore) SaveMessage(ctx context.Context, msg *model.Message) (*model.Message, error) {
-	// 1. Prepare arguments for the master record (im_message.messages)
-	// According to schema: thread_id, sender_id, receiver_id, type, body, metadata
 	args := pgx.NamedArgs{
 		"thread_id":   msg.ThreadID,
 		"sender_id":   msg.From.ID,
 		"receiver_id": msg.To.ID,
-		"type":        msg.Type, // SMALLINT (MessageType enum)
+		"type":        msg.Type,
 		"body":        msg.Text,
 		"metadata":    msg.Metadata,
 	}
@@ -60,67 +42,74 @@ func (m *messageStore) SaveMessage(ctx context.Context, msg *model.Message) (*mo
             receiver_id AS "to.id"`
 
 	var saved model.Message
-
-	// 2. Execute main message insertion
-	// Since we use Unit of Work, m.q is the active transaction
 	if err := pgxscan.Get(ctx, m.q, &saved, query, args); err != nil {
-		return nil, fmt.Errorf("save_message.messages: %w", err)
-	}
-
-	// 3. Handle [IMAGE] attachments
-	if len(msg.Images) > 0 {
-		saved.Images = make([]*model.MessageImage, 0, len(msg.Images))
-
-		for _, img := range msg.Images {
-			// Link the attachment to the newly generated message ID
-			imgArgs := pgx.NamedArgs{
-				"message_id": saved.ID,
-				"file_id":    img.FileID,
-				"name":       img.Name,
-				"mime":       img.Mime,
-				"thumbnails": img.Thumbnails,
-				"width":      img.Width,
-				"height":     img.Height,
-			}
-
-			const imgQuery = `
-                INSERT INTO im_message.message_images (message_id, file_id, name, mime, thumbnails, width, height)
-                VALUES (@message_id, @file_id, @name, @mime, @thumbnails, @width, @height)
-                RETURNING id, message_id, file_id, name, mime, thumbnails, width, height, created_at`
-
-			var savedImg model.MessageImage
-			if err := pgxscan.Get(ctx, m.q, &savedImg, imgQuery, imgArgs); err != nil {
-				return nil, fmt.Errorf("save_message.message_images: %w", err)
-			}
-
-			saved.Images = append(saved.Images, &savedImg)
-		}
-	}
-
-	// 4. Handle [DOCUMENT] attachments
-	if len(msg.Documents) > 0 {
-		saved.Documents = make([]*model.MessageDocument, 0, len(msg.Documents))
-		for _, doc := range msg.Documents {
-			docArgs := pgx.NamedArgs{
-				"message_id": saved.ID,
-				"file_id":    doc.FileID,
-				"name":       doc.Name,
-				"mime":       doc.Mime,
-				"size":       doc.Size,
-			}
-
-			const docQuery = `
-                INSERT INTO im_message.message_documents (message_id, file_id, name, mime, size)
-                VALUES (@message_id, @file_id, @name, @mime, @size)
-                RETURNING id, message_id, file_id, name, mime, size, created_at`
-
-			var savedDoc model.MessageDocument
-			if err := pgxscan.Get(ctx, m.q, &savedDoc, docQuery, docArgs); err != nil {
-				return nil, fmt.Errorf("save_message.message_documents: %w", err)
-			}
-			saved.Documents = append(saved.Documents, &savedDoc)
-		}
+		return nil, fmt.Errorf("postgres.save_message: %w", err)
 	}
 
 	return &saved, nil
+}
+
+// [IMAGE] Attachments implementation
+// PERFORMS bulk-like insertion for image metadata associated with a specific MESSAGE_ID.
+func (m *messageStore) SaveImages(ctx context.Context, messageID uuid.UUID, images []*model.MessageImage) ([]*model.MessageImage, error) {
+	if len(images) == 0 {
+		return nil, nil
+	}
+
+	savedImages := make([]*model.MessageImage, 0, len(images))
+	for _, img := range images {
+		args := pgx.NamedArgs{
+			"message_id": messageID,
+			"file_id":    img.FileID,
+			"mime":       img.Mime,
+			"thumbnails": img.Thumbnails,
+			"width":      img.Width,
+			"height":     img.Height,
+		}
+
+		const query = `
+            INSERT INTO im_message.message_images (message_id, file_id, mime, thumbnails, width, height)
+            VALUES (@message_id, @file_id, @mime, @thumbnails, @width, @height)
+            RETURNING id, message_id, file_id, mime, thumbnails, width, height, created_at`
+
+		var saved model.MessageImage
+		if err := pgxscan.Get(ctx, m.q, &saved, query, args); err != nil {
+			return nil, fmt.Errorf("postgres.save_images: %w", err)
+		}
+		savedImages = append(savedImages, &saved)
+	}
+
+	return savedImages, nil
+}
+
+// [DOCUMENT] Attachments implementation
+// PERFORMS bulk-like insertion for document metadata associated with a specific MESSAGE_ID.
+func (m *messageStore) SaveDocuments(ctx context.Context, messageID uuid.UUID, docs []*model.MessageDocument) ([]*model.MessageDocument, error) {
+	if len(docs) == 0 {
+		return nil, nil
+	}
+
+	savedDocs := make([]*model.MessageDocument, 0, len(docs))
+	for _, doc := range docs {
+		args := pgx.NamedArgs{
+			"message_id": messageID,
+			"file_id":    doc.FileID,
+			"name":       doc.Name,
+			"mime":       doc.Mime,
+			"size":       doc.Size,
+		}
+
+		const query = `
+            INSERT INTO im_message.message_documents (message_id, file_id, name, mime, size)
+            VALUES (@message_id, @file_id, @name, @mime, @size)
+            RETURNING id, message_id, file_id, name, mime, size, created_at`
+
+		var saved model.MessageDocument
+		if err := pgxscan.Get(ctx, m.q, &saved, query, args); err != nil {
+			return nil, fmt.Errorf("postgres.save_documents: %w", err)
+		}
+		savedDocs = append(savedDocs, &saved)
+	}
+
+	return savedDocs, nil
 }
