@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	ServiceName      = "your-service-name"
+	ServiceName      = "im-thread-service"
 	ServiceNamespace = "webitel"
 )
 

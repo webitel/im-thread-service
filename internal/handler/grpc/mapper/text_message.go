@@ -12,9 +12,10 @@ func MapToSendTextRequest(in *impb.SendTextRequest) *dto.SendTextRequest {
 		return nil
 	}
 	return &dto.SendTextRequest{
-		From: MapPeerFromProto(in.GetFrom()),
-		To:   MapPeerFromProto(in.GetTo()),
-		Body: in.GetBody(),
+		From:     MapPeerFromProto(in.GetFrom()),
+		To:       MapPeerFromProto(in.GetTo()),
+		Body:     in.GetBody(),
+		DomainID: in.GetDomainId(),
 	}
 }
 
@@ -34,6 +35,9 @@ func MapPeerFromProto(pb *impb.Peer) model.Peer {
 	case *impb.Peer_ChannelId:
 		p.ID, _ = uuid.Parse(kind.ChannelId)
 		p.Type = model.PeerChannel
+	case *impb.Peer_BotId:
+		p.ID, _ = uuid.Parse(kind.BotId)
+		p.Type = model.PeerBot
 	}
 	return p
 }

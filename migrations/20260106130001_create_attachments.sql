@@ -6,7 +6,6 @@ CREATE TABLE IF NOT EXISTS im_message.message_images (
     id          UUID PRIMARY KEY DEFAULT uuidv7(),
     message_id  UUID NOT NULL REFERENCES im_message.messages(id) ON DELETE CASCADE,
     file_id     BIGINT NOT NULL, 
-    name        TEXT,            
     mime        VARCHAR(64),     
     thumbnails  JSONB,           
     width       INT,

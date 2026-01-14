@@ -5,6 +5,7 @@ import (
 	"log/slog"
 
 	contactv1 "github.com/webitel/im-thread-service/gen/go/client/contact/v1"
+	"github.com/webitel/im-thread-service/internal/domain/model"
 	"github.com/webitel/im-thread-service/internal/service/dto"
 )
 
@@ -39,8 +40,9 @@ func (c *ContactsClient) DeleteContact(ctx context.Context, req *contactv1.Delet
 
 func (c *ContactsClient) CanSend(ctx context.Context, req *dto.CanSendRequest) (*dto.CanSendResponse, error) {
 	pb := &contactv1.CanSendRequest{
-		FromId: req.FromID,
-		ToId:   req.ToID,
+		DomainId: req.DomainID,
+		From:     c.mapModelPeerToProto(req.From),
+		To:       c.mapModelPeerToProto(req.To),
 	}
 
 	resp, err := c.cc.CanSend(ctx, pb)
@@ -49,4 +51,31 @@ func (c *ContactsClient) CanSend(ctx context.Context, req *dto.CanSendRequest) (
 	}
 
 	return dto.NewCanSendResponse(resp.GetCan()), nil
+}
+
+func (c *ContactsClient) mapModelPeerToProto(p model.Peer) *contactv1.CanSendRequest_Peer {
+	peer := &contactv1.CanSendRequest_Peer{}
+
+	switch p.Type {
+	case model.PeerUser:
+		peer.Kind = &contactv1.CanSendRequest_Peer_ContactId{
+			ContactId: p.ID.String(),
+		}
+	case model.PeerBot:
+		peer.Kind = &contactv1.CanSendRequest_Peer_BotId{
+			BotId: p.ID.String(),
+		}
+
+	default:
+		c.logger.Error("failed to map peer to proto: unknown peer type",
+			"type", p.Type,
+			"id", p.ID.String(),
+		)
+
+		peer.Kind = &contactv1.CanSendRequest_Peer_ContactId{
+			ContactId: p.ID.String(),
+		}
+	}
+
+	return peer
 }

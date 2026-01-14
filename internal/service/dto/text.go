@@ -7,9 +7,10 @@ import (
 
 type (
 	SendTextRequest struct {
-		From model.Peer `json:"from"`
-		To   model.Peer `json:"to"`
-		Body string     `json:"body"`
+		From     model.Peer `json:"from"`
+		To       model.Peer `json:"to"`
+		Body     string     `json:"body"`
+		DomainID int64      `json:"domain_id"`
 	}
 
 	SendTextResponse struct {

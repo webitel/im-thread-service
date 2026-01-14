@@ -6,7 +6,7 @@ import (
 	"log/slog"
 	"strconv"
 
-	"github.com/google/uuid"
+	imcontact "github.com/webitel/im-thread-service/infra/webitel/im-contact"
 	"github.com/webitel/im-thread-service/internal/domain/model"
 	"github.com/webitel/im-thread-service/internal/service/dto"
 	guards "github.com/webitel/im-thread-service/internal/service/guards"
@@ -20,16 +20,26 @@ type Messager interface {
 }
 
 type MessageService struct {
-	uow      store.UnitOfWork
-	logger   *slog.Logger
-	threader ThreadManager
+	uow            store.UnitOfWork
+	logger         *slog.Logger
+	threader       ThreadManager
+	contactClient  *imcontact.Client
+	mediaProcessor MediaProcessor
 }
 
-func NewMessageService(uow store.UnitOfWork, logger *slog.Logger, threader ThreadManager) *MessageService {
+func NewMessageService(
+	uow store.UnitOfWork,
+	logger *slog.Logger,
+	threader ThreadManager,
+	contactClient *imcontact.Client,
+	mediaProcessor MediaProcessor,
+) *MessageService {
 	return &MessageService{
-		uow:      uow,
-		logger:   logger,
-		threader: threader,
+		uow:            uow,
+		logger:         logger,
+		threader:       threader,
+		contactClient:  contactClient,
+		mediaProcessor: mediaProcessor,
 	}
 }
 
@@ -42,22 +52,37 @@ func (s *MessageService) SendText(ctx context.Context, in *dto.SendTextRequest) 
 		return nil, fmt.Errorf("validation: %w", err)
 	}
 
-	// // [THREAD] Resolve or initialize communication channel
-	// t, err := s.threader.EnsureDirectThread(ctx, &dto.EnsureDirectThreadRequest{
-	// 	PeerFrom: &in.From,
-	// 	PeerTo:   &in.To,
-	// })
-	// if err != nil {
-	// 	return nil, err
-	// }
+	// [ACCESS_CONTROL] VERIFY communication permissions between peers via Contacts service
+	cansend, err := s.contactClient.ContactsService().CanSend(ctx, dto.NewCanSendRequestDtoFromPeers(in.From, in.To, int32(in.DomainID)))
+	if err != nil {
+		s.logger.Error("error in can send rights validation gRPC request!", "err", err)
+		return nil, err
+	}
+
+	// [GUARD] ENFORCE access policies and block unauthorized messaging attempts
+	if err = guards.CanSendRightsViolationGuard(cansend.CanSend); err != nil {
+		s.logger.Warn("send rights violation", "from", in.From.ID, "to", in.To.ID)
+		return nil, err
+	}
+
+	// [THREAD] Resolve or initialize communication channel
+	t, err := s.threader.EnsureDirectThread(ctx, &dto.EnsureDirectThreadRequest{
+		PeerFrom: &in.From,
+		PeerTo:   &in.To,
+		DomainID: int(in.DomainID),
+		MemberID: in.From.ID,
+	})
+	if err != nil {
+		return nil, err
+	}
 
 	// [MODEL] Construct domain entity with pre-staged distribution events
-	msg := model.NewTextMessage(uuid.New(), in.From, []model.Peer{in.To}, in.Body)
+	msg := model.NewTextMessage(t.ID, in.From, []model.Peer{in.To}, in.Body)
 
 	var resp *dto.SendTextResponse
 
 	// [ATOMIC] Execute persistence and outbox staging in a single transaction
-	err := s.uow.WithinTransaction(ctx, func(txCtx context.Context, uow store.UnitOfWork) error {
+	err = s.uow.WithinTransaction(ctx, func(txCtx context.Context, uow store.UnitOfWork) error {
 		saved, err := uow.Messages().SaveMessage(txCtx, msg)
 		if err != nil {
 			return err
@@ -86,18 +111,44 @@ func (s *MessageService) SendImage(ctx context.Context, in *dto.SendImageRequest
 		return nil, fmt.Errorf("validation: %w", err)
 	}
 
-	// // [THREAD]
-	// t, err := s.threader.EnsureDirectThread(ctx, &dto.EnsureDirectThreadRequest{
-	// 	PeerFrom: &in.From,
-	// 	PeerTo:   &in.To,
-	// })
-	// if err != nil {
-	// 	return nil, err
-	// }
+	// [ACCESS_CONTROL] VERIFY communication permissions between peers via Contacts service
+	cansend, err := s.contactClient.ContactsService().CanSend(ctx, dto.NewCanSendRequestDtoFromPeers(in.From, in.To, int32(in.DomainID)))
+	if err != nil {
+		s.logger.Error("error in can send rights validation gRPC request!", "err", err)
+		return nil, err
+	}
+
+	// [GUARD] ENFORCE access policies and block unauthorized messaging attempts
+	if err = guards.CanSendRightsViolationGuard(cansend.CanSend); err != nil {
+		s.logger.Warn("send rights violation", "from", in.From.ID, "to", in.To.ID)
+		return nil, err
+	}
+
+	// [THREAD]
+	t, err := s.threader.EnsureDirectThread(ctx, &dto.EnsureDirectThreadRequest{
+		PeerFrom: &in.From,
+		PeerTo:   &in.To,
+		DomainID: int(in.DomainID),
+		MemberID: in.From.ID,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	// [CONVERT] TO ATTACHMENTS INTERFACE
+	attachments := make([]AttachmentProcessor, len(in.Image.Images))
+	for i, img := range in.Image.Images {
+		attachments[i] = img
+	}
+
+	// [PROCESS] ALL IMAGES AT ONCE
+	if err := s.mediaProcessor.Process(ctx, in.DomainID, attachments); err != nil {
+		return nil, err
+	}
 
 	// [MODEL] Initialize rich media message with mapped inputs
 	msg := model.NewImageMessage(
-		uuid.New(),
+		t.ID,
 		in.From,
 		[]model.Peer{in.To},
 		in.Image.Body,
@@ -107,13 +158,19 @@ func (s *MessageService) SendImage(ctx context.Context, in *dto.SendImageRequest
 	var resp *dto.SendImageResponse
 
 	// [ATOMIC]
-	err := s.uow.WithinTransaction(ctx, func(txCtx context.Context, uow store.UnitOfWork) error {
+	err = s.uow.WithinTransaction(ctx, func(txCtx context.Context, uow store.UnitOfWork) error {
+		// 1. [SAVE] Base message
 		saved, err := uow.Messages().SaveMessage(txCtx, msg)
 		if err != nil {
 			return err
 		}
 
-		// [DISPATCH]
+		// 2. [SAVE] Image attachments specifically
+		if _, err := uow.Messages().SaveImages(txCtx, saved.ID, msg.Images); err != nil {
+			return err
+		}
+
+		// 3. [DISPATCH]
 		if err := s.dispatchEvents(txCtx, uow, msg); err != nil {
 			return err
 		}
@@ -136,18 +193,44 @@ func (s *MessageService) SendDocument(ctx context.Context, in *dto.SendDocumentR
 		return nil, fmt.Errorf("validation: %w", err)
 	}
 
-	// // [THREAD] Ensure the communication channel exists
-	// t, err := s.threader.EnsureDirectThread(ctx, &dto.EnsureDirectThreadRequest{
-	// 	PeerFrom: &in.From,
-	// 	PeerTo:   &in.To,
-	// })
-	// if err != nil {
-	// 	return nil, err
-	// }
+	// [ACCESS_CONTROL] VERIFY communication permissions between peers via Contacts service
+	cansend, err := s.contactClient.ContactsService().CanSend(ctx, dto.NewCanSendRequestDtoFromPeers(in.From, in.To, int32(in.DomainID)))
+	if err != nil {
+		s.logger.Error("error in can send rights validation gRPC request!", "err", err)
+		return nil, err
+	}
+
+	// [GUARD] ENFORCE access policies and block unauthorized messaging attempts
+	if err = guards.CanSendRightsViolationGuard(cansend.CanSend); err != nil {
+		s.logger.Warn("send rights violation", "from", in.From.ID, "to", in.To.ID)
+		return nil, err
+	}
+
+	// [THREAD] Ensure the communication channel exists
+	t, err := s.threader.EnsureDirectThread(ctx, &dto.EnsureDirectThreadRequest{
+		PeerFrom: &in.From,
+		PeerTo:   &in.To,
+		DomainID: int(in.DomainID),
+		MemberID: in.From.ID,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	// [CONVERT] TO ATTACHMENTS INTERFACE
+	attachments := make([]AttachmentProcessor, len(in.Document.Documents))
+	for i, img := range in.Document.Documents {
+		attachments[i] = img
+	}
+
+	// [PROCESS] ALL IMAGES AT ONCE
+	if err := s.mediaProcessor.Process(ctx, in.DomainID, attachments); err != nil {
+		return nil, err
+	}
 
 	// [MODEL] Initialize domain entity
 	msg := model.NewDocumentMessage(
-		uuid.New(),
+		t.ID,
 		in.From,
 		[]model.Peer{in.To},
 		in.Document.Body,
@@ -157,12 +240,19 @@ func (s *MessageService) SendDocument(ctx context.Context, in *dto.SendDocumentR
 	var resp *dto.SendDocumentResponse
 
 	// [ATOMIC] Persistence and Outbox staging
-	err := s.uow.WithinTransaction(ctx, func(txCtx context.Context, uow store.UnitOfWork) error {
+	err = s.uow.WithinTransaction(ctx, func(txCtx context.Context, uow store.UnitOfWork) error {
+		// 1. [SAVE] Base message
 		saved, err := uow.Messages().SaveMessage(txCtx, msg)
 		if err != nil {
 			return err
 		}
 
+		// 2. [SAVE] Document attachments specifically
+		if _, err := uow.Messages().SaveDocuments(txCtx, saved.ID, msg.Documents); err != nil {
+			return err
+		}
+
+		// 3. [DISPATCH]
 		if err := s.dispatchEvents(txCtx, uow, msg); err != nil {
 			return err
 		}
@@ -215,9 +305,8 @@ func (s *MessageService) mapImageInputs(dtoImages []*dto.Image) []model.ImageInp
 	inputs := make([]model.ImageInput, 0, len(dtoImages))
 	for _, img := range dtoImages {
 		inputs = append(inputs, model.ImageInput{
-			FileID:   img.ID,
+			FileID:   strconv.FormatInt(img.ID, 10),
 			MimeType: img.MimeType,
-			Name:     "image_attachment",
 		})
 	}
 	return inputs
