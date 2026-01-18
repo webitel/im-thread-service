@@ -3,7 +3,8 @@ package webitel
 import (
 	"log/slog"
 
-	"github.com/webitel/webitel-go-kit/infra/discovery"
+	"github.com/webitel/im-thread-service/infra/transport/grpc/resolver/discovery"
+	ds "github.com/webitel/webitel-go-kit/infra/discovery"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -29,10 +30,11 @@ const (
 	}`
 )
 
-func New(log *slog.Logger, discovery discovery.DiscoveryProvider, target string) (*grpc.ClientConn, error) {
+func New(log *slog.Logger, dp ds.DiscoveryProvider, target string) (*grpc.ClientConn, error) {
 	log.Info("connecting to service", slog.String("target", target))
 
 	options := []grpc.DialOption{
+		grpc.WithResolvers(discovery.NewBuilder(dp, discovery.WithInsecure(true))),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithDefaultServiceConfig(retryPolicy),
 		grpc.WithStatsHandler(otelgrpc.NewClientHandler()),
