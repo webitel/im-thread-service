@@ -15,11 +15,11 @@ type threadWithCanSendDecorator struct {
 	service.ThreadManager
 
 	logger     *slog.Logger
-	imContacts *imcontact.Client
+	imContacts imcontact.ContactsService
 }
 
 // Return ThreadManager decorator with imcontact.Client gRPC client
-func NewThreadWithCanSendDecorator(logger *slog.Logger, base service.ThreadManager, imContactsClient *imcontact.Client) *threadWithCanSendDecorator {
+func NewThreadWithCanSendDecorator(logger *slog.Logger, base service.ThreadManager, imContactsClient imcontact.ContactsService) *threadWithCanSendDecorator {
 	componentLogger := logger.With("component", "thread.decorator.can_send") // ADD SCOPE CONTEXT
 
 	return &threadWithCanSendDecorator{
@@ -51,7 +51,7 @@ func (t *threadWithCanSendDecorator) EnsureDirectThread(ctx context.Context, req
 	//SEND RPC CALL TO IM-CONTACT SERVICE TO VALIDATE THAT Peer.From CAN CHAT WITH Peer.To!
 	//TODO: add can send result cacheability!
 	//? better to cache result centralized on RPC ContactsService implementation or in this wrapper?
-	resp, err := t.imContacts.ContactsService().CanSend(ctx, canSendRequest)
+	resp, err := t.imContacts.CanSend(ctx, canSendRequest)
 	if err != nil {
 		t.logger.Error("error in can send rights validation gRPC request!", "err", err)
 		return nil, err

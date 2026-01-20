@@ -23,7 +23,7 @@ type MessageService struct {
 	uow            store.UnitOfWork
 	logger         *slog.Logger
 	threader       ThreadManager
-	contactClient  *imcontact.Client
+	contactClient  imcontact.ContactsService
 	mediaProcessor MediaProcessor
 }
 
@@ -31,7 +31,7 @@ func NewMessageService(
 	uow store.UnitOfWork,
 	logger *slog.Logger,
 	threader ThreadManager,
-	contactClient *imcontact.Client,
+	contactClient imcontact.ContactsService,
 	mediaProcessor MediaProcessor,
 ) *MessageService {
 	return &MessageService{
@@ -53,7 +53,7 @@ func (s *MessageService) SendText(ctx context.Context, in *dto.SendTextRequest) 
 	}
 
 	// [ACCESS_CONTROL] VERIFY communication permissions between peers via Contacts service
-	cansend, err := s.contactClient.ContactsService().CanSend(ctx, dto.NewCanSendRequestDtoFromPeers(in.From, in.To, int32(in.DomainID)))
+	cansend, err := s.contactClient.CanSend(ctx, dto.NewCanSendRequestDtoFromPeers(in.From, in.To, int32(in.DomainID)))
 	if err != nil {
 		s.logger.Error("error in can send rights validation gRPC request!", "err", err)
 		return nil, err
@@ -112,7 +112,7 @@ func (s *MessageService) SendImage(ctx context.Context, in *dto.SendImageRequest
 	}
 
 	// [ACCESS_CONTROL] VERIFY communication permissions between peers via Contacts service
-	cansend, err := s.contactClient.ContactsService().CanSend(ctx, dto.NewCanSendRequestDtoFromPeers(in.From, in.To, int32(in.DomainID)))
+	cansend, err := s.contactClient.CanSend(ctx, dto.NewCanSendRequestDtoFromPeers(in.From, in.To, int32(in.DomainID)))
 	if err != nil {
 		s.logger.Error("error in can send rights validation gRPC request!", "err", err)
 		return nil, err
@@ -194,7 +194,7 @@ func (s *MessageService) SendDocument(ctx context.Context, in *dto.SendDocumentR
 	}
 
 	// [ACCESS_CONTROL] VERIFY communication permissions between peers via Contacts service
-	cansend, err := s.contactClient.ContactsService().CanSend(ctx, dto.NewCanSendRequestDtoFromPeers(in.From, in.To, int32(in.DomainID)))
+	cansend, err := s.contactClient.CanSend(ctx, dto.NewCanSendRequestDtoFromPeers(in.From, in.To, int32(in.DomainID)))
 	if err != nil {
 		s.logger.Error("error in can send rights validation gRPC request!", "err", err)
 		return nil, err

@@ -25,10 +25,10 @@ type MediaProcessor interface {
 }
 
 type storageProcessor struct {
-	client *storageclient.Client
+	client storageclient.FileService
 }
 
-func NewMediaProcessor(client *storageclient.Client) MediaProcessor {
+func NewMediaProcessor(client storageclient.FileService) MediaProcessor {
 	return &storageProcessor{client: client}
 }
 
@@ -38,7 +38,7 @@ func (p *storageProcessor) Process(ctx context.Context, domainID int64, items []
 		return nil
 	}
 
-	svc := p.client.FileService()
+	svc := p.client
 	for _, item := range items {
 		// [CASE_1] VERIFY IF ID EXISTS
 		if id := item.GetID(); id != 0 {

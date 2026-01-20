@@ -7,60 +7,80 @@ import (
 	"github.com/webitel/im-thread-service/gen/go/client/storage"
 	"github.com/webitel/im-thread-service/infra/webitel"
 	"github.com/webitel/webitel-go-kit/infra/discovery"
+	rpc "github.com/webitel/webitel-go-kit/infra/transport/gRPC"
 	"google.golang.org/grpc"
 )
 
 const ServiceName string = "storage"
 
-// [CLIENT] REPRESENTS THE BASE STRUCTURE FOR STORAGE COMMUNICATION
-type Client struct {
-	Logger *slog.Logger
-	Conn   *grpc.ClientConn
+type FileService interface {
+	SearchFiles(ctx context.Context, in *storage.SearchFilesRequest) (*storage.ListFile, error)
+	UploadFileUrl(ctx context.Context, in *storage.UploadFileUrlRequest) (*storage.UploadFileUrlResponse, error)
 }
 
-// [STORAGE_CLIENT] WRAPS THE GRPC SERVICE CLIENT WITH LOGGING CAPABILITIES
-// WE EMBED [storage.FileServiceClient] TO AUTOMATICALLY IMPLEMENT ALL INTERFACE METHODS
+type Client struct {
+	Logger *slog.Logger
+	rpc    *rpc.Client[storage.FileServiceClient]
+}
+
 type StorageClient struct {
 	logger *slog.Logger
-	// [EMBEDDED] ORIGINAL GRPC CLIENT TO HANDLE UNIMPLEMENTED METHODS AUTOMATICALLY
 	storage.FileServiceClient
 }
 
-// [NEW] INITIALIZES A NEW BASE STORAGE CLIENT
 func New(logger *slog.Logger, discovery discovery.DiscoveryProvider) (*Client, error) {
-	// conn, err := webitel.New(logger, discovery, ServiceName)
-	conn, err := webitel.New(logger, discovery, ServiceName)
+	factory := func(conn *grpc.ClientConn) storage.FileServiceClient {
+		return storage.NewFileServiceClient(conn)
+	}
+
+	c, err := webitel.New(discovery, ServiceName, factory)
 	if err != nil {
 		return nil, err
 	}
 
 	return &Client{
 		Logger: logger,
-		Conn:   conn,
+		rpc:    c,
 	}, nil
 }
 
-// [FILE_SERVICE] RETURNS AN INSTANCE OF THE FILE SERVICE CLIENT
-func (c *Client) FileService() *StorageClient {
-	return &StorageClient{
-		logger:            c.Logger,
-		FileServiceClient: storage.NewFileServiceClient(c.Conn),
-	}
+type storageClientWithLog struct {
+	logger *slog.Logger
+	storage.FileServiceClient
 }
 
-// --- OVERRIDDEN METHODS WITH LOGGING ---
-
-// [SEARCH_FILES] SEARCHES FOR FILES IN THE STORAGE SERVICE
-func (s *StorageClient) SearchFiles(ctx context.Context, in *storage.SearchFilesRequest, opts ...grpc.CallOption) (*storage.ListFile, error) {
+func (s *storageClientWithLog) SearchFiles(ctx context.Context, in *storage.SearchFilesRequest, opts ...grpc.CallOption) (*storage.ListFile, error) {
 	s.logger.Debug("STORAGE.SEARCH_FILES", slog.Any("REQUEST", in))
 	return s.FileServiceClient.SearchFiles(ctx, in, opts...)
 }
 
-// [UPLOAD_FILE_URL] UPLOADS A FILE TO STORAGE USING A PROVIDED URL
-func (s *StorageClient) UploadFileUrl(ctx context.Context, in *storage.UploadFileUrlRequest, opts ...grpc.CallOption) (*storage.UploadFileUrlResponse, error) {
+func (s *storageClientWithLog) UploadFileUrl(ctx context.Context, in *storage.UploadFileUrlRequest, opts ...grpc.CallOption) (*storage.UploadFileUrlResponse, error) {
 	s.logger.Info("STORAGE.UPLOAD_FILE_URL", slog.String("URL", in.GetUrl()))
 	return s.FileServiceClient.UploadFileUrl(ctx, in, opts...)
 }
 
-// [INTERFACE_GUARD] ENSURES THAT STORAGE_CLIENT FULLY IMPLEMENTS THE GRPC INTERFACE
-var _ storage.FileServiceClient = (*StorageClient)(nil)
+func (c *Client) SearchFiles(ctx context.Context, in *storage.SearchFilesRequest) (*storage.ListFile, error) {
+	var resp *storage.ListFile
+
+	err := c.rpc.Execute(ctx, func(api storage.FileServiceClient) error {
+		var err error
+		wrapper := &storageClientWithLog{logger: c.Logger, FileServiceClient: api}
+		resp, err = wrapper.SearchFiles(ctx, in)
+		return err
+	})
+
+	return resp, err
+}
+
+func (c *Client) UploadFileUrl(ctx context.Context, in *storage.UploadFileUrlRequest) (*storage.UploadFileUrlResponse, error) {
+	var resp *storage.UploadFileUrlResponse
+
+	err := c.rpc.Execute(ctx, func(api storage.FileServiceClient) error {
+		var err error
+		wrapper := &storageClientWithLog{logger: c.Logger, FileServiceClient: api}
+		resp, err = wrapper.UploadFileUrl(ctx, in)
+		return err
+	})
+
+	return resp, err
+}

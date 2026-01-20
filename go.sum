@@ -372,6 +372,8 @@ github.com/webitel/webitel-go-kit/infra/discovery v0.0.0-20251224105820-8d9bcb90
 github.com/webitel/webitel-go-kit/infra/discovery v0.0.0-20251224105820-8d9bcb902593/go.mod h1:Uib3qB6XhOoytxFHrD8Jj5GWXIDIz2IjDVxcW7SWENE=
 github.com/webitel/webitel-go-kit/infra/otel v0.0.0-20251224105820-8d9bcb902593 h1:ZSxcgANKHGU5+shpyBXdKdfTqRFs8XLoQODhDfRRalI=
 github.com/webitel/webitel-go-kit/infra/otel v0.0.0-20251224105820-8d9bcb902593/go.mod h1:tbGmdVdDdUbfsI2wpOoMj7dlmgwaKQFmIoAbaWPS7j4=
+github.com/webitel/webitel-go-kit/infra/transport v0.0.0-20260120125006-c8fad5ea2b63 h1:5lS6VCYZZ5AvD406sh1JJCEqZ7wQ7jV/jUhdChQ/g38=
+github.com/webitel/webitel-go-kit/infra/transport v0.0.0-20260120125006-c8fad5ea2b63/go.mod h1:pDNLCygkIoDlz0m9pj9p9961FqtNqINLXJq1vtUDs2k=
 github.com/webitel/webitel-go-kit/pkg/errors v0.0.0-20251222125635-d60448d23a82 h1:0WuyeTkUyUmPAWKjvNtRfuLJzzzKeVDlTjj8tzG2g1Q=
 github.com/webitel/webitel-go-kit/pkg/errors v0.0.0-20251222125635-d60448d23a82/go.mod h1:/6hKNQ+DiFi5A+auMQmixhiWzHz8g38RblGi3GjNfuw=
 github.com/webitel/webitel-go-kit/pkg/interceptors v0.0.0-20251224105820-8d9bcb902593 h1:XQ5uSIGSwDsXR/xa7Xfq+x7iBLWXBgJKlG539zOHN2g=
