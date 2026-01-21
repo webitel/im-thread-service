@@ -59,6 +59,7 @@ var (
 type MessageCreated struct {
 	MessageID  uuid.UUID         `json:"message_id"`
 	ThreadID   uuid.UUID         `json:"thread_id"`
+	DomainID   int32             `json:"domain_id"`
 	FromID     uuid.UUID         `json:"from_id"`
 	FromType   int               `json:"from_type"`
 	ToID       uuid.UUID         `json:"to_id"`

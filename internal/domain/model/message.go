@@ -20,6 +20,7 @@ const (
 type Message struct {
 	ID        uuid.UUID      `json:"id" db:"id"`
 	ThreadID  uuid.UUID      `json:"thread_id" db:"thread_id"`
+	DomainID  int32          `json:"domain_id" db:"domain_id"`
 	From      Peer           `json:"from" db:"from"`
 	To        Peer           `json:"to" db:"to"`
 	Text      string         `json:"text" db:"body"`

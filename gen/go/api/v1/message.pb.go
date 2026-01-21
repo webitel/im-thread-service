@@ -7,10 +7,11 @@
 package threadv1
 
 import (
-	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
-	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
 	sync "sync"
+
+	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
+	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 )
 
 const (
@@ -787,20 +788,23 @@ func file_v1_message_proto_rawDescGZIP() []byte {
 	return file_v1_message_proto_rawDescData
 }
 
-var file_v1_message_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
-var file_v1_message_proto_goTypes = []interface{}{
-	(*SendTextRequest)(nil),      // 0: webitel.im.internal.thread.v1.SendTextRequest
-	(*SendTextResponse)(nil),     // 1: webitel.im.internal.thread.v1.SendTextResponse
-	(*DocumentInput)(nil),        // 2: webitel.im.internal.thread.v1.DocumentInput
-	(*DocumentRequest)(nil),      // 3: webitel.im.internal.thread.v1.DocumentRequest
-	(*SendDocumentRequest)(nil),  // 4: webitel.im.internal.thread.v1.SendDocumentRequest
-	(*SendDocumentResponse)(nil), // 5: webitel.im.internal.thread.v1.SendDocumentResponse
-	(*ImageInput)(nil),           // 6: webitel.im.internal.thread.v1.ImageInput
-	(*ImageRequest)(nil),         // 7: webitel.im.internal.thread.v1.ImageRequest
-	(*SendImageRequest)(nil),     // 8: webitel.im.internal.thread.v1.SendImageRequest
-	(*SendImageResponse)(nil),    // 9: webitel.im.internal.thread.v1.SendImageResponse
-	(*Peer)(nil),                 // 10: webitel.im.internal.thread.v1.Peer
-}
+var (
+	file_v1_message_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
+	file_v1_message_proto_goTypes  = []interface{}{
+		(*SendTextRequest)(nil),      // 0: webitel.im.internal.thread.v1.SendTextRequest
+		(*SendTextResponse)(nil),     // 1: webitel.im.internal.thread.v1.SendTextResponse
+		(*DocumentInput)(nil),        // 2: webitel.im.internal.thread.v1.DocumentInput
+		(*DocumentRequest)(nil),      // 3: webitel.im.internal.thread.v1.DocumentRequest
+		(*SendDocumentRequest)(nil),  // 4: webitel.im.internal.thread.v1.SendDocumentRequest
+		(*SendDocumentResponse)(nil), // 5: webitel.im.internal.thread.v1.SendDocumentResponse
+		(*ImageInput)(nil),           // 6: webitel.im.internal.thread.v1.ImageInput
+		(*ImageRequest)(nil),         // 7: webitel.im.internal.thread.v1.ImageRequest
+		(*SendImageRequest)(nil),     // 8: webitel.im.internal.thread.v1.SendImageRequest
+		(*SendImageResponse)(nil),    // 9: webitel.im.internal.thread.v1.SendImageResponse
+		(*Peer)(nil),                 // 10: webitel.im.internal.thread.v1.Peer
+	}
+)
+
 var file_v1_message_proto_depIdxs = []int32{
 	10, // 0: webitel.im.internal.thread.v1.SendTextRequest.from:type_name -> webitel.im.internal.thread.v1.Peer
 	10, // 1: webitel.im.internal.thread.v1.SendTextRequest.to:type_name -> webitel.im.internal.thread.v1.Peer

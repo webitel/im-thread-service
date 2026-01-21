@@ -21,11 +21,12 @@ type DocumentInput struct {
 	Size     int64
 }
 
-func NewTextMessage(threadID uuid.UUID, from Peer, recipients []Peer, text string) *Message {
+func NewTextMessage(threadID uuid.UUID, domainID int32, from Peer, recipients []Peer, text string) *Message {
 	cleanText := prepareText(text)
 	msg := &Message{
 		ID:        uuid.New(),
 		ThreadID:  threadID,
+		DomainID:  domainID,
 		From:      from,
 		Text:      cleanText,
 		Type:      MessageTypeText,
@@ -35,6 +36,7 @@ func NewTextMessage(threadID uuid.UUID, from Peer, recipients []Peer, text strin
 
 	for _, to := range recipients {
 		msg.AddEvent(events.MessageCreated{
+			DomainID:   domainID,
 			MessageID:  msg.ID,
 			ThreadID:   msg.ThreadID,
 			FromID:     msg.From.ID,
@@ -49,7 +51,7 @@ func NewTextMessage(threadID uuid.UUID, from Peer, recipients []Peer, text strin
 	return msg
 }
 
-func NewImageMessage(threadID uuid.UUID, from Peer, recipients []Peer, text string, images []ImageInput) *Message {
+func NewImageMessage(threadID uuid.UUID, domainID int32, from Peer, recipients []Peer, text string, images []ImageInput) *Message {
 	cleanText := prepareText(text)
 	domainImages := make([]*MessageImage, 0, len(images))
 	for _, img := range images {
@@ -64,6 +66,7 @@ func NewImageMessage(threadID uuid.UUID, from Peer, recipients []Peer, text stri
 	msg := &Message{
 		ID:        uuid.New(),
 		ThreadID:  threadID,
+		DomainID:  domainID,
 		From:      from,
 		Text:      cleanText,
 		Type:      MessageTypeImage,
@@ -76,6 +79,7 @@ func NewImageMessage(threadID uuid.UUID, from Peer, recipients []Peer, text stri
 		msg.AddEvent(events.MessageCreated{
 			MessageID:  msg.ID,
 			ThreadID:   msg.ThreadID,
+			DomainID:   domainID,
 			FromID:     msg.From.ID,
 			FromType:   int(msg.From.Type),
 			ToID:       to.ID,
@@ -89,7 +93,7 @@ func NewImageMessage(threadID uuid.UUID, from Peer, recipients []Peer, text stri
 	return msg
 }
 
-func NewDocumentMessage(threadID uuid.UUID, from Peer, recipients []Peer, body string, docs []DocumentInput) *Message {
+func NewDocumentMessage(threadID uuid.UUID, domainID int32, from Peer, recipients []Peer, body string, docs []DocumentInput) *Message {
 	cleanText := prepareText(body)
 	domainDocs := make([]*MessageDocument, 0, len(docs))
 	for _, d := range docs {
@@ -105,6 +109,7 @@ func NewDocumentMessage(threadID uuid.UUID, from Peer, recipients []Peer, body s
 	msg := &Message{
 		ID:        uuid.New(),
 		ThreadID:  threadID,
+		DomainID:  domainID,
 		From:      from,
 		To:        recipients[0],
 		Text:      cleanText,
@@ -118,6 +123,7 @@ func NewDocumentMessage(threadID uuid.UUID, from Peer, recipients []Peer, body s
 		msg.AddEvent(events.MessageCreated{
 			MessageID:  msg.ID,
 			ThreadID:   msg.ThreadID,
+			DomainID:   domainID,
 			FromID:     msg.From.ID,
 			FromType:   int(msg.From.Type),
 			ToID:       to.ID,
