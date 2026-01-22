@@ -2,7 +2,7 @@ package dto
 
 import (
 	"github.com/google/uuid"
-	"github.com/webitel/im-thread-service/internal/domain/model"
+	"github.com/webitel/im-thread-service/internal/domain/shared"
 )
 
 type Document struct {
@@ -19,15 +19,15 @@ type DocumentRequest struct {
 }
 
 type SendDocumentRequest struct {
-	From     model.Peer
-	To       model.Peer
+	From     shared.Peer
+	To       shared.Peer
 	Document DocumentRequest
 	DomainID int64 `json:"domain_id"`
 }
 
 type SendDocumentResponse struct {
 	ID uuid.UUID
-	To model.Peer
+	To shared.Peer
 }
 
 func (d *Document) GetID() int64        { return d.ID }

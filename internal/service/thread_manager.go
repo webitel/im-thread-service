@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/webitel/im-thread-service/internal/domain/model"
+	"github.com/webitel/im-thread-service/internal/domain/shared"
 	"github.com/webitel/im-thread-service/internal/service/dto"
 	"github.com/webitel/im-thread-service/internal/store"
 )
@@ -92,7 +93,7 @@ func (t *thread) createDirectThread(ctx context.Context, req *dto.EnsureDirectTh
 		err          error
 		now          = time.Now().UTC()
 		directThread = &model.Thread{
-			BaseModel: model.BaseModel{
+			BaseModel: shared.BaseModel{
 				DomainID:  req.DomainID,
 				CreatedAt: now,
 				UpdatedAt: now,
@@ -107,7 +108,7 @@ func (t *thread) createDirectThread(ctx context.Context, req *dto.EnsureDirectTh
 	}
 
 	dialog := &model.ThreadDialog{
-		BaseModel: model.BaseModel{
+		BaseModel: shared.BaseModel{
 			DomainID:  req.DomainID,
 			CreatedAt: now,
 			UpdatedAt: now,

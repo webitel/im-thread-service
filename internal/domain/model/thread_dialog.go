@@ -1,9 +1,12 @@
 package model
 
-import "github.com/google/uuid"
+import (
+	"github.com/google/uuid"
+	"github.com/webitel/im-thread-service/internal/domain/shared"
+)
 
 type ThreadDialog struct {
-	BaseModel
+	shared.BaseModel
 
 	MemberID uuid.UUID  `json:"member_id"`
 	ThreadID uuid.UUID  `json:"thread_id"`

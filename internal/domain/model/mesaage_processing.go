@@ -6,6 +6,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/rivo/uniseg"
+	"github.com/webitel/im-thread-service/internal/domain/shared"
 	"golang.org/x/text/unicode/norm"
 )
 
@@ -29,12 +30,12 @@ func buildMetadata(text string) map[string]any {
 	}
 }
 
-func extractEntities(text string) []Entity {
-	var entities []Entity
+func extractEntities(text string) []shared.Entity {
+	var entities []shared.Entity
 	collect := func(re *regexp.Regexp, entityType string) {
 		matches := re.FindAllStringIndex(text, -1)
 		for _, loc := range matches {
-			entities = append(entities, Entity{
+			entities = append(entities, shared.Entity{
 				Type:   entityType,
 				Offset: loc[0],
 				Length: loc[1] - loc[0],

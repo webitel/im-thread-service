@@ -5,7 +5,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/webitel/im-thread-service/internal/domain/events"
+	"github.com/webitel/im-thread-service/internal/domain/event"
+	"github.com/webitel/im-thread-service/internal/domain/shared"
 )
 
 type ImageInput struct {
@@ -21,7 +22,7 @@ type DocumentInput struct {
 	Size     int64
 }
 
-func NewTextMessage(threadID uuid.UUID, domainID int32, from Peer, recipients []Peer, text string) *Message {
+func NewTextMessage(threadID uuid.UUID, domainID int32, from shared.Peer, recipients []shared.Peer, text string) *Message {
 	cleanText := prepareText(text)
 	msg := &Message{
 		ID:        uuid.New(),
@@ -35,14 +36,18 @@ func NewTextMessage(threadID uuid.UUID, domainID int32, from Peer, recipients []
 	}
 
 	for _, to := range recipients {
-		msg.AddEvent(events.MessageCreated{
-			DomainID:   domainID,
-			MessageID:  msg.ID,
-			ThreadID:   msg.ThreadID,
-			FromID:     msg.From.ID,
-			FromType:   int(msg.From.Type),
-			ToID:       to.ID,
-			ToType:     int(to.Type),
+		msg.AddEvent(event.MessageCreated{
+			DomainID:  domainID,
+			MessageID: msg.ID,
+			ThreadID:  msg.ThreadID,
+			From: &shared.Peer{
+				ID:   msg.From.ID,
+				Type: msg.From.Type,
+			},
+			To: &shared.Peer{
+				ID:   to.ID,
+				Type: to.Type,
+			},
 			Body:       msg.Text,
 			Type:       int16(msg.Type),
 			OccurredAt: msg.CreatedAt,
@@ -51,7 +56,7 @@ func NewTextMessage(threadID uuid.UUID, domainID int32, from Peer, recipients []
 	return msg
 }
 
-func NewImageMessage(threadID uuid.UUID, domainID int32, from Peer, recipients []Peer, text string, images []ImageInput) *Message {
+func NewImageMessage(threadID uuid.UUID, domainID int32, from shared.Peer, recipients []shared.Peer, text string, images []ImageInput) *Message {
 	cleanText := prepareText(text)
 	domainImages := make([]*MessageImage, 0, len(images))
 	for _, img := range images {
@@ -76,14 +81,18 @@ func NewImageMessage(threadID uuid.UUID, domainID int32, from Peer, recipients [
 	}
 
 	for _, to := range recipients {
-		msg.AddEvent(events.MessageCreated{
-			MessageID:  msg.ID,
-			ThreadID:   msg.ThreadID,
-			DomainID:   domainID,
-			FromID:     msg.From.ID,
-			FromType:   int(msg.From.Type),
-			ToID:       to.ID,
-			ToType:     int(to.Type),
+		msg.AddEvent(event.MessageCreated{
+			MessageID: msg.ID,
+			ThreadID:  msg.ThreadID,
+			DomainID:  domainID,
+			From: &shared.Peer{
+				ID:   msg.From.ID,
+				Type: msg.From.Type,
+			},
+			To: &shared.Peer{
+				ID:   to.ID,
+				Type: to.Type,
+			},
 			Body:       msg.Text,
 			Type:       int16(msg.Type),
 			Images:     mapImagesToPayload(msg.Images),
@@ -93,7 +102,7 @@ func NewImageMessage(threadID uuid.UUID, domainID int32, from Peer, recipients [
 	return msg
 }
 
-func NewDocumentMessage(threadID uuid.UUID, domainID int32, from Peer, recipients []Peer, body string, docs []DocumentInput) *Message {
+func NewDocumentMessage(threadID uuid.UUID, domainID int32, from shared.Peer, recipients []shared.Peer, body string, docs []DocumentInput) *Message {
 	cleanText := prepareText(body)
 	domainDocs := make([]*MessageDocument, 0, len(docs))
 	for _, d := range docs {
@@ -120,14 +129,18 @@ func NewDocumentMessage(threadID uuid.UUID, domainID int32, from Peer, recipient
 	}
 
 	for _, to := range recipients {
-		msg.AddEvent(events.MessageCreated{
-			MessageID:  msg.ID,
-			ThreadID:   msg.ThreadID,
-			DomainID:   domainID,
-			FromID:     msg.From.ID,
-			FromType:   int(msg.From.Type),
-			ToID:       to.ID,
-			ToType:     int(to.Type),
+		msg.AddEvent(event.MessageCreated{
+			MessageID: msg.ID,
+			ThreadID:  msg.ThreadID,
+			DomainID:  domainID,
+			From: &shared.Peer{
+				ID:   msg.From.ID,
+				Type: msg.From.Type,
+			},
+			To: &shared.Peer{
+				ID:   to.ID,
+				Type: to.Type,
+			},
 			Body:       msg.Text,
 			Type:       int16(msg.Type),
 			Documents:  mapDocumentsToPayload(msg.Documents),
@@ -139,18 +152,18 @@ func NewDocumentMessage(threadID uuid.UUID, domainID int32, from Peer, recipient
 
 // --- Internal Payloads Mappers ---
 
-func mapImagesToPayload(imgs []*MessageImage) []events.ImagePayload {
-	res := make([]events.ImagePayload, 0, len(imgs))
+func mapImagesToPayload(imgs []*MessageImage) []event.ImagePayload {
+	res := make([]event.ImagePayload, 0, len(imgs))
 	for _, i := range imgs {
-		res = append(res, events.ImagePayload{FileID: i.FileID, Mime: i.Mime, Name: i.Name})
+		res = append(res, event.ImagePayload{FileID: i.FileID, Mime: i.Mime, Name: i.Name})
 	}
 	return res
 }
 
-func mapDocumentsToPayload(docs []*MessageDocument) []events.DocumentPayload {
-	res := make([]events.DocumentPayload, 0, len(docs))
+func mapDocumentsToPayload(docs []*MessageDocument) []event.DocumentPayload {
+	res := make([]event.DocumentPayload, 0, len(docs))
 	for _, d := range docs {
-		res = append(res, events.DocumentPayload{FileID: d.FileID, Mime: d.Mime, Name: d.Name, Size: d.Size})
+		res = append(res, event.DocumentPayload{FileID: d.FileID, Mime: d.Mime, Name: d.Name, Size: d.Size})
 	}
 	return res
 }

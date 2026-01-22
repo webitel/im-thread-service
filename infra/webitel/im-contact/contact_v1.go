@@ -5,7 +5,7 @@ import (
 	"log/slog"
 
 	contactv1 "github.com/webitel/im-thread-service/gen/go/client/contact/v1"
-	"github.com/webitel/im-thread-service/internal/domain/model"
+	"github.com/webitel/im-thread-service/internal/domain/shared"
 	"github.com/webitel/im-thread-service/internal/service/dto"
 )
 
@@ -53,17 +53,13 @@ func (c *ContactsClient) CanSend(ctx context.Context, req *dto.CanSendRequest) (
 	return dto.NewCanSendResponse(resp.GetCan()), nil
 }
 
-func (c *ContactsClient) mapModelPeerToProto(p model.Peer) *contactv1.CanSendRequest_Peer {
+func (c *ContactsClient) mapModelPeerToProto(p shared.Peer) *contactv1.CanSendRequest_Peer {
 	peer := &contactv1.CanSendRequest_Peer{}
 
 	switch p.Type {
-	case model.PeerUser:
+	case shared.PeerContact:
 		peer.Kind = &contactv1.CanSendRequest_Peer_ContactId{
 			ContactId: p.ID.String(),
-		}
-	case model.PeerBot:
-		peer.Kind = &contactv1.CanSendRequest_Peer_BotId{
-			BotId: p.ID.String(),
 		}
 
 	default:

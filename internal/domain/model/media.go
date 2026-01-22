@@ -1,9 +1,13 @@
 package model
 
-import "net/url"
+import (
+	"net/url"
+
+	"github.com/webitel/im-thread-service/internal/domain/shared"
+)
 
 type Image struct {
-	BaseModel
+	shared.BaseModel
 	Thumbnails []*Thumbnail `json:"thumbnails"`
 	URL        *url.URL     `json:"url"`
 	FileName   string       `json:"file_name"`
@@ -11,7 +15,7 @@ type Image struct {
 }
 
 type Document struct {
-	BaseModel
+	shared.BaseModel
 	URL       *url.URL `json:"url"`
 	FileName  string   `json:"file_name"`
 	MimeType  string   `json:"mime_type"`
