@@ -51,7 +51,7 @@ func (t *threadWithCanSendDecorator) EnsureDirectThread(ctx context.Context, req
 	//SEND RPC CALL TO IM-CONTACT SERVICE TO VALIDATE THAT Peer.From CAN CHAT WITH Peer.To!
 	//TODO: add can send result cacheability!
 	//? better to cache result centralized on RPC ContactsService implementation or in this wrapper?
-	resp, err := t.imContacts.ContactsService().CanSend(ctx, canSendRequest)
+	resp, err := t.imContacts.CanSend(ctx, canSendRequest)
 	if err != nil {
 		t.logger.Error("error in can send rights validation gRPC request!", "err", err)
 		return nil, err

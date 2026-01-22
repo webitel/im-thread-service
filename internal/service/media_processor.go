@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/webitel/im-thread-service/gen/go/client/storage"
+	"github.com/webitel/im-thread-service/gen/go/storage"
 	storageclient "github.com/webitel/im-thread-service/infra/webitel/storage"
 )
 
@@ -25,11 +25,11 @@ type MediaProcessor interface {
 }
 
 type storageProcessor struct {
-	client *storageclient.Client
+	storage *storageclient.Client
 }
 
 func NewMediaProcessor(client *storageclient.Client) MediaProcessor {
-	return &storageProcessor{client: client}
+	return &storageProcessor{storage: client}
 }
 
 // [PROCESS] HANDLES VALIDATION AND UPLOADS FOR ALL ATTACHMENTS
@@ -38,11 +38,10 @@ func (p *storageProcessor) Process(ctx context.Context, domainID int64, items []
 		return nil
 	}
 
-	svc := p.client.FileService()
 	for _, item := range items {
 		// [CASE_1] VERIFY IF ID EXISTS
 		if id := item.GetID(); id != 0 {
-			res, err := svc.SearchFiles(ctx, &storage.SearchFilesRequest{Id: []int64{id}, Size: 1})
+			res, err := p.storage.SearchFiles(ctx, &storage.SearchFilesRequest{Id: []int64{id}, Size: 1})
 			if err != nil || len(res.GetItems()) == 0 {
 				return fmt.Errorf("storage: file %d check failed: %w", id, err)
 			}
@@ -57,7 +56,7 @@ func (p *storageProcessor) Process(ctx context.Context, domainID int64, items []
 
 		// [CASE_2] UPLOAD IF URL IS PROVIDED
 		if url := item.GetURL(); url != "" {
-			res, err := svc.UploadFileUrl(ctx, &storage.UploadFileUrlRequest{
+			res, err := p.storage.UploadFileUrl(ctx, &storage.UploadFileUrlRequest{
 				DomainId: domainID,
 				Url:      url,
 				Mime:     item.GetMimeType(),

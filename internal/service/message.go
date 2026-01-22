@@ -53,18 +53,18 @@ func (s *MessageService) SendText(ctx context.Context, in *dto.SendTextRequest) 
 		return nil, fmt.Errorf("validation: %w", err)
 	}
 
-	// // [ACCESS_CONTROL] VERIFY communication permissions between peers via Contacts service
-	// cansend, err := s.contactClient.ContactsService().CanSend(ctx, dto.NewCanSendRequestDtoFromPeers(in.From, in.To, int32(in.DomainID)))
-	// if err != nil {
-	// 	s.logger.Error("error in can send rights validation gRPC request!", "err", err)
-	// 	return nil, err
-	// }
+	// [ACCESS_CONTROL] VERIFY communication permissions between peers via Contacts service
+	cansend, err := s.contactClient.CanSend(ctx, dto.NewCanSendRequestDtoFromPeers(in.From, in.To, int32(in.DomainID)))
+	if err != nil {
+		s.logger.Error("error in can send rights validation gRPC request!", "err", err)
+		return nil, err
+	}
 
-	// // [GUARD] ENFORCE access policies and block unauthorized messaging attempts
-	// if err = guards.CanSendRightsViolationGuard(cansend.CanSend); err != nil {
-	// 	s.logger.Warn("send rights violation", "from", in.From.ID, "to", in.To.ID)
-	// 	return nil, err
-	// }
+	// [GUARD] ENFORCE access policies and block unauthorized messaging attempts
+	if err = guards.CanSendRightsViolationGuard(cansend.CanSend); err != nil {
+		s.logger.Warn("send rights violation", "from", in.From.ID, "to", in.To.ID)
+		return nil, err
+	}
 
 	// [THREAD] Resolve or initialize communication channel
 	t, err := s.threader.EnsureDirectThread(ctx, &dto.EnsureDirectThreadRequest{
@@ -119,7 +119,7 @@ func (s *MessageService) SendImage(ctx context.Context, in *dto.SendImageRequest
 	}
 
 	// [ACCESS_CONTROL] VERIFY communication permissions between peers via Contacts service
-	cansend, err := s.contactClient.ContactsService().CanSend(ctx, dto.NewCanSendRequestDtoFromPeers(in.From, in.To, int32(in.DomainID)))
+	cansend, err := s.contactClient.CanSend(ctx, dto.NewCanSendRequestDtoFromPeers(in.From, in.To, int32(in.DomainID)))
 	if err != nil {
 		s.logger.Error("error in can send rights validation gRPC request!", "err", err)
 		return nil, err
@@ -202,7 +202,7 @@ func (s *MessageService) SendDocument(ctx context.Context, in *dto.SendDocumentR
 	}
 
 	// [ACCESS_CONTROL] VERIFY communication permissions between peers via Contacts service
-	cansend, err := s.contactClient.ContactsService().CanSend(ctx, dto.NewCanSendRequestDtoFromPeers(in.From, in.To, int32(in.DomainID)))
+	cansend, err := s.contactClient.CanSend(ctx, dto.NewCanSendRequestDtoFromPeers(in.From, in.To, int32(in.DomainID)))
 	if err != nil {
 		s.logger.Error("error in can send rights validation gRPC request!", "err", err)
 		return nil, err
