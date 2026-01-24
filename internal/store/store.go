@@ -7,6 +7,7 @@ import (
 	"github.com/webitel/im-thread-service/internal/domain/events"
 	"github.com/webitel/im-thread-service/internal/domain/model"
 	"github.com/webitel/im-thread-service/internal/service/dto"
+	queryobject "github.com/webitel/im-thread-service/internal/store/query_object"
 )
 
 type (
@@ -37,5 +38,9 @@ type (
 
 	ThreadStore interface {
 		Create(ctx context.Context, req *model.Thread) (*model.Thread, error)
+	}
+
+	MessageHistory interface {
+		Search(ctx context.Context, query queryobject.QueryObject) ([]*dto.HistoryMessage, error)
 	}
 )

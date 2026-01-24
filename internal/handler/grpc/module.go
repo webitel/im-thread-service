@@ -4,20 +4,26 @@ package grpc
 import (
 	"go.uber.org/fx"
 
-	impb "github.com/webitel/im-thread-service/gen/go/api/v1"
+	impbv "github.com/webitel/im-thread-service/gen/go/api/thread/v1"
 	grpcsrv "github.com/webitel/im-thread-service/infra/server/grpc"
 )
 
 var Module = fx.Module("message_grpc",
 	fx.Provide(
 		NewMessageService,
+		NewMessageHistoryService,
 	),
 	fx.Invoke(RegisterMessageService),
+	fx.Invoke(RegisterMessageHistoryService),
 )
 
 func RegisterMessageService(
 	server *grpcsrv.Server,
 	service *MessageService,
 ) {
-	impb.RegisterMessageServer(server.Server, service)
+	impbv.RegisterMessageServer(server.Server, service)
+}
+
+func RegisterMessageHistoryService(srv *grpcsrv.Server, svc *MessageHistoryService) {
+	impbv.RegisterMessageHistoryServer(srv.Server, svc)
 }

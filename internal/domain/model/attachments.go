@@ -1,6 +1,7 @@
 package model
 
 import (
+	"net/url"
 	"time"
 
 	"github.com/google/uuid"
@@ -16,6 +17,7 @@ type MessageImage struct {
 	Height     int32          `json:"height,omitempty" db:"height"`
 	CreatedAt  time.Time      `json:"created_at" db:"created_at"`
 	Thumbnails map[string]any `json:"thumbnails,omitempty" db:"thumbnails"`
+	URL        *url.URL       `json:"url,omitempty"`
 }
 
 type MessageDocument struct {
@@ -26,4 +28,5 @@ type MessageDocument struct {
 	Mime      string    `json:"mime" db:"mime"`
 	Size      int64     `json:"size" db:"size"`
 	CreatedAt time.Time `json:"created_at" db:"created_at"`
+	URL       *url.URL  `json:"url,omitempty"`
 }

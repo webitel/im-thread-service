@@ -2,7 +2,7 @@ package mapper
 
 import (
 	"github.com/google/uuid"
-	impb "github.com/webitel/im-thread-service/gen/go/api/v1"
+	impb "github.com/webitel/im-thread-service/gen/go/api/thread/v1"
 	"github.com/webitel/im-thread-service/internal/domain/model"
 	"github.com/webitel/im-thread-service/internal/service/dto"
 )

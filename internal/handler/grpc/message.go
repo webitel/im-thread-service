@@ -4,7 +4,7 @@ import (
 	"context"
 	"log/slog"
 
-	impb "github.com/webitel/im-thread-service/gen/go/api/v1"
+	impb "github.com/webitel/im-thread-service/gen/go/api/thread/v1"
 	"github.com/webitel/im-thread-service/internal/handler/grpc/mapper"
 	"github.com/webitel/im-thread-service/internal/service"
 )

@@ -1,9 +1,14 @@
 package model
 
-import "net/url"
+import (
+	"net/url"
+
+	"github.com/google/uuid"
+)
 
 type Image struct {
 	BaseModel
+	MessageId  uuid.UUID
 	Thumbnails []*Thumbnail `json:"thumbnails"`
 	URL        *url.URL     `json:"url"`
 	FileName   string       `json:"file_name"`
@@ -12,6 +17,7 @@ type Image struct {
 
 type Document struct {
 	BaseModel
+	MessageId uuid.UUID
 	URL       *url.URL `json:"url"`
 	FileName  string   `json:"file_name"`
 	MimeType  string   `json:"mime_type"`

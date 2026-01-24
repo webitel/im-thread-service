@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/urfave/cli/v2"
+	"github.com/webitel/im-thread-service/cmd/migrate"
 	"github.com/webitel/im-thread-service/config"
 )
 
@@ -31,6 +32,7 @@ func Run() error {
 		Usage: "Microservice for Webitel platform",
 		Commands: []*cli.Command{
 			serverCmd(),
+			migrate.CMD(),
 		},
 	}
 
