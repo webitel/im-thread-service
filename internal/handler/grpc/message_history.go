@@ -36,8 +36,10 @@ func (s *MessageHistoryService) SearchThreadMessagesHistory(ctx context.Context,
 		return nil, err
 	}
 
+	next, messages = utils.ProcessPagination(int(req.Size), messages)
+
 	resp = mapper.MapMessage2SearchMessageHistoryResponse(messages)
-	next, resp.Messages = utils.ProcessPagination(int(req.Size), resp.Messages)
+	resp.From = mapper.GetUniqueFrom(messages)
 	resp.Next = next
 
 	return resp, nil
