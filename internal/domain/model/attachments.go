@@ -1,6 +1,7 @@
 package model
 
 import (
+	"net/url"
 	"time"
 
 	"github.com/google/uuid"
@@ -27,4 +28,5 @@ type MessageDocument struct {
 	Mime      string    `json:"mime" db:"mime"`
 	Size      int64     `json:"size" db:"size"`
 	CreatedAt time.Time `json:"created_at" db:"created_at"`
+	URL       *url.URL  `json:"url,omitempty"`
 }

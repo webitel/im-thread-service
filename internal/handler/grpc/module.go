@@ -11,13 +11,19 @@ import (
 var Module = fx.Module("message_grpc",
 	fx.Provide(
 		NewMessageService,
+		NewMessageHistoryService,
 	),
 	fx.Invoke(RegisterMessageService),
+	fx.Invoke(RegisterMessageHistoryService),
 )
 
 func RegisterMessageService(
 	server *grpcsrv.Server,
 	service *MessageService,
 ) {
-	impb.RegisterMessageServer(server.Server, service)
+	impbv.RegisterMessageServer(server.Server, service)
+}
+
+func RegisterMessageHistoryService(srv *grpcsrv.Server, svc *MessageHistoryService) {
+	impbv.RegisterMessageHistoryServer(srv.Server, svc)
 }

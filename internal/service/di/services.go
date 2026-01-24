@@ -16,6 +16,10 @@ var Module = fx.Module(
 			service.NewThreadService,
 			fx.As(new(service.ThreadManager)),
 		),
+		fx.Annotate(
+			service.NewMessageHistory,
+			fx.As(new(service.MessageHistorySearcher)),
+		),
 	),
 	fx.Decorate(func(logger *slog.Logger, base service.ThreadManager, imContactsClient *imcontact.Client) service.ThreadManager {
 		return decorators.NewThreadWithCanSendDecorator(logger, base, imContactsClient)

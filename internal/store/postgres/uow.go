@@ -15,10 +15,11 @@ type unitOfWork struct {
 	querier  Querier
 	wmlogger watermill.LoggerAdapter
 
-	threadStore       store.ThreadStore
-	threadDialogStore store.ThreadDialogStore
-	messageStore      store.MessageStore
-	outboxStore       store.OutboxStore
+	threadStore         store.ThreadStore
+	threadDialogStore   store.ThreadDialogStore
+	messageStore        store.MessageStore
+	outboxStore         store.OutboxStore
+	messageHistoryStore store.MessageHistory
 }
 
 // NewPgxUnitOfWork returns a new unit of work, given a pgx pool.
@@ -68,6 +69,14 @@ func (u *unitOfWork) Outbox() store.OutboxStore {
 		u.outboxStore = NewOutboxStore(u.querier, u.wmlogger)
 	}
 	return u.outboxStore
+}
+
+func (u *unitOfWork) MessageHistory() store.MessageHistory {
+	if u.messageHistoryStore != nil {
+		u.messageHistoryStore = NewMessageHistoryStore(u.querier)
+	}
+
+	return u.messageHistoryStore
 }
 
 // WithinTransaction executes a function within a transaction.
