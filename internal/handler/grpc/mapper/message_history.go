@@ -8,6 +8,7 @@ import (
 	"github.com/webitel/im-thread-service/internal/domain/model"
 	"github.com/webitel/im-thread-service/internal/service/dto"
 	"github.com/webitel/im-thread-service/internal/utils"
+	"github.com/webitel/im-thread-service/internal/utils/set"
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/structpb"
 )
@@ -76,6 +77,18 @@ func MapMessage2SearchMessageHistoryResponse(messages []*model.Message) *impb.Se
 		Messages: responseMessages,
 		Next:     true,
 	}
+}
+
+func GetUniqueFrom(messages []*model.Message) []string {
+	var (
+		set = set.New[uuid.UUID](0)
+	)
+
+	for _, message := range messages {
+		set.Insert(message.From.ID)
+	}
+
+	return utils.Map(set.Slice(), func(p uuid.UUID) string { return p.String() })
 }
 
 func mapDocs(docs []*model.MessageDocument) []*impb.DocumentDTO {
