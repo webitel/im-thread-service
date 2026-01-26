@@ -17,7 +17,7 @@ var (
 
 type (
 	MessageHistorySearcher interface {
-		Search(context.Context, *dto.HistoryMessageInputDTO) ([]*model.Message, error)
+		Search(context.Context, *dto.HistoryMessageInputDTO) (model.MessageSlice, error)
 	}
 
 	messageHistory struct {
@@ -30,7 +30,7 @@ func NewMessageHistory(messageHistoryStore store.MessageHistory) *messageHistory
 		messageHistoryStore: messageHistoryStore,
 	}
 }
-func (s *messageHistory) Search(ctx context.Context, hmiDTO *dto.HistoryMessageInputDTO) ([]*model.Message, error) {
+func (s *messageHistory) Search(ctx context.Context, hmiDTO *dto.HistoryMessageInputDTO) (model.MessageSlice, error) {
 	var (
 		query  queryobject.QueryObject
 		err    error
@@ -48,7 +48,6 @@ func (s *messageHistory) Search(ctx context.Context, hmiDTO *dto.HistoryMessageI
 		WithIdsFilter(hmiDTO.Ids...).
 		WithReceiverIdsFilter(hmiDTO.ReceiverIds...).
 		WithSenderIdsFilter(hmiDTO.SenderIds...).
-		WithSort(hmiDTO.Sort).
 		WithThreadIdsFilter(hmiDTO.ThreadIds...).
 		WithLimit(hmiDTO.Size).
 		WithTypeFilter(hmiDTO.Types...)
