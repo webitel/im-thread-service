@@ -123,25 +123,20 @@ func (q *MessageHistoryQuery) WithTypeFilter(types ...int) *MessageHistoryQuery 
 	return q
 }
 
-func (q *MessageHistoryQuery) WithSort(sort string) *MessageHistoryQuery {
-	_, isDesc := formatSort(sort, availableFields)
-
-	q.desc = isDesc
+func (q *MessageHistoryQuery) WithCursor(cursor *MessageHistoryCursor) *MessageHistoryQuery {
 	orderDir := "DESC"
-	if !q.desc {
-		orderDir = "ASC"
+
+	if cursor != nil {
+		q.cursor = cursor
+
+		if q.cursor.Direction {
+			orderDir = "ASC"
+		}
 	}
+
 	q.builder = q.builder.
 		OrderBy(fmt.Sprintf("created_at %s", orderDir)).
 		OrderBy(fmt.Sprintf("id %s", orderDir))
-
-	return q
-}
-
-func (q *MessageHistoryQuery) WithCursor(cursor *MessageHistoryCursor) *MessageHistoryQuery {
-	if cursor != nil {
-		q.cursor = cursor
-	}
 
 	return q
 }

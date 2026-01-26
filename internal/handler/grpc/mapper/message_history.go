@@ -40,7 +40,6 @@ func MapSearchMessageHistoryRequest2HistoryMessageInputDTO(mhr *impb.SearchMessa
 		SenderIds:   senderIds,
 		ReceiverIds: receiverIds,
 		Size:        int(mhr.GetSize()),
-		Sort:        mhr.GetSort(),
 		Types:       types,
 		Cursor:      cursor,
 	}
@@ -89,6 +88,39 @@ func GetUniqueFrom(messages []*model.Message) []string {
 	}
 
 	return utils.Map(set.Slice(), func(p uuid.UUID) string { return p.String() })
+}
+
+func MapPaging(paging *model.Paging) *impb.Paging {
+	if paging == nil {
+		return nil
+	}
+
+	var (
+		after, before *impb.HistoryMessageCursor
+	)
+
+	if paging.After != nil {
+		after = newPBHistoryCursor(paging.After.Id, paging.After.CreatedAt, paging.After.Direction)
+	}
+
+	if paging.Before != nil {
+		before = newPBHistoryCursor(paging.Before.Id, paging.Before.CreatedAt, paging.Before.Direction)
+	}
+
+	return &impb.Paging{
+		Cursors: &impb.Cursors{
+			After:  after,
+			Before: before,
+		},
+	}
+}
+
+func newPBHistoryCursor(id uuid.UUID, createdAt time.Time, direction bool) *impb.HistoryMessageCursor {
+	return &impb.HistoryMessageCursor{
+		CreatedAt: createdAt.UnixMicro(),
+		Id:        id.String(),
+		Direction: direction,
+	}
 }
 
 func mapDocs(docs []*model.MessageDocument) []*impb.DocumentDTO {
