@@ -9,10 +9,50 @@ import (
 	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/pressly/goose/v3"
 	"github.com/pressly/goose/v3/database"
+	"github.com/urfave/cli/v2"
+	"github.com/webitel/im-thread-service/cmd/server"
 	"github.com/webitel/im-thread-service/config"
 	"github.com/webitel/im-thread-service/migrations"
+	"go.uber.org/fx"
 )
 
+func CMD() *cli.Command {
+	return &cli.Command{
+		Name:    "migrate",
+		Aliases: []string{"m"},
+		Usage:   "Execute database migrations",
+		Flags: []cli.Flag{
+			&cli.StringFlag{
+				Name:  "config_file",
+				Usage: "Path to the configuration file",
+			},
+		},
+		Action: func(c *cli.Context) error {
+			cfg, err := config.LoadConfig()
+			if err != nil {
+				return err
+			}
+
+			app := fx.New(
+				fx.Provide(
+					func() *config.Config { return cfg },
+					server.ProvideLogger,
+				),
+				fx.Invoke(func(cfg *config.Config, log *slog.Logger, lc fx.Lifecycle) error {
+					m := NewMigrator(cfg, log)
+					if err := m.Run(c.Context); err != nil {
+						return err
+					}
+
+					return nil
+				}),
+				fx.NopLogger,
+			)
+
+			return app.Start(c.Context)
+		},
+	}
+}
 
 type migrator struct {
 	cfg *config.Config
@@ -37,7 +77,7 @@ func (m *migrator) Run(ctx context.Context) error {
 
 	goose.SetLogger(newLogger(m.log))
 	goose.SetVerbose(true)
-	store, err := database.NewStore(database.DialectPostgres, "im_contact_schema_version")
+	store, err := database.NewStore(database.DialectPostgres, "im_thread_schema_version")
 	if err != nil {
 		return err
 	}

@@ -1,4 +1,4 @@
-package cmd
+package server
 
 import (
 	"context"
@@ -6,38 +6,12 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	"github.com/urfave/cli/v2"
 	"github.com/webitel/im-thread-service/config"
 )
 
-const (
-	ServiceName      = "im-thread-service"
-	ServiceNamespace = "webitel"
-)
-
-var (
-	version        = "0.0.0"
-	commit         = "hash"
-	commitDate     = time.Now().String()
-	branch         = "branch"
-	buildTimestamp = ""
-)
-
-func Run() error {
-	app := &cli.App{
-		Name:  ServiceName,
-		Usage: "Microservice for Webitel platform",
-		Commands: []*cli.Command{
-			serverCmd(),
-		},
-	}
-
-	return app.Run(os.Args)
-}
-
-func serverCmd() *cli.Command {
+func CMD() *cli.Command {
 	return &cli.Command{
 		Name:    "server",
 		Aliases: []string{"s"},

@@ -14,7 +14,7 @@ volumes:
 services:
   postgres-master:
     image: registry-1.docker.io/bitnami/postgresql:latest
-    container_name: postgres-im-contact-master
+    container_name: postgres-im-master
     networks:
       - webitel
     ports:
@@ -52,7 +52,7 @@ services:
 
   postgres-replica:
     image: registry-1.docker.io/bitnami/postgresql:latest
-    container_name: postgres-im-contact-replica
+    container_name: postgres-im-replica
     networks:
       - webitel
     ports:
@@ -118,7 +118,7 @@ services:
 
   rabbitmq:
     image: rabbitmq:3.13-management-alpine
-    container_name: im-contact-rabbit
+    container_name: im-rabbit
     restart: unless-stopped
     volumes:
       - rabbitmq-data:/var/lib/rabbitmq
@@ -171,17 +171,31 @@ services:
           cpus: '0.25'
           memory: 256M
 
-  im-thread-service:
+  migration-job:
     build:
       context: ../../
       dockerfile: ./Dockerfile
+    image: docker-im-thread-service:v1
+    pull_policy: never
+    command: [ "migrate", "--config_file=/config/config.yaml" ]
+    volumes:
+      - ./config/config.yaml:/config/config.yaml:ro
+    networks:
+      - webitel
+    depends_on:
+      postgres-master:
+        condition: service_healthy
+
+  im-thread-service:
+    image: docker-im-thread-service:v1
     container_name: im-thread-service
-    restart: unless-stopped
+    pull_policy: never
+    restart: no
     command: ["server", "--config_file=/config/config.yaml"]
     networks:
       - webitel
     ports:
-      - "10156:10156"
+      - "10158:10158"
     volumes:
       - ./config/config.yaml:/config/config.yaml:ro
     depends_on:
@@ -193,6 +207,8 @@ services:
         condition: service_healthy
       consul-server:
         condition: service_healthy
+      migration-job:
+        condition: service_completed_successfully
     deploy:
       resources:
         limits:

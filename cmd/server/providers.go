@@ -1,20 +1,15 @@
-package cmd
+package server
 
 import (
 	"context"
-	"errors"
 	"log/slog"
 	"net/url"
 	"os"
 	"time"
 
 	"github.com/ThreeDotsLabs/watermill"
-	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/webitel/im-thread-service/config"
-	"github.com/webitel/im-thread-service/infra/db/pg"
-	"github.com/webitel/im-thread-service/infra/pubsub"
-	"github.com/webitel/im-thread-service/infra/pubsub/factory"
-	"github.com/webitel/im-thread-service/infra/pubsub/factory/amqp"
+	"github.com/webitel/im-thread-service/internal/domain/model"
 	"github.com/webitel/webitel-go-kit/infra/discovery"
 	_ "github.com/webitel/webitel-go-kit/infra/discovery/consul"
 	otelsdk "github.com/webitel/webitel-go-kit/infra/otel/sdk"
@@ -76,10 +71,10 @@ func ProvideLogger(cfg *config.Config, lc fx.Lifecycle) (*slog.Logger, error) {
 
 	if logSettings.Otel {
 		service := resource.NewSchemaless(
-			semconv.ServiceName(ServiceName),
-			semconv.ServiceVersion(version),
+			semconv.ServiceName(model.ServiceName),
+			semconv.ServiceVersion(model.Version),
 			semconv.ServiceInstanceID(cfg.Service.Id),
-			semconv.ServiceNamespace(ServiceNamespace),
+			semconv.ServiceNamespace(model.ServiceNamespace),
 		)
 		otelHandler := otelslog.NewHandler("slog")
 
@@ -174,24 +169,6 @@ func (h *multiHandler) WithGroup(name string) slog.Handler {
 	return &multiHandler{handlers: newHandlers}
 }
 
-//
-//func ProvideCluster(cfg *config.Config, srv *grpc_srv.Server, l *slog.Logger, lc fx.Lifecycle) (*consul.Cluster, error) {
-//	c := consul.NewCluster(model.ServiceName, cfg.Consul.Address, l)
-//	host := srv.Host()
-//
-//	lc.Append(fx.Hook{
-//		OnStart: func(ctx context.Context) error {
-//			return c.Start(cfg.Service.Id, host, srv.Port())
-//		},
-//		OnStop: func(ctx context.Context) error {
-//			c.Stop()
-//			return nil
-//		},
-//	})
-//
-//	return c, nil
-//}
-
 func ProvideSD(cfg *config.Config, log *slog.Logger, lc fx.Lifecycle) (discovery.DiscoveryProvider, error) {
 	provider, err := discovery.DefaultFactory.CreateProvider(
 		discovery.ProviderConsul,
@@ -207,13 +184,13 @@ func ProvideSD(cfg *config.Config, log *slog.Logger, lc fx.Lifecycle) (discovery
 	si := new(discovery.ServiceInstance)
 	{
 		si.Id = cfg.Service.Id
-		si.Name = ServiceName
-		si.Version = version
+		si.Name = model.ServiceName
+		si.Version = model.Version
 		si.Metadata = map[string]string{
-			"commit":         commit,
-			"commitDate":     commitDate,
-			"branch":         branch,
-			"buildTimestamp": buildTimestamp,
+			"commit":         model.Commit,
+			"commitDate":     model.CommitDate,
+			"branch":         model.Branch,
+			"buildTimestamp": model.BuildTimestamp,
 		}
 		si.Endpoints = []string{(&url.URL{Scheme: "grpc", Host: cfg.Service.Address}).String()}
 	}
@@ -234,59 +211,4 @@ func ProvideSD(cfg *config.Config, log *slog.Logger, lc fx.Lifecycle) (discovery
 	})
 
 	return provider, nil
-}
-
-func ProvidePubSub(cfg *config.Config, l *slog.Logger, lc fx.Lifecycle) (pubsub.Provider, error) {
-	var (
-		pubsubConfig  = cfg.Pubsub
-		loggerAdapter = watermill.NewSlogLogger(l)
-		pubsubFactory factory.Factory
-		err           error
-	)
-
-	switch pubsubConfig.Driver {
-	case "amqp":
-		pubsubFactory, err = amqp.NewFactory(pubsubConfig.URL, loggerAdapter)
-		if err != nil {
-			return nil, err
-		}
-	default:
-		return nil, errors.New("pubsub driver not supported")
-	}
-
-	router, err := message.NewRouter(message.RouterConfig{}, loggerAdapter)
-	if err != nil {
-		return nil, err
-	}
-	lc.Append(fx.Hook{
-		OnStart: func(ctx context.Context) error {
-			go func() {
-				if err := router.Run(context.Background()); err != nil {
-					l.Error("watermill router failed", slog.Any("error", err))
-				}
-			}()
-			return nil
-		},
-		OnStop: func(ctx context.Context) error {
-			return router.Close()
-		},
-	})
-
-	return pubsub.NewDefaultProvider(router, pubsubFactory)
-}
-
-func ProvideNewDBConnection(cfg *config.Config, l *slog.Logger, lc fx.Lifecycle) (*pg.PgxDB, error) {
-	db, err := pg.New(context.Background(), l, cfg.Postgres.DSN)
-	if err != nil {
-		return nil, err
-	}
-
-	lc.Append(fx.Hook{
-		OnStop: func(ctx context.Context) error {
-			db.Master().Close()
-			return nil
-		},
-	})
-
-	return db, err
 }
