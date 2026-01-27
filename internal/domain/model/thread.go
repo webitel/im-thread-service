@@ -16,10 +16,10 @@ const (
 type Thread struct {
 	shared.BaseModel
 
-	Kind    ThreadKind  `json:"kind"`
-	Owner   uuid.UUID   `json:"owner"`
-	Admins  []uuid.UUID `json:"admins"`
-	Members []uuid.UUID `json:"members"`
+		Kind    ThreadKind  `json:"kind"`
+		Owner   uuid.UUID   `json:"owner"`
+		Admins  []uuid.UUID `json:"admins"`
+		Members []uuid.UUID `json:"members"`
 
 	Subject     string `json:"subject"`
 	Description string `json:"description"`

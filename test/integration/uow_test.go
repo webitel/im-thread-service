@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"testing"
 
+	"github.com/ThreeDotsLabs/watermill"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/assert"
@@ -40,7 +41,7 @@ func (s *UoWTestSuite) SetupSuite() {
 		log.Fatal(err)
 	}
 
-	s.uow = postgres.NewPgxUnitOfWork(pool)
+	s.uow = postgres.NewPgxUnitOfWork(pool, watermill.NewSlogLogger(slog.Default()))
 }
 
 func (suite *UoWTestSuite) SetupTest() {

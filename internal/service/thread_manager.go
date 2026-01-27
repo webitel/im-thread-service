@@ -118,10 +118,29 @@ func (t *thread) createDirectThread(ctx context.Context, req *dto.EnsureDirectTh
 		DirectTo: &req.PeerTo.ID,
 	}
 
-	// CREATE TWO RECORDS WITH PAIR member_id <-> direct_to AND REVERSED direct_to <-> member_id
-	if _, err = uow.ThreadDialogStore().CreateDirectPair(ctx, dialog); err != nil {
+	var (
+		baseMemberSettings = model.NewBaseThreadSettingBuilder().WithDomainID(req.DomainID).WithTitle(req.PeerFrom.Identity.Name).Build()
+		memberSettings     = model.NewDirectThreadSettingBuilder().WithBaseSettings(baseMemberSettings).Build()
+
+		baseDirectToSettings = model.NewBaseThreadSettingBuilder().WithDomainID(req.DomainID).WithTitle(req.PeerTo.Identity.Name).Build()
+		directToSettings     = model.NewDirectThreadSettingBuilder().WithBaseSettings(baseDirectToSettings).Build()
+	)
+
+	directThreadDialog := model.NewDirectThreadDialogBuilder().
+		WithThreadDialog(dialog).
+		WithDirectToSettings(directToSettings).
+		WithMemberSettings(memberSettings).
+		WithDomainID(req.DomainID).
+		Build()
+
+	if _, err = uow.DirectThreadDialogOrchestration().InitializeFullDirectThread(ctx, directThreadDialog); err != nil {
 		return nil, err
 	}
+
+	// // CREATE TWO RECORDS WITH PAIR member_id <-> direct_to AND REVERSED direct_to <-> member_id
+	// if _, err = uow.ThreadDialogStore().CreateDirectPair(ctx, dialog); err != nil {
+	// 	return nil, err
+	// }
 
 	return &dto.EnsureDirectThreadResponse{ID: directThread.ID}, nil
 }

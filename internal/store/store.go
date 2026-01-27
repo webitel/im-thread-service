@@ -43,4 +43,18 @@ type (
 	MessageHistory interface {
 		Search(ctx context.Context, query queryobject.QueryObject) ([]*dto.HistoryMessage, error)
 	}
+
+	DirectThreadSetting interface {
+		Create(ctx context.Context, setting *model.DirectThreadSetting) (*model.DirectThreadSetting, error)
+		Search(ctx context.Context, query queryobject.QueryObject) ([]*model.DirectThreadSetting, error)
+
+		//NOT IMPLEMENTED!
+		Update(ctx context.Context) ([]*model.DirectThreadSetting, error)
+		//NOT IMPLEMENTED!
+		Delete(ctx context.Context) error
+	}
+
+	DirectThreadDialogOrchestration interface {
+		InitializeFullDirectThread(ctx context.Context, directThread *model.DirectThreadDialog) ([]*model.DirectThreadDialog, error)
+	}
 )
