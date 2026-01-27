@@ -19,7 +19,6 @@ require (
 	github.com/testcontainers/testcontainers-go v0.40.0
 	github.com/testcontainers/testcontainers-go/modules/postgres v0.40.0
 	github.com/urfave/cli/v2 v2.27.7
-	github.com/webitel/im-delivery-service v0.0.0-20260122115452-f6b1d3dfa37a
 	github.com/webitel/storage v0.0.0-20260109145042-79404a35fcce
 	github.com/webitel/webitel-go-kit/infra/discovery v0.0.0-20251224105820-8d9bcb902593
 	github.com/webitel/webitel-go-kit/infra/otel v0.0.0-20251224105820-8d9bcb902593

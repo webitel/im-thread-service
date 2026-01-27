@@ -26,11 +26,11 @@ func MapPeerFromProto(pb *impb.Peer) shared.Peer {
 
 	var p shared.Peer
 	switch kind := pb.Kind.(type) {
-	case *impb.Peer_UserId:
-		p.ID, _ = uuid.Parse(kind.UserId)
+	case *impb.Peer_ContactId:
+		p.ID, _ = uuid.Parse(kind.ContactId)
 		p.Type = shared.PeerContact
-	case *impb.Peer_ChatId:
-		p.ID, _ = uuid.Parse(kind.ChatId)
+	case *impb.Peer_GroupId:
+		p.ID, _ = uuid.Parse(kind.GroupId)
 		p.Type = shared.PeerGroup
 	case *impb.Peer_ChannelId:
 		p.ID, _ = uuid.Parse(kind.ChannelId)
@@ -54,9 +54,9 @@ func MapPeerToProto(p shared.Peer) *impb.Peer {
 	res := &impb.Peer{}
 	switch p.Type {
 	case shared.PeerContact:
-		res.Kind = &impb.Peer_UserId{UserId: idStr}
+		res.Kind = &impb.Peer_ContactId{ContactId: idStr}
 	case shared.PeerGroup:
-		res.Kind = &impb.Peer_ChatId{ChatId: idStr}
+		res.Kind = &impb.Peer_GroupId{GroupId: idStr}
 	case shared.PeerChannel:
 		res.Kind = &impb.Peer_ChannelId{ChannelId: idStr}
 	}

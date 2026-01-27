@@ -7,7 +7,6 @@ import (
 
 	contactv1 "github.com/webitel/im-thread-service/gen/go/contact/v1"
 	"github.com/webitel/im-thread-service/infra/webitel"
-	"github.com/webitel/im-thread-service/internal/domain/shared"
 	"github.com/webitel/im-thread-service/internal/service/dto"
 	"github.com/webitel/webitel-go-kit/infra/discovery"
 	rpc "github.com/webitel/webitel-go-kit/infra/transport/gRPC"
@@ -51,8 +50,8 @@ func (c *Client) CanSend(ctx context.Context, req *dto.CanSendRequest) (*dto.Can
 		// [MAPPING] Convert domain DTO to protobuf request
 		pb := &contactv1.CanSendRequest{
 			DomainId: req.DomainID,
-			From:     c.mapModelPeerToProto(req.From),
-			To:       c.mapModelPeerToProto(req.To),
+			From:     req.From.ID.String(),
+			To:       req.To.ID.String(),
 		}
 
 		c.logger.Debug("CONTACTS.CAN_SEND", slog.Any("from", req.From), slog.Any("to", req.To))
@@ -89,31 +88,4 @@ func (c *Client) Close() error {
 		return c.rpc.Close()
 	}
 	return nil
-}
-
-// --- PRIVATE MAPPERS ---
-
-// mapModelPeerToProto converts domain Peer entity to gRPC polymorphic Peer Kind
-func (c *Client) mapModelPeerToProto(p shared.Peer) *contactv1.CanSendRequest_Peer {
-	peer := &contactv1.CanSendRequest_Peer{}
-
-	switch p.Type {
-	case shared.PeerContact:
-		peer.Kind = &contactv1.CanSendRequest_Peer_ContactId{
-			ContactId: p.ID.String(),
-		}
-
-	default:
-		// [FALLBACK] Log error and default to ContactId for unknown types
-		c.logger.Error("failed to map peer to proto: unknown peer type",
-			"type", p.Type,
-			"id", p.ID.String(),
-		)
-
-		peer.Kind = &contactv1.CanSendRequest_Peer_ContactId{
-			ContactId: p.ID.String(),
-		}
-	}
-
-	return peer
 }

@@ -364,8 +364,6 @@ github.com/tklauser/numcpus v0.6.1/go.mod h1:1XfjsgE2zo8GVw7POkMbHENHzVg3GzmoZ9f
 github.com/tv42/httpunix v0.0.0-20150427012821-b75d8614f926/go.mod h1:9ESjWnEqriFuLhtthL60Sar/7RFoluCcXsuvEwTV5KM=
 github.com/urfave/cli/v2 v2.27.7 h1:bH59vdhbjLv3LAvIu6gd0usJHgoTTPhCFib8qqOwXYU=
 github.com/urfave/cli/v2 v2.27.7/go.mod h1:CyNAG/xg+iAOg0N4MPGZqVmv2rCoP267496AOXUZjA4=
-github.com/webitel/im-delivery-service v0.0.0-20260122115452-f6b1d3dfa37a h1:vC6XJ1HLT7WakDIPDkBH+m6mS/dxe/7TowNagPNp76w=
-github.com/webitel/im-delivery-service v0.0.0-20260122115452-f6b1d3dfa37a/go.mod h1:kY6aNDmJt6s0ED2G7/ErpRDchU3auGT18pfagqV7RGI=
 github.com/webitel/storage v0.0.0-20260109145042-79404a35fcce h1:Lcb8pioQ+lTYjNmIYP51kNhLzDRCFnpwE4rE70uUXsk=
 github.com/webitel/storage v0.0.0-20260109145042-79404a35fcce/go.mod h1:kvj3NDB1uRVsYtigl7t1vAtIq0IFnXOJJr93h3bw8Gg=
 github.com/webitel/webitel-go-kit/infra/discovery v0.0.0-20251224105820-8d9bcb902593 h1:YyaZO6YTeJ776MSNaRJPShaR2F+hyeACXyxa3jKskuU=

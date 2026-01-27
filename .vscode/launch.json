@@ -9,6 +9,9 @@
       "program": "${workspaceFolder}/main.go",
       "cwd": "${workspaceFolder}",
       "envFile": "${workspaceFolder}/.env",
+      "env": {
+        "GOLANG_PROTOBUF_REGISTRATION_CONFLICT": "ignore"
+      },
       "args": [
         "server",
       ],
