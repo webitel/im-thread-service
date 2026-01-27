@@ -133,6 +133,7 @@ func defineFlags() {
 	pflag.String("redis.addr", "localhost:6379", "Redis address")
 	pflag.String("consul.addr", "localhost:8500", "Consul address")
 	pflag.String("pubsub.broker_url", "", "PubSub broker URL")
+	pflag.String("pubsub.broker_driver", "amqp", "PubSub broker driver")
 
 	defineConnectionFlags()
 }

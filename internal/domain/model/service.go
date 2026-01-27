@@ -3,7 +3,7 @@ package model
 import "time"
 
 const (
-	ServiceName      = "im-contact-service"
+	ServiceName      = "im-thread-service"
 	ServiceNamespace = "webitel"
 	Version          = "1.0.0"
 )
