@@ -64,8 +64,7 @@ func TestMessageHistoryQuery_WithMultipleFilters(t *testing.T) {
 }
 
 func TestMessageHistoryQuery_SortAsc(t *testing.T) {
-	q := NewMessageHistoryQuery().
-		WithSort("+created_at")
+	q := NewMessageHistoryQuery()
 
 	sql, _, err := q.ToSql()
 
@@ -101,8 +100,7 @@ func TestMessageHistoryQuery_WithCursorAsc(t *testing.T) {
 	cursorTime := time.Now()
 	cursorID := uuid.New()
 
-	q := NewMessageHistoryQuery().
-		WithSort("+created_at")
+	q := NewMessageHistoryQuery()
 
 	q.cursor = &MessageHistoryCursor{
 		CreatedAt: cursorTime,

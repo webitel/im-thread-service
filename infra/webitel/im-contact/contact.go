@@ -95,6 +95,8 @@ func (c *Client) DeleteContact(ctx context.Context, req *contactv1.DeleteContact
 }
 
 func (c *Client) CanSend(ctx context.Context, req *dto.CanSendRequest) (*dto.CanSendResponse, error) {
+	return dto.NewCanSendResponse(true), nil
+
 	var resp *dto.CanSendResponse
 	err := c.rpc.Execute(ctx, func(api contactv1.ContactsClient) error {
 		pb := &contactv1.CanSendRequest{

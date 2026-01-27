@@ -12,12 +12,13 @@ import (
 
 type (
 	directSettingsRecord struct {
-		ID             uuid.UUID `json:"id,omitempty" db:"id"`
-		DomainID       int       `json:"domain_id,omitempty" db:"domain_id"`
-		ThreadDialogID uuid.UUID `json:"thread_dialog_id,omitempty" db:"thread_dialog_id"`
-		CreatedAt      time.Time `json:"created_at" db:"created_at"`
-		UpdatedAt      time.Time `json:"updated_at" db:"updated_at"`
-		Title          string    `json:"title,omitempty" db:"title"`
+		ID             uuid.UUID  `json:"id,omitempty" db:"id"`
+		DomainID       int        `json:"domain_id,omitempty" db:"domain_id"`
+		ThreadDialogID uuid.UUID  `json:"thread_dialog_id,omitempty" db:"thread_dialog_id"`
+		CreatedAt      time.Time  `json:"created_at,omitempty" db:"created_at"`
+		UpdatedAt      time.Time  `json:"updated_at,omitempty" db:"updated_at"`
+		Title          string     `json:"title,omitempty" db:"title"`
+		MemberID       *uuid.UUID `json:"member_id,omitempty" db:"member_id"`
 	}
 
 	threadDialogRecord struct {

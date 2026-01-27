@@ -44,7 +44,7 @@ type (
 		Search(ctx context.Context, query queryobject.QueryObject) ([]*dto.HistoryMessage, error)
 	}
 
-	DirectThreadSetting interface {
+	DirectSettings interface {
 		Create(ctx context.Context, setting *model.DirectThreadSetting) (*model.DirectThreadSetting, error)
 		Search(ctx context.Context, query queryobject.QueryObject) ([]*model.DirectThreadSetting, error)
 
