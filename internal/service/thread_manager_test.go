@@ -22,7 +22,7 @@ func Test_thread_EnsureDirectThread(t *testing.T) {
 		mockUOW         = mock_store.NewMockUnitOfWork(ctrl)
 		mockThreadStore = mock_store.NewMockThreadStore(ctrl)
 		mockDialogStore = mock_store.NewMockThreadDialogStore(ctrl)
-		svc             = NewThreadService(mockUOW)
+		svc             = NewThreadService(nil)
 		ctx             = context.Background()
 	)
 
@@ -58,7 +58,7 @@ func Test_thread_EnsureDirectThread(t *testing.T) {
 
 		mockUOW.EXPECT().WithinTransaction(ctx, gomock.Any()).DoAndReturn(
 			func(ctx context.Context, fn func(ctx context.Context, uow store.UnitOfWork) error) error {
-				return fn(ctx, mockUOW)
+				return fn(ctx, nil)
 			},
 		)
 

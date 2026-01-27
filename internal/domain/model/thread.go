@@ -1,6 +1,8 @@
 package model
 
-import "github.com/google/uuid"
+import (
+	"github.com/google/uuid"
+)
 
 type ThreadKind = int
 
@@ -10,14 +12,16 @@ const (
 	ThreadChannel                   //channel, right now not implemented!
 )
 
-type Thread struct {
-	BaseModel
+type (
+	Thread struct {
+		BaseModel
 
-	Kind    ThreadKind  `json:"kind"`
-	Owner   uuid.UUID   `json:"owner"`
-	Admins  []uuid.UUID `json:"admins"`
-	Members []uuid.UUID `json:"members"`
+		Kind    ThreadKind  `json:"kind"`
+		Owner   uuid.UUID   `json:"owner"`
+		Admins  []uuid.UUID `json:"admins"`
+		Members []uuid.UUID `json:"members"`
 
-	Subject     string `json:"subject"`
-	Description string    `json:"description"`
-}
+		Subject     string `json:"subject"`
+		Description string `json:"description"`
+	}
+)

@@ -18,9 +18,15 @@ const (
 	PeerBot
 )
 
+type Identity struct {
+	Issuer string
+	Name   string
+}
+
 type Peer struct {
-	ID   uuid.UUID `json:"id" db:"id"`
-	Type PeerType  `json:"type" db:"type"`
+	ID       uuid.UUID `json:"id" db:"id"`
+	Type     PeerType  `json:"type" db:"type"`
+	Identity *Identity `json:"identity"`
 }
 
 type BaseModel struct {

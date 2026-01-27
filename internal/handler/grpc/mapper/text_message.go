@@ -25,6 +25,12 @@ func MapPeerFromProto(pb *impb.Peer) model.Peer {
 	}
 
 	var p model.Peer
+	{
+		p.Identity = &model.Identity{
+			Issuer: pb.GetIdentity().GetIssuer(),
+			Name:   pb.GetIdentity().GetName(),
+		}
+	}
 	switch kind := pb.Kind.(type) {
 	case *impb.Peer_UserId:
 		p.ID, _ = uuid.Parse(kind.UserId)
