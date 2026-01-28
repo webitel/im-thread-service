@@ -5,6 +5,7 @@ import (
 	leader "github.com/webitel/im-thread-service/infra/discovery/consul"
 	"github.com/webitel/im-thread-service/infra/pubsub"
 	grpcsrv "github.com/webitel/im-thread-service/infra/server/grpc"
+	"github.com/webitel/im-thread-service/infra/tls"
 	webiteldi "github.com/webitel/im-thread-service/infra/webitel/di"
 	grpchandler "github.com/webitel/im-thread-service/internal/handler/grpc"
 	"github.com/webitel/im-thread-service/internal/service"
@@ -22,6 +23,7 @@ func NewApp(cfg *config.Config) *fx.App {
 			ProvideSD,
 		),
 		fx.Invoke(func(discovery discovery.DiscoveryProvider) error { return nil }),
+		tls.Module,
 		pubsub.Module,
 		postgres.Module,
 		leader.Module,
