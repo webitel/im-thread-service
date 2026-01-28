@@ -7,14 +7,29 @@ import (
 	"github.com/google/uuid"
 	"github.com/webitel/im-thread-service/internal/domain/model"
 	"github.com/webitel/im-thread-service/internal/service/dto"
+	"github.com/webitel/im-thread-service/internal/service/guards"
 	"github.com/webitel/im-thread-service/internal/store"
+	queryobject "github.com/webitel/im-thread-service/internal/store/query_object"
 )
 
-var _ ThreadManager = (*thread)(nil)
+var (
+	_ ThreadManager     = (*thread)(nil)
+	_ ThreadProvisioner = (*thread)(nil)
+	_ ThreadSearcher    = (*thread)(nil)
+)
 
 type (
 	ThreadManager interface {
+		ThreadProvisioner
+		ThreadSearcher
+	}
+
+	ThreadProvisioner interface {
 		EnsureDirectThread(ctx context.Context, req *dto.EnsureDirectThreadRequest) (*dto.EnsureDirectThreadResponse, error)
+	}
+
+	ThreadSearcher interface {
+		Search(ctx context.Context, searchRequest *dto.SearchThreadRequest) ([]*model.Thread, error)
 	}
 
 	thread struct {
@@ -27,6 +42,37 @@ func NewThreadService(uow store.UnitOfWork) *thread {
 	return &thread{
 		uow: uow,
 	}
+}
+
+// Search searches for threads based on the given request.
+// It returns the threads found by the search, or an error if the operation fails.
+// If the operation succeeds, it returns the threads found by the search.
+// If the operation fails, it returns nil and the error.
+// The request can contain filters on thread id, domain id, kind, member id, owner id, subject, limit, sort, and offset.
+// The response contains the threads found by the search.
+func (t *thread) Search(ctx context.Context, searchRequest *dto.SearchThreadRequest) ([]*model.Thread, error) {
+	if err := guards.SearchThreadValidationGuard(searchRequest); err != nil {
+		return nil, err
+	}
+
+	query := queryobject.NewThreadQueryObject().
+		WithFields(searchRequest.Fields).
+		WithIDFilter(searchRequest.Ids...).
+		WithDomainIDFilter(searchRequest.DomainIds...).
+		WithKindFilter(searchRequest.Kinds...).
+		WithMemberIDFilter(searchRequest.MemberIds...).
+		WithOwnerFilter(searchRequest.Owners...).
+		WithSubjectFilter(searchRequest.Q).
+		WithLimit(searchRequest.Limit).
+		WithSort(searchRequest.Sort).
+		WithOffset(searchRequest.Page)
+
+	threads, err := t.uow.ThreadStore().Search(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+
+	return threads, nil
 }
 
 // EnsureDirectThread resolves a direct thread by peers. If the thread is found, it returns the thread id.
@@ -112,7 +158,7 @@ func (t *thread) createDirectThread(ctx context.Context, req *dto.EnsureDirectTh
 			CreatedAt: now,
 			UpdatedAt: now,
 		},
-		MemberID: req.MemberID, // member id == peer.from.id or not?
+		MemberID: req.MemberID,
 		ThreadID: directThread.ID,
 		DirectTo: &req.PeerTo.ID,
 	}
@@ -132,14 +178,10 @@ func (t *thread) createDirectThread(ctx context.Context, req *dto.EnsureDirectTh
 		WithDomainID(req.DomainID).
 		Build()
 
+	// CREATE TWO RECORDS WITH PAIR member_id <-> direct_to AND REVERSED direct_to <-> member_id and specific user settings
 	if _, err = uow.DirectThreadDialogOrchestration().InitializeFullDirectThread(ctx, directThreadDialog); err != nil {
 		return nil, err
 	}
-
-	// // CREATE TWO RECORDS WITH PAIR member_id <-> direct_to AND REVERSED direct_to <-> member_id
-	// if _, err = uow.ThreadDialogStore().CreateDirectPair(ctx, dialog); err != nil {
-	// 	return nil, err
-	// }
 
 	return &dto.EnsureDirectThreadResponse{ID: directThread.ID}, nil
 }

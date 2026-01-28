@@ -97,3 +97,31 @@ func CanSendRightsViolationGuard(canSend bool) error {
 }
 
 //#endregion
+
+//#region Search
+
+func SearchThreadValidationGuard(request *dto.SearchThreadRequest) error {
+	guards := []ValidationGuard[*dto.SearchThreadRequest]{
+		nilSearchRequest(),
+	}
+
+	for _, guard := range guards {
+		if err := guard(request); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func nilSearchRequest() ValidationGuard[*dto.SearchThreadRequest] {
+	return func(req *dto.SearchThreadRequest) error {
+		if req == nil {
+			return errors.New("request is nil!")
+		}
+
+		return nil
+	}
+}
+
+//#endregion

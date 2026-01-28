@@ -15,7 +15,7 @@ type (
 	}
 )
 
-func NewDirectThreadSettingsStore(db Querier) *directSettingsStore {
+func NewDirectSettingsStore(db Querier) *directSettingsStore {
 	return &directSettingsStore{
 		db: db,
 	}

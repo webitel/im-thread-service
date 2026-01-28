@@ -12,9 +12,11 @@ var Module = fx.Module("message_grpc",
 	fx.Provide(
 		NewMessageService,
 		NewMessageHistoryService,
+		NewThreadService,
 	),
 	fx.Invoke(RegisterMessageService),
 	fx.Invoke(RegisterMessageHistoryService),
+	fx.Invoke(RegisterThreadService),
 )
 
 func RegisterMessageService(
@@ -26,4 +28,8 @@ func RegisterMessageService(
 
 func RegisterMessageHistoryService(srv *grpcsrv.Server, svc *MessageHistoryService) {
 	impbv.RegisterMessageHistoryServer(srv.Server, svc)
+}
+
+func RegisterThreadService(srv *grpcsrv.Server, svc *ThreadService) {
+	impbv.RegisterThreadServer(srv.Server, svc)
 }

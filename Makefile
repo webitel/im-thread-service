@@ -1,6 +1,6 @@
 BUF_DIR := buf
-THREAD_PROTO_INTERNAL := ../../protos/im/internal/thread/v1
-THREAD_PROTO_SHARED := ../../protos/im/shared/thread/v1
+THREAD_PROTO_INTERNAL := ../../protos/im/service/thread/v1
+THREAD_PROTO_SHARED := ../../protos/im/domain/thread/v1
 
 .PHONY: gen-thread
 

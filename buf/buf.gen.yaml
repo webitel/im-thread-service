@@ -25,4 +25,4 @@ inputs:
   #  - git_repo: "https://github.com/webitel/protos"
   #    branch: "feat/messaging"
   #    subdir: "im/internal/contact"
-  - directory: "../../protos/im/"
+  - directory: "../../protos/im"
