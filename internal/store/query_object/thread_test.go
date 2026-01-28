@@ -130,7 +130,7 @@ func TestThreadQueryObject_WithIDFilter(t *testing.T) {
 			qo := NewThreadQueryObject()
 			qo.WithIDFilter(tt.ids...)
 
-			sql, _, err := qo.ToSQL()
+			sql, _, err := qo.ToSql()
 			require.NoError(t, err)
 
 			if tt.wantWhere {
@@ -169,7 +169,7 @@ func TestThreadQueryObject_WithDomainIDFilter(t *testing.T) {
 			qo := NewThreadQueryObject()
 			qo.WithDomainIDFilter(tt.domainIDs...)
 
-			sql, _, err := qo.ToSQL()
+			sql, _, err := qo.ToSql()
 			require.NoError(t, err)
 
 			if tt.wantWhere {
@@ -204,7 +204,7 @@ func TestThreadQueryObject_WithKindFilter(t *testing.T) {
 			qo := NewThreadQueryObject()
 			qo.WithKindFilter(tt.kinds...)
 
-			sql, _, err := qo.ToSQL()
+			sql, _, err := qo.ToSql()
 			require.NoError(t, err)
 
 			if len(tt.kinds) > 0 {
@@ -238,7 +238,7 @@ func TestThreadQueryObject_WithOwnerFilter(t *testing.T) {
 			qo := NewThreadQueryObject()
 			qo.WithOwnerFilter(tt.owners...)
 
-			sql, _, err := qo.ToSQL()
+			sql, _, err := qo.ToSql()
 			require.NoError(t, err)
 
 			if len(tt.owners) > 0 {
@@ -285,7 +285,7 @@ func TestThreadQueryObject_WithSubjectFilter(t *testing.T) {
 			qo := NewThreadQueryObject()
 			qo.WithSubjectFilter(tt.subject)
 
-			sql, args, err := qo.ToSQL()
+			sql, args, err := qo.ToSql()
 			require.NoError(t, err)
 
 			if tt.wantWhere {
@@ -332,7 +332,7 @@ func TestThreadQueryObject_WithDescriptionFilter(t *testing.T) {
 			qo := NewThreadQueryObject()
 			qo.WithDescriptionFilter(tt.description)
 
-			sql, _, err := qo.ToSQL()
+			sql, _, err := qo.ToSql()
 			require.NoError(t, err)
 
 			if tt.wantWhere {
@@ -371,7 +371,7 @@ func TestThreadQueryObject_WithMemberIDFilter(t *testing.T) {
 			qo := NewThreadQueryObject()
 			qo.WithMemberIDFilter(tt.memberIDs...)
 
-			sql, _, err := qo.ToSQL()
+			sql, _, err := qo.ToSql()
 			require.NoError(t, err)
 
 			if tt.wantJoin {
@@ -391,7 +391,7 @@ func TestThreadQueryObject_linkThreadDialog(t *testing.T) {
 		qo := NewThreadQueryObject()
 		qo.linkThreadDialog()
 
-		sql, _, err := qo.ToSQL()
+		sql, _, err := qo.ToSql()
 		require.NoError(t, err)
 
 		assert.Contains(t, sql, "INNER JOIN")
@@ -405,7 +405,7 @@ func TestThreadQueryObject_linkThreadDialog(t *testing.T) {
 		qo.linkThreadDialog()
 		qo.linkThreadDialog()
 
-		sql, _, err := qo.ToSQL()
+		sql, _, err := qo.ToSql()
 		require.NoError(t, err)
 
 		joinCount := strings.Count(sql, "INNER JOIN "+ThreadDialogTable)
@@ -418,7 +418,7 @@ func TestThreadQueryObject_linkDirectSettings(t *testing.T) {
 		qo := NewThreadQueryObject()
 		qo.linkDirectSettings()
 
-		sql, _, err := qo.ToSQL()
+		sql, _, err := qo.ToSql()
 		require.NoError(t, err)
 
 		assert.Contains(t, sql, "INNER JOIN")
@@ -435,7 +435,7 @@ func TestThreadQueryObject_linkDirectSettings(t *testing.T) {
 		qo.linkDirectSettings()
 		qo.linkDirectSettings()
 
-		sql, _, err := qo.ToSQL()
+		sql, _, err := qo.ToSql()
 		require.NoError(t, err)
 
 		leftJoinCount := strings.Count(sql, "LEFT JOIN "+DirectSettingsTable)
@@ -448,7 +448,7 @@ func TestThreadQueryObject_linkMembersLateral(t *testing.T) {
 		qo := NewThreadQueryObject()
 		qo.linkMembersLateral()
 
-		sql, _, err := qo.ToSQL()
+		sql, _, err := qo.ToSql()
 		require.NoError(t, err)
 
 		assert.Contains(t, sql, "LEFT JOIN")
@@ -463,7 +463,7 @@ func TestThreadQueryObject_linkMembersLateral(t *testing.T) {
 		qo.linkMembersLateral()
 		qo.linkMembersLateral()
 
-		sql, _, err := qo.ToSQL()
+		sql, _, err := qo.ToSql()
 		require.NoError(t, err)
 
 		lateralCount := strings.Count(strings.ToLower(sql), "lateral")
@@ -476,7 +476,7 @@ func TestThreadQueryObject_linkFullMembersLateral(t *testing.T) {
 		qo := NewThreadQueryObject()
 		qo.linkFullMembersLateral()
 
-		sql, _, err := qo.ToSQL()
+		sql, _, err := qo.ToSql()
 		require.NoError(t, err)
 
 		assert.Contains(t, sql, "LEFT JOIN")
@@ -526,7 +526,7 @@ func TestThreadQueryObject_EnsureJoins(t *testing.T) {
 			qo := NewThreadQueryObject()
 			qo.EnsureJoins(tt.requiredJoin)
 
-			sql, _, err := qo.ToSQL()
+			sql, _, err := qo.ToSql()
 			require.NoError(t, err)
 
 			for _, want := range tt.wantJoins {
@@ -571,7 +571,7 @@ func TestThreadQueryObject_WithFields(t *testing.T) {
 			qo := NewThreadQueryObject()
 			qo.WithFields(tt.fields)
 
-			sql, _, err := qo.ToSQL()
+			sql, _, err := qo.ToSql()
 			require.NoError(t, err)
 
 			for _, want := range tt.wantInSQL {
@@ -624,7 +624,7 @@ func TestThreadQueryObject_WithSort(t *testing.T) {
 			qo.WithFields([]string{"id"}) // Need at least one field
 			qo.WithSort(tt.sortFields...)
 
-			sql, _, err := qo.ToSQL()
+			sql, _, err := qo.ToSql()
 			require.NoError(t, err)
 
 			for _, want := range tt.wantInSQL {
@@ -671,7 +671,7 @@ func TestThreadQueryObject_WithLimit(t *testing.T) {
 			qo.WithFields([]string{"id"})
 			qo.WithLimit(tt.limit, tt.quota...)
 
-			sql, _, err := qo.ToSQL()
+			sql, _, err := qo.ToSql()
 			require.NoError(t, err)
 
 			assert.Contains(t, sql, "LIMIT")
@@ -713,7 +713,7 @@ func TestThreadQueryObject_WithOffset(t *testing.T) {
 			qo.WithLimit(tt.limit)
 			qo.WithOffset(tt.page)
 
-			sql, _, err := qo.ToSQL()
+			sql, _, err := qo.ToSql()
 			require.NoError(t, err)
 
 			if tt.wantOffset {
@@ -744,7 +744,7 @@ func TestThreadQueryObject_ComplexQuery(t *testing.T) {
 			WithLimit(20).
 			WithOffset(2)
 
-		sql, args, err := qo.ToSQL()
+		sql, args, err := qo.ToSql()
 		require.NoError(t, err)
 
 		// Verify structure
@@ -776,7 +776,7 @@ func TestThreadQueryObject_SubjectWithMembersFilter(t *testing.T) {
 		qo.WithFields([]string{"subject"}).
 			WithMemberIDFilter(memberID)
 
-		sql, _, err := qo.ToSQL()
+		sql, _, err := qo.ToSql()
 		require.NoError(t, err)
 
 		// Should contain CASE expression for direct thread title
@@ -791,7 +791,7 @@ func TestThreadQueryObject_SubjectWithMembersFilter(t *testing.T) {
 
 		qo.WithFields([]string{"subject"})
 
-		sql, _, err := qo.ToSQL()
+		sql, _, err := qo.ToSql()
 		require.NoError(t, err)
 
 		// Should use simple subject expression

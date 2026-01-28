@@ -18,6 +18,8 @@ var Module = fx.Module(
 		fx.Annotate(
 			NewThreadService,
 			fx.As(new(ThreadManager)),
+			fx.As(new(ThreadProvisioner)),
+			fx.As(new(ThreadSearcher)),
 		),
 
 		fx.Annotate(

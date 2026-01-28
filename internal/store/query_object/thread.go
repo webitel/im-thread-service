@@ -183,7 +183,6 @@ func (q *threadQueryObject) WithDomainIDFilter(ids ...int) *threadQueryObject {
 func (q *threadQueryObject) WithKindFilter(kinds ...int) *threadQueryObject {
 	if len(kinds) != 0 {
 		q.builder = q.builder.Where(squirrel.Eq{threadAlias + ".kind": kinds})
-
 	}
 
 	return q
@@ -201,7 +200,7 @@ func (q *threadQueryObject) WithSubjectFilter(subject string) *threadQueryObject
 	if subject != "" && utf8.ValidString(subject) {
 		q.escapeLikePattern(subject)
 		q.mustIncludeComputedSubject = true
-		q.builder = q.builder.Where(fmt.Sprintf("%s.subject ilike ?", threadAlias), subject)
+		q.builder = q.builder.Where(fmt.Sprintf("(%s.subject ilike ? or %s.title ilike ?)", threadAlias, threadDirectSettingsAlias), subject, subject)
 	}
 
 	return q
@@ -289,7 +288,7 @@ func (q *threadQueryObject) linkFullMembersLateral() {
 			select jsonb_agg(
 				jsonb_build_object(
 					'id', %[1]s.member_id,
-					'settings', (
+					'direct_settings', (
 						select jsonb_build_object(
 							'id', %[2]s.id,
 							'domain_id', %[2]s.domain_id,

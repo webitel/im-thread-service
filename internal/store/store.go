@@ -38,6 +38,7 @@ type (
 
 	ThreadStore interface {
 		Create(ctx context.Context, req *model.Thread) (*model.Thread, error)
+		Search(ctx context.Context, query queryobject.QueryObject) ([]*model.Thread, error)
 	}
 
 	MessageHistory interface {

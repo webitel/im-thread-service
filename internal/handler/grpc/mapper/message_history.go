@@ -65,7 +65,7 @@ func MapMessage2SearchMessageHistoryResponse(messages []*model.Message) *impb.Se
 			Body:       m.Text,
 			Type:       int32(m.Type),
 			Metadata:   md,
-			CreatedAt:  max(m.CreatedAt.UnixMicro(), 0),
+			CreatedAt:  max(m.CreatedAt.UnixMilli(), 0),
 			UpdatedAt:  max(m.UpdatedAt.UnixMilli(), 0),
 			Documents:  docs,
 			Images:     images,

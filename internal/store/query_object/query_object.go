@@ -96,7 +96,7 @@ func (q *baseQueryObject[T]) WithSort(sortFields ...string) T {
 }
 
 func (q *baseQueryObject[T]) WithLimit(limit int, quota ...int) T {
-	if limit < 0 {
+	if limit <= 0 {
 		limit = DefaultLimit
 	}
 
@@ -127,7 +127,7 @@ func (q *baseQueryObject[T]) escapeLikePattern(s string) string {
 	return s
 }
 
-func (q *baseQueryObject[T]) ToSQL() (string, []any, error) {
+func (q *baseQueryObject[T]) ToSql() (string, []any, error) {
 	if len(q.fields) < 1 {
 		q.fields = q.entity.DefaultFields()
 	}

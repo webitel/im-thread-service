@@ -38,6 +38,14 @@ type BaseModel struct {
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
+func (b *BaseModel) CreatedAtMilliseconds() int64 {
+	return max(b.CreatedAt.UnixMilli(), 0)
+}
+
+func (b *BaseModel) UpdatedAtMilliseconds() int64 {
+	return max(b.UpdatedAt.UnixMilli(), 0)
+}
+
 type Entity struct {
 	Type   string `json:"type"`
 	Offset int    `json:"offset"`

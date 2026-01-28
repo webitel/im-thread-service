@@ -21,6 +21,7 @@ type unitOfWork struct {
 	outboxStore                     store.OutboxStore
 	messageHistoryStore             store.MessageHistory
 	directThreadDialogOrchestration store.DirectThreadDialogOrchestration
+	directSettings                  store.DirectSettings
 }
 
 // NewPgxUnitOfWork returns a new unit of work, given a pgx pool.
@@ -86,6 +87,14 @@ func (u *unitOfWork) DirectThreadDialogOrchestration() store.DirectThreadDialogO
 	}
 
 	return u.directThreadDialogOrchestration
+}
+
+func (u *unitOfWork) DirectSettingsStore() store.DirectSettings {
+	if u.directSettings == nil {
+		u.directSettings = NewDirectSettingsStore(u.querier)
+	}
+
+	return u.directSettings
 }
 
 // WithinTransaction executes a function within a transaction.
