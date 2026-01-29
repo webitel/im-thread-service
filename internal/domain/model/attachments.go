@@ -1,11 +1,14 @@
 package model
 
 import (
-	"net/url"
 	"time"
 
 	"github.com/google/uuid"
 )
+
+type MessageAttachment interface {
+	GetFileID() int64
+}
 
 type MessageImage struct {
 	ID         uuid.UUID      `json:"id" db:"id"`
@@ -20,6 +23,8 @@ type MessageImage struct {
 	URL        string         `json:"url"`
 }
 
+func (mi *MessageImage) GetFileID() int64 { return mi.FileID }
+
 type MessageDocument struct {
 	ID        uuid.UUID `json:"id" db:"id"`
 	MessageID uuid.UUID `json:"message_id" db:"message_id"`
@@ -28,5 +33,7 @@ type MessageDocument struct {
 	Mime      string    `json:"mime" db:"mime"`
 	Size      int64     `json:"size" db:"size"`
 	CreatedAt time.Time `json:"created_at" db:"created_at"`
-	URL       *url.URL  `json:"url,omitempty"`
+	URL       string    `json:"url,omitempty"`
 }
+
+func (md *MessageDocument) GetFileID() int64 { return md.FileID }

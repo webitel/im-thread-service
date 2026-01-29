@@ -45,6 +45,7 @@ func (s *messageHistory) Search(ctx context.Context, hmiDTO *dto.HistoryMessageI
 	query = queryobject.NewMessageHistoryQuery().
 		WithFields(hmiDTO.Fields).
 		WithCursor(cursor).
+		WithDomainIDsFilter(hmiDTO.DomainID).
 		WithIdsFilter(hmiDTO.Ids...).
 		WithReceiverIdsFilter(hmiDTO.ReceiverIds...).
 		WithSenderIdsFilter(hmiDTO.SenderIds...).
@@ -85,8 +86,8 @@ func mapHistoryMessagesToMessage(history []*dto.HistoryMessage) []*model.Message
 	})
 }
 
-func mapDocuments(historyDocs []dto.HistoryDocument) []*model.MessageDocument {
-	return utils.Map(historyDocs, func(doc dto.HistoryDocument) *model.MessageDocument {
+func mapDocuments(historyDocs []*dto.HistoryDocument) []*model.MessageDocument {
+	return utils.Map(historyDocs, func(doc *dto.HistoryDocument) *model.MessageDocument {
 		return &model.MessageDocument{
 			ID:        doc.ID,
 			MessageID: doc.MessageID,
@@ -99,8 +100,8 @@ func mapDocuments(historyDocs []dto.HistoryDocument) []*model.MessageDocument {
 	})
 }
 
-func mapImages(historyImages []dto.HistoryImage) []*model.MessageImage {
-	return utils.Map(historyImages, func(histImg dto.HistoryImage) *model.MessageImage {
+func mapImages(historyImages []*dto.HistoryImage) []*model.MessageImage {
+	return utils.Map(historyImages, func(histImg *dto.HistoryImage) *model.MessageImage {
 		return &model.MessageImage{
 			ID:        histImg.ID,
 			MessageID: histImg.MessageID,

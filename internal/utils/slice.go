@@ -13,6 +13,16 @@ func Map[T, U any](s []T, f func(T) U) []U {
 	return res
 }
 
+func Where[T any](s []T, predicate func(T) bool) []T {
+	var result []T
+	for _, v := range s {
+		if predicate(v) {
+			result = append(result, v)
+		}
+	}
+	return result
+}
+
 func IdsParser(s string) uuid.UUID {
 	id, _ := uuid.Parse(s)
 	return id
