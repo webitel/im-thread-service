@@ -315,6 +315,8 @@ func (s *MessageService) mapImageInputs(dtoImages []*dto.Image) []model.ImageInp
 	for _, img := range dtoImages {
 		inputs = append(inputs, model.ImageInput{
 			FileID:   strconv.FormatInt(img.ID, 10),
+			Name:     img.Name,
+			URL:      img.URL,
 			MimeType: img.MimeType,
 		})
 	}

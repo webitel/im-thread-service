@@ -122,6 +122,7 @@ type ImagePayload struct {
 	FileID int64  `json:"file_id"`
 	Mime   string `json:"mime"`
 	Name   string `json:"name"`
+	URL    string `json:"url"`
 }
 
 type DocumentPayload struct {

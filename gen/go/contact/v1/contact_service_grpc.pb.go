@@ -2,7 +2,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.5.1
 // - protoc             (unknown)
-// source: internal/contact/v1/contact_service.proto
+// source: service/contact/v1/contact_service.proto
 
 package contact
 
@@ -19,12 +19,12 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	Contacts_SearchContact_FullMethodName = "/webitel.im.internal.contact.v1.Contacts/SearchContact"
-	Contacts_CreateContact_FullMethodName = "/webitel.im.internal.contact.v1.Contacts/CreateContact"
-	Contacts_UpdateContact_FullMethodName = "/webitel.im.internal.contact.v1.Contacts/UpdateContact"
-	Contacts_DeleteContact_FullMethodName = "/webitel.im.internal.contact.v1.Contacts/DeleteContact"
-	Contacts_CanSend_FullMethodName       = "/webitel.im.internal.contact.v1.Contacts/CanSend"
-	Contacts_Upsert_FullMethodName        = "/webitel.im.internal.contact.v1.Contacts/Upsert"
+	Contacts_SearchContact_FullMethodName = "/webitel.im.service.contact.v1.Contacts/SearchContact"
+	Contacts_CreateContact_FullMethodName = "/webitel.im.service.contact.v1.Contacts/CreateContact"
+	Contacts_UpdateContact_FullMethodName = "/webitel.im.service.contact.v1.Contacts/UpdateContact"
+	Contacts_DeleteContact_FullMethodName = "/webitel.im.service.contact.v1.Contacts/DeleteContact"
+	Contacts_CanSend_FullMethodName       = "/webitel.im.service.contact.v1.Contacts/CanSend"
+	Contacts_Upsert_FullMethodName        = "/webitel.im.service.contact.v1.Contacts/Upsert"
 )
 
 // ContactsClient is the client API for Contacts service.
@@ -278,7 +278,7 @@ func _Contacts_Upsert_Handler(srv interface{}, ctx context.Context, dec func(int
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
 var Contacts_ServiceDesc = grpc.ServiceDesc{
-	ServiceName: "webitel.im.internal.contact.v1.Contacts",
+	ServiceName: "webitel.im.service.contact.v1.Contacts",
 	HandlerType: (*ContactsServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
@@ -307,5 +307,5 @@ var Contacts_ServiceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "internal/contact/v1/contact_service.proto",
+	Metadata: "service/contact/v1/contact_service.proto",
 }
