@@ -57,7 +57,7 @@ func (p *storageProcessor) Process(ctx context.Context, domainID int64, items []
 
 		// [CASE_2] UPLOAD IF URL IS PROVIDED
 		if url := item.GetURL(); url != "" {
-			res, err := p.storage.UploadFileUrl(ctx, &storage.UploadFileUrlRequest{
+			res, err := p.client.UploadFileUrl(ctx, &storage.UploadFileUrlRequest{
 				Url:      url,
 				Name:     item.GetName(),
 				DomainId: domainID,
