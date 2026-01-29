@@ -16,6 +16,7 @@ type AttachmentProcessor interface {
 	GetName() string
 	SetID(int64)
 	SetMime(string)
+	SetURL(string)
 	SetName(string)
 }
 
@@ -57,8 +58,9 @@ func (p *storageProcessor) Process(ctx context.Context, domainID int64, items []
 		// [CASE_2] UPLOAD IF URL IS PROVIDED
 		if url := item.GetURL(); url != "" {
 			res, err := p.storage.UploadFileUrl(ctx, &storage.UploadFileUrlRequest{
-				DomainId: domainID,
 				Url:      url,
+				Name:     item.GetName(),
+				DomainId: domainID,
 				Mime:     item.GetMimeType(),
 				Channel:  storage.UploadFileChannel_ChatChannel,
 			})
@@ -71,6 +73,7 @@ func (p *storageProcessor) Process(ctx context.Context, domainID int64, items []
 			if res.GetMime() != "" {
 				item.SetMime(res.GetMime())
 			}
+			item.SetURL(res.Url)
 		}
 	}
 	return nil

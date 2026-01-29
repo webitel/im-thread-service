@@ -2,7 +2,7 @@
 // versions:
 // 	protoc-gen-go v1.34.1
 // 	protoc        (unknown)
-// source: shared/thread/v1/group_thread.proto
+// source: domain/thread/v1/group_thread.proto
 
 package thread
 
@@ -61,11 +61,11 @@ func (x ThreadType) String() string {
 }
 
 func (ThreadType) Descriptor() protoreflect.EnumDescriptor {
-	return file_shared_thread_v1_group_thread_proto_enumTypes[0].Descriptor()
+	return file_domain_thread_v1_group_thread_proto_enumTypes[0].Descriptor()
 }
 
 func (ThreadType) Type() protoreflect.EnumType {
-	return &file_shared_thread_v1_group_thread_proto_enumTypes[0]
+	return &file_domain_thread_v1_group_thread_proto_enumTypes[0]
 }
 
 func (x ThreadType) Number() protoreflect.EnumNumber {
@@ -74,7 +74,7 @@ func (x ThreadType) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use ThreadType.Descriptor instead.
 func (ThreadType) EnumDescriptor() ([]byte, []int) {
-	return file_shared_thread_v1_group_thread_proto_rawDescGZIP(), []int{0}
+	return file_domain_thread_v1_group_thread_proto_rawDescGZIP(), []int{0}
 }
 
 type Thread struct {
@@ -109,7 +109,7 @@ type Thread struct {
 func (x *Thread) Reset() {
 	*x = Thread{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_shared_thread_v1_group_thread_proto_msgTypes[0]
+		mi := &file_domain_thread_v1_group_thread_proto_msgTypes[0]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -122,7 +122,7 @@ func (x *Thread) String() string {
 func (*Thread) ProtoMessage() {}
 
 func (x *Thread) ProtoReflect() protoreflect.Message {
-	mi := &file_shared_thread_v1_group_thread_proto_msgTypes[0]
+	mi := &file_domain_thread_v1_group_thread_proto_msgTypes[0]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -135,7 +135,7 @@ func (x *Thread) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Thread.ProtoReflect.Descriptor instead.
 func (*Thread) Descriptor() ([]byte, []int) {
-	return file_shared_thread_v1_group_thread_proto_rawDescGZIP(), []int{0}
+	return file_domain_thread_v1_group_thread_proto_rawDescGZIP(), []int{0}
 }
 
 func (x *Thread) GetId() string {
@@ -236,7 +236,7 @@ type CreateGroupThreadRequest struct {
 func (x *CreateGroupThreadRequest) Reset() {
 	*x = CreateGroupThreadRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_shared_thread_v1_group_thread_proto_msgTypes[1]
+		mi := &file_domain_thread_v1_group_thread_proto_msgTypes[1]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -249,7 +249,7 @@ func (x *CreateGroupThreadRequest) String() string {
 func (*CreateGroupThreadRequest) ProtoMessage() {}
 
 func (x *CreateGroupThreadRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_shared_thread_v1_group_thread_proto_msgTypes[1]
+	mi := &file_domain_thread_v1_group_thread_proto_msgTypes[1]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -262,7 +262,7 @@ func (x *CreateGroupThreadRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateGroupThreadRequest.ProtoReflect.Descriptor instead.
 func (*CreateGroupThreadRequest) Descriptor() ([]byte, []int) {
-	return file_shared_thread_v1_group_thread_proto_rawDescGZIP(), []int{1}
+	return file_domain_thread_v1_group_thread_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *CreateGroupThreadRequest) GetCreator() string {
@@ -313,7 +313,7 @@ type CreateGroupThreadResponse struct {
 func (x *CreateGroupThreadResponse) Reset() {
 	*x = CreateGroupThreadResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_shared_thread_v1_group_thread_proto_msgTypes[2]
+		mi := &file_domain_thread_v1_group_thread_proto_msgTypes[2]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -326,7 +326,7 @@ func (x *CreateGroupThreadResponse) String() string {
 func (*CreateGroupThreadResponse) ProtoMessage() {}
 
 func (x *CreateGroupThreadResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_shared_thread_v1_group_thread_proto_msgTypes[2]
+	mi := &file_domain_thread_v1_group_thread_proto_msgTypes[2]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -339,7 +339,7 @@ func (x *CreateGroupThreadResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateGroupThreadResponse.ProtoReflect.Descriptor instead.
 func (*CreateGroupThreadResponse) Descriptor() ([]byte, []int) {
-	return file_shared_thread_v1_group_thread_proto_rawDescGZIP(), []int{2}
+	return file_domain_thread_v1_group_thread_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *CreateGroupThreadResponse) GetThread() *Thread {
@@ -365,13 +365,13 @@ type SearchThreadRequest struct {
 	// The maximum number of results to return.
 	Limit int32 `protobuf:"varint,4,opt,name=limit,proto3" json:"limit,omitempty"`
 	// The types of searching threads.
-	ThreadTypes []ThreadType `protobuf:"varint,5,rep,packed,name=thread_types,json=threadTypes,proto3,enum=webitel.im.shared.thread.v1.ThreadType" json:"thread_types,omitempty"`
+	ThreadTypes []ThreadType `protobuf:"varint,5,rep,packed,name=thread_types,json=threadTypes,proto3,enum=webitel.im.domain.thread.v1.ThreadType" json:"thread_types,omitempty"`
 }
 
 func (x *SearchThreadRequest) Reset() {
 	*x = SearchThreadRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_shared_thread_v1_group_thread_proto_msgTypes[3]
+		mi := &file_domain_thread_v1_group_thread_proto_msgTypes[3]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -384,7 +384,7 @@ func (x *SearchThreadRequest) String() string {
 func (*SearchThreadRequest) ProtoMessage() {}
 
 func (x *SearchThreadRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_shared_thread_v1_group_thread_proto_msgTypes[3]
+	mi := &file_domain_thread_v1_group_thread_proto_msgTypes[3]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -397,7 +397,7 @@ func (x *SearchThreadRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SearchThreadRequest.ProtoReflect.Descriptor instead.
 func (*SearchThreadRequest) Descriptor() ([]byte, []int) {
-	return file_shared_thread_v1_group_thread_proto_rawDescGZIP(), []int{3}
+	return file_domain_thread_v1_group_thread_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *SearchThreadRequest) GetMember() string {
@@ -450,7 +450,7 @@ type SearchThreadResponse struct {
 func (x *SearchThreadResponse) Reset() {
 	*x = SearchThreadResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_shared_thread_v1_group_thread_proto_msgTypes[4]
+		mi := &file_domain_thread_v1_group_thread_proto_msgTypes[4]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -463,7 +463,7 @@ func (x *SearchThreadResponse) String() string {
 func (*SearchThreadResponse) ProtoMessage() {}
 
 func (x *SearchThreadResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_shared_thread_v1_group_thread_proto_msgTypes[4]
+	mi := &file_domain_thread_v1_group_thread_proto_msgTypes[4]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -476,7 +476,7 @@ func (x *SearchThreadResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SearchThreadResponse.ProtoReflect.Descriptor instead.
 func (*SearchThreadResponse) Descriptor() ([]byte, []int) {
-	return file_shared_thread_v1_group_thread_proto_rawDescGZIP(), []int{4}
+	return file_domain_thread_v1_group_thread_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *SearchThreadResponse) GetThreads() []*Thread {
@@ -507,7 +507,7 @@ type AddMemberToGroupThreadRequest struct {
 func (x *AddMemberToGroupThreadRequest) Reset() {
 	*x = AddMemberToGroupThreadRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_shared_thread_v1_group_thread_proto_msgTypes[5]
+		mi := &file_domain_thread_v1_group_thread_proto_msgTypes[5]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -520,7 +520,7 @@ func (x *AddMemberToGroupThreadRequest) String() string {
 func (*AddMemberToGroupThreadRequest) ProtoMessage() {}
 
 func (x *AddMemberToGroupThreadRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_shared_thread_v1_group_thread_proto_msgTypes[5]
+	mi := &file_domain_thread_v1_group_thread_proto_msgTypes[5]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -533,7 +533,7 @@ func (x *AddMemberToGroupThreadRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AddMemberToGroupThreadRequest.ProtoReflect.Descriptor instead.
 func (*AddMemberToGroupThreadRequest) Descriptor() ([]byte, []int) {
-	return file_shared_thread_v1_group_thread_proto_rawDescGZIP(), []int{5}
+	return file_domain_thread_v1_group_thread_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *AddMemberToGroupThreadRequest) GetThreadId() string {
@@ -568,7 +568,7 @@ type AddMemberToGroupThreadResponse struct {
 func (x *AddMemberToGroupThreadResponse) Reset() {
 	*x = AddMemberToGroupThreadResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_shared_thread_v1_group_thread_proto_msgTypes[6]
+		mi := &file_domain_thread_v1_group_thread_proto_msgTypes[6]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -581,7 +581,7 @@ func (x *AddMemberToGroupThreadResponse) String() string {
 func (*AddMemberToGroupThreadResponse) ProtoMessage() {}
 
 func (x *AddMemberToGroupThreadResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_shared_thread_v1_group_thread_proto_msgTypes[6]
+	mi := &file_domain_thread_v1_group_thread_proto_msgTypes[6]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -594,7 +594,7 @@ func (x *AddMemberToGroupThreadResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AddMemberToGroupThreadResponse.ProtoReflect.Descriptor instead.
 func (*AddMemberToGroupThreadResponse) Descriptor() ([]byte, []int) {
-	return file_shared_thread_v1_group_thread_proto_rawDescGZIP(), []int{6}
+	return file_domain_thread_v1_group_thread_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *AddMemberToGroupThreadResponse) GetMemberJoinResult() []*AddMemberToGroupThreadResponse_MemberJoinResult {
@@ -617,7 +617,7 @@ type AddMemberToGroupThreadResponse_MemberJoinResult struct {
 func (x *AddMemberToGroupThreadResponse_MemberJoinResult) Reset() {
 	*x = AddMemberToGroupThreadResponse_MemberJoinResult{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_shared_thread_v1_group_thread_proto_msgTypes[7]
+		mi := &file_domain_thread_v1_group_thread_proto_msgTypes[7]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -630,7 +630,7 @@ func (x *AddMemberToGroupThreadResponse_MemberJoinResult) String() string {
 func (*AddMemberToGroupThreadResponse_MemberJoinResult) ProtoMessage() {}
 
 func (x *AddMemberToGroupThreadResponse_MemberJoinResult) ProtoReflect() protoreflect.Message {
-	mi := &file_shared_thread_v1_group_thread_proto_msgTypes[7]
+	mi := &file_domain_thread_v1_group_thread_proto_msgTypes[7]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -643,7 +643,7 @@ func (x *AddMemberToGroupThreadResponse_MemberJoinResult) ProtoReflect() protore
 
 // Deprecated: Use AddMemberToGroupThreadResponse_MemberJoinResult.ProtoReflect.Descriptor instead.
 func (*AddMemberToGroupThreadResponse_MemberJoinResult) Descriptor() ([]byte, []int) {
-	return file_shared_thread_v1_group_thread_proto_rawDescGZIP(), []int{6, 0}
+	return file_domain_thread_v1_group_thread_proto_rawDescGZIP(), []int{6, 0}
 }
 
 func (x *AddMemberToGroupThreadResponse_MemberJoinResult) GetSuccess() bool {
@@ -667,14 +667,14 @@ func (x *AddMemberToGroupThreadResponse_MemberJoinResult) GetMessage() string {
 	return ""
 }
 
-var File_shared_thread_v1_group_thread_proto protoreflect.FileDescriptor
+var File_domain_thread_v1_group_thread_proto protoreflect.FileDescriptor
 
-var file_shared_thread_v1_group_thread_proto_rawDesc = []byte{
-	0x0a, 0x23, 0x73, 0x68, 0x61, 0x72, 0x65, 0x64, 0x2f, 0x74, 0x68, 0x72, 0x65, 0x61, 0x64, 0x2f,
+var file_domain_thread_v1_group_thread_proto_rawDesc = []byte{
+	0x0a, 0x23, 0x64, 0x6f, 0x6d, 0x61, 0x69, 0x6e, 0x2f, 0x74, 0x68, 0x72, 0x65, 0x61, 0x64, 0x2f,
 	0x76, 0x31, 0x2f, 0x67, 0x72, 0x6f, 0x75, 0x70, 0x5f, 0x74, 0x68, 0x72, 0x65, 0x61, 0x64, 0x2e,
 	0x70, 0x72, 0x6f, 0x74, 0x6f, 0x12, 0x1b, 0x77, 0x65, 0x62, 0x69, 0x74, 0x65, 0x6c, 0x2e, 0x69,
-	0x6d, 0x2e, 0x73, 0x68, 0x61, 0x72, 0x65, 0x64, 0x2e, 0x74, 0x68, 0x72, 0x65, 0x61, 0x64, 0x2e,
-	0x76, 0x31, 0x1a, 0x1e, 0x73, 0x68, 0x61, 0x72, 0x65, 0x64, 0x2f, 0x74, 0x68, 0x72, 0x65, 0x61,
+	0x6d, 0x2e, 0x64, 0x6f, 0x6d, 0x61, 0x69, 0x6e, 0x2e, 0x74, 0x68, 0x72, 0x65, 0x61, 0x64, 0x2e,
+	0x76, 0x31, 0x1a, 0x1e, 0x64, 0x6f, 0x6d, 0x61, 0x69, 0x6e, 0x2f, 0x74, 0x68, 0x72, 0x65, 0x61,
 	0x64, 0x2f, 0x76, 0x31, 0x2f, 0x6d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x2e, 0x70, 0x72, 0x6f,
 	0x74, 0x6f, 0x22, 0xe4, 0x02, 0x0a, 0x06, 0x54, 0x68, 0x72, 0x65, 0x61, 0x64, 0x12, 0x0e, 0x0a,
 	0x02, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x02, 0x69, 0x64, 0x12, 0x1d, 0x0a,
@@ -696,7 +696,7 @@ var file_shared_thread_v1_group_thread_proto_rawDesc = []byte{
 	0x52, 0x0b, 0x64, 0x65, 0x73, 0x63, 0x72, 0x69, 0x70, 0x74, 0x69, 0x6f, 0x6e, 0x12, 0x4a, 0x0a,
 	0x0c, 0x74, 0x68, 0x72, 0x65, 0x61, 0x64, 0x5f, 0x70, 0x68, 0x6f, 0x74, 0x6f, 0x18, 0x0b, 0x20,
 	0x01, 0x28, 0x0b, 0x32, 0x27, 0x2e, 0x77, 0x65, 0x62, 0x69, 0x74, 0x65, 0x6c, 0x2e, 0x69, 0x6d,
-	0x2e, 0x73, 0x68, 0x61, 0x72, 0x65, 0x64, 0x2e, 0x74, 0x68, 0x72, 0x65, 0x61, 0x64, 0x2e, 0x76,
+	0x2e, 0x64, 0x6f, 0x6d, 0x61, 0x69, 0x6e, 0x2e, 0x74, 0x68, 0x72, 0x65, 0x61, 0x64, 0x2e, 0x76,
 	0x31, 0x2e, 0x49, 0x6d, 0x61, 0x67, 0x65, 0x49, 0x6e, 0x70, 0x75, 0x74, 0x52, 0x0b, 0x74, 0x68,
 	0x72, 0x65, 0x61, 0x64, 0x50, 0x68, 0x6f, 0x74, 0x6f, 0x22, 0xd6, 0x01, 0x0a, 0x18, 0x43, 0x72,
 	0x65, 0x61, 0x74, 0x65, 0x47, 0x72, 0x6f, 0x75, 0x70, 0x54, 0x68, 0x72, 0x65, 0x61, 0x64, 0x52,
@@ -709,14 +709,14 @@ var file_shared_thread_v1_group_thread_proto_rawDesc = []byte{
 	0x69, 0x6f, 0x6e, 0x18, 0x04, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0b, 0x64, 0x65, 0x73, 0x63, 0x72,
 	0x69, 0x70, 0x74, 0x69, 0x6f, 0x6e, 0x12, 0x4a, 0x0a, 0x0c, 0x74, 0x68, 0x72, 0x65, 0x61, 0x64,
 	0x5f, 0x70, 0x68, 0x6f, 0x74, 0x6f, 0x18, 0x05, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x27, 0x2e, 0x77,
-	0x65, 0x62, 0x69, 0x74, 0x65, 0x6c, 0x2e, 0x69, 0x6d, 0x2e, 0x73, 0x68, 0x61, 0x72, 0x65, 0x64,
+	0x65, 0x62, 0x69, 0x74, 0x65, 0x6c, 0x2e, 0x69, 0x6d, 0x2e, 0x64, 0x6f, 0x6d, 0x61, 0x69, 0x6e,
 	0x2e, 0x74, 0x68, 0x72, 0x65, 0x61, 0x64, 0x2e, 0x76, 0x31, 0x2e, 0x49, 0x6d, 0x61, 0x67, 0x65,
 	0x49, 0x6e, 0x70, 0x75, 0x74, 0x52, 0x0b, 0x74, 0x68, 0x72, 0x65, 0x61, 0x64, 0x50, 0x68, 0x6f,
 	0x74, 0x6f, 0x22, 0x58, 0x0a, 0x19, 0x43, 0x72, 0x65, 0x61, 0x74, 0x65, 0x47, 0x72, 0x6f, 0x75,
 	0x70, 0x54, 0x68, 0x72, 0x65, 0x61, 0x64, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12,
 	0x3b, 0x0a, 0x06, 0x74, 0x68, 0x72, 0x65, 0x61, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32,
-	0x23, 0x2e, 0x77, 0x65, 0x62, 0x69, 0x74, 0x65, 0x6c, 0x2e, 0x69, 0x6d, 0x2e, 0x73, 0x68, 0x61,
-	0x72, 0x65, 0x64, 0x2e, 0x74, 0x68, 0x72, 0x65, 0x61, 0x64, 0x2e, 0x76, 0x31, 0x2e, 0x54, 0x68,
+	0x23, 0x2e, 0x77, 0x65, 0x62, 0x69, 0x74, 0x65, 0x6c, 0x2e, 0x69, 0x6d, 0x2e, 0x64, 0x6f, 0x6d,
+	0x61, 0x69, 0x6e, 0x2e, 0x74, 0x68, 0x72, 0x65, 0x61, 0x64, 0x2e, 0x76, 0x31, 0x2e, 0x54, 0x68,
 	0x72, 0x65, 0x61, 0x64, 0x52, 0x06, 0x74, 0x68, 0x72, 0x65, 0x61, 0x64, 0x22, 0xcd, 0x01, 0x0a,
 	0x13, 0x53, 0x65, 0x61, 0x72, 0x63, 0x68, 0x54, 0x68, 0x72, 0x65, 0x61, 0x64, 0x52, 0x65, 0x71,
 	0x75, 0x65, 0x73, 0x74, 0x12, 0x16, 0x0a, 0x06, 0x6d, 0x65, 0x6d, 0x62, 0x65, 0x72, 0x18, 0x01,
@@ -727,14 +727,14 @@ var file_shared_thread_v1_group_thread_proto_rawDesc = []byte{
 	0x6c, 0x69, 0x6d, 0x69, 0x74, 0x18, 0x04, 0x20, 0x01, 0x28, 0x05, 0x52, 0x05, 0x6c, 0x69, 0x6d,
 	0x69, 0x74, 0x12, 0x4a, 0x0a, 0x0c, 0x74, 0x68, 0x72, 0x65, 0x61, 0x64, 0x5f, 0x74, 0x79, 0x70,
 	0x65, 0x73, 0x18, 0x05, 0x20, 0x03, 0x28, 0x0e, 0x32, 0x27, 0x2e, 0x77, 0x65, 0x62, 0x69, 0x74,
-	0x65, 0x6c, 0x2e, 0x69, 0x6d, 0x2e, 0x73, 0x68, 0x61, 0x72, 0x65, 0x64, 0x2e, 0x74, 0x68, 0x72,
+	0x65, 0x6c, 0x2e, 0x69, 0x6d, 0x2e, 0x64, 0x6f, 0x6d, 0x61, 0x69, 0x6e, 0x2e, 0x74, 0x68, 0x72,
 	0x65, 0x61, 0x64, 0x2e, 0x76, 0x31, 0x2e, 0x54, 0x68, 0x72, 0x65, 0x61, 0x64, 0x54, 0x79, 0x70,
 	0x65, 0x52, 0x0b, 0x74, 0x68, 0x72, 0x65, 0x61, 0x64, 0x54, 0x79, 0x70, 0x65, 0x73, 0x42, 0x0c,
 	0x0a, 0x0a, 0x5f, 0x63, 0x75, 0x72, 0x73, 0x6f, 0x72, 0x5f, 0x69, 0x64, 0x22, 0x70, 0x0a, 0x14,
 	0x53, 0x65, 0x61, 0x72, 0x63, 0x68, 0x54, 0x68, 0x72, 0x65, 0x61, 0x64, 0x52, 0x65, 0x73, 0x70,
 	0x6f, 0x6e, 0x73, 0x65, 0x12, 0x3d, 0x0a, 0x07, 0x74, 0x68, 0x72, 0x65, 0x61, 0x64, 0x73, 0x18,
 	0x01, 0x20, 0x03, 0x28, 0x0b, 0x32, 0x23, 0x2e, 0x77, 0x65, 0x62, 0x69, 0x74, 0x65, 0x6c, 0x2e,
-	0x69, 0x6d, 0x2e, 0x73, 0x68, 0x61, 0x72, 0x65, 0x64, 0x2e, 0x74, 0x68, 0x72, 0x65, 0x61, 0x64,
+	0x69, 0x6d, 0x2e, 0x64, 0x6f, 0x6d, 0x61, 0x69, 0x6e, 0x2e, 0x74, 0x68, 0x72, 0x65, 0x61, 0x64,
 	0x2e, 0x76, 0x31, 0x2e, 0x54, 0x68, 0x72, 0x65, 0x61, 0x64, 0x52, 0x07, 0x74, 0x68, 0x72, 0x65,
 	0x61, 0x64, 0x73, 0x12, 0x19, 0x0a, 0x08, 0x68, 0x61, 0x73, 0x5f, 0x6e, 0x65, 0x78, 0x74, 0x18,
 	0x02, 0x20, 0x01, 0x28, 0x08, 0x52, 0x07, 0x68, 0x61, 0x73, 0x4e, 0x65, 0x78, 0x74, 0x22, 0x77,
@@ -750,7 +750,7 @@ var file_shared_thread_v1_group_thread_proto_rawDesc = []byte{
 	0x61, 0x64, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x7a, 0x0a, 0x12, 0x6d, 0x65,
 	0x6d, 0x62, 0x65, 0x72, 0x5f, 0x6a, 0x6f, 0x69, 0x6e, 0x5f, 0x72, 0x65, 0x73, 0x75, 0x6c, 0x74,
 	0x18, 0x01, 0x20, 0x03, 0x28, 0x0b, 0x32, 0x4c, 0x2e, 0x77, 0x65, 0x62, 0x69, 0x74, 0x65, 0x6c,
-	0x2e, 0x69, 0x6d, 0x2e, 0x73, 0x68, 0x61, 0x72, 0x65, 0x64, 0x2e, 0x74, 0x68, 0x72, 0x65, 0x61,
+	0x2e, 0x69, 0x6d, 0x2e, 0x64, 0x6f, 0x6d, 0x61, 0x69, 0x6e, 0x2e, 0x74, 0x68, 0x72, 0x65, 0x61,
 	0x64, 0x2e, 0x76, 0x31, 0x2e, 0x41, 0x64, 0x64, 0x4d, 0x65, 0x6d, 0x62, 0x65, 0x72, 0x54, 0x6f,
 	0x47, 0x72, 0x6f, 0x75, 0x70, 0x54, 0x68, 0x72, 0x65, 0x61, 0x64, 0x52, 0x65, 0x73, 0x70, 0x6f,
 	0x6e, 0x73, 0x65, 0x2e, 0x4d, 0x65, 0x6d, 0x62, 0x65, 0x72, 0x4a, 0x6f, 0x69, 0x6e, 0x52, 0x65,
@@ -767,57 +767,57 @@ var file_shared_thread_v1_group_thread_proto_rawDesc = []byte{
 	0x44, 0x49, 0x52, 0x45, 0x43, 0x54, 0x10, 0x01, 0x12, 0x09, 0x0a, 0x05, 0x47, 0x52, 0x4f, 0x55,
 	0x50, 0x10, 0x02, 0x12, 0x0b, 0x0a, 0x07, 0x43, 0x48, 0x41, 0x4e, 0x4e, 0x45, 0x4c, 0x10, 0x03,
 	0x42, 0xfa, 0x01, 0x0a, 0x1f, 0x63, 0x6f, 0x6d, 0x2e, 0x77, 0x65, 0x62, 0x69, 0x74, 0x65, 0x6c,
-	0x2e, 0x69, 0x6d, 0x2e, 0x73, 0x68, 0x61, 0x72, 0x65, 0x64, 0x2e, 0x74, 0x68, 0x72, 0x65, 0x61,
+	0x2e, 0x69, 0x6d, 0x2e, 0x64, 0x6f, 0x6d, 0x61, 0x69, 0x6e, 0x2e, 0x74, 0x68, 0x72, 0x65, 0x61,
 	0x64, 0x2e, 0x76, 0x31, 0x42, 0x10, 0x47, 0x72, 0x6f, 0x75, 0x70, 0x54, 0x68, 0x72, 0x65, 0x61,
 	0x64, 0x50, 0x72, 0x6f, 0x74, 0x6f, 0x50, 0x01, 0x5a, 0x34, 0x67, 0x69, 0x74, 0x68, 0x75, 0x62,
 	0x2e, 0x63, 0x6f, 0x6d, 0x2f, 0x77, 0x65, 0x62, 0x69, 0x74, 0x65, 0x6c, 0x2f, 0x70, 0x72, 0x6f,
 	0x74, 0x6f, 0x73, 0x2f, 0x67, 0x65, 0x6e, 0x2f, 0x67, 0x6f, 0x2f, 0x69, 0x6d, 0x2f, 0x74, 0x68,
 	0x72, 0x65, 0x61, 0x64, 0x2f, 0x76, 0x31, 0x3b, 0x74, 0x68, 0x72, 0x65, 0x61, 0x64, 0xa2, 0x02,
-	0x04, 0x57, 0x49, 0x53, 0x54, 0xaa, 0x02, 0x1b, 0x57, 0x65, 0x62, 0x69, 0x74, 0x65, 0x6c, 0x2e,
-	0x49, 0x6d, 0x2e, 0x53, 0x68, 0x61, 0x72, 0x65, 0x64, 0x2e, 0x54, 0x68, 0x72, 0x65, 0x61, 0x64,
+	0x04, 0x57, 0x49, 0x44, 0x54, 0xaa, 0x02, 0x1b, 0x57, 0x65, 0x62, 0x69, 0x74, 0x65, 0x6c, 0x2e,
+	0x49, 0x6d, 0x2e, 0x44, 0x6f, 0x6d, 0x61, 0x69, 0x6e, 0x2e, 0x54, 0x68, 0x72, 0x65, 0x61, 0x64,
 	0x2e, 0x56, 0x31, 0xca, 0x02, 0x1b, 0x57, 0x65, 0x62, 0x69, 0x74, 0x65, 0x6c, 0x5c, 0x49, 0x6d,
-	0x5c, 0x53, 0x68, 0x61, 0x72, 0x65, 0x64, 0x5c, 0x54, 0x68, 0x72, 0x65, 0x61, 0x64, 0x5c, 0x56,
-	0x31, 0xe2, 0x02, 0x27, 0x57, 0x65, 0x62, 0x69, 0x74, 0x65, 0x6c, 0x5c, 0x49, 0x6d, 0x5c, 0x53,
-	0x68, 0x61, 0x72, 0x65, 0x64, 0x5c, 0x54, 0x68, 0x72, 0x65, 0x61, 0x64, 0x5c, 0x56, 0x31, 0x5c,
+	0x5c, 0x44, 0x6f, 0x6d, 0x61, 0x69, 0x6e, 0x5c, 0x54, 0x68, 0x72, 0x65, 0x61, 0x64, 0x5c, 0x56,
+	0x31, 0xe2, 0x02, 0x27, 0x57, 0x65, 0x62, 0x69, 0x74, 0x65, 0x6c, 0x5c, 0x49, 0x6d, 0x5c, 0x44,
+	0x6f, 0x6d, 0x61, 0x69, 0x6e, 0x5c, 0x54, 0x68, 0x72, 0x65, 0x61, 0x64, 0x5c, 0x56, 0x31, 0x5c,
 	0x47, 0x50, 0x42, 0x4d, 0x65, 0x74, 0x61, 0x64, 0x61, 0x74, 0x61, 0xea, 0x02, 0x1f, 0x57, 0x65,
-	0x62, 0x69, 0x74, 0x65, 0x6c, 0x3a, 0x3a, 0x49, 0x6d, 0x3a, 0x3a, 0x53, 0x68, 0x61, 0x72, 0x65,
-	0x64, 0x3a, 0x3a, 0x54, 0x68, 0x72, 0x65, 0x61, 0x64, 0x3a, 0x3a, 0x56, 0x31, 0x62, 0x06, 0x70,
+	0x62, 0x69, 0x74, 0x65, 0x6c, 0x3a, 0x3a, 0x49, 0x6d, 0x3a, 0x3a, 0x44, 0x6f, 0x6d, 0x61, 0x69,
+	0x6e, 0x3a, 0x3a, 0x54, 0x68, 0x72, 0x65, 0x61, 0x64, 0x3a, 0x3a, 0x56, 0x31, 0x62, 0x06, 0x70,
 	0x72, 0x6f, 0x74, 0x6f, 0x33,
 }
 
 var (
-	file_shared_thread_v1_group_thread_proto_rawDescOnce sync.Once
-	file_shared_thread_v1_group_thread_proto_rawDescData = file_shared_thread_v1_group_thread_proto_rawDesc
+	file_domain_thread_v1_group_thread_proto_rawDescOnce sync.Once
+	file_domain_thread_v1_group_thread_proto_rawDescData = file_domain_thread_v1_group_thread_proto_rawDesc
 )
 
-func file_shared_thread_v1_group_thread_proto_rawDescGZIP() []byte {
-	file_shared_thread_v1_group_thread_proto_rawDescOnce.Do(func() {
-		file_shared_thread_v1_group_thread_proto_rawDescData = protoimpl.X.CompressGZIP(file_shared_thread_v1_group_thread_proto_rawDescData)
+func file_domain_thread_v1_group_thread_proto_rawDescGZIP() []byte {
+	file_domain_thread_v1_group_thread_proto_rawDescOnce.Do(func() {
+		file_domain_thread_v1_group_thread_proto_rawDescData = protoimpl.X.CompressGZIP(file_domain_thread_v1_group_thread_proto_rawDescData)
 	})
-	return file_shared_thread_v1_group_thread_proto_rawDescData
+	return file_domain_thread_v1_group_thread_proto_rawDescData
 }
 
-var file_shared_thread_v1_group_thread_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_shared_thread_v1_group_thread_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
-var file_shared_thread_v1_group_thread_proto_goTypes = []interface{}{
-	(ThreadType)(0),                                         // 0: webitel.im.shared.thread.v1.ThreadType
-	(*Thread)(nil),                                          // 1: webitel.im.shared.thread.v1.Thread
-	(*CreateGroupThreadRequest)(nil),                        // 2: webitel.im.shared.thread.v1.CreateGroupThreadRequest
-	(*CreateGroupThreadResponse)(nil),                       // 3: webitel.im.shared.thread.v1.CreateGroupThreadResponse
-	(*SearchThreadRequest)(nil),                             // 4: webitel.im.shared.thread.v1.SearchThreadRequest
-	(*SearchThreadResponse)(nil),                            // 5: webitel.im.shared.thread.v1.SearchThreadResponse
-	(*AddMemberToGroupThreadRequest)(nil),                   // 6: webitel.im.shared.thread.v1.AddMemberToGroupThreadRequest
-	(*AddMemberToGroupThreadResponse)(nil),                  // 7: webitel.im.shared.thread.v1.AddMemberToGroupThreadResponse
-	(*AddMemberToGroupThreadResponse_MemberJoinResult)(nil), // 8: webitel.im.shared.thread.v1.AddMemberToGroupThreadResponse.MemberJoinResult
-	(*ImageInput)(nil),                                      // 9: webitel.im.shared.thread.v1.ImageInput
+var file_domain_thread_v1_group_thread_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_domain_thread_v1_group_thread_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
+var file_domain_thread_v1_group_thread_proto_goTypes = []interface{}{
+	(ThreadType)(0),                                         // 0: webitel.im.domain.thread.v1.ThreadType
+	(*Thread)(nil),                                          // 1: webitel.im.domain.thread.v1.Thread
+	(*CreateGroupThreadRequest)(nil),                        // 2: webitel.im.domain.thread.v1.CreateGroupThreadRequest
+	(*CreateGroupThreadResponse)(nil),                       // 3: webitel.im.domain.thread.v1.CreateGroupThreadResponse
+	(*SearchThreadRequest)(nil),                             // 4: webitel.im.domain.thread.v1.SearchThreadRequest
+	(*SearchThreadResponse)(nil),                            // 5: webitel.im.domain.thread.v1.SearchThreadResponse
+	(*AddMemberToGroupThreadRequest)(nil),                   // 6: webitel.im.domain.thread.v1.AddMemberToGroupThreadRequest
+	(*AddMemberToGroupThreadResponse)(nil),                  // 7: webitel.im.domain.thread.v1.AddMemberToGroupThreadResponse
+	(*AddMemberToGroupThreadResponse_MemberJoinResult)(nil), // 8: webitel.im.domain.thread.v1.AddMemberToGroupThreadResponse.MemberJoinResult
+	(*ImageInput)(nil),                                      // 9: webitel.im.domain.thread.v1.ImageInput
 }
-var file_shared_thread_v1_group_thread_proto_depIdxs = []int32{
-	9, // 0: webitel.im.shared.thread.v1.Thread.thread_photo:type_name -> webitel.im.shared.thread.v1.ImageInput
-	9, // 1: webitel.im.shared.thread.v1.CreateGroupThreadRequest.thread_photo:type_name -> webitel.im.shared.thread.v1.ImageInput
-	1, // 2: webitel.im.shared.thread.v1.CreateGroupThreadResponse.thread:type_name -> webitel.im.shared.thread.v1.Thread
-	0, // 3: webitel.im.shared.thread.v1.SearchThreadRequest.thread_types:type_name -> webitel.im.shared.thread.v1.ThreadType
-	1, // 4: webitel.im.shared.thread.v1.SearchThreadResponse.threads:type_name -> webitel.im.shared.thread.v1.Thread
-	8, // 5: webitel.im.shared.thread.v1.AddMemberToGroupThreadResponse.member_join_result:type_name -> webitel.im.shared.thread.v1.AddMemberToGroupThreadResponse.MemberJoinResult
+var file_domain_thread_v1_group_thread_proto_depIdxs = []int32{
+	9, // 0: webitel.im.domain.thread.v1.Thread.thread_photo:type_name -> webitel.im.domain.thread.v1.ImageInput
+	9, // 1: webitel.im.domain.thread.v1.CreateGroupThreadRequest.thread_photo:type_name -> webitel.im.domain.thread.v1.ImageInput
+	1, // 2: webitel.im.domain.thread.v1.CreateGroupThreadResponse.thread:type_name -> webitel.im.domain.thread.v1.Thread
+	0, // 3: webitel.im.domain.thread.v1.SearchThreadRequest.thread_types:type_name -> webitel.im.domain.thread.v1.ThreadType
+	1, // 4: webitel.im.domain.thread.v1.SearchThreadResponse.threads:type_name -> webitel.im.domain.thread.v1.Thread
+	8, // 5: webitel.im.domain.thread.v1.AddMemberToGroupThreadResponse.member_join_result:type_name -> webitel.im.domain.thread.v1.AddMemberToGroupThreadResponse.MemberJoinResult
 	6, // [6:6] is the sub-list for method output_type
 	6, // [6:6] is the sub-list for method input_type
 	6, // [6:6] is the sub-list for extension type_name
@@ -825,14 +825,14 @@ var file_shared_thread_v1_group_thread_proto_depIdxs = []int32{
 	0, // [0:6] is the sub-list for field type_name
 }
 
-func init() { file_shared_thread_v1_group_thread_proto_init() }
-func file_shared_thread_v1_group_thread_proto_init() {
-	if File_shared_thread_v1_group_thread_proto != nil {
+func init() { file_domain_thread_v1_group_thread_proto_init() }
+func file_domain_thread_v1_group_thread_proto_init() {
+	if File_domain_thread_v1_group_thread_proto != nil {
 		return
 	}
-	file_shared_thread_v1_message_proto_init()
+	file_domain_thread_v1_message_proto_init()
 	if !protoimpl.UnsafeEnabled {
-		file_shared_thread_v1_group_thread_proto_msgTypes[0].Exporter = func(v interface{}, i int) interface{} {
+		file_domain_thread_v1_group_thread_proto_msgTypes[0].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*Thread); i {
 			case 0:
 				return &v.state
@@ -844,7 +844,7 @@ func file_shared_thread_v1_group_thread_proto_init() {
 				return nil
 			}
 		}
-		file_shared_thread_v1_group_thread_proto_msgTypes[1].Exporter = func(v interface{}, i int) interface{} {
+		file_domain_thread_v1_group_thread_proto_msgTypes[1].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*CreateGroupThreadRequest); i {
 			case 0:
 				return &v.state
@@ -856,7 +856,7 @@ func file_shared_thread_v1_group_thread_proto_init() {
 				return nil
 			}
 		}
-		file_shared_thread_v1_group_thread_proto_msgTypes[2].Exporter = func(v interface{}, i int) interface{} {
+		file_domain_thread_v1_group_thread_proto_msgTypes[2].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*CreateGroupThreadResponse); i {
 			case 0:
 				return &v.state
@@ -868,7 +868,7 @@ func file_shared_thread_v1_group_thread_proto_init() {
 				return nil
 			}
 		}
-		file_shared_thread_v1_group_thread_proto_msgTypes[3].Exporter = func(v interface{}, i int) interface{} {
+		file_domain_thread_v1_group_thread_proto_msgTypes[3].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*SearchThreadRequest); i {
 			case 0:
 				return &v.state
@@ -880,7 +880,7 @@ func file_shared_thread_v1_group_thread_proto_init() {
 				return nil
 			}
 		}
-		file_shared_thread_v1_group_thread_proto_msgTypes[4].Exporter = func(v interface{}, i int) interface{} {
+		file_domain_thread_v1_group_thread_proto_msgTypes[4].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*SearchThreadResponse); i {
 			case 0:
 				return &v.state
@@ -892,7 +892,7 @@ func file_shared_thread_v1_group_thread_proto_init() {
 				return nil
 			}
 		}
-		file_shared_thread_v1_group_thread_proto_msgTypes[5].Exporter = func(v interface{}, i int) interface{} {
+		file_domain_thread_v1_group_thread_proto_msgTypes[5].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*AddMemberToGroupThreadRequest); i {
 			case 0:
 				return &v.state
@@ -904,7 +904,7 @@ func file_shared_thread_v1_group_thread_proto_init() {
 				return nil
 			}
 		}
-		file_shared_thread_v1_group_thread_proto_msgTypes[6].Exporter = func(v interface{}, i int) interface{} {
+		file_domain_thread_v1_group_thread_proto_msgTypes[6].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*AddMemberToGroupThreadResponse); i {
 			case 0:
 				return &v.state
@@ -916,7 +916,7 @@ func file_shared_thread_v1_group_thread_proto_init() {
 				return nil
 			}
 		}
-		file_shared_thread_v1_group_thread_proto_msgTypes[7].Exporter = func(v interface{}, i int) interface{} {
+		file_domain_thread_v1_group_thread_proto_msgTypes[7].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*AddMemberToGroupThreadResponse_MemberJoinResult); i {
 			case 0:
 				return &v.state
@@ -929,24 +929,24 @@ func file_shared_thread_v1_group_thread_proto_init() {
 			}
 		}
 	}
-	file_shared_thread_v1_group_thread_proto_msgTypes[3].OneofWrappers = []interface{}{}
+	file_domain_thread_v1_group_thread_proto_msgTypes[3].OneofWrappers = []interface{}{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: file_shared_thread_v1_group_thread_proto_rawDesc,
+			RawDescriptor: file_domain_thread_v1_group_thread_proto_rawDesc,
 			NumEnums:      1,
 			NumMessages:   8,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
-		GoTypes:           file_shared_thread_v1_group_thread_proto_goTypes,
-		DependencyIndexes: file_shared_thread_v1_group_thread_proto_depIdxs,
-		EnumInfos:         file_shared_thread_v1_group_thread_proto_enumTypes,
-		MessageInfos:      file_shared_thread_v1_group_thread_proto_msgTypes,
+		GoTypes:           file_domain_thread_v1_group_thread_proto_goTypes,
+		DependencyIndexes: file_domain_thread_v1_group_thread_proto_depIdxs,
+		EnumInfos:         file_domain_thread_v1_group_thread_proto_enumTypes,
+		MessageInfos:      file_domain_thread_v1_group_thread_proto_msgTypes,
 	}.Build()
-	File_shared_thread_v1_group_thread_proto = out.File
-	file_shared_thread_v1_group_thread_proto_rawDesc = nil
-	file_shared_thread_v1_group_thread_proto_goTypes = nil
-	file_shared_thread_v1_group_thread_proto_depIdxs = nil
+	File_domain_thread_v1_group_thread_proto = out.File
+	file_domain_thread_v1_group_thread_proto_rawDesc = nil
+	file_domain_thread_v1_group_thread_proto_goTypes = nil
+	file_domain_thread_v1_group_thread_proto_depIdxs = nil
 }

@@ -34,7 +34,8 @@ type (
 func (i *Image) GetID() int64        { return i.ID }
 func (i *Image) GetURL() string      { return i.URL }
 func (i *Image) GetMimeType() string { return i.MimeType }
-func (i *Image) GetName() string     { return "image_attachment" }
+func (i *Image) GetName() string     { return i.Name }
 func (i *Image) SetID(id int64)      { i.ID = id }
 func (i *Image) SetMime(mime string) { i.MimeType = mime }
 func (i *Image) SetName(name string) { i.Name = name }
+func (i *Image) SetURL(url string)   { i.URL = url }

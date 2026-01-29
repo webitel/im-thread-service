@@ -2,7 +2,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.5.1
 // - protoc             (unknown)
-// source: internal/thread/v1/message_history_service.proto
+// source: service/thread/v1/message_history_service.proto
 
 package thread
 
@@ -123,5 +123,5 @@ var MessageHistory_ServiceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "internal/thread/v1/message_history_service.proto",
+	Metadata: "service/thread/v1/message_history_service.proto",
 }

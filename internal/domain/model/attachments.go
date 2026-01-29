@@ -16,6 +16,7 @@ type MessageImage struct {
 	Height     int32          `json:"height,omitempty" db:"height"`
 	CreatedAt  time.Time      `json:"created_at" db:"created_at"`
 	Thumbnails map[string]any `json:"thumbnails,omitempty" db:"thumbnails"`
+	URL        string         `json:"url"`
 }
 
 type MessageDocument struct {

@@ -2,7 +2,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.5.1
 // - protoc             (unknown)
-// source: internal/thread/v1/group_thread_service.proto
+// source: service/thread/v1/group_thread_service.proto
 
 package thread
 
@@ -19,9 +19,9 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	GroupThread_CreateGroupThread_FullMethodName      = "/webitel.im.internal.thread.v1.GroupThread/CreateGroupThread"
-	GroupThread_SearchThread_FullMethodName           = "/webitel.im.internal.thread.v1.GroupThread/SearchThread"
-	GroupThread_AddMemberToGroupThread_FullMethodName = "/webitel.im.internal.thread.v1.GroupThread/AddMemberToGroupThread"
+	GroupThread_CreateGroupThread_FullMethodName      = "/webitel.im.service.thread.v1.GroupThread/CreateGroupThread"
+	GroupThread_SearchThread_FullMethodName           = "/webitel.im.service.thread.v1.GroupThread/SearchThread"
+	GroupThread_AddMemberToGroupThread_FullMethodName = "/webitel.im.service.thread.v1.GroupThread/AddMemberToGroupThread"
 )
 
 // GroupThreadClient is the client API for GroupThread service.
@@ -186,7 +186,7 @@ func _GroupThread_AddMemberToGroupThread_Handler(srv interface{}, ctx context.Co
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
 var GroupThread_ServiceDesc = grpc.ServiceDesc{
-	ServiceName: "webitel.im.internal.thread.v1.GroupThread",
+	ServiceName: "webitel.im.service.thread.v1.GroupThread",
 	HandlerType: (*GroupThreadServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
@@ -203,5 +203,5 @@ var GroupThread_ServiceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "internal/thread/v1/group_thread_service.proto",
+	Metadata: "service/thread/v1/group_thread_service.proto",
 }

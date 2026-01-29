@@ -11,14 +11,15 @@ import (
 
 type ImageInput struct {
 	FileID   string
-	MimeType string
 	Name     string
+	MimeType string
+	URL      string
 }
 
 type DocumentInput struct {
 	FileID   string
-	MimeType string
 	Name     string
+	MimeType string
 	Size     int64
 }
 
@@ -64,8 +65,9 @@ func NewImageMessage(threadID uuid.UUID, domainID int32, from shared.Peer, recip
 		fID, _ := strconv.ParseInt(img.FileID, 10, 64)
 		domainImages = append(domainImages, &MessageImage{
 			FileID: fID,
-			Mime:   img.MimeType,
 			Name:   img.Name,
+			Mime:   img.MimeType,
+			URL:    img.URL,
 		})
 	}
 
@@ -157,7 +159,7 @@ func NewDocumentMessage(threadID uuid.UUID, domainID int32, from shared.Peer, re
 func mapImagesToPayload(imgs []*MessageImage) []event.ImagePayload {
 	res := make([]event.ImagePayload, 0, len(imgs))
 	for _, i := range imgs {
-		res = append(res, event.ImagePayload{FileID: i.FileID, Mime: i.Mime, Name: i.Name})
+		res = append(res, event.ImagePayload{FileID: i.FileID, Mime: i.Mime, Name: i.Name, URL: i.URL})
 	}
 	return res
 }
