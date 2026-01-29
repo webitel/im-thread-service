@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/webitel/im-thread-service/internal/domain/model"
+	"github.com/webitel/im-thread-service/internal/domain/shared"
 	"github.com/webitel/im-thread-service/internal/utils"
 )
 
@@ -124,7 +125,7 @@ func (d *directThreadDialogOrchestration) InitializeFullDirectThread(ctx context
 
 func mapThreadDialogRecordToModel(record *threadDialogRecord, isDirectTo bool) *model.DirectThreadDialog {
 	threadDialog := &model.ThreadDialog{
-		BaseModel: model.BaseModel{
+		BaseModel: shared.BaseModel{
 			ID:        record.ID,
 			DomainID:  record.DomainID,
 			CreatedAt: record.CreatedAt,
@@ -151,7 +152,7 @@ func mapThreadDialogRecordToModel(record *threadDialogRecord, isDirectTo bool) *
 func mapDirectSettingsRecordToModel(record *directSettingsRecord) *model.DirectThreadSetting {
 	return &model.DirectThreadSetting{
 		BaseThreadSetting: model.BaseThreadSetting{
-			BaseModel: model.BaseModel{
+			BaseModel: shared.BaseModel{
 				ID:        record.ID,
 				DomainID:  record.DomainID,
 				CreatedAt: record.CreatedAt,

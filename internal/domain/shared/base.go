@@ -1,7 +1,7 @@
 // Package model defines the core domain entities and business logic rules
 // for the IM Thread service. This package is the heart of the application
 // and must remain independent of any external frameworks or transport layers.
-package model
+package shared
 
 import (
 	"time"
@@ -9,13 +9,13 @@ import (
 	"github.com/google/uuid"
 )
 
-type PeerType int
+type PeerType int16
 
+//go:generate stringer -type=PeerType
 const (
-	PeerUser PeerType = iota
-	PeerChat
+	PeerContact PeerType = iota + 1
+	PeerGroup
 	PeerChannel
-	PeerBot
 )
 
 type Identity struct {

@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"log/slog"
 	"net"
@@ -13,45 +14,58 @@ import (
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"go.uber.org/fx"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 
 	intrcp "github.com/webitel/webitel-go-kit/pkg/interceptors"
 
 	"github.com/webitel/im-thread-service/config"
 	"github.com/webitel/im-thread-service/infra/server/grpc/interceptors"
+	infratls "github.com/webitel/im-thread-service/infra/tls"
 )
 
 var Module = fx.Module("grpc_server",
-	fx.Provide(func(conf *config.Config, logger *slog.Logger, lc fx.Lifecycle) (*Server, error) {
-		srv, err := New(conf.Service.Address, logger)
-		if err != nil {
-			return nil, err
-		}
-
-		lc.Append(fx.Hook{
-			OnStart: func(ctx context.Context) error {
-				go func() {
-					logger.Info(fmt.Sprintf("listen grpc %s:%d", srv.Host(), srv.Port()))
-					if err := srv.Listen(); err != nil {
-						logger.Error("grpc server error", "err", err)
-					}
-				}()
-
-				return nil
-			},
-			OnStop: func(ctx context.Context) error {
-				if err := srv.Shutdown(); err != nil {
-					logger.Error("error stopping grpc server", "err", err.Error())
-
-					return err
-				}
-
-				return nil
-			},
-		})
-
-		return srv, nil
-	}),
+	fx.Provide(
+		fx.Annotate(
+			ProvideServer,
+		),
+	),
 )
+
+func ProvideServer(conf *config.Config, logger *slog.Logger, tls *infratls.Config, lc fx.Lifecycle) (*Server, error) {
+	srv, err := New(conf.Service.Address, func(c *Config) error {
+		c.TLS = tls.Server.Clone()
+		c.Logger = logger
+
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	lc.Append(fx.Hook{
+		OnStart: func(ctx context.Context) error {
+			go func() {
+				logger.Info(fmt.Sprintf("listen grpc %s:%d", srv.Host(), srv.Port()))
+				if err := srv.Listen(); err != nil {
+					logger.Error("grpc server error", "err", err)
+				}
+			}()
+
+			return nil
+		},
+		OnStop: func(ctx context.Context) error {
+			if err := srv.Shutdown(); err != nil {
+				logger.Error("error stopping grpc server", "err", err.Error())
+
+				return err
+			}
+
+			return nil
+		},
+	})
+
+	return srv, nil
+}
 
 type Server struct {
 	*grpc.Server
@@ -63,19 +77,49 @@ type Server struct {
 	listener net.Listener
 }
 
+type Config struct {
+	TLS    *tls.Config
+	Logger *slog.Logger
+}
+
+type Option func(*Config) error
+
 // New provides a new gRPC server.
-func New(addr string, log *slog.Logger) (*Server, error) {
+func New(addr string, opts ...Option) (*Server, error) {
+	var (
+		conf    Config
+		grpcTLS credentials.TransportCredentials
+	)
+	for _, opt := range opts {
+		if err := opt(&conf); err != nil {
+			return nil, err
+		}
+	}
+
+	log := conf.Logger
+	if log == nil {
+		log = slog.Default()
+	}
+
+	if addr == "" {
+		addr = ":0"
+	}
+
+	if conf.TLS != nil {
+		grpcTLS = credentials.NewTLS(conf.TLS)
+	}
+
 	validator, err := protovalidate.New()
 	if err != nil {
 		return nil, err
 	}
 
 	s := grpc.NewServer(
+		grpc.Creds(grpcTLS),
 		grpc.StatsHandler(otelgrpc.NewServerHandler()),
 		grpc.ChainUnaryInterceptor(
 			intrcp.UnaryServerErrorInterceptor(),
 			interceptors.NewUnaryAuthInterceptor(),
-			// intrcp.RecoveryUnaryServerInterceptor(log),
 			validatemiddleware.UnaryServerInterceptor(validator),
 		),
 	)

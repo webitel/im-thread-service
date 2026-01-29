@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/webitel/im-thread-service/internal/domain/model"
+	"github.com/webitel/im-thread-service/internal/domain/shared"
 	"github.com/webitel/im-thread-service/internal/service/dto"
 	"github.com/webitel/im-thread-service/internal/store"
 	queryobject "github.com/webitel/im-thread-service/internal/store/query_object"
@@ -72,8 +73,8 @@ func mapHistoryMessagesToMessage(history []*dto.HistoryMessage) []*model.Message
 		return &model.Message{
 			ID:        histMsg.ID,
 			ThreadID:  histMsg.ThreadID,
-			From:      model.Peer{ID: histMsg.SenderID},
-			To:        model.Peer{ID: histMsg.ReceiverID},
+			From:      shared.Peer{ID: histMsg.SenderID},
+			To:        shared.Peer{ID: histMsg.ReceiverID},
 			Text:      histMsg.Body,
 			Type:      model.MessageType(histMsg.Type),
 			CreatedAt: histMsg.CreatedAt,

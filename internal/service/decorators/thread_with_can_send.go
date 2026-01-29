@@ -15,11 +15,11 @@ type threadWithCanSendDecorator struct {
 	service.ThreadManager
 
 	logger     *slog.Logger
-	imContacts imcontact.ContactsService
+	imContacts imcontact.Client
 }
 
 // Return ThreadManager decorator with imcontact.Client gRPC client
-func NewThreadWithCanSendDecorator(logger *slog.Logger, base service.ThreadManager, imContactsClient imcontact.ContactsService) *threadWithCanSendDecorator {
+func NewThreadWithCanSendDecorator(logger *slog.Logger, base service.ThreadManager, imContactsClient imcontact.Client) *threadWithCanSendDecorator {
 	componentLogger := logger.With("component", "thread.decorator.can_send") // ADD SCOPE CONTEXT
 
 	return &threadWithCanSendDecorator{

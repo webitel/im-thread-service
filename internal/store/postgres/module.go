@@ -1,14 +1,20 @@
 package postgres
 
 import (
+	"context"
+	"log/slog"
+
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/webitel/im-thread-service/config"
+	"github.com/webitel/im-thread-service/infra/db/pg"
 	"github.com/webitel/im-thread-service/internal/store"
 	"go.uber.org/fx"
 )
 
 var Module = fx.Module("store",
 	fx.Provide(
-
+		ProvideNewDBConnection,
+		pg.ProvidePgxPool,
 		fx.Annotate(
 			func(p *pgxpool.Pool) Querier {
 				return p
@@ -53,3 +59,19 @@ var Module = fx.Module("store",
 		),
 	),
 )
+
+func ProvideNewDBConnection(cfg *config.Config, l *slog.Logger, lc fx.Lifecycle) (*pg.PgxDB, error) {
+	db, err := pg.New(context.Background(), l, cfg.Postgres.DSN)
+	if err != nil {
+		return nil, err
+	}
+
+	lc.Append(fx.Hook{
+		OnStop: func(ctx context.Context) error {
+			db.Master().Close()
+			return nil
+		},
+	})
+
+	return db, err
+}

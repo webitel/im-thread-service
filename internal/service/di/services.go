@@ -22,6 +22,6 @@ var Module = fx.Module(
 		),
 	),
 	fx.Decorate(func(logger *slog.Logger, base service.ThreadManager, imContactsClient *imcontact.Client) service.ThreadManager {
-		return decorators.NewThreadWithCanSendDecorator(logger, base, imContactsClient)
+		return decorators.NewThreadWithCanSendDecorator(logger, base, *imContactsClient)
 	}),
 )

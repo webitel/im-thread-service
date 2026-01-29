@@ -3,14 +3,15 @@ package dto
 import (
 	"github.com/google/uuid"
 	"github.com/webitel/im-thread-service/internal/domain/model"
+	"github.com/webitel/im-thread-service/internal/domain/shared"
 )
 
 type (
 	EnsureDirectThreadRequest struct {
 		DomainID int
 		MemberID uuid.UUID
-		PeerFrom *model.Peer
-		PeerTo   *model.Peer
+		PeerFrom *shared.Peer
+		PeerTo   *shared.Peer
 	}
 
 	EnsureDirectThreadResponse struct {
@@ -20,13 +21,13 @@ type (
 	SearchThreadDialogRequest struct {
 		DomainID int
 		Kind     model.ThreadKind
-		From     *model.Peer
-		To       *model.Peer
+		From     *shared.Peer
+		To       *shared.Peer
 	}
 
 	CanSendRequest struct {
-		From     model.Peer
-		To       model.Peer
+		From     shared.Peer
+		To       shared.Peer
 		DomainID int32
 	}
 
@@ -54,7 +55,7 @@ func NewEnsureDirectThreadResponse(id uuid.UUID) *EnsureDirectThreadResponse {
 	}
 }
 
-func NewSearchThreadRequest(domainID int, kind model.ThreadKind, from, to *model.Peer) *SearchThreadDialogRequest {
+func NewSearchThreadRequest(domainID int, kind model.ThreadKind, from, to *shared.Peer) *SearchThreadDialogRequest {
 	return &SearchThreadDialogRequest{
 		DomainID: domainID,
 		Kind:     kind,
@@ -63,7 +64,7 @@ func NewSearchThreadRequest(domainID int, kind model.ThreadKind, from, to *model
 	}
 }
 
-func NewCanSendRequestDtoFromPeers(from, to model.Peer, domainID int32) *CanSendRequest {
+func NewCanSendRequestDtoFromPeers(from, to shared.Peer, domainID int32) *CanSendRequest {
 	return &CanSendRequest{
 		From:     from,
 		To:       to,

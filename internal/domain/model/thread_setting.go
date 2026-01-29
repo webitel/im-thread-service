@@ -4,11 +4,12 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/webitel/im-thread-service/internal/domain/shared"
 )
 
 type (
 	BaseThreadSetting struct {
-		BaseModel
+		shared.BaseModel
 
 		ThreadDialogID uuid.UUID
 		Title          string

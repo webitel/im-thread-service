@@ -8,6 +8,7 @@ import (
 
 	imcontact "github.com/webitel/im-thread-service/infra/webitel/im-contact"
 	"github.com/webitel/im-thread-service/internal/domain/model"
+	"github.com/webitel/im-thread-service/internal/domain/shared"
 	"github.com/webitel/im-thread-service/internal/service/dto"
 	guards "github.com/webitel/im-thread-service/internal/service/guards"
 	"github.com/webitel/im-thread-service/internal/store"
@@ -23,7 +24,7 @@ type MessageService struct {
 	uow            store.UnitOfWork
 	logger         *slog.Logger
 	threader       ThreadManager
-	contactClient  imcontact.ContactsService
+	contactClient  *imcontact.Client
 	mediaProcessor MediaProcessor
 }
 
@@ -31,7 +32,7 @@ func NewMessageService(
 	uow store.UnitOfWork,
 	logger *slog.Logger,
 	threader ThreadManager,
-	contactClient imcontact.ContactsService,
+	contactClient *imcontact.Client,
 	mediaProcessor MediaProcessor,
 ) *MessageService {
 	return &MessageService{
@@ -77,7 +78,13 @@ func (s *MessageService) SendText(ctx context.Context, in *dto.SendTextRequest) 
 	}
 
 	// [MODEL] Construct domain entity with pre-staged distribution events
-	msg := model.NewTextMessage(t.ID, in.From, []model.Peer{in.To}, in.Body)
+	msg := model.NewTextMessage(
+		t.ID,
+		int32(in.DomainID),
+		in.From,
+		[]shared.Peer{in.To},
+		in.Body,
+	)
 
 	var resp *dto.SendTextResponse
 
@@ -149,8 +156,9 @@ func (s *MessageService) SendImage(ctx context.Context, in *dto.SendImageRequest
 	// [MODEL] Initialize rich media message with mapped inputs
 	msg := model.NewImageMessage(
 		t.ID,
+		int32(in.DomainID),
 		in.From,
-		[]model.Peer{in.To},
+		[]shared.Peer{in.To},
 		in.Image.Body,
 		s.mapImageInputs(in.Image.Images),
 	)
@@ -231,8 +239,9 @@ func (s *MessageService) SendDocument(ctx context.Context, in *dto.SendDocumentR
 	// [MODEL] Initialize domain entity
 	msg := model.NewDocumentMessage(
 		t.ID,
+		int32(in.DomainID),
 		in.From,
-		[]model.Peer{in.To},
+		[]shared.Peer{in.To},
 		in.Document.Body,
 		s.mapDocumentInputs(in.Document.Documents),
 	)

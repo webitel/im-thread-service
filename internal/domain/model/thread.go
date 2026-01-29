@@ -2,6 +2,7 @@ package model
 
 import (
 	"github.com/google/uuid"
+	"github.com/webitel/im-thread-service/internal/domain/shared"
 )
 
 type ThreadKind = int
@@ -13,17 +14,15 @@ const (
 	ThreadChannel                //channel, right now not implemented!
 )
 
-type (
-	Thread struct {
-		BaseModel
+type Thread struct {
+	shared.BaseModel
 
-		Kind       ThreadKind      `json:"kind"`
-		Owner      uuid.UUID       `json:"owner"`
-		Admins     []uuid.UUID     `json:"admins"`
-		MembersIds []uuid.UUID     `json:"members_ids"`
-		Members    []*ThreadMember `json:"members"`
+	Kind       ThreadKind      `json:"kind"`
+	Owner      uuid.UUID       `json:"owner"`
+	Admins     []uuid.UUID     `json:"admins"`
+	MembersIds []uuid.UUID     `json:"members_ids"`
+	Members    []*ThreadMember `json:"members"`
 
-		Subject     string `json:"subject"`
-		Description string `json:"description"`
-	}
-)
+	Subject     string `json:"subject"`
+	Description string `json:"description"`
+}

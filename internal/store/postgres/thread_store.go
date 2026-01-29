@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/webitel/im-thread-service/internal/domain/model"
+	"github.com/webitel/im-thread-service/internal/domain/shared"
 	queryobject "github.com/webitel/im-thread-service/internal/store/query_object"
 	"github.com/webitel/im-thread-service/internal/utils"
 )
@@ -125,7 +126,7 @@ func mapThreadRecordToModel(record *threadRecord) *model.Thread {
 		if tmr.DirectSettings != nil {
 			directSettings = &model.DirectThreadSetting{
 				BaseThreadSetting: model.BaseThreadSetting{
-					BaseModel: model.BaseModel{
+					BaseModel: shared.BaseModel{
 						ID:        tmr.DirectSettings.ID,
 						DomainID:  tmr.DirectSettings.DomainID,
 						CreatedAt: tmr.DirectSettings.CreatedAt,
@@ -143,7 +144,7 @@ func mapThreadRecordToModel(record *threadRecord) *model.Thread {
 	})
 
 	thread := &model.Thread{
-		BaseModel: model.BaseModel{
+		BaseModel: shared.BaseModel{
 			ID:        record.ID,
 			DomainID:  record.DomainID,
 			CreatedAt: record.CreatedAt,

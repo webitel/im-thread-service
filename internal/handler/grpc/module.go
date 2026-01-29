@@ -4,7 +4,7 @@ package grpc
 import (
 	"go.uber.org/fx"
 
-	impbv "github.com/webitel/im-thread-service/gen/go/api/thread/v1"
+	impb "github.com/webitel/im-thread-service/gen/go/thread/v1"
 	grpcsrv "github.com/webitel/im-thread-service/infra/server/grpc"
 )
 
@@ -23,13 +23,13 @@ func RegisterMessageService(
 	server *grpcsrv.Server,
 	service *MessageService,
 ) {
-	impbv.RegisterMessageServer(server.Server, service)
+	impb.RegisterMessageServer(server.Server, service)
 }
 
 func RegisterMessageHistoryService(srv *grpcsrv.Server, svc *MessageHistoryService) {
-	impbv.RegisterMessageHistoryServer(srv.Server, svc)
+	impb.RegisterMessageHistoryServer(srv.Server, svc)
 }
 
 func RegisterThreadService(srv *grpcsrv.Server, svc *ThreadService) {
-	impbv.RegisterThreadServer(srv.Server, svc)
+	impb.RegisterThreadServer(srv.Server, svc)
 }

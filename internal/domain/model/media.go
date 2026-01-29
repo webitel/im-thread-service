@@ -3,12 +3,11 @@ package model
 import (
 	"net/url"
 
-	"github.com/google/uuid"
+	"github.com/webitel/im-thread-service/internal/domain/shared"
 )
 
 type Image struct {
-	BaseModel
-	MessageId  uuid.UUID
+	shared.BaseModel
 	Thumbnails []*Thumbnail `json:"thumbnails"`
 	URL        *url.URL     `json:"url"`
 	FileName   string       `json:"file_name"`
@@ -16,8 +15,7 @@ type Image struct {
 }
 
 type Document struct {
-	BaseModel
-	MessageId uuid.UUID
+	shared.BaseModel
 	URL       *url.URL `json:"url"`
 	FileName  string   `json:"file_name"`
 	MimeType  string   `json:"mime_type"`

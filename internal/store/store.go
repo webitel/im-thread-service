@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/google/uuid"
-	"github.com/webitel/im-thread-service/internal/domain/events"
+	"github.com/webitel/im-thread-service/internal/domain/event"
 	"github.com/webitel/im-thread-service/internal/domain/model"
 	"github.com/webitel/im-thread-service/internal/service/dto"
 	queryobject "github.com/webitel/im-thread-service/internal/store/query_object"
@@ -27,7 +27,7 @@ type (
 	}
 
 	OutboxStore interface {
-		Publish(ctx context.Context, topic string, event events.Outboxer) error
+		Publish(ctx context.Context, topic string, event event.Outboxer) error
 		Cleanup(ctx context.Context, opt *model.OutboxCleanupOptions) (int64, error)
 	}
 

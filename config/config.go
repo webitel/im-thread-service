@@ -20,9 +20,22 @@ type Config struct {
 }
 
 type ServiceConfig struct {
-	Id        string `mapstructure:"id"`
-	Address   string `mapstructure:"addr"`
-	SecretKey string `mapstructure:"secret"`
+	Id         string           `mapstructure:"id"`
+	Address    string           `mapstructure:"addr"`
+	Connection ConnectionConfig `mapstructure:"conn"`
+}
+
+type ConnectionConfig struct {
+	TLSConfig
+
+	VerifyCerts bool      `mapstructure:"verify_certs"`
+	Client      TLSConfig `mapstructure:"client"`
+}
+
+type TLSConfig struct {
+	CA   string `mapstructure:"ca"`
+	Cert string `mapstructure:"cert"`
+	Key  string `mapstructure:"key"`
 }
 
 type LogConfig struct {
@@ -58,19 +71,12 @@ func LoadConfig() (*Config, error) {
 	pflag.Parse()
 
 	viper.AutomaticEnv()
+
 	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_", "-", "_"))
 
 	if err := viper.BindPFlags(pflag.CommandLine); err != nil {
 		return nil, err
 	}
-
-	// Explicitly bind environment variables for nested structures
-	viper.BindEnv("service.id", "SERVICE_ID")
-	viper.BindEnv("service.addr", "SERVICE_ADDR")
-	viper.BindEnv("service.secret", "SERVICE_SECRET")
-	viper.BindEnv("postgres.dsn", "POSTGRES_DSN")
-	viper.BindEnv("pubsub.broker_url", "PUBSUB_BROKER_URL")
-	viper.BindEnv("pubsub.broker_driver", "PUBSUB_BROKER_DRIVER")
 
 	cfg := &Config{}
 
@@ -80,23 +86,30 @@ func LoadConfig() (*Config, error) {
 		if err := viper.ReadInConfig(); err != nil {
 			return nil, fmt.Errorf("failed to read config file: %w", err)
 		}
+
+		viper.OnConfigChange(func(e fsnotify.Event) {
+			log.Printf("Config file changed: %s", e.Name)
+
+			newCfg := &Config{}
+			if err := viper.Unmarshal(newCfg); err != nil {
+				log.Printf("Reload error: unable to decode: %v", err)
+				return
+			}
+
+			if err := newCfg.validate(); err != nil {
+				log.Printf("Reload error: invalid config: %v", err)
+				return
+			}
+
+			*cfg = *newCfg
+			log.Println("Config reloaded successfully")
+		})
+
+		viper.WatchConfig()
 	}
 
 	if err := viper.Unmarshal(cfg); err != nil {
 		return nil, fmt.Errorf("unable to decode into struct: %v", err)
-	}
-
-	if configFile != "" {
-		viper.OnConfigChange(func(e fsnotify.Event) {
-			log.Printf("Config file changed: %s", e.Name)
-			newCfg := &Config{}
-			if err := viper.Unmarshal(newCfg); err == nil {
-				if err := newCfg.validate(); err == nil {
-					*cfg = *newCfg
-				}
-			}
-		})
-		viper.WatchConfig()
 	}
 
 	if err := cfg.validate(); err != nil {
@@ -107,44 +120,87 @@ func LoadConfig() (*Config, error) {
 }
 
 func defineFlags() {
-	pflag.String("config_file", "", "Configuration file path")
+	pflag.String("config_file", "", "Configuration file (YAML, JSON, etc.)")
 
 	pflag.String("service.id", "", "Service ID")
 	pflag.String("service.addr", "localhost:8080", "Service address")
-	pflag.String("service.secret", "", "Service secret key")
 
 	pflag.String("log.level", "info", "Log level")
-	pflag.Bool("log.json", false, "Enable JSON logging")
-	pflag.Bool("log.console", true, "Enable console logging")
+	pflag.Bool("log.json", false, "Log in JSON format")
+	pflag.String("log.file", "", "Log file path")
 
-	pflag.String("postgres.dsn", "", "PostgreSQL connection string")
-	pflag.String("redis.addr", "localhost:6379", "Redis server address")
-	pflag.String("consul.addr", "localhost:8500", "Consul server address")
+	pflag.String("postgres.dsn", "", "Postgres DSN")
+	pflag.String("redis.addr", "localhost:6379", "Redis address")
+	pflag.String("consul.addr", "localhost:8500", "Consul address")
+	pflag.String("pubsub.broker_url", "", "PubSub broker URL")
+	pflag.String("pubsub.broker_driver", "amqp", "PubSub broker driver")
 
-	pflag.String("pubsub.broker_url", "", "PubSub broker connection URL")
-	pflag.String("pubsub.broker_driver", "amqp", "PubSub driver (e.g. amqp)")
+	defineConnectionFlags()
 }
 
 func (c *Config) validate() error {
 	if c.Service.Id == "" {
-		return fmt.Errorf("config: service.id is required")
+		return fmt.Errorf("config: service.id is required (use --service.id or SERVICE_ID env)")
 	}
-	if c.Service.SecretKey == "" {
-		return fmt.Errorf("config: service.secret is required")
+
+	if c.Service.Address == "" {
+		return fmt.Errorf("config: service.addr is required")
 	}
+
+	err := validateConnectionConfig(c.Service.Connection)
+	if err != nil {
+		return err
+	}
+
+	if c.Log.Level == "" {
+		c.Log.Level = "info"
+	}
+
 	if c.Postgres.DSN == "" {
-		return fmt.Errorf("config: postgres.dsn is required")
+		return fmt.Errorf("config: postgres.dsn is required (use --postgres.dsn or DATA_SOURCE env)")
 	}
+
+	if c.Redis.Addr == "" {
+		return fmt.Errorf("config: redis.addr is required")
+	}
+
+	if c.Consul.Address == "" {
+		return fmt.Errorf("config: consul.addr is required")
+	}
+
 	if c.Pubsub.URL == "" {
-		return fmt.Errorf("config: pubsub.broker_url is required")
-	}
-	if c.Pubsub.Driver == "" {
-		return fmt.Errorf("config: pubsub.broker_driver is required")
+		return fmt.Errorf("config: pubsub.broker_url is required (use --pubsub.broker_url or PUBSUB env)")
 	}
 
 	if !strings.HasPrefix(c.Pubsub.URL, "amqp://") && !strings.HasPrefix(c.Pubsub.URL, "amqps://") {
 		return fmt.Errorf("config: pubsub.broker_url must start with amqp:// or amqps://")
 	}
 
+	return nil
+}
+
+func validateConnectionConfig(conn ConnectionConfig) error {
+	if conn.VerifyCerts {
+		if conn.CA == "" {
+			return fmt.Errorf("config: service.conn.ca is required when verify_certs is true")
+		}
+		if conn.Cert == "" {
+			return fmt.Errorf("config: service.conn.cert is required when verify_certs is true")
+		}
+		if conn.Key == "" {
+			return fmt.Errorf("config: service.conn.key is required when verify_certs is true")
+		}
+	}
+	return nil
+}
+
+func defineConnectionFlags() error {
+	pflag.String("service.conn.verify_certs", "true", "Determine whether to verify certificates (false only for development)")
+	pflag.String("service.conn.ca", "", "Server CA certificate path")
+	pflag.String("service.conn.key", "", "Server certificate key path")
+	pflag.String("service.conn.cert", "", "Server certificate path")
+	pflag.String("service.conn.client.ca", "", "Client CA certificate path")
+	pflag.String("service.conn.client.key", "", "Client certificate key path")
+	pflag.String("service.conn.client.cert", "", "Client certificate path")
 	return nil
 }

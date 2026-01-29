@@ -9,13 +9,14 @@
 //   - Decoupling: Uses primitive-based DTOs to prevent circular dependencies between 'model' and 'events'.
 //   - Reliability: Leverages UUID v7 for time-ordered event tracking and efficient database indexing.
 //   - Routing: Provides built-in recipient-based routing logic for message broker exchanges.
-package events
+package event
 
 import (
 	"encoding/json"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/webitel/im-thread-service/internal/domain/shared"
 )
 
 // [VERSIONS] Explicit API versioning constants for schema evolution
@@ -59,10 +60,9 @@ var (
 type MessageCreated struct {
 	MessageID  uuid.UUID         `json:"message_id"`
 	ThreadID   uuid.UUID         `json:"thread_id"`
-	FromID     uuid.UUID         `json:"from_id"`
-	FromType   int               `json:"from_type"`
-	ToID       uuid.UUID         `json:"to_id"`
-	ToType     int               `json:"to_type"`
+	DomainID   int32             `json:"domain_id"`
+	From       *shared.Peer      `json:"from"`
+	To         *shared.Peer      `json:"to"`
 	Body       string            `json:"body"`
 	Type       int16             `json:"type"` // 1:TEXT, 2:FILE, 3:IMAGE, 4:SYSTEM
 	OccurredAt time.Time         `json:"occurred_at"`
@@ -73,7 +73,7 @@ type MessageCreated struct {
 // [OUTBOXER_IMPLEMENTATION]
 func (MessageCreated) EventType() string        { return MessageCreatedEvent }
 func (m MessageCreated) Version() string        { return MessageVersionV1 }
-func (m MessageCreated) RecipientID() uuid.UUID { return m.ToID }
+func (m MessageCreated) RecipientID() uuid.UUID { return m.To.ID }
 func (m MessageCreated) ToOutbox() (OutboxEvent, error) {
 	return m.serialize(m, m.Version())
 }
@@ -91,7 +91,7 @@ type MessageCreatedV2 struct {
 // [OUTBOXER_IMPLEMENTATION]
 func (MessageCreatedV2) EventType() string        { return MessageCreatedEvent }
 func (m MessageCreatedV2) Version() string        { return MessageVersionV2 }
-func (m MessageCreatedV2) RecipientID() uuid.UUID { return m.ToID }
+func (m MessageCreatedV2) RecipientID() uuid.UUID { return m.To.ID }
 func (m MessageCreatedV2) ToOutbox() (OutboxEvent, error) {
 	return m.serialize(m, m.Version())
 }

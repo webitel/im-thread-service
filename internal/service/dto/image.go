@@ -2,7 +2,7 @@ package dto
 
 import (
 	"github.com/google/uuid"
-	"github.com/webitel/im-thread-service/internal/domain/model"
+	"github.com/webitel/im-thread-service/internal/domain/shared"
 )
 
 type (
@@ -19,15 +19,15 @@ type (
 	}
 
 	SendImageRequest struct {
-		From     model.Peer   `json:"from"`
-		To       model.Peer   `json:"to"`
+		From     shared.Peer  `json:"from"`
+		To       shared.Peer  `json:"to"`
 		Image    ImageRequest `json:"image"`
 		DomainID int64        `json:"domain_id"`
 	}
 
 	SendImageResponse struct {
-		To model.Peer `json:"to"`
-		ID uuid.UUID  `json:"id"`
+		To shared.Peer `json:"to"`
+		ID uuid.UUID   `json:"id"`
 	}
 )
 

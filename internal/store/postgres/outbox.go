@@ -8,7 +8,8 @@ import (
 	"github.com/ThreeDotsLabs/watermill-sql/v4/pkg/sql"
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/jackc/pgx/v5"
-	"github.com/webitel/im-thread-service/internal/domain/events"
+
+	"github.com/webitel/im-thread-service/internal/domain/event"
 	"github.com/webitel/im-thread-service/internal/domain/model"
 	"github.com/webitel/im-thread-service/internal/store"
 )
@@ -37,7 +38,7 @@ func NewOutboxStore(q Querier, wmlogger watermill.LoggerAdapter) store.OutboxSto
 
 var _ store.OutboxStore = (*outboxStore)(nil)
 
-func (o *outboxStore) Publish(ctx context.Context, topic string, event events.Outboxer) error {
+func (o *outboxStore) Publish(ctx context.Context, topic string, event event.Outboxer) error {
 	// [ATOMICITY_CHECK]
 	// Watermill SQL publisher MUST run within an active transaction
 	// to ensure the business logic and event storage are committed together.

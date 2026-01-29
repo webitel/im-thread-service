@@ -10,6 +10,7 @@ import (
 	"github.com/pressly/goose/v3"
 	"github.com/pressly/goose/v3/database"
 	"github.com/urfave/cli/v2"
+	"github.com/webitel/im-thread-service/cmd/server"
 	"github.com/webitel/im-thread-service/config"
 	"github.com/webitel/im-thread-service/migrations"
 	"go.uber.org/fx"
@@ -32,35 +33,23 @@ func CMD() *cli.Command {
 				return err
 			}
 
-			var migrationErr error
-
 			app := fx.New(
 				fx.Provide(
 					func() *config.Config { return cfg },
-					slog.Default,
+					server.ProvideLogger,
 				),
 				fx.Invoke(func(cfg *config.Config, log *slog.Logger, lc fx.Lifecycle) error {
-					lc.Append(fx.Hook{
-						OnStart: func(ctx context.Context) error {
-							m := NewMigrator(cfg, log)
-							migrationErr = m.Run(ctx)
-							return migrationErr
-						},
-					})
+					m := NewMigrator(cfg, log)
+					if err := m.Run(c.Context); err != nil {
+						return err
+					}
+
 					return nil
 				}),
 				fx.NopLogger,
 			)
 
-			if err := app.Start(c.Context); err != nil {
-				return err
-			}
-
-			if err := app.Stop(c.Context); err != nil {
-				return err
-			}
-
-			return migrationErr
+			return app.Start(c.Context)
 		},
 	}
 }
@@ -88,7 +77,7 @@ func (m *migrator) Run(ctx context.Context) error {
 
 	goose.SetLogger(newLogger(m.log))
 	goose.SetVerbose(true)
-	store, err := database.NewStore(database.DialectPostgres, "im_contact_schema_version")
+	store, err := database.NewStore(database.DialectPostgres, "im_thread_schema_version")
 	if err != nil {
 		return err
 	}
