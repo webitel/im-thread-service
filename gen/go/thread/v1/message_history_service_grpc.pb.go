@@ -19,7 +19,7 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	MessageHistory_SearchThreadMessagesHistory_FullMethodName = "/webitel.im.internal.thread.v1.MessageHistory/SearchThreadMessagesHistory"
+	MessageHistory_SearchThreadMessagesHistory_FullMethodName = "/webitel.im.service.thread.v1.MessageHistory/SearchThreadMessagesHistory"
 )
 
 // MessageHistoryClient is the client API for MessageHistory service.
@@ -29,7 +29,7 @@ const (
 // The MessageHistory service provides methods for working with messages history.
 type MessageHistoryClient interface {
 	// Search for messages in a thread.
-	SearchThreadMessagesHistory(ctx context.Context, in *SearchThreadMessagesHistoryRequest, opts ...grpc.CallOption) (*SearchThreadMessagesHistoryResponse, error)
+	SearchThreadMessagesHistory(ctx context.Context, in *SearchMessageHistoryRequest, opts ...grpc.CallOption) (*SearchMessageHistoryResponse, error)
 }
 
 type messageHistoryClient struct {
@@ -40,9 +40,9 @@ func NewMessageHistoryClient(cc grpc.ClientConnInterface) MessageHistoryClient {
 	return &messageHistoryClient{cc}
 }
 
-func (c *messageHistoryClient) SearchThreadMessagesHistory(ctx context.Context, in *SearchThreadMessagesHistoryRequest, opts ...grpc.CallOption) (*SearchThreadMessagesHistoryResponse, error) {
+func (c *messageHistoryClient) SearchThreadMessagesHistory(ctx context.Context, in *SearchMessageHistoryRequest, opts ...grpc.CallOption) (*SearchMessageHistoryResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(SearchThreadMessagesHistoryResponse)
+	out := new(SearchMessageHistoryResponse)
 	err := c.cc.Invoke(ctx, MessageHistory_SearchThreadMessagesHistory_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
@@ -57,7 +57,7 @@ func (c *messageHistoryClient) SearchThreadMessagesHistory(ctx context.Context, 
 // The MessageHistory service provides methods for working with messages history.
 type MessageHistoryServer interface {
 	// Search for messages in a thread.
-	SearchThreadMessagesHistory(context.Context, *SearchThreadMessagesHistoryRequest) (*SearchThreadMessagesHistoryResponse, error)
+	SearchThreadMessagesHistory(context.Context, *SearchMessageHistoryRequest) (*SearchMessageHistoryResponse, error)
 	mustEmbedUnimplementedMessageHistoryServer()
 }
 
@@ -68,7 +68,7 @@ type MessageHistoryServer interface {
 // pointer dereference when methods are called.
 type UnimplementedMessageHistoryServer struct{}
 
-func (UnimplementedMessageHistoryServer) SearchThreadMessagesHistory(context.Context, *SearchThreadMessagesHistoryRequest) (*SearchThreadMessagesHistoryResponse, error) {
+func (UnimplementedMessageHistoryServer) SearchThreadMessagesHistory(context.Context, *SearchMessageHistoryRequest) (*SearchMessageHistoryResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SearchThreadMessagesHistory not implemented")
 }
 func (UnimplementedMessageHistoryServer) mustEmbedUnimplementedMessageHistoryServer() {}
@@ -93,7 +93,7 @@ func RegisterMessageHistoryServer(s grpc.ServiceRegistrar, srv MessageHistorySer
 }
 
 func _MessageHistory_SearchThreadMessagesHistory_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(SearchThreadMessagesHistoryRequest)
+	in := new(SearchMessageHistoryRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -105,7 +105,7 @@ func _MessageHistory_SearchThreadMessagesHistory_Handler(srv interface{}, ctx co
 		FullMethod: MessageHistory_SearchThreadMessagesHistory_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(MessageHistoryServer).SearchThreadMessagesHistory(ctx, req.(*SearchThreadMessagesHistoryRequest))
+		return srv.(MessageHistoryServer).SearchThreadMessagesHistory(ctx, req.(*SearchMessageHistoryRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -114,7 +114,7 @@ func _MessageHistory_SearchThreadMessagesHistory_Handler(srv interface{}, ctx co
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
 var MessageHistory_ServiceDesc = grpc.ServiceDesc{
-	ServiceName: "webitel.im.internal.thread.v1.MessageHistory",
+	ServiceName: "webitel.im.service.thread.v1.MessageHistory",
 	HandlerType: (*MessageHistoryServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{

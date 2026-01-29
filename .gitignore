@@ -44,3 +44,4 @@ go.work
 *.env
 env
 debug
+deploy/docker/config/config.yaml
