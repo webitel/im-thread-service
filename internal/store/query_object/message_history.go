@@ -83,6 +83,14 @@ func (q *MessageHistoryQuery) WithFields(fields []string) *MessageHistoryQuery {
 	return q
 }
 
+func (q *MessageHistoryQuery) WithDomainIDsFilter(domainIDs ...int) *MessageHistoryQuery {
+	if len(domainIDs) != 0 {
+		q.builder = q.builder.Where(squirrel.Eq{"domain_id": domainIDs})
+	}
+
+	return q
+}
+
 func (q *MessageHistoryQuery) WithIdsFilter(ids ...uuid.UUID) *MessageHistoryQuery {
 	if len(ids) != 0 {
 		q.builder = q.builder.Where(squirrel.Eq{"id": ids})

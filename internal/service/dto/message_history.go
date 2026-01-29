@@ -8,41 +8,44 @@ import (
 
 type (
 	HistoryDocument struct {
-		ID        uuid.UUID `json:"id"`
-		MessageID uuid.UUID `json:"message_id"`
-		FileID    int       `json:"file_id"`
-		Name      string    `json:"name"`
-		Mime      string    `json:"mime"`
-		Size      int64     `json:"size"`
-		CreatedAt time.Time `json:"created_at"`
+		ID        uuid.UUID `json:"id" db:"id"`
+		MessageID uuid.UUID `json:"message_id" db:"message_id"`
+		FileID    int       `json:"file_id" db:"file_id"`
+		Name      string    `json:"name" db:"name"`
+		Mime      string    `json:"mime" db:"mime"`
+		Size      int64     `json:"size" db:"size"`
+		CreatedAt time.Time `json:"created_at" db:"created_at"`
+		URL       string
 	}
 
 	HistoryImage struct {
-		ID        uuid.UUID `json:"id"`
-		MessageID uuid.UUID `json:"message_id"`
-		FileID    int       `json:"file_id"`
-		Mime      string    `json:"mime"`
-		Width     int       `json:"width"`
-		Height    int       `json:"height"`
-		CreatedAt time.Time `json:"created_at"`
+		ID        uuid.UUID `json:"id" db:"id"`
+		MessageID uuid.UUID `json:"message_id" db:"message_id"`
+		FileID    int       `json:"file_id" db:"file_id"`
+		Mime      string    `json:"mime" db:"mime"`
+		Width     int       `json:"width" db:"width"`
+		Height    int       `json:"height" db:"height"`
+		CreatedAt time.Time `json:"created_at" db:"created_at"`
 	}
 
 	HistoryMessage struct {
-		ID         uuid.UUID
-		ThreadID   uuid.UUID
-		SenderID   uuid.UUID
-		ReceiverID uuid.UUID
-		Type       int
-		Body       string
-		Metadata   map[string]any
-		CreatedAt  time.Time
-		UpdatedAt  time.Time
+		ID         uuid.UUID      `json:"id" db:"id"`
+		DomainID   int            `json:"domain_id" db:"domain_id"`
+		ThreadID   uuid.UUID      `json:"thread_id" db:"thread_id"`
+		SenderID   uuid.UUID      `json:"sender_id" db:"sender_id"`
+		ReceiverID uuid.UUID      `json:"receiver_id" db:"receiver_id"`
+		Type       int            `json:"type" db:"type"`
+		Body       string         `json:"body" db:"body"`
+		Metadata   map[string]any `json:"metadata" db:"metadata"`
+		CreatedAt  time.Time      `json:"created_at" db:"created_at"`
+		UpdatedAt  time.Time      `json:"updated_at" db:"updated_at"`
 
-		Documents []HistoryDocument
-		Images    []HistoryImage
+		Documents []*HistoryDocument `json:"documents" db:"documents"`
+		Images    []*HistoryImage    `json:"images" db:"images"`
 	}
 
 	HistoryMessageInputDTO struct {
+		DomainID    int
 		Fields      []string
 		Ids         uuid.UUIDs
 		ThreadIds   uuid.UUIDs
