@@ -104,13 +104,20 @@ func (m *messageStore) SaveImages(ctx context.Context, messageID uuid.UUID, imag
 			message_id, file_id, mime, thumbnails, width, height
 		)
 		select 
-			@MessageID, 
-			unnest(@FileIDs::int[]), 
-			unnest(@Mimes::text[]), 
-			unnest(@Thumbnails::jsonb[]), 
-			unnest(@Widths::int[]), 
-			unnest(@Heights::int[])
-		RETURNING id, message_id, file_id, mime, thumbnails, width, height, created_at
+			@MessageID,
+			u.file_id,
+			u.mime,
+			u.thumbnails,
+			u.width,
+			u.height
+		from unnest(
+			@FileIDs::int[],
+			@Mimes::text[],
+			@Thumbnails::jsonb[],
+			@Widths::int[],
+			@Heights::int[]
+		) as u(file_id, mime, thumbnails, width, height)
+		returning id, message_id, file_id, mime, thumbnails, width, height, created_at
 	`
 
 	args := pgx.NamedArgs{
@@ -172,11 +179,17 @@ func (m *messageStore) SaveDocuments(ctx context.Context, messageID uuid.UUID, d
 			message_id, file_id, name, mime, size
 		)
 		select
-			@MessageID, 
-			unnest(@FileIDs::int[]),
-			unnest(@FileNames::text[]),
-			unnest(@Mimes::text[]),
-			unnest(@Sizes::int[])
+			@MessageID,
+			u.file_id,
+			u.name,
+			u.mime,
+			u.size
+		from unnest(
+			@FileIDs::int[],
+			@FileNames::text[],
+			@Mimes::text[],
+			@Sizes::int[]
+		) as u(file_id, name, mime, size)
 		returning id, message_id, file_id, name, mime, size, created_at
 	`
 
