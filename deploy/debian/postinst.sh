@@ -13,7 +13,7 @@ create_user() {
         addgroup --system "$GROUP_NAME"
     fi
 
-    if ! getent passwd "$USER_NAME" >/dev/null 2&1; then
+    if ! getent passwd "$USER_NAME" >/dev/null 2>&1; then
         echo "Creating user: $USER_NAME"
         adduser --system --no-create-home --ingroup "$GROUP_NAME" \
                 --disabled-password --disabled-login \
