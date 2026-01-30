@@ -8,7 +8,7 @@ import (
 	"github.com/webitel/im-thread-service/infra/tls"
 	webiteldi "github.com/webitel/im-thread-service/infra/webitel/di"
 	grpchandler "github.com/webitel/im-thread-service/internal/handler/grpc"
-	"github.com/webitel/im-thread-service/internal/service"
+	"github.com/webitel/im-thread-service/internal/service/di"
 	"github.com/webitel/im-thread-service/internal/store/postgres"
 	"github.com/webitel/webitel-go-kit/infra/discovery"
 	"go.uber.org/fx"
@@ -27,9 +27,9 @@ func NewApp(cfg *config.Config) *fx.App {
 		pubsub.Module,
 		postgres.Module,
 		leader.Module,
-		service.Module,
+		webiteldi.Module,
+		di.ServiceModule,
 		grpchandler.Module,
 		grpcsrv.Module,
-		webiteldi.Module,
 	)
 }

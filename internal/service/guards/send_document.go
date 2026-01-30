@@ -46,9 +46,9 @@ func checkDocumentsIntegrity() DocumentMessageGuard {
 			prefix := fmt.Sprintf("document[%d]", i)
 
 			// [ID] Basic integrity check
-			if doc.ID == 0 {
-				return fmt.Errorf("%s: file id is required", prefix)
-			}
+			// if doc.ID == 0 {
+			// 	return fmt.Errorf("%s: file id is required", prefix)
+			// }
 
 			// [URL] VALIDATE FORMAT IF LINK PROVIDED
 			if doc.URL != "" {

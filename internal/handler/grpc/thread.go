@@ -11,7 +11,7 @@ import (
 
 type (
 	ThreadService struct {
-		impb.UnimplementedThreadServer
+		impb.UnimplementedThreadManagementServer
 
 		threadManager service.ThreadManager
 	}

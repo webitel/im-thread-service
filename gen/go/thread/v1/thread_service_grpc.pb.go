@@ -19,18 +19,18 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	Thread_Search_FullMethodName      = "/webitel.im.service.thread.v1.Thread/Search"
-	Thread_CreateGroup_FullMethodName = "/webitel.im.service.thread.v1.Thread/CreateGroup"
-	Thread_AddMember_FullMethodName   = "/webitel.im.service.thread.v1.Thread/AddMember"
+	ThreadManagement_Search_FullMethodName      = "/webitel.im.service.thread.v1.ThreadManagement/Search"
+	ThreadManagement_CreateGroup_FullMethodName = "/webitel.im.service.thread.v1.ThreadManagement/CreateGroup"
+	ThreadManagement_AddMember_FullMethodName   = "/webitel.im.service.thread.v1.ThreadManagement/AddMember"
 )
 
-// ThreadClient is the client API for Thread service.
+// ThreadManagementClient is the client API for ThreadManagement service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 //
 // Thread service provides operations for managing
 // and interacting with threads.
-type ThreadClient interface {
+type ThreadManagementClient interface {
 	// Searches threads using filtering, sorting,
 	// and pagination parameters.
 	Search(ctx context.Context, in *ThreadSearchRequest, opts ...grpc.CallOption) (*SearchThreadResponse, error)
@@ -41,51 +41,51 @@ type ThreadClient interface {
 	AddMember(ctx context.Context, in *AddMemberRequest, opts ...grpc.CallOption) (*Thread, error)
 }
 
-type threadClient struct {
+type threadManagementClient struct {
 	cc grpc.ClientConnInterface
 }
 
-func NewThreadClient(cc grpc.ClientConnInterface) ThreadClient {
-	return &threadClient{cc}
+func NewThreadManagementClient(cc grpc.ClientConnInterface) ThreadManagementClient {
+	return &threadManagementClient{cc}
 }
 
-func (c *threadClient) Search(ctx context.Context, in *ThreadSearchRequest, opts ...grpc.CallOption) (*SearchThreadResponse, error) {
+func (c *threadManagementClient) Search(ctx context.Context, in *ThreadSearchRequest, opts ...grpc.CallOption) (*SearchThreadResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(SearchThreadResponse)
-	err := c.cc.Invoke(ctx, Thread_Search_FullMethodName, in, out, cOpts...)
+	err := c.cc.Invoke(ctx, ThreadManagement_Search_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *threadClient) CreateGroup(ctx context.Context, in *CreateGroupRequest, opts ...grpc.CallOption) (*Thread, error) {
+func (c *threadManagementClient) CreateGroup(ctx context.Context, in *CreateGroupRequest, opts ...grpc.CallOption) (*Thread, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(Thread)
-	err := c.cc.Invoke(ctx, Thread_CreateGroup_FullMethodName, in, out, cOpts...)
+	err := c.cc.Invoke(ctx, ThreadManagement_CreateGroup_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *threadClient) AddMember(ctx context.Context, in *AddMemberRequest, opts ...grpc.CallOption) (*Thread, error) {
+func (c *threadManagementClient) AddMember(ctx context.Context, in *AddMemberRequest, opts ...grpc.CallOption) (*Thread, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(Thread)
-	err := c.cc.Invoke(ctx, Thread_AddMember_FullMethodName, in, out, cOpts...)
+	err := c.cc.Invoke(ctx, ThreadManagement_AddMember_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-// ThreadServer is the server API for Thread service.
-// All implementations must embed UnimplementedThreadServer
+// ThreadManagementServer is the server API for ThreadManagement service.
+// All implementations must embed UnimplementedThreadManagementServer
 // for forward compatibility.
 //
 // Thread service provides operations for managing
 // and interacting with threads.
-type ThreadServer interface {
+type ThreadManagementServer interface {
 	// Searches threads using filtering, sorting,
 	// and pagination parameters.
 	Search(context.Context, *ThreadSearchRequest) (*SearchThreadResponse, error)
@@ -94,118 +94,118 @@ type ThreadServer interface {
 	CreateGroup(context.Context, *CreateGroupRequest) (*Thread, error)
 	// Adds a new member to an existing thread.
 	AddMember(context.Context, *AddMemberRequest) (*Thread, error)
-	mustEmbedUnimplementedThreadServer()
+	mustEmbedUnimplementedThreadManagementServer()
 }
 
-// UnimplementedThreadServer must be embedded to have
+// UnimplementedThreadManagementServer must be embedded to have
 // forward compatible implementations.
 //
 // NOTE: this should be embedded by value instead of pointer to avoid a nil
 // pointer dereference when methods are called.
-type UnimplementedThreadServer struct{}
+type UnimplementedThreadManagementServer struct{}
 
-func (UnimplementedThreadServer) Search(context.Context, *ThreadSearchRequest) (*SearchThreadResponse, error) {
+func (UnimplementedThreadManagementServer) Search(context.Context, *ThreadSearchRequest) (*SearchThreadResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Search not implemented")
 }
-func (UnimplementedThreadServer) CreateGroup(context.Context, *CreateGroupRequest) (*Thread, error) {
+func (UnimplementedThreadManagementServer) CreateGroup(context.Context, *CreateGroupRequest) (*Thread, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CreateGroup not implemented")
 }
-func (UnimplementedThreadServer) AddMember(context.Context, *AddMemberRequest) (*Thread, error) {
+func (UnimplementedThreadManagementServer) AddMember(context.Context, *AddMemberRequest) (*Thread, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method AddMember not implemented")
 }
-func (UnimplementedThreadServer) mustEmbedUnimplementedThreadServer() {}
-func (UnimplementedThreadServer) testEmbeddedByValue()                {}
+func (UnimplementedThreadManagementServer) mustEmbedUnimplementedThreadManagementServer() {}
+func (UnimplementedThreadManagementServer) testEmbeddedByValue()                          {}
 
-// UnsafeThreadServer may be embedded to opt out of forward compatibility for this service.
-// Use of this interface is not recommended, as added methods to ThreadServer will
+// UnsafeThreadManagementServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to ThreadManagementServer will
 // result in compilation errors.
-type UnsafeThreadServer interface {
-	mustEmbedUnimplementedThreadServer()
+type UnsafeThreadManagementServer interface {
+	mustEmbedUnimplementedThreadManagementServer()
 }
 
-func RegisterThreadServer(s grpc.ServiceRegistrar, srv ThreadServer) {
-	// If the following call pancis, it indicates UnimplementedThreadServer was
+func RegisterThreadManagementServer(s grpc.ServiceRegistrar, srv ThreadManagementServer) {
+	// If the following call pancis, it indicates UnimplementedThreadManagementServer was
 	// embedded by pointer and is nil.  This will cause panics if an
 	// unimplemented method is ever invoked, so we test this at initialization
 	// time to prevent it from happening at runtime later due to I/O.
 	if t, ok := srv.(interface{ testEmbeddedByValue() }); ok {
 		t.testEmbeddedByValue()
 	}
-	s.RegisterService(&Thread_ServiceDesc, srv)
+	s.RegisterService(&ThreadManagement_ServiceDesc, srv)
 }
 
-func _Thread_Search_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _ThreadManagement_Search_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ThreadSearchRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(ThreadServer).Search(ctx, in)
+		return srv.(ThreadManagementServer).Search(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: Thread_Search_FullMethodName,
+		FullMethod: ThreadManagement_Search_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ThreadServer).Search(ctx, req.(*ThreadSearchRequest))
+		return srv.(ThreadManagementServer).Search(ctx, req.(*ThreadSearchRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Thread_CreateGroup_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _ThreadManagement_CreateGroup_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(CreateGroupRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(ThreadServer).CreateGroup(ctx, in)
+		return srv.(ThreadManagementServer).CreateGroup(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: Thread_CreateGroup_FullMethodName,
+		FullMethod: ThreadManagement_CreateGroup_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ThreadServer).CreateGroup(ctx, req.(*CreateGroupRequest))
+		return srv.(ThreadManagementServer).CreateGroup(ctx, req.(*CreateGroupRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Thread_AddMember_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _ThreadManagement_AddMember_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(AddMemberRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(ThreadServer).AddMember(ctx, in)
+		return srv.(ThreadManagementServer).AddMember(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: Thread_AddMember_FullMethodName,
+		FullMethod: ThreadManagement_AddMember_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ThreadServer).AddMember(ctx, req.(*AddMemberRequest))
+		return srv.(ThreadManagementServer).AddMember(ctx, req.(*AddMemberRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-// Thread_ServiceDesc is the grpc.ServiceDesc for Thread service.
+// ThreadManagement_ServiceDesc is the grpc.ServiceDesc for ThreadManagement service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
-var Thread_ServiceDesc = grpc.ServiceDesc{
-	ServiceName: "webitel.im.service.thread.v1.Thread",
-	HandlerType: (*ThreadServer)(nil),
+var ThreadManagement_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "webitel.im.service.thread.v1.ThreadManagement",
+	HandlerType: (*ThreadManagementServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
 			MethodName: "Search",
-			Handler:    _Thread_Search_Handler,
+			Handler:    _ThreadManagement_Search_Handler,
 		},
 		{
 			MethodName: "CreateGroup",
-			Handler:    _Thread_CreateGroup_Handler,
+			Handler:    _ThreadManagement_CreateGroup_Handler,
 		},
 		{
 			MethodName: "AddMember",
-			Handler:    _Thread_AddMember_Handler,
+			Handler:    _ThreadManagement_AddMember_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

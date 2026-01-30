@@ -42,11 +42,12 @@ func MapSearchMessageHistoryRequest2HistoryMessageInputDTO(mhr *impb.SearchMessa
 		Size:        int(mhr.GetSize()),
 		Types:       types,
 		Cursor:      cursor,
+		DomainID:    int(mhr.GetDomainId()),
 	}
 }
 
 func MapMessage2SearchMessageHistoryResponse(messages []*model.Message) *impb.SearchMessageHistoryResponse {
-	responseMessages := utils.Map(messages, func(m *model.Message) *impb.MessageDTO {
+	responseMessages := utils.Map(messages, func(m *model.Message) *impb.HistoryMessage {
 		var (
 			docs   = mapDocs(m.Documents)
 			images = mapImages(m.Images)
@@ -57,7 +58,7 @@ func MapMessage2SearchMessageHistoryResponse(messages []*model.Message) *impb.Se
 			return nil
 		}
 
-		return &impb.MessageDTO{
+		return &impb.HistoryMessage{
 			Id:         m.ID.String(),
 			ThreadId:   m.ThreadID.String(),
 			SenderId:   m.From.ID.String(),
@@ -123,9 +124,9 @@ func newPBHistoryCursor(id uuid.UUID, createdAt time.Time, direction bool) *impb
 	}
 }
 
-func mapDocs(docs []*model.MessageDocument) []*impb.DocumentDTO {
-	return utils.Map(docs, func(md *model.MessageDocument) *impb.DocumentDTO {
-		return &impb.DocumentDTO{
+func mapDocs(docs []*model.MessageDocument) []*impb.Document {
+	return utils.Map(docs, func(md *model.MessageDocument) *impb.Document {
+		return &impb.Document{
 			Id:        md.ID.String(),
 			MessageId: md.MessageID.String(),
 			FileId:    md.FileID,
@@ -133,13 +134,14 @@ func mapDocs(docs []*model.MessageDocument) []*impb.DocumentDTO {
 			Mime:      md.Mime,
 			Size:      md.Size,
 			CreatedAt: md.CreatedAt.UnixMilli(),
+			Url:       md.URL,
 		}
 	})
 }
 
-func mapImages(images []*model.MessageImage) []*impb.ImageDTO {
-	return utils.Map(images, func(mi *model.MessageImage) *impb.ImageDTO {
-		return &impb.ImageDTO{
+func mapImages(images []*model.MessageImage) []*impb.Image {
+	return utils.Map(images, func(mi *model.MessageImage) *impb.Image {
+		return &impb.Image{
 			Id:        mi.ID.String(),
 			MessageId: mi.MessageID.String(),
 			FileId:    mi.FileID,
@@ -147,6 +149,7 @@ func mapImages(images []*model.MessageImage) []*impb.ImageDTO {
 			Width:     mi.Width,
 			Height:    mi.Height,
 			CreatedAt: mi.CreatedAt.UnixMilli(),
+			Url:       mi.URL,
 		}
 	})
 }
