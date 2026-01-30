@@ -43,6 +43,10 @@ func New(logger *slog.Logger, discovery discovery.DiscoveryProvider) (*Client, e
 
 // CanSend checks if a message can be delivered based on contact permissions
 func (c *Client) CanSend(ctx context.Context, req *dto.CanSendRequest) (*dto.CanSendResponse, error) {
+	return &dto.CanSendResponse{
+		CanSend: true,
+	}, nil
+
 	var resp *contactv1.CanSendResponse
 
 	// [EXECUTE] Handles load balancing, retries, and circuit breaking

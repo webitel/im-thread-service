@@ -23,6 +23,7 @@ func MapToSendImageRequest(in *impb.SendImageRequest) *dto.SendImageRequest {
 				ID:       id,
 				URL:      img.GetLink(),
 				MimeType: img.GetMimeType(),
+				Name:     img.GetName(),
 			})
 		}
 	}

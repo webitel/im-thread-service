@@ -39,8 +39,8 @@ func (m *messageStore) SaveMessage(ctx context.Context, msg *model.Message) (*mo
 		)
 		returning
 			id, thread_id, type, body, metadata, created_at, updated_at,
-			sender_id as "from.id",
-			receiver_id as "to.id"
+			jsonb_build_object('id', sender_id) as "from",
+			jsonb_build_object('id', receiver_id) as "to"
 	`
 
 	args := pgx.NamedArgs{
@@ -84,7 +84,7 @@ func (m *messageStore) SaveImages(ctx context.Context, messageID uuid.UUID, imag
 	}
 
 	var (
-		fileIDs    = make([]uuid.UUID, len(images))
+		fileIDs    = make([]int64, len(images))
 		mimes      = make([]string, len(images))
 		thumbnails = make([]map[string]any, len(images))
 		widths     = make([]int32, len(images))
@@ -92,7 +92,7 @@ func (m *messageStore) SaveImages(ctx context.Context, messageID uuid.UUID, imag
 	)
 
 	for i, img := range images {
-		fileIDs[i] = img.ID
+		fileIDs[i] = img.FileID
 		mimes[i] = img.Mime
 		thumbnails[i] = img.Thumbnails
 		widths[i] = img.Width
@@ -105,7 +105,7 @@ func (m *messageStore) SaveImages(ctx context.Context, messageID uuid.UUID, imag
 		)
 		select 
 			@MessageID, 
-			unnest(@FileIDs::uuid[]), 
+			unnest(@FileIDs::int[]), 
 			unnest(@Mimes::text[]), 
 			unnest(@Thumbnails::jsonb[]), 
 			unnest(@Widths::int[]), 

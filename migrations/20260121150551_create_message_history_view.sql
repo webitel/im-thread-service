@@ -1,19 +1,19 @@
 -- +goose Up
 -- +goose StatementBegin
 CREATE OR REPLACE VIEW im_thread.v_messages AS
-select m.id,
-    m.thread_id,
-    m.sender_id,
-    m.receiver_id,
-    m.type,
-    m.body,
-    m.metadata,
-    m.created_at,
-    m.updated_at,
+SELECT id,
+    thread_id,
+    sender_id,
+    receiver_id,
+    type,
+    body,
+    metadata,
+    created_at,
+    updated_at,
     (
-        select jsonb_agg("document")
-        from (
-                select jsonb_build_object(
+        SELECT jsonb_agg(unnamed_subquery.document) AS jsonb_agg
+        FROM (
+                SELECT jsonb_build_object(
                         'id',
                         doc.id,
                         'message_id',
@@ -28,15 +28,15 @@ select m.id,
                         doc.size,
                         'created_at',
                         doc.created_at
-                    ) as "document"
-                from im_message.message_documents doc
-                where doc.message_id = m.id
-            )
-    ) as documents,
+                    ) AS document
+                FROM im_message.message_documents doc
+                WHERE doc.message_id = m.id
+            ) unnamed_subquery
+    ) AS documents,
     (
-        select jsonb_agg(image)
-        from (
-                select jsonb_build_object(
+        SELECT jsonb_agg(unnamed_subquery.image) AS jsonb_agg
+        FROM (
+                SELECT jsonb_build_object(
                         'id',
                         img.id,
                         'message_id',
@@ -51,12 +51,13 @@ select m.id,
                         img.height,
                         'created_at',
                         img.created_at
-                    ) as image
-                from im_message.message_images img
-                where img.message_id = m.id
-            )
-    ) as images
-from im_message.messages m;
+                    ) AS image
+                FROM im_message.message_images img
+                WHERE img.message_id = m.id
+            ) unnamed_subquery
+    ) AS images,
+    domain_id
+FROM im_message.messages m;
 create index if not exists idx_messages_pagination_desc ON im_message.messages using btree(created_at DESC, id DESC);
 -- +goose StatementEnd
 -- +goose Down

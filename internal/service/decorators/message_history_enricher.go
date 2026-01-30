@@ -14,6 +14,10 @@ import (
 )
 
 const (
+	StorageDownloadAction string = "download"
+)
+
+const (
 	ImagesRequested    string = "images"
 	DocumentsRequested string = "documents"
 )
@@ -111,6 +115,7 @@ func (m *messageHistoryEnricher) fetchFileLinks(ctx context.Context, fileIDs []i
 			DomainId: int64(domainID),
 			FileId:   fileID,
 			Metadata: loadMetadata,
+			Action:   StorageDownloadAction,
 		}
 	}
 

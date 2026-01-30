@@ -24,6 +24,7 @@ func MapToSendDocumentRequest(in *impb.SendDocumentRequest) *dto.SendDocumentReq
 				Name:     doc.GetFileName(),
 				MimeType: doc.GetMimeType(),
 				Size:     doc.GetSizeBytes(),
+				URL:      doc.GetUrl(),
 			})
 		}
 	}
