@@ -1,6 +1,6 @@
 #!/bin/bash
 
-SERVICE_NAME="im-thread-service"
+SERVICE_NAME="webitel-im-thread"
 
 stop_service_on_upgrade() {
     if [ -x "/bin/systemctl" ]; then

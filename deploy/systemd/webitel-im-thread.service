@@ -1,0 +1,47 @@
+[Unit]
+Description=Webitel IM Thread
+After=network.target consul.service rabbitmq-server.service postgresql.service
+
+StartLimitIntervalSec=60
+StartLimitBurst=3
+
+[Service]
+Type=simple
+
+User=webitel
+Group=webitel
+
+# Configuration file path
+# Environment=CONFIG_FILE=
+Environment=SERVICE_SECRET=
+Environment=SERVICE_ADDR=127.0.0.1:10052
+
+# Required if SERVICE_CONN_VERIFY_CERTS=true
+# Environment=SERVICE_CONN_CA=
+# Environment=SERVICE_CONN_KEY=
+# Environment=SERVICE_CONN_CERT=
+# Environment=SERVICE_CONN_CLIENT_CA=
+# Environment=SERVICE_CONN_CLIENT_KEY=
+# Environment=SERVICE_CONN_CLIENT_CERT=
+
+EnvironmentFile=/etc/default/webitel-im
+
+ExecStart=/usr/local/bin/webitel-im-thread server
+
+KillMode=mixed
+KillSignal=SIGTERM
+TimeoutStartSec=0
+TimeoutStopSec=30
+
+Restart=on-failure
+RestartSec=5
+
+LimitNOFILE=64000
+LimitNPROC=4096
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=webitel-im-thread
+
+[Install]
+WantedBy=multi-user.target

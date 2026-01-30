@@ -2,7 +2,7 @@
 
 set -e
 
-SERVICE_NAME="im-thread-service"
+SERVICE_NAME="webitel-im-thread"
 
 USER_NAME="webitel"
 GROUP_NAME="webitel"
@@ -35,10 +35,10 @@ handle_service_restart() {
     systemctl restart "$SERVICE_NAME" || true
 }
 
-if [ "$1" == "configure"]; then
+if [ "$1" == "configure" ]; then
     echo "Configuring $SERVICE_NAME..."
 
-    if [ -z "$2"]; then
+    if [ -z "$2" ]; then
         create_user
         configure_systemd
 
