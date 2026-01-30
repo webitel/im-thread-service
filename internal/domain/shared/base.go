@@ -18,9 +18,15 @@ const (
 	PeerChannel
 )
 
+type Identity struct {
+	Issuer string
+	Name   string
+}
+
 type Peer struct {
-	ID   uuid.UUID `json:"id" db:"id"`
-	Type PeerType  `json:"type" db:"type"`
+	ID       uuid.UUID `json:"id" db:"id"`
+	Type     PeerType  `json:"type" db:"type"`
+	Identity *Identity `json:"identity"`
 }
 
 type BaseModel struct {
@@ -30,6 +36,14 @@ type BaseModel struct {
 	UpdatedBy int       `json:"updated_by"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
+}
+
+func (b *BaseModel) CreatedAtMilliseconds() int64 {
+	return max(b.CreatedAt.UnixMilli(), 0)
+}
+
+func (b *BaseModel) UpdatedAtMilliseconds() int64 {
+	return max(b.UpdatedAt.UnixMilli(), 0)
 }
 
 type Entity struct {

@@ -1,4 +1,5 @@
 package storageclient
+
 import (
 	"context"
 	"fmt"
@@ -9,6 +10,8 @@ import (
 	"github.com/webitel/webitel-go-kit/infra/discovery"
 	rpc "github.com/webitel/webitel-go-kit/infra/transport/gRPC"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 const ServiceName string = "storage"
@@ -16,18 +19,15 @@ const ServiceName string = "storage"
 // [CLIENT] Wrapper for Storage FileService with resilient RPC execution
 type Client struct {
 	logger *slog.Logger
-	// [GENERIC_RPC] Holds the go-kit RPC client specifically for FileService
-	rpc *rpc.Client[storagev1.FileServiceClient]
+	rpc    *rpc.Client[storagev1.FileServiceClient]
 }
 
 // New initializes the Storage client with service discovery and load balancing
 func New(logger *slog.Logger, discovery discovery.DiscoveryProvider) (*Client, error) {
-	// [FACTORY] Instantiates the gRPC stub for FileServiceClient
 	factory := func(conn *grpc.ClientConn) storagev1.FileServiceClient {
 		return storagev1.NewFileServiceClient(conn)
 	}
 
-	// [INIT] webitel.New returns a go-kit RPC wrapper with discovery support
 	c, err := webitel.New(logger, discovery, ServiceName, factory)
 	if err != nil {
 		return nil, fmt.Errorf("[storage-client] initialization failed: %w", err)
@@ -42,8 +42,6 @@ func New(logger *slog.Logger, discovery discovery.DiscoveryProvider) (*Client, e
 // SearchFiles performs a file lookup using the resilient Execute wrapper
 func (c *Client) SearchFiles(ctx context.Context, req *storagev1.SearchFilesRequest) (*storagev1.ListFile, error) {
 	var resp *storagev1.ListFile
-
-	// [EXECUTE] Handles load balancing and retries
 	err := c.rpc.Execute(ctx, func(api storagev1.FileServiceClient) error {
 		c.logger.Debug("STORAGE.SEARCH_FILES", slog.Any("req", req))
 
@@ -68,6 +66,37 @@ func (c *Client) UploadFileUrl(ctx context.Context, req *storagev1.UploadFileUrl
 	})
 
 	return resp, err
+}
+
+func (c *Client) BulkGenerateFileLink(ctx context.Context, req *storagev1.BulkGenerateFileLinkRequest) (*storagev1.BulkGenerateFileLinkResponse, error) {
+	var (
+		resp *storagev1.BulkGenerateFileLinkResponse
+		err  error
+	)
+
+	c.rpc.Execute(ctx, func(fsc storagev1.FileServiceClient) error {
+		resp, err = fsc.BulkGenerateFileLink(ctx, req)
+		return err
+	})
+
+	if err != nil {
+		st, _ := status.FromError(err)
+		errGroup := slog.Group("grpc_info",
+			slog.String("error", st.Message()),
+			slog.String("code", st.Code().String()),
+		)
+
+		switch st.Code() {
+		case codes.Unavailable:
+			c.logger.WarnContext(ctx, "STORAGE.BulkGenerateFileLink TEMPORARY UNAVAILABLE", errGroup)
+		default:
+			c.logger.ErrorContext(ctx, "STORAGE.BulkGenerateFileLink gRPC CALL ERROR", errGroup)
+		}
+
+		return nil, err
+	}
+
+	return resp, nil
 }
 
 // Close gracefully shuts down the underlying gRPC connection pool

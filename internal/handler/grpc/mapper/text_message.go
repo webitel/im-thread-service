@@ -36,6 +36,12 @@ func MapPeerFromProto(pb *impb.Peer) shared.Peer {
 		p.ID, _ = uuid.Parse(kind.ChannelId)
 		p.Type = shared.PeerChannel
 	}
+
+	p.Identity = &shared.Identity{
+		Issuer: pb.GetIdentity().GetIssuer(),
+		Name:   pb.GetIdentity().GetName(),
+	}
+
 	return p
 }
 

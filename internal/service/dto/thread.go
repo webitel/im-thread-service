@@ -34,6 +34,19 @@ type (
 	CanSendResponse struct {
 		CanSend bool
 	}
+
+	SearchThreadRequest struct {
+		Fields    []string
+		Ids       uuid.UUIDs
+		DomainIds []int
+		Kinds     []model.ThreadKind
+		Owners    uuid.UUIDs
+		Q         string
+		MemberIds uuid.UUIDs
+		Limit     int
+		Sort      string
+		Page      int
+	}
 )
 
 func NewEnsureDirectThreadResponse(id uuid.UUID) *EnsureDirectThreadResponse {

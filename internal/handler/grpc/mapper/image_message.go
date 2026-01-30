@@ -21,9 +21,9 @@ func MapToSendImageRequest(in *impb.SendImageRequest) *dto.SendImageRequest {
 			id, _ := strconv.ParseInt(img.GetId(), 10, 64)
 			imgReq.Images = append(imgReq.Images, &dto.Image{
 				ID:       id,
-				Name:     img.GetName(),
 				URL:      img.GetLink(),
 				MimeType: img.GetMimeType(),
+				Name:     img.GetName(),
 			})
 		}
 	}

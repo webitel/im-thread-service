@@ -7,6 +7,7 @@ import (
 	"github.com/webitel/im-thread-service/internal/domain/event"
 	"github.com/webitel/im-thread-service/internal/domain/model"
 	"github.com/webitel/im-thread-service/internal/service/dto"
+	queryobject "github.com/webitel/im-thread-service/internal/store/query_object"
 )
 
 type (
@@ -37,5 +38,24 @@ type (
 
 	ThreadStore interface {
 		Create(ctx context.Context, req *model.Thread) (*model.Thread, error)
+		Search(ctx context.Context, query queryobject.QueryObject) ([]*model.Thread, error)
+	}
+
+	MessageHistory interface {
+		Search(ctx context.Context, query queryobject.QueryObject) ([]*dto.HistoryMessage, error)
+	}
+
+	DirectSettings interface {
+		Create(ctx context.Context, setting *model.DirectThreadSetting) (*model.DirectThreadSetting, error)
+		Search(ctx context.Context, query queryobject.QueryObject) ([]*model.DirectThreadSetting, error)
+
+		//NOT IMPLEMENTED!
+		Update(ctx context.Context) ([]*model.DirectThreadSetting, error)
+		//NOT IMPLEMENTED!
+		Delete(ctx context.Context) error
+	}
+
+	DirectThreadDialogOrchestration interface {
+		InitializeFullDirectThread(ctx context.Context, directThread *model.DirectThreadDialog) ([]*model.DirectThreadDialog, error)
 	}
 )

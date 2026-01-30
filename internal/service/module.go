@@ -18,7 +18,15 @@ var Module = fx.Module(
 		fx.Annotate(
 			NewThreadService,
 			fx.As(new(ThreadManager)),
+			fx.As(new(ThreadProvisioner)),
+			fx.As(new(ThreadSearcher)),
 		),
+
+		fx.Annotate(
+			NewMessageHistory,
+			fx.As(new(MessageHistorySearcher)),
+		),
+
 		fx.Annotate(
 			NewMediaProcessor,
 			fx.As(new(MediaProcessor)),

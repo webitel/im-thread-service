@@ -38,6 +38,22 @@ var Module = fx.Module("store",
 		),
 
 		fx.Annotate(
+			NewMessageHistoryStore,
+			fx.As(new(store.MessageHistory)),
+		),
+		fx.Annotate(
+			NewDirectThreadDialogOrchestration,
+			fx.As(new(store.DirectThreadDialogOrchestration)),
+		),
+		fx.Annotate(
+			NewThreadStore,
+			fx.As(new(store.ThreadStore)),
+		),
+		fx.Annotate(
+			NewDirectSettingsStore,
+			fx.As(new(store.DirectSettings)),
+		),
+		fx.Annotate(
 			NewPgxUnitOfWork,
 			fx.As(new(store.UnitOfWork)),
 		),

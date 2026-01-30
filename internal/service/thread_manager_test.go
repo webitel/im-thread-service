@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	mock_store "github.com/webitel/im-thread-service/gen/mocks/_internal/store"
 	"github.com/webitel/im-thread-service/internal/domain/model"
+	"github.com/webitel/im-thread-service/internal/domain/shared"
 	"github.com/webitel/im-thread-service/internal/service/dto"
 	"github.com/webitel/im-thread-service/internal/store"
 	"go.uber.org/mock/gomock"
@@ -22,7 +23,7 @@ func Test_thread_EnsureDirectThread(t *testing.T) {
 		mockUOW         = mock_store.NewMockUnitOfWork(ctrl)
 		mockThreadStore = mock_store.NewMockThreadStore(ctrl)
 		mockDialogStore = mock_store.NewMockThreadDialogStore(ctrl)
-		svc             = NewThreadService(mockUOW)
+		svc             = NewThreadService(nil)
 		ctx             = context.Background()
 	)
 
@@ -30,8 +31,8 @@ func Test_thread_EnsureDirectThread(t *testing.T) {
 		req := &dto.EnsureDirectThreadRequest{
 			DomainID: 1,
 			MemberID: uuid.New(),
-			PeerFrom: &model.Peer{ID: uuid.New()},
-			PeerTo:   &model.Peer{ID: uuid.New()},
+			PeerFrom: &shared.Peer{ID: uuid.New()},
+			PeerTo:   &shared.Peer{ID: uuid.New()},
 		}
 		expectedId := uuid.New()
 
@@ -48,8 +49,8 @@ func Test_thread_EnsureDirectThread(t *testing.T) {
 		req := &dto.EnsureDirectThreadRequest{
 			DomainID: 1,
 			MemberID: uuid.New(),
-			PeerFrom: &model.Peer{ID: uuid.New()},
-			PeerTo:   &model.Peer{ID: uuid.New()},
+			PeerFrom: &shared.Peer{ID: uuid.New()},
+			PeerTo:   &shared.Peer{ID: uuid.New()},
 		}
 		newThreadID := uuid.New()
 
@@ -58,7 +59,7 @@ func Test_thread_EnsureDirectThread(t *testing.T) {
 
 		mockUOW.EXPECT().WithinTransaction(ctx, gomock.Any()).DoAndReturn(
 			func(ctx context.Context, fn func(ctx context.Context, uow store.UnitOfWork) error) error {
-				return fn(ctx, mockUOW)
+				return fn(ctx, nil)
 			},
 		)
 

@@ -15,10 +15,13 @@ type unitOfWork struct {
 	querier  Querier
 	wmlogger watermill.LoggerAdapter
 
-	threadStore       store.ThreadStore
-	threadDialogStore store.ThreadDialogStore
-	messageStore      store.MessageStore
-	outboxStore       store.OutboxStore
+	threadStore                     store.ThreadStore
+	threadDialogStore               store.ThreadDialogStore
+	messageStore                    store.MessageStore
+	outboxStore                     store.OutboxStore
+	messageHistoryStore             store.MessageHistory
+	directThreadDialogOrchestration store.DirectThreadDialogOrchestration
+	directSettings                  store.DirectSettings
 }
 
 // NewPgxUnitOfWork returns a new unit of work, given a pgx pool.
@@ -68,6 +71,30 @@ func (u *unitOfWork) Outbox() store.OutboxStore {
 		u.outboxStore = NewOutboxStore(u.querier, u.wmlogger)
 	}
 	return u.outboxStore
+}
+
+func (u *unitOfWork) MessageHistory() store.MessageHistory {
+	if u.messageHistoryStore == nil {
+		u.messageHistoryStore = NewMessageHistoryStore(u.querier)
+	}
+
+	return u.messageHistoryStore
+}
+
+func (u *unitOfWork) DirectThreadDialogOrchestration() store.DirectThreadDialogOrchestration {
+	if u.directThreadDialogOrchestration == nil {
+		u.directThreadDialogOrchestration = NewDirectThreadDialogOrchestration(u.querier)
+	}
+
+	return u.directThreadDialogOrchestration
+}
+
+func (u *unitOfWork) DirectSettingsStore() store.DirectSettings {
+	if u.directSettings == nil {
+		u.directSettings = NewDirectSettingsStore(u.querier)
+	}
+
+	return u.directSettings
 }
 
 // WithinTransaction executes a function within a transaction.
