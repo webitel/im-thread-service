@@ -118,7 +118,7 @@ func (p *storageProcessor) uploadFile(ctx context.Context, domainID int64, items
 		}
 
 		for _, item := range itemsWithURL {
-			res, err := p.client.UploadFileUrl(ctx, &storage.UploadFileUrlRequest{
+			res, err := p.storage.UploadFileUrl(ctx, &storage.UploadFileUrlRequest{
 				Url:      item.GetURL(),
 				DomainId: domainID,
 				Name:     item.GetName(),
@@ -165,7 +165,7 @@ func (p *storageProcessor) statFile(ctx context.Context, itemsWithID []Attachmen
 			return
 		}
 
-		res, err := p.client.SearchFiles(ctx, &storage.SearchFilesRequest{Id: ids, Size: int32(expectedSize)})
+		res, err := p.storage.SearchFiles(ctx, &storage.SearchFilesRequest{Id: ids, Size: int32(expectedSize)})
 		if err != nil {
 			resultChan <- fmt.Errorf("[MEDIA_PROCESSOR] storage ids check failed: %w", err)
 			return

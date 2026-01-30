@@ -24,7 +24,7 @@ type MessageService struct {
 	uow            store.UnitOfWork
 	logger         *slog.Logger
 	threader       ThreadManager
-	contactClient  imcontact.ContactsService
+	contactClient  *imcontact.Client
 	mediaProcessor MediaProcessor
 }
 
@@ -32,7 +32,7 @@ func NewMessageService(
 	uow store.UnitOfWork,
 	logger *slog.Logger,
 	threader ThreadManager,
-	contactClient imcontact.ContactsService,
+	contactClient *imcontact.Client,
 	mediaProcessor MediaProcessor,
 ) *MessageService {
 	return &MessageService{

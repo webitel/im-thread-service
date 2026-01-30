@@ -5,8 +5,9 @@ import (
 	"github.com/webitel/im-thread-service/internal/domain/shared"
 )
 
-type ThreadDialog struct {
-	shared.BaseModel
+type (
+	ThreadDialog struct {
+		shared.BaseModel
 
 		MemberID uuid.UUID  `json:"member_id"`
 		ThreadID uuid.UUID  `json:"thread_id"`

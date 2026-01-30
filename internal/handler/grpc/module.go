@@ -26,11 +26,11 @@ func RegisterMessageService(
 	server *grpcsrv.Server,
 	service *MessageService,
 ) {
-	impbv.RegisterMessageServer(server.Server, service)
+	impb.RegisterMessageServer(server.Server, service)
 }
 
 func RegisterMessageHistoryService(srv *grpcsrv.Server, svc *MessageHistoryService) {
-	impbv.RegisterMessageHistoryServer(srv.Server, svc)
+	impb.RegisterMessageHistoryServer(srv.Server, svc)
 }
 
 func RegisterThreadService(srv *grpcsrv.Server, svc *ThreadService) {
