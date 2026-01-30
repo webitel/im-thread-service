@@ -42,7 +42,6 @@ func MapPeerFromProto(pb *impb.Peer) shared.Peer {
 		Name:   pb.GetIdentity().GetName(),
 	}
 
-
 	return p
 }
 

@@ -16,16 +16,8 @@
       "request": "launch",
       "mode": "debug",
       "program": "${workspaceFolder}/main.go",
-      "cwd": "${workspaceFolder}",
-      "envFile": "${workspaceFolder}/.env",
-      "env": {
-        "GOLANG_PROTOBUF_REGISTRATION_CONFLICT": "ignore"
-      },
-      "args": [
-        "server",
-      ],
-      "console": "integratedTerminal",
-      "showLog": true
+      "args": ["migrate"],
+      "envFile": "${workspaceFolder}/.env"
     }
   ]
 }
