@@ -2,7 +2,7 @@
 
 set -e
 
-SERVICE_NAME="im-thread-service"
+SERVICE_NAME="webitel-im-thread"
 
 stop_service() {
     if [ -x "/bin/systemctl" ]; then
@@ -31,7 +31,7 @@ stop_service() {
 disable_service() {
     if [ -x "/bin/systemctl" ]; then
         if systemctl is-enabled --quiet "$SERVICE_NAME" 2>/dev/null; then
-            echo "Disabling $SERVICE_NAME service..." 
+            echo "Disabling $SERVICE_NAME service..."
             systemctl disable "$SERVICE_NAME" || true
             systemctl daemon-reload
         fi
