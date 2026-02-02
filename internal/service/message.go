@@ -56,7 +56,7 @@ func (s *MessageService) SendText(ctx context.Context, in *dto.SendTextRequest) 
 	// [THREAD] RESOLVE OR INITIALIZE COMMUNICATION CHANNEL
 	t, err := s.threader.EnsureDirectThread(ctx, &dto.EnsureDirectThreadRequest{
 		PeerFrom: &in.From,
-		PeerTo:   &shared.Peer{ID: in.To.ID},
+		PeerTo:   &in.To,
 		DomainID: int(in.DomainID),
 		MemberID: in.From.ID,
 	})
@@ -85,7 +85,7 @@ func (s *MessageService) SendImage(ctx context.Context, in *dto.SendImageRequest
 	// [THREAD] ENSURE CHANNEL EXISTENCE
 	t, err := s.threader.EnsureDirectThread(ctx, &dto.EnsureDirectThreadRequest{
 		PeerFrom: &in.From,
-		PeerTo:   &shared.Peer{ID: in.To.ID},
+		PeerTo:   &in.To,
 		DomainID: int(in.DomainID),
 		MemberID: in.From.ID,
 	})
@@ -142,7 +142,7 @@ func (s *MessageService) SendDocument(ctx context.Context, in *dto.SendDocumentR
 	// [THREAD]
 	t, err := s.threader.EnsureDirectThread(ctx, &dto.EnsureDirectThreadRequest{
 		PeerFrom: &in.From,
-		PeerTo:   &shared.Peer{ID: in.To.ID},
+		PeerTo:   &in.To,
 		DomainID: int(in.DomainID),
 		MemberID: in.From.ID,
 	})
