@@ -6,8 +6,6 @@ import (
 	"log/slog"
 	"strconv"
 
-	"github.com/google/uuid"
-	impb "github.com/webitel/im-thread-service/gen/go/contact/v1"
 	imcontact "github.com/webitel/im-thread-service/infra/webitel/im-contact"
 	"github.com/webitel/im-thread-service/internal/domain/model"
 	"github.com/webitel/im-thread-service/internal/domain/shared"
@@ -55,16 +53,10 @@ func (s *MessageService) SendText(ctx context.Context, in *dto.SendTextRequest) 
 		return nil, fmt.Errorf("validation: %w", err)
 	}
 
-	// [RESOLVE] EXECUTE PERMISSIONS CHECK AND RECIPIENT IDENTITY LOOKUP
-	toID, err := s.resolveRecipient(ctx, in.From, in.To, int32(in.DomainID))
-	if err != nil {
-		return nil, err
-	}
-
 	// [THREAD] RESOLVE OR INITIALIZE COMMUNICATION CHANNEL
 	t, err := s.threader.EnsureDirectThread(ctx, &dto.EnsureDirectThreadRequest{
 		PeerFrom: &in.From,
-		PeerTo:   &shared.Peer{ID: toID},
+		PeerTo:   &shared.Peer{ID: in.To.ID},
 		DomainID: int(in.DomainID),
 		MemberID: in.From.ID,
 	})
@@ -73,7 +65,7 @@ func (s *MessageService) SendText(ctx context.Context, in *dto.SendTextRequest) 
 	}
 
 	// [MODEL] CONSTRUCT DOMAIN ENTITY
-	msg := model.NewTextMessage(t.ID, int32(in.DomainID), in.From, []shared.Peer{{ID: toID}}, in.Body)
+	msg := model.NewTextMessage(t.ID, int32(in.DomainID), in.From, []shared.Peer{{ID: in.To.ID}}, in.Body)
 
 	// [ATOMIC] EXECUTE PERSISTENCE AND DISPATCH WITHIN TRANSACTION
 	if err := s.executeMessageTransaction(ctx, msg); err != nil {
@@ -90,16 +82,10 @@ func (s *MessageService) SendImage(ctx context.Context, in *dto.SendImageRequest
 		return nil, fmt.Errorf("validation: %w", err)
 	}
 
-	// [RESOLVE] VERIFY ACCESS AND FIND RECIPIENT
-	toID, err := s.resolveRecipient(ctx, in.From, in.To, int32(in.DomainID))
-	if err != nil {
-		return nil, err
-	}
-
 	// [THREAD] ENSURE CHANNEL EXISTENCE
 	t, err := s.threader.EnsureDirectThread(ctx, &dto.EnsureDirectThreadRequest{
 		PeerFrom: &in.From,
-		PeerTo:   &shared.Peer{ID: toID},
+		PeerTo:   &shared.Peer{ID: in.To.ID},
 		DomainID: int(in.DomainID),
 		MemberID: in.From.ID,
 	})
@@ -121,7 +107,7 @@ func (s *MessageService) SendImage(ctx context.Context, in *dto.SendImageRequest
 		t.ID,
 		int32(in.DomainID),
 		in.From,
-		[]shared.Peer{{ID: toID}},
+		[]shared.Peer{{ID: in.To.ID}},
 		in.Image.Body,
 		s.mapImageInputs(in.Image.Images),
 	)
@@ -153,16 +139,10 @@ func (s *MessageService) SendDocument(ctx context.Context, in *dto.SendDocumentR
 		return nil, fmt.Errorf("validation: %w", err)
 	}
 
-	// [RESOLVE]
-	toID, err := s.resolveRecipient(ctx, in.From, in.To, int32(in.DomainID))
-	if err != nil {
-		return nil, err
-	}
-
 	// [THREAD]
 	t, err := s.threader.EnsureDirectThread(ctx, &dto.EnsureDirectThreadRequest{
 		PeerFrom: &in.From,
-		PeerTo:   &shared.Peer{ID: toID},
+		PeerTo:   &shared.Peer{ID: in.To.ID},
 		DomainID: int(in.DomainID),
 		MemberID: in.From.ID,
 	})
@@ -184,7 +164,7 @@ func (s *MessageService) SendDocument(ctx context.Context, in *dto.SendDocumentR
 		t.ID,
 		int32(in.DomainID),
 		in.From,
-		[]shared.Peer{{ID: toID}},
+		[]shared.Peer{{ID: in.To.ID}},
 		in.Document.Body,
 		s.mapDocumentInputs(in.Document.Documents),
 	)
@@ -212,27 +192,18 @@ func (s *MessageService) SendDocument(ctx context.Context, in *dto.SendDocumentR
 // --- Internal Helpers ---
 
 // [INTERNAL] RESOLVEREPCIPIENT HANDLES PERMISSIONS AND IDENTITY DISCOVERY
-func (s *MessageService) resolveRecipient(ctx context.Context, from, to shared.Peer, domainID int32) (uuid.UUID, error) {
+func (s *MessageService) resolveRecipient(ctx context.Context, from, to shared.Peer, domainID int32) error {
 	// CHECK COMMUNICATION RIGHTS
 	cansend, err := s.contactClient.CanSend(ctx, dto.NewCanSendRequestDtoFromPeers(from, to, domainID))
 	if err != nil {
 		s.logger.Error("rights validation failed", "err", err)
-		return uuid.Nil, err
+		return err
 	}
 	if err = guards.CanSendRightsViolationGuard(cansend.CanSend); err != nil {
-		return uuid.Nil, err
+		return err
 	}
 
-	// FIND INTERNAL CONTACT IDENTITY
-	out, err := s.contactClient.SearchContact(ctx, &impb.SearchContactRequest{Subjects: []string{to.ID.String()}, DomainId: domainID})
-	if err != nil {
-		return uuid.Nil, fmt.Errorf("contact search failed: %w", err)
-	}
-	if len(out.Contacts) == 0 {
-		return uuid.Nil, fmt.Errorf("recipient contact not found")
-	}
-
-	return uuid.Parse(out.Contacts[0].Id)
+	return nil
 }
 
 // [INTERNAL] EXECUTEMESSAGETRANSACTION HANDLES BASE MESSAGE PERSISTENCE AND EVENT DISPATCH
