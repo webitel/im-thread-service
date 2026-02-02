@@ -368,6 +368,10 @@ github.com/webitel/storage v0.0.0-20260109145042-79404a35fcce h1:Lcb8pioQ+lTYjNm
 github.com/webitel/storage v0.0.0-20260109145042-79404a35fcce/go.mod h1:kvj3NDB1uRVsYtigl7t1vAtIq0IFnXOJJr93h3bw8Gg=
 github.com/webitel/webitel-go-kit/infra/discovery v0.0.0-20251224105820-8d9bcb902593 h1:YyaZO6YTeJ776MSNaRJPShaR2F+hyeACXyxa3jKskuU=
 github.com/webitel/webitel-go-kit/infra/discovery v0.0.0-20251224105820-8d9bcb902593/go.mod h1:Uib3qB6XhOoytxFHrD8Jj5GWXIDIz2IjDVxcW7SWENE=
+github.com/webitel/webitel-go-kit/infra/discovery v0.0.0-20260202112038-5adb214379c6 h1:Q+9qQojzkbcgWAjlTeYeuKTa+/WSarHhX2mCEFDvWQE=
+github.com/webitel/webitel-go-kit/infra/discovery v0.0.0-20260202112038-5adb214379c6/go.mod h1:IhUZHd7EYD1pCoX9dNNlkpF+/c3Q6ODgBcluGDMbJrU=
+github.com/webitel/webitel-go-kit/infra/discovery v0.0.0-20260202112708-f7b4e7cc68eb h1:ug/tVH5XWjv/h60amHEwb6DwoQ6xvrm2pwBFeAnkZ/s=
+github.com/webitel/webitel-go-kit/infra/discovery v0.0.0-20260202112708-f7b4e7cc68eb/go.mod h1:IhUZHd7EYD1pCoX9dNNlkpF+/c3Q6ODgBcluGDMbJrU=
 github.com/webitel/webitel-go-kit/infra/otel v0.0.0-20251224105820-8d9bcb902593 h1:ZSxcgANKHGU5+shpyBXdKdfTqRFs8XLoQODhDfRRalI=
 github.com/webitel/webitel-go-kit/infra/otel v0.0.0-20251224105820-8d9bcb902593/go.mod h1:tbGmdVdDdUbfsI2wpOoMj7dlmgwaKQFmIoAbaWPS7j4=
 github.com/webitel/webitel-go-kit/infra/transport v0.0.0-20260120140602-6f20efe1524e h1:7oU0htys/6uYa8CxhA/3UllwgWCUHf507dLVDpzD5S0=

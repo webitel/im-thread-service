@@ -22,7 +22,7 @@ require (
 	github.com/testcontainers/testcontainers-go/modules/postgres v0.40.0
 	github.com/urfave/cli/v2 v2.27.7
 	github.com/webitel/storage v0.0.0-20260109145042-79404a35fcce
-	github.com/webitel/webitel-go-kit/infra/discovery v0.0.0-20251224105820-8d9bcb902593
+	github.com/webitel/webitel-go-kit/infra/discovery v0.0.0-20260202112708-f7b4e7cc68eb
 	github.com/webitel/webitel-go-kit/infra/otel v0.0.0-20251224105820-8d9bcb902593
 	github.com/webitel/webitel-go-kit/infra/transport v0.0.0-20260120140602-6f20efe1524e
 	github.com/webitel/webitel-go-kit/pkg/interceptors v0.0.0-20251224105820-8d9bcb902593
