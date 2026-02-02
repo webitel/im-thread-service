@@ -194,7 +194,7 @@ func validateConnectionConfig(conn ConnectionConfig) error {
 }
 
 func defineConnectionFlags() error {
-	pflag.String("service.conn.verify_certs", "true", "Determine whether to verify certificates (false only for development)")
+	pflag.Bool("service.conn.verify_certs", true, "Determine whether to verify certificates (false only for development)")
 	pflag.String("service.conn.ca", "", "Server CA certificate path")
 	pflag.String("service.conn.key", "", "Server certificate key path")
 	pflag.String("service.conn.cert", "", "Server certificate path")

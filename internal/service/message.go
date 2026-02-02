@@ -6,6 +6,8 @@ import (
 	"log/slog"
 	"strconv"
 
+	"github.com/google/uuid"
+	impb "github.com/webitel/im-thread-service/gen/go/contact/v1"
 	imcontact "github.com/webitel/im-thread-service/infra/webitel/im-contact"
 	"github.com/webitel/im-thread-service/internal/domain/model"
 	"github.com/webitel/im-thread-service/internal/domain/shared"
@@ -48,28 +50,21 @@ var _ Messager = (*MessageService)(nil)
 
 // SendText handles normalization and multi-recipient distribution of text messages.
 func (s *MessageService) SendText(ctx context.Context, in *dto.SendTextRequest) (*dto.SendTextResponse, error) {
-	// [VALIDATE] Ensure payload integrity
+	// [VALIDATE] ENSURE PAYLOAD INTEGRITY
 	if err := guards.SendTextGuard(in); err != nil {
 		return nil, fmt.Errorf("validation: %w", err)
 	}
 
-	// [ACCESS_CONTROL] VERIFY communication permissions between peers via Contacts service
-	cansend, err := s.contactClient.CanSend(ctx, dto.NewCanSendRequestDtoFromPeers(in.From, in.To, int32(in.DomainID)))
+	// [RESOLVE] EXECUTE PERMISSIONS CHECK AND RECIPIENT IDENTITY LOOKUP
+	toID, err := s.resolveRecipient(ctx, in.From, in.To, int32(in.DomainID))
 	if err != nil {
-		s.logger.Error("error in can send rights validation gRPC request!", "err", err)
 		return nil, err
 	}
 
-	// [GUARD] ENFORCE access policies and block unauthorized messaging attempts
-	if err = guards.CanSendRightsViolationGuard(cansend.CanSend); err != nil {
-		s.logger.Warn("send rights violation", "from", in.From.ID, "to", in.To.ID)
-		return nil, err
-	}
-
-	// [THREAD] Resolve or initialize communication channel
+	// [THREAD] RESOLVE OR INITIALIZE COMMUNICATION CHANNEL
 	t, err := s.threader.EnsureDirectThread(ctx, &dto.EnsureDirectThreadRequest{
 		PeerFrom: &in.From,
-		PeerTo:   &in.To,
+		PeerTo:   &shared.Peer{ID: toID},
 		DomainID: int(in.DomainID),
 		MemberID: in.From.ID,
 	})
@@ -77,64 +72,34 @@ func (s *MessageService) SendText(ctx context.Context, in *dto.SendTextRequest) 
 		return nil, err
 	}
 
-	// [MODEL] Construct domain entity with pre-staged distribution events
-	msg := model.NewTextMessage(
-		t.ID,
-		int32(in.DomainID),
-		in.From,
-		[]shared.Peer{in.To},
-		in.Body,
-	)
+	// [MODEL] CONSTRUCT DOMAIN ENTITY
+	msg := model.NewTextMessage(t.ID, int32(in.DomainID), in.From, []shared.Peer{{ID: toID}}, in.Body)
 
-	var resp *dto.SendTextResponse
-
-	// [ATOMIC] Execute persistence and outbox staging in a single transaction
-	err = s.uow.WithinTransaction(ctx, func(txCtx context.Context, uow store.UnitOfWork) error {
-		saved, err := uow.Messages().SaveMessage(txCtx, msg)
-		if err != nil {
-			return err
-		}
-
-		// [DISPATCH] Propagate staged domain events to the Outbox store
-		if err := s.dispatchEvents(txCtx, uow, msg); err != nil {
-			return err
-		}
-		resp = &dto.SendTextResponse{ID: saved.ID, To: in.To}
-
-		return nil
-	})
-	if err != nil {
-		s.logger.ErrorContext(ctx, "send_text_failed", "err", err)
+	// [ATOMIC] EXECUTE PERSISTENCE AND DISPATCH WITHIN TRANSACTION
+	if err := s.executeMessageTransaction(ctx, msg); err != nil {
 		return nil, err
 	}
 
-	return resp, nil
+	return &dto.SendTextResponse{ID: msg.ID, To: in.To}, nil
 }
 
 // SendImage handles media attachments and transactional event propagation.
 func (s *MessageService) SendImage(ctx context.Context, in *dto.SendImageRequest) (*dto.SendImageResponse, error) {
-	// [VALIDATE] Check media constraints and peer data
+	// [VALIDATE] CHECK MEDIA CONSTRAINTS
 	if err := guards.SendImageGuard(in); err != nil {
 		return nil, fmt.Errorf("validation: %w", err)
 	}
 
-	// [ACCESS_CONTROL] VERIFY communication permissions between peers via Contacts service
-	cansend, err := s.contactClient.CanSend(ctx, dto.NewCanSendRequestDtoFromPeers(in.From, in.To, int32(in.DomainID)))
+	// [RESOLVE] VERIFY ACCESS AND FIND RECIPIENT
+	toID, err := s.resolveRecipient(ctx, in.From, in.To, int32(in.DomainID))
 	if err != nil {
-		s.logger.Error("error in can send rights validation gRPC request!", "err", err)
 		return nil, err
 	}
 
-	// [GUARD] ENFORCE access policies and block unauthorized messaging attempts
-	if err = guards.CanSendRightsViolationGuard(cansend.CanSend); err != nil {
-		s.logger.Warn("send rights violation", "from", in.From.ID, "to", in.To.ID)
-		return nil, err
-	}
-
-	// [THREAD]
+	// [THREAD] ENSURE CHANNEL EXISTENCE
 	t, err := s.threader.EnsureDirectThread(ctx, &dto.EnsureDirectThreadRequest{
 		PeerFrom: &in.From,
-		PeerTo:   &in.To,
+		PeerTo:   &shared.Peer{ID: toID},
 		DomainID: int(in.DomainID),
 		MemberID: in.From.ID,
 	})
@@ -142,56 +107,43 @@ func (s *MessageService) SendImage(ctx context.Context, in *dto.SendImageRequest
 		return nil, err
 	}
 
-	// [CONVERT] TO ATTACHMENTS INTERFACE
+	// [PROCESS] CONVERT AND UPLOAD MEDIA ATTACHMENTS
 	attachments := make([]AttachmentProcessor, len(in.Image.Images))
 	for i, img := range in.Image.Images {
 		attachments[i] = img
 	}
-
-	// [PROCESS] ALL IMAGES AT ONCE
 	if err := s.mediaProcessor.Process(ctx, in.DomainID, attachments); err != nil {
 		return nil, err
 	}
 
-	// [MODEL] Initialize rich media message with mapped inputs
+	// [MODEL] INITIALIZE IMAGE DOMAIN ENTITY
 	msg := model.NewImageMessage(
 		t.ID,
 		int32(in.DomainID),
 		in.From,
-		[]shared.Peer{in.To},
+		[]shared.Peer{{ID: toID}},
 		in.Image.Body,
 		s.mapImageInputs(in.Image.Images),
 	)
 
-	var resp *dto.SendImageResponse
-
-	// [ATOMIC]
+	// [ATOMIC] SAVE MESSAGE AND ATTACHMENTS
 	err = s.uow.WithinTransaction(ctx, func(txCtx context.Context, uow store.UnitOfWork) error {
-		// 1. [SAVE] Base message
 		saved, err := uow.Messages().SaveMessage(txCtx, msg)
 		if err != nil {
 			return err
 		}
-
-		// 2. [SAVE] Image attachments specifically
 		if _, err := uow.Messages().SaveImages(txCtx, saved.ID, msg.Images); err != nil {
 			return err
 		}
-
-		// 3. [DISPATCH]
-		if err := s.dispatchEvents(txCtx, uow, msg); err != nil {
-			return err
-		}
-
-		resp = &dto.SendImageResponse{ID: saved.ID, To: in.To}
-		return nil
+		return s.dispatchEvents(txCtx, uow, msg)
 	})
+
 	if err != nil {
 		s.logger.ErrorContext(ctx, "send_image_failed", "err", err)
 		return nil, err
 	}
 
-	return resp, nil
+	return &dto.SendImageResponse{ID: msg.ID, To: in.To}, nil
 }
 
 // SendDocument processes document attachments and ensures transactional integrity.
@@ -201,23 +153,16 @@ func (s *MessageService) SendDocument(ctx context.Context, in *dto.SendDocumentR
 		return nil, fmt.Errorf("validation: %w", err)
 	}
 
-	// [ACCESS_CONTROL] VERIFY communication permissions between peers via Contacts service
-	cansend, err := s.contactClient.CanSend(ctx, dto.NewCanSendRequestDtoFromPeers(in.From, in.To, int32(in.DomainID)))
+	// [RESOLVE]
+	toID, err := s.resolveRecipient(ctx, in.From, in.To, int32(in.DomainID))
 	if err != nil {
-		s.logger.Error("error in can send rights validation gRPC request!", "err", err)
 		return nil, err
 	}
 
-	// [GUARD] ENFORCE access policies and block unauthorized messaging attempts
-	if err = guards.CanSendRightsViolationGuard(cansend.CanSend); err != nil {
-		s.logger.Warn("send rights violation", "from", in.From.ID, "to", in.To.ID)
-		return nil, err
-	}
-
-	// [THREAD] Ensure the communication channel exists
+	// [THREAD]
 	t, err := s.threader.EnsureDirectThread(ctx, &dto.EnsureDirectThreadRequest{
 		PeerFrom: &in.From,
-		PeerTo:   &in.To,
+		PeerTo:   &shared.Peer{ID: toID},
 		DomainID: int(in.DomainID),
 		MemberID: in.From.ID,
 	})
@@ -225,76 +170,93 @@ func (s *MessageService) SendDocument(ctx context.Context, in *dto.SendDocumentR
 		return nil, err
 	}
 
-	// [CONVERT] TO ATTACHMENTS INTERFACE
+	// [PROCESS] MEDIA
 	attachments := make([]AttachmentProcessor, len(in.Document.Documents))
-	for i, img := range in.Document.Documents {
-		attachments[i] = img
+	for i, doc := range in.Document.Documents {
+		attachments[i] = doc
 	}
-
-	// [PROCESS] ALL IMAGES AT ONCE
 	if err := s.mediaProcessor.Process(ctx, in.DomainID, attachments); err != nil {
 		return nil, err
 	}
 
-	// [MODEL] Initialize domain entity
+	// [MODEL]
 	msg := model.NewDocumentMessage(
 		t.ID,
 		int32(in.DomainID),
 		in.From,
-		[]shared.Peer{in.To},
+		[]shared.Peer{{ID: toID}},
 		in.Document.Body,
 		s.mapDocumentInputs(in.Document.Documents),
 	)
 
-	var resp *dto.SendDocumentResponse
-
-	// [ATOMIC] Persistence and Outbox staging
+	// [ATOMIC]
 	err = s.uow.WithinTransaction(ctx, func(txCtx context.Context, uow store.UnitOfWork) error {
-		// 1. [SAVE] Base message
 		saved, err := uow.Messages().SaveMessage(txCtx, msg)
 		if err != nil {
 			return err
 		}
-
-		// 2. [SAVE] Document attachments specifically
 		if _, err := uow.Messages().SaveDocuments(txCtx, saved.ID, msg.Documents); err != nil {
 			return err
 		}
-
-		// 3. [DISPATCH]
-		if err := s.dispatchEvents(txCtx, uow, msg); err != nil {
-			return err
-		}
-
-		resp = &dto.SendDocumentResponse{ID: saved.ID, To: in.To}
-		return nil
+		return s.dispatchEvents(txCtx, uow, msg)
 	})
+
 	if err != nil {
-		s.logger.ErrorContext(ctx, "SEND_DOCUMENT_FAILED", "err", err)
+		s.logger.ErrorContext(ctx, "send_document_failed", "err", err)
 		return nil, err
 	}
 
-	return resp, nil
+	return &dto.SendDocumentResponse{ID: msg.ID, To: in.To}, nil
 }
 
 // --- Internal Helpers ---
 
-// dispatchEvents handles the propagation of staged domain events to the persistent Outbox.
-func (s *MessageService) dispatchEvents(ctx context.Context, uow store.UnitOfWork, msg *model.Message) error {
-	// [EXTRACT] Retrieve staged events from the domain entity.
-	// Note: The model clears its internal queue upon this call to prevent double-dispatch.
-	evs := msg.Events()
-
-	// [INVARIANT_CHECK] Ensure consistency between database state and event stream.
-	// If a message is persisted without its corresponding events, the system
-	// enters an inconsistent state, thus we trigger a transaction rollback.
-	if len(evs) == 0 {
-		return fmt.Errorf("domain events queue is empty: transaction aborted to maintain consistency")
+// [INTERNAL] RESOLVEREPCIPIENT HANDLES PERMISSIONS AND IDENTITY DISCOVERY
+func (s *MessageService) resolveRecipient(ctx context.Context, from, to shared.Peer, domainID int32) (uuid.UUID, error) {
+	// CHECK COMMUNICATION RIGHTS
+	cansend, err := s.contactClient.CanSend(ctx, dto.NewCanSendRequestDtoFromPeers(from, to, domainID))
+	if err != nil {
+		s.logger.Error("rights validation failed", "err", err)
+		return uuid.Nil, err
+	}
+	if err = guards.CanSendRightsViolationGuard(cansend.CanSend); err != nil {
+		return uuid.Nil, err
 	}
 
-	// [PUBLISH] Stage each event into the Outbox table within the current transaction.
+	// FIND INTERNAL CONTACT IDENTITY
+	out, err := s.contactClient.SearchContact(ctx, &impb.SearchContactRequest{Subjects: []string{to.ID.String()}, DomainId: domainID})
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("contact search failed: %w", err)
+	}
+	if len(out.Contacts) == 0 {
+		return uuid.Nil, fmt.Errorf("recipient contact not found")
+	}
+
+	return uuid.Parse(out.Contacts[0].Id)
+}
+
+// [INTERNAL] EXECUTEMESSAGETRANSACTION HANDLES BASE MESSAGE PERSISTENCE AND EVENT DISPATCH
+func (s *MessageService) executeMessageTransaction(ctx context.Context, msg *model.Message) error {
+	err := s.uow.WithinTransaction(ctx, func(txCtx context.Context, uow store.UnitOfWork) error {
+		if _, err := uow.Messages().SaveMessage(txCtx, msg); err != nil {
+			return err
+		}
+		return s.dispatchEvents(txCtx, uow, msg)
+	})
+	if err != nil {
+		s.logger.ErrorContext(ctx, "transaction_failed", "err", err)
+	}
+	return err
+}
+
+// dispatchEvents handles the propagation of staged domain events to the persistent Outbox.
+func (s *MessageService) dispatchEvents(ctx context.Context, uow store.UnitOfWork, msg *model.Message) error {
+	evs := msg.Events()
+	if len(evs) == 0 {
+		return fmt.Errorf("domain events queue is empty: transaction aborted")
+	}
+
 	for _, event := range evs {
-		// [ROUTING] Dynamic routing key generation based on the recipient's identity.
 		topic := fmt.Sprintf("im_message.%s.message.%s.%s",
 			event.RecipientID(),
 			"created",
@@ -302,10 +264,9 @@ func (s *MessageService) dispatchEvents(ctx context.Context, uow store.UnitOfWor
 		)
 
 		if err := uow.Outbox().Publish(ctx, topic, event); err != nil {
-			return fmt.Errorf("failed to stage outbox event for topic [%s]: %w", topic, err)
+			return fmt.Errorf("outbox publish failed: %w", err)
 		}
 	}
-
 	return nil
 }
 
@@ -323,11 +284,11 @@ func (s *MessageService) mapImageInputs(dtoImages []*dto.Image) []model.ImageInp
 	return inputs
 }
 
+// mapDocumentInputs transforms DTOs to domain models.
 func (s *MessageService) mapDocumentInputs(dtoDocs []*dto.Document) []model.DocumentInput {
 	inputs := make([]model.DocumentInput, 0, len(dtoDocs))
 	for _, doc := range dtoDocs {
 		inputs = append(inputs, model.DocumentInput{
-			// [CONVERT] int64 to string
 			FileID:   strconv.FormatInt(doc.ID, 10),
 			Name:     doc.Name,
 			MimeType: doc.MimeType,
