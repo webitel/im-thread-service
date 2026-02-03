@@ -65,7 +65,7 @@ func (s *MessageService) SendText(ctx context.Context, in *dto.SendTextRequest) 
 	}
 
 	// [MODEL] CONSTRUCT DOMAIN ENTITY
-	msg := model.NewTextMessage(t.ID, int32(in.DomainID), in.From, []shared.Peer{{ID: in.To.ID}}, in.Body)
+	msg := model.NewTextMessage(t.ID, int32(in.DomainID), in.From, []shared.Peer{{ID: in.To.ID, Type: in.To.Type}}, in.Body)
 
 	// [ATOMIC] EXECUTE PERSISTENCE AND DISPATCH WITHIN TRANSACTION
 	if err := s.executeMessageTransaction(ctx, msg); err != nil {
@@ -107,7 +107,7 @@ func (s *MessageService) SendImage(ctx context.Context, in *dto.SendImageRequest
 		t.ID,
 		int32(in.DomainID),
 		in.From,
-		[]shared.Peer{{ID: in.To.ID}},
+		[]shared.Peer{{ID: in.To.ID, Type: in.To.Type}},
 		in.Image.Body,
 		s.mapImageInputs(in.Image.Images),
 	)
@@ -164,7 +164,7 @@ func (s *MessageService) SendDocument(ctx context.Context, in *dto.SendDocumentR
 		t.ID,
 		int32(in.DomainID),
 		in.From,
-		[]shared.Peer{{ID: in.To.ID}},
+		[]shared.Peer{{ID: in.To.ID, Type: in.To.Type}},
 		in.Document.Body,
 		s.mapDocumentInputs(in.Document.Documents),
 	)
