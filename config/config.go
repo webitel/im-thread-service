@@ -56,8 +56,7 @@ type RedisConfig struct {
 }
 
 type ConsulConfig struct {
-	Address       string `mapstructure:"addr"`
-	PublicAddress string `mapstructure:"grpc_addr"`
+	Address string `mapstructure:"addr"`
 }
 
 type PubsubConfig struct {
@@ -123,18 +122,30 @@ func defineFlags() {
 
 	pflag.String("service.id", "", "Service ID")
 	pflag.String("service.addr", "localhost:8080", "Service address")
+	pflag.Bool("service.conn.verify_certs", true, "Determine whether to verify certificates")
+	pflag.String("service.conn.ca", "", "Server CA certificate path")
+	pflag.String("service.conn.key", "", "Server certificate key path")
+	pflag.String("service.conn.cert", "", "Server certificate path")
+	pflag.String("service.conn.client.ca", "", "Client CA certificate path")
+	pflag.String("service.conn.client.key", "", "Client certificate key path")
+	pflag.String("service.conn.client.cert", "", "Client certificate path")
 
 	pflag.String("log.level", "info", "Log level")
 	pflag.Bool("log.json", false, "Log in JSON format")
 	pflag.String("log.file", "", "Log file path")
+	pflag.Bool("log.console", true, "Enable console logging")
+	pflag.Bool("log.otel", false, "Enable OTEL logging")
 
 	pflag.String("postgres.dsn", "", "Postgres DSN")
-	pflag.String("redis.addr", "localhost:6379", "Redis address")
-	pflag.String("consul.addr", "localhost:8500", "Consul address")
-	pflag.String("pubsub.broker_url", "", "PubSub broker URL")
-	pflag.String("pubsub.broker_driver", "amqp", "PubSub broker driver")
 
-	defineConnectionFlags()
+	pflag.String("redis.addr", "localhost:6379", "Redis address")
+	pflag.String("redis.password", "", "Redis password")
+	pflag.Int("redis.db", 0, "Redis database number")
+
+	pflag.String("consul.addr", "localhost:8500", "Consul address")
+
+	pflag.String("pubsub.broker_url", "", "PubSub broker URL")
+	pflag.String("pubsub.broker_driver", "", "PubSub broker driver")
 }
 
 func (c *Config) validate() error {
@@ -190,16 +201,5 @@ func validateConnectionConfig(conn ConnectionConfig) error {
 			return fmt.Errorf("config: service.conn.key is required when verify_certs is true")
 		}
 	}
-	return nil
-}
-
-func defineConnectionFlags() error {
-	pflag.Bool("service.conn.verify_certs", true, "Determine whether to verify certificates (false only for development)")
-	pflag.String("service.conn.ca", "", "Server CA certificate path")
-	pflag.String("service.conn.key", "", "Server certificate key path")
-	pflag.String("service.conn.cert", "", "Server certificate path")
-	pflag.String("service.conn.client.ca", "", "Client CA certificate path")
-	pflag.String("service.conn.client.key", "", "Client certificate key path")
-	pflag.String("service.conn.client.cert", "", "Client certificate path")
 	return nil
 }
