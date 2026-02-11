@@ -165,10 +165,10 @@ func (t *thread) createDirectThread(ctx context.Context, req *dto.EnsureDirectTh
 	}
 
 	var (
-		baseMemberSettings = model.NewBaseThreadSettingBuilder().WithDomainID(req.DomainID).WithTitle(req.PeerFrom.Identity.Name).Build()
+		baseMemberSettings = model.NewBaseThreadSettingBuilder().WithDomainID(req.DomainID).WithTitle(req.PeerTo.Identity.Name).Build()
 		memberSettings     = model.NewDirectThreadSettingBuilder().WithBaseSettings(baseMemberSettings).Build()
 
-		baseDirectToSettings = model.NewBaseThreadSettingBuilder().WithDomainID(req.DomainID).WithTitle(req.PeerTo.Identity.Name).Build()
+		baseDirectToSettings = model.NewBaseThreadSettingBuilder().WithDomainID(req.DomainID).WithTitle(req.PeerFrom.Identity.Name).Build()
 		directToSettings     = model.NewDirectThreadSettingBuilder().WithBaseSettings(baseDirectToSettings).Build()
 	)
 
