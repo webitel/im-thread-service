@@ -16,6 +16,7 @@ type (
 
 	EnsureDirectThreadResponse struct {
 		ID uuid.UUID
+		DomainID int32
 	}
 
 	SearchThreadDialogRequest struct {
@@ -49,9 +50,10 @@ type (
 	}
 )
 
-func NewEnsureDirectThreadResponse(id uuid.UUID) *EnsureDirectThreadResponse {
+func NewEnsureDirectThreadResponse(id uuid.UUID, domainID int32) *EnsureDirectThreadResponse {
 	return &EnsureDirectThreadResponse{
-		ID: id,
+		ID:       id,
+		DomainID: domainID,
 	}
 }
 
