@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/webitel/im-thread-service/internal/domain/event"
 	"github.com/webitel/im-thread-service/internal/domain/model"
 	"github.com/webitel/im-thread-service/internal/domain/shared"
 	"github.com/webitel/im-thread-service/internal/service/dto"
@@ -82,7 +83,7 @@ func (t *thread) Search(ctx context.Context, searchRequest *dto.SearchThreadRequ
 func (t *thread) EnsureDirectThread(ctx context.Context, req *dto.EnsureDirectThreadRequest) (*dto.EnsureDirectThreadResponse, error) {
 	var (
 		err          error
-		directThread *dto.EnsureDirectThreadResponse
+		directThread *model.Thread
 	)
 
 	// RESOLVE DIRECT THREAD BY PEERS!
@@ -92,7 +93,7 @@ func (t *thread) EnsureDirectThread(ctx context.Context, req *dto.EnsureDirectTh
 
 	// SUCCESSFULLY FOUND!
 	if directThread != nil {
-		return directThread, nil
+		return dto.NewEnsureDirectThreadResponse(directThread.ID, int32(directThread.DomainID)), nil
 	}
 
 	// IF NOT FOUND WE NEED TO CREATE NEW THREAD AND TWO NEW THREAD DIALOG FOR PEERS WITHIN ONE TRANSACTION!
@@ -103,18 +104,24 @@ func (t *thread) EnsureDirectThread(ctx context.Context, req *dto.EnsureDirectTh
 			return err
 		}
 
+		for _, e := range directThread.PullEvents() {
+			if err = uow.Outbox().Publish(ctx, e.Topic(), e); err != nil {
+				return err
+			}
+		}
+
 		return nil
 	})
 	if err != nil {
 		return nil, err
 	}
 
-	return directThread, nil
+	return dto.NewEnsureDirectThreadResponse(directThread.ID, int32(directThread.DomainID)), nil
 }
 
 // searchDirectThread resolves a direct thread by peers. If the thread is found, it returns the thread id.
 // If not found, it returns nil and the error.
-func (t *thread) searchDirectThread(ctx context.Context, req *dto.EnsureDirectThreadRequest) (*dto.EnsureDirectThreadResponse, error) {
+func (t *thread) searchDirectThread(ctx context.Context, req *dto.EnsureDirectThreadRequest) (*model.Thread, error) {
 	searchDirectThreadRequest := dto.NewSearchThreadRequest(
 		req.DomainID,
 		model.ThreadDirect,
@@ -124,7 +131,7 @@ func (t *thread) searchDirectThread(ctx context.Context, req *dto.EnsureDirectTh
 
 	directThreadId, err := t.uow.ThreadDialogStore().Resolve(ctx, searchDirectThreadRequest)
 	if err == nil && directThreadId != uuid.Nil {
-		return dto.NewEnsureDirectThreadResponse(directThreadId), nil
+		return model.NewThreadBuilder().WithID(directThreadId).WithDomainID(req.DomainID).Build(), nil
 	}
 
 	return nil, err
@@ -134,7 +141,7 @@ func (t *thread) searchDirectThread(ctx context.Context, req *dto.EnsureDirectTh
 // It returns the newly created thread id or an error if the operation fails.
 // If the operation succeeds, it returns a new EnsureDirectThreadResponse with the newly created thread id.
 // If the operation fails, it returns nil and the error.
-func (t *thread) createDirectThread(ctx context.Context, req *dto.EnsureDirectThreadRequest, uow store.UnitOfWork) (*dto.EnsureDirectThreadResponse, error) {
+func (t *thread) createDirectThread(ctx context.Context, req *dto.EnsureDirectThreadRequest, uow store.UnitOfWork) (*model.Thread, error) {
 	var (
 		err          error
 		now          = time.Now().UTC()
@@ -152,6 +159,11 @@ func (t *thread) createDirectThread(ctx context.Context, req *dto.EnsureDirectTh
 	if directThread, err = uow.ThreadStore().Create(ctx, directThread); err != nil {
 		return nil, err
 	}
+
+	directThread.AddEvents(	
+		event.NewThreadCreated(directThread.ID, req.PeerFrom.ID, int32(directThread.DomainID), directThread.CreatedAt),
+		event.NewThreadCreated(directThread.ID, req.PeerTo.ID, int32(directThread.DomainID), directThread.CreatedAt),
+	)
 
 	dialog := &model.ThreadDialog{
 		BaseModel: shared.BaseModel{
@@ -182,7 +194,7 @@ func (t *thread) createDirectThread(ctx context.Context, req *dto.EnsureDirectTh
 	// CREATE TWO RECORDS WITH PAIR member_id <-> direct_to AND REVERSED direct_to <-> member_id and specific user settings
 	if _, err = uow.DirectThreadDialogOrchestration().InitializeFullDirectThread(ctx, directThreadDialog); err != nil {
 		return nil, err
-	}
+	}	
 
-	return &dto.EnsureDirectThreadResponse{ID: directThread.ID}, nil
+	return directThread, nil
 }
