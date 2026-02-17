@@ -16,20 +16,24 @@ const (
 	ThreadCreatedEvent string = "im.thread.created"
 )
 
+type Recipient struct {
+	ID   uuid.UUID `json:"id"`
+	Name string    `json:"name"`
+}
+
+func NewRecipient(id uuid.UUID, name string) *Recipient {
+	return &Recipient{
+		ID:   id,
+		Name: name,
+	}
+}
+
 type ThreadCreated struct {
 	ID        uuid.UUID `json:"id"`
 	DomainID  int32     `json:"domain_id"`
 	CreatedAt time.Time `json:"created_at"`
-	Recipient uuid.UUID `json:"recipient"`
-}
-
-func NewThreadCreated(id, recipient uuid.UUID, domainID int32, createdAt time.Time) *ThreadCreated {
-	return &ThreadCreated{
-		ID:        id,
-		DomainID:  domainID,
-		CreatedAt: createdAt,
-		Recipient: recipient,
-	}
+	Subject   string    `json:"subject"`
+	Recipient *Recipient `json:"recipient"`
 }
 
 func (e *ThreadCreated) serialize(data any, version string) (OutboxEvent, error) {
@@ -52,7 +56,7 @@ func (e *ThreadCreated) EventType() string { return ThreadCreatedEvent }
 
 func (e *ThreadCreated) Version() string { return ThreadVersionV1 }
 
-func (e *ThreadCreated) RecipientID() uuid.UUID { return e.Recipient }
+func (e *ThreadCreated) RecipientID() uuid.UUID { return e.Recipient.ID }
 
 func (e *ThreadCreated) ToOutbox() (OutboxEvent, error) {
 	return e.serialize(e, e.Version())
@@ -67,3 +71,41 @@ func (e *ThreadCreated) Topic() string {
 	)
 }
 
+type ThreadCreatedBuilder struct {
+	event *ThreadCreated
+}
+
+func NewThreadCreatedBuilder() *ThreadCreatedBuilder {
+	return &ThreadCreatedBuilder{
+		event: new(ThreadCreated),
+	}
+}
+
+func (b *ThreadCreatedBuilder) WithID(id uuid.UUID) *ThreadCreatedBuilder {
+	b.event.ID = id
+	return b
+}
+
+func (b *ThreadCreatedBuilder) WithDomainID(domainID int32) *ThreadCreatedBuilder {
+	b.event.DomainID = domainID
+	return b
+}
+
+func (b *ThreadCreatedBuilder) WithCreatedAt(createdAt time.Time) *ThreadCreatedBuilder {
+	b.event.CreatedAt = createdAt
+	return b
+}
+
+func (b *ThreadCreatedBuilder) WithSubject(subject string) *ThreadCreatedBuilder {
+	b.event.Subject = subject
+	return b
+}
+
+func (b *ThreadCreatedBuilder) WithRecipient(recipient *Recipient) *ThreadCreatedBuilder {
+	b.event.Recipient = recipient
+	return b
+}
+
+func (b *ThreadCreatedBuilder) Build() *ThreadCreated {
+	return b.event
+}
