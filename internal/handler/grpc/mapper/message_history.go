@@ -18,7 +18,6 @@ func MapSearchMessageHistoryRequest2HistoryMessageInputDTO(mhr *impb.SearchMessa
 		ids         = utils.Map(mhr.Ids, utils.IdsParser)
 		threadIds   = utils.Map(mhr.ThreadIds, utils.IdsParser)
 		senderIds   = utils.Map(mhr.SenderIds, utils.IdsParser)
-		receiverIds = utils.Map(mhr.ReceiverIds, utils.IdsParser)
 		types       = utils.Map(mhr.Types, func(i int32) int { return int(i) })
 		cursor      *dto.HistoryMessageCursor
 	)
@@ -38,7 +37,6 @@ func MapSearchMessageHistoryRequest2HistoryMessageInputDTO(mhr *impb.SearchMessa
 		Ids:         ids,
 		ThreadIds:   threadIds,
 		SenderIds:   senderIds,
-		ReceiverIds: receiverIds,
 		Size:        int(mhr.GetSize()),
 		Types:       types,
 		Cursor:      cursor,
@@ -62,7 +60,6 @@ func MapMessage2SearchMessageHistoryResponse(messages []*model.Message) *impb.Se
 			Id:         m.ID.String(),
 			ThreadId:   m.ThreadID.String(),
 			SenderId:   m.From.ID.String(),
-			ReceiverId: m.To.ID.String(),
 			Body:       m.Text,
 			Type:       int32(m.Type),
 			Metadata:   md,

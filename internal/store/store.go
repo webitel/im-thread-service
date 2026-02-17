@@ -34,6 +34,7 @@ type (
 	ThreadDialogStore interface {
 		Resolve(ctx context.Context, search *dto.SearchThreadDialogRequest) (uuid.UUID, error)
 		CreateDirectPair(ctx context.Context, dialog *model.ThreadDialog) ([]*model.ThreadDialog, error) // or just return one?
+		IsThreadMember(ctx context.Context, threadID, memberID uuid.UUID, domainID int32) (bool, error)
 	}
 
 	ThreadStore interface {

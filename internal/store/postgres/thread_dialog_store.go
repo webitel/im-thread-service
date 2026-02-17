@@ -55,6 +55,27 @@ func (t *threadDialogStore) Resolve(ctx context.Context, search *dto.SearchThrea
 	return resolvedId, nil
 }
 
+func (t *threadDialogStore) IsThreadMember(ctx context.Context, threadID, memberID uuid.UUID, domainID int32) (bool, error) {
+	query := `
+		select exists (
+			select 1
+			from im_thread.thread_dialog td
+			where td.domain_id = @DomainID
+			and (td.thread_id, td.member_id) = (@ThreadID, @MemberID)
+		)
+	`
+	args := pgx.NamedArgs{
+		"DomainID": domainID,
+		"ThreadID": threadID,
+		"MemberID": memberID,
+	}
+
+	var isMember bool
+	err := t.db.QueryRow(ctx, query, args).Scan(&isMember)
+	
+	return isMember, err
+}
+
 // CreateDirectPair creates two new thread dialogs for peers within one transaction.
 // It returns two newly created thread dialogs or an error if the operation fails.
 // If the operation succeeds, it returns two newly created thread dialogs with the id set.

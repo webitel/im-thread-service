@@ -21,6 +21,7 @@ where direct_to is not null;
 create unique index thread_dialog_member_group_unique on im_thread.thread_dialog(member_id, member_of)
 where member_of is not null;
 create index idx_thread_dialog_domain_thread on im_thread.thread_dialog using btree(domain_id, thread_id);
+create unique index idx_thread_dialog_domain_thread_member on im_thread.thread_dialog using btree(domain_id, thread_id, member_id);
 -- +goose StatementEnd
 -- +goose Down
 -- +goose StatementBegin

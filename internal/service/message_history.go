@@ -48,7 +48,6 @@ func (s *messageHistory) Search(ctx context.Context, hmiDTO *dto.HistoryMessageI
 		WithCursor(cursor).
 		WithDomainIDsFilter(hmiDTO.DomainID).
 		WithIdsFilter(hmiDTO.Ids...).
-		WithReceiverIdsFilter(hmiDTO.ReceiverIds...).
 		WithSenderIdsFilter(hmiDTO.SenderIds...).
 		WithThreadIdsFilter(hmiDTO.ThreadIds...).
 		WithLimit(hmiDTO.Size).
@@ -75,7 +74,6 @@ func mapHistoryMessagesToMessage(history []*dto.HistoryMessage) []*model.Message
 			ID:        histMsg.ID,
 			ThreadID:  histMsg.ThreadID,
 			From:      shared.Peer{ID: histMsg.SenderID},
-			To:        shared.Peer{ID: histMsg.ReceiverID},
 			Text:      histMsg.Body,
 			Type:      model.MessageType(histMsg.Type),
 			CreatedAt: histMsg.CreatedAt,

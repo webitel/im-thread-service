@@ -33,7 +33,6 @@ type (
 		DomainID   int            `json:"domain_id" db:"domain_id"`
 		ThreadID   uuid.UUID      `json:"thread_id" db:"thread_id"`
 		SenderID   uuid.UUID      `json:"sender_id" db:"sender_id"`
-		ReceiverID uuid.UUID      `json:"receiver_id" db:"receiver_id"`
 		Type       int            `json:"type" db:"type"`
 		Body       string         `json:"body" db:"body"`
 		Metadata   map[string]any `json:"metadata" db:"metadata"`
@@ -50,7 +49,6 @@ type (
 		Ids         uuid.UUIDs
 		ThreadIds   uuid.UUIDs
 		SenderIds   uuid.UUIDs
-		ReceiverIds uuid.UUIDs
 		Types       []int
 		Cursor      *HistoryMessageCursor
 		Sort        string

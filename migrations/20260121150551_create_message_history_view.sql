@@ -4,7 +4,6 @@ CREATE OR REPLACE VIEW im_thread.v_messages AS
 SELECT id,
     thread_id,
     sender_id,
-    receiver_id,
     type,
     body,
     metadata,
