@@ -4,9 +4,8 @@ CREATE SCHEMA IF NOT EXISTS im_message;
 CREATE TABLE IF NOT EXISTS im_message.messages (
     id UUID PRIMARY KEY DEFAULT uuidv7(),
     domain_id int not null check(domain_id > 0),
-    thread_id UUID NOT NULL,
+    thread_id UUID NOT NULL references im_thread.thread(id) on delete no action,
     sender_id UUID NOT NULL,
-    receiver_id UUID NOT NULL,
     type SMALLINT NOT NULL DEFAULT 1 CONSTRAINT check_message_type CHECK (
         type BETWEEN 1 AND 4
     ),

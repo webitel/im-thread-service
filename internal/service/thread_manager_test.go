@@ -23,7 +23,7 @@ func Test_thread_EnsureDirectThread(t *testing.T) {
 		mockUOW         = mock_store.NewMockUnitOfWork(ctrl)
 		mockThreadStore = mock_store.NewMockThreadStore(ctrl)
 		mockDialogStore = mock_store.NewMockThreadDialogStore(ctrl)
-		svc             = NewThreadService(nil)
+		svc             = NewThreadService(nil, nil)
 		ctx             = context.Background()
 	)
 

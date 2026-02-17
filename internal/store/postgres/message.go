@@ -32,22 +32,20 @@ func NewMessageStore(q Querier) store.MessageStore {
 func (m *messageStore) SaveMessage(ctx context.Context, msg *model.Message) (*model.Message, error) {
 	const query = `
 		insert into im_message.messages (
-			domain_id, thread_id, sender_id, receiver_id, type, body, metadata
+			domain_id, thread_id, sender_id, type, body, metadata
 		)
 		values (
-			@DomainID, @ThreadID, @SenderID, @ReceiverID, @Type, @Body, @Metadata
+			@DomainID, @ThreadID, @SenderID, @Type, @Body, @Metadata
 		)
 		returning
 			id, thread_id, type, body, metadata, created_at, updated_at,
-			jsonb_build_object('id', sender_id) as "from",
-			jsonb_build_object('id', receiver_id) as "to"
+			jsonb_build_object('id', sender_id) as "from"
 	`
 
 	args := pgx.NamedArgs{
 		"DomainID":   msg.DomainID,
 		"ThreadID":   msg.ThreadID,
 		"SenderID":   msg.From.ID,
-		"ReceiverID": msg.To.ID,
 		"Type":       msg.Type,
 		"Body":       msg.Text,
 		"Metadata":   msg.Metadata,

@@ -17,7 +17,6 @@ var (
 		"id":          true,
 		"thread_id":   true,
 		"sender_id":   true,
-		"receiver_id": true,
 		"type":        true,
 		"body":        true,
 		"metadata":    true,
@@ -28,7 +27,7 @@ var (
 	}
 	defaultFields = []string{
 		"id", "thread_id", "sender_id",
-		"receiver_id", "type", "body", "metadata", "created_at",
+		"type", "body", "metadata", "created_at",
 		"updated_at",
 	}
 )
@@ -110,14 +109,6 @@ func (q *MessageHistoryQuery) WithThreadIdsFilter(threadIds ...uuid.UUID) *Messa
 func (q *MessageHistoryQuery) WithSenderIdsFilter(senderIds ...uuid.UUID) *MessageHistoryQuery {
 	if len(senderIds) != 0 {
 		q.builder = q.builder.Where(squirrel.Eq{"sender_id": senderIds})
-	}
-
-	return q
-}
-
-func (q *MessageHistoryQuery) WithReceiverIdsFilter(receiverIds ...uuid.UUID) *MessageHistoryQuery {
-	if len(receiverIds) != 0 {
-		q.builder = q.builder.Where(squirrel.Eq{"receiver_id": receiverIds})
 	}
 
 	return q

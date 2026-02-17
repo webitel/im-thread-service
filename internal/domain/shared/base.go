@@ -16,6 +16,7 @@ const (
 	PeerContact PeerType = iota + 1
 	PeerGroup
 	PeerChannel
+	PeerThread
 )
 
 type Identity struct {

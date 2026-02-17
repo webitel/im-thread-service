@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"log/slog"
 	"time"
 
 	"github.com/google/uuid"
@@ -12,6 +13,11 @@ import (
 	"github.com/webitel/im-thread-service/internal/service/guards"
 	"github.com/webitel/im-thread-service/internal/store"
 	queryobject "github.com/webitel/im-thread-service/internal/store/query_object"
+	"github.com/webitel/webitel-go-kit/pkg/errors"
+)
+
+var (
+	notThreadMemberError = errors.New("member is not part of thread")
 )
 
 var (
@@ -36,13 +42,17 @@ type (
 
 	thread struct {
 		uow store.UnitOfWork
+		logger *slog.Logger
 	}
 )
 
 // NewThreadService returns a new thread manager, given a unit of work.
-func NewThreadService(uow store.UnitOfWork) *thread {
+func NewThreadService(logger *slog.Logger, uow store.UnitOfWork) *thread {
+	log := logger.With(slog.String("component", "thread"))
+
 	return &thread{
 		uow: uow,
+		logger: log,
 	}
 }
 
@@ -81,6 +91,23 @@ func (t *thread) Search(ctx context.Context, searchRequest *dto.SearchThreadRequ
 // If not found, it creates a new thread and two new thread dialogs for peers within one transaction.
 // If any error occurs during the transaction, it rolls back all operations and returns the error.
 func (t *thread) EnsureDirectThread(ctx context.Context, req *dto.EnsureDirectThreadRequest) (*dto.EnsureDirectThreadResponse, error) {
+	if indirect := t.indirectThreadContext(req); indirect != nil {
+		if isMember, err := t.uow.ThreadDialogStore().IsThreadMember(ctx, indirect.ID, req.PeerFrom.ID, indirect.DomainID); err != nil || !isMember {
+			t.logger.ErrorContext(
+				ctx,
+				"sender is not part of thread or internal DB error",
+				slog.Int("domain_id", int(indirect.DomainID)),
+				slog.String("thread_id", indirect.ID.String()),
+				slog.String("member_id", req.PeerFrom.ID.String()),
+				slog.Any("err", err),
+				slog.Bool("is_member", isMember),
+			)			
+
+			return nil, errors.Wrap(notThreadMemberError, errors.WithValue("err", err))
+		}
+		return indirect, nil
+	} 
+	
 	var (
 		err          error
 		directThread *model.Thread
@@ -203,4 +230,16 @@ func (t *thread) createDirectThread(ctx context.Context, req *dto.EnsureDirectTh
 	)
 
 	return directThread, nil
+}
+
+
+func (t *thread) indirectThreadContext(req *dto.EnsureDirectThreadRequest) *dto.EnsureDirectThreadResponse {
+	if req.PeerTo.Type == shared.PeerContact {
+		return nil
+	}
+
+	return &dto.EnsureDirectThreadResponse{
+		ID:       req.PeerTo.ID,
+		DomainID: int32(req.DomainID),
+	}
 }
