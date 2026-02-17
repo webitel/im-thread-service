@@ -152,18 +152,12 @@ func (t *thread) createDirectThread(ctx context.Context, req *dto.EnsureDirectTh
 				UpdatedAt: now,
 			},
 			Kind: model.ThreadDirect,
-			// LEAVE EMPTY SUBJECT FOR DIRECT THREAD!
 		}
 	)
 
 	if directThread, err = uow.ThreadStore().Create(ctx, directThread); err != nil {
 		return nil, err
 	}
-
-	directThread.AddEvents(	
-		event.NewThreadCreated(directThread.ID, req.PeerFrom.ID, int32(directThread.DomainID), directThread.CreatedAt),
-		event.NewThreadCreated(directThread.ID, req.PeerTo.ID, int32(directThread.DomainID), directThread.CreatedAt),
-	)
 
 	dialog := &model.ThreadDialog{
 		BaseModel: shared.BaseModel{
@@ -194,7 +188,19 @@ func (t *thread) createDirectThread(ctx context.Context, req *dto.EnsureDirectTh
 	// CREATE TWO RECORDS WITH PAIR member_id <-> direct_to AND REVERSED direct_to <-> member_id and specific user settings
 	if _, err = uow.DirectThreadDialogOrchestration().InitializeFullDirectThread(ctx, directThreadDialog); err != nil {
 		return nil, err
-	}	
+	}
+
+	directThread.AddEvents(
+		event.NewThreadCreatedBuilder().
+			WithDomainID(int32(directThread.DomainID)).WithCreatedAt(directThread.CreatedAt).
+			WithID(directThread.ID).WithRecipient(event.NewRecipient(req.PeerFrom.ID, req.PeerFrom.Identity.Name)).
+			WithSubject(memberSettings.Title).Build(),
+
+			event.NewThreadCreatedBuilder().
+				WithDomainID(int32(directThread.DomainID)).WithCreatedAt(directThread.CreatedAt).
+				WithID(directThread.ID).WithRecipient(event.NewRecipient(req.PeerTo.ID, req.PeerTo.Identity.Name)).
+				WithSubject(directToSettings.Title).Build(),
+	)
 
 	return directThread, nil
 }
