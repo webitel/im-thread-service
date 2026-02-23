@@ -16,7 +16,7 @@ import (
 func MapSearchMessageHistoryRequest2HistoryMessageInputDTO(mhr *impb.SearchMessageHistoryRequest) *dto.HistoryMessageInputDTO {
 	var (
 		ids         = utils.Map(mhr.Ids, utils.IdsParser)
-		threadIds   = utils.Map(mhr.ThreadIds, utils.IdsParser)
+		threadIds   = utils.Map([]string{mhr.ThreadId}, utils.IdsParser)
 		senderIds   = utils.Map(mhr.SenderIds, utils.IdsParser)
 		types       = utils.Map(mhr.Types, func(i int32) int { return int(i) })
 		cursor      *dto.HistoryMessageCursor

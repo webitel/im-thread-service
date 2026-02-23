@@ -31,6 +31,7 @@ func NewMessageHistory(messageHistoryStore store.MessageHistory) *messageHistory
 		messageHistoryStore: messageHistoryStore,
 	}
 }
+
 func (s *messageHistory) Search(ctx context.Context, hmiDTO *dto.HistoryMessageInputDTO) (model.MessageSlice, error) {
 	var (
 		query  queryobject.QueryObject

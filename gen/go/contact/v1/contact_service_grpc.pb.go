@@ -23,6 +23,7 @@ const (
 	Contacts_CreateContact_FullMethodName = "/webitel.im.service.contact.v1.Contacts/CreateContact"
 	Contacts_UpdateContact_FullMethodName = "/webitel.im.service.contact.v1.Contacts/UpdateContact"
 	Contacts_DeleteContact_FullMethodName = "/webitel.im.service.contact.v1.Contacts/DeleteContact"
+	Contacts_Patch_FullMethodName         = "/webitel.im.service.contact.v1.Contacts/Patch"
 	Contacts_CanSend_FullMethodName       = "/webitel.im.service.contact.v1.Contacts/CanSend"
 	Contacts_Upsert_FullMethodName        = "/webitel.im.service.contact.v1.Contacts/Upsert"
 )
@@ -35,6 +36,7 @@ type ContactsClient interface {
 	CreateContact(ctx context.Context, in *CreateContactRequest, opts ...grpc.CallOption) (*Contact, error)
 	UpdateContact(ctx context.Context, in *UpdateContactRequest, opts ...grpc.CallOption) (*Contact, error)
 	DeleteContact(ctx context.Context, in *DeleteContactRequest, opts ...grpc.CallOption) (*Contact, error)
+	Patch(ctx context.Context, in *PatchContactRequest, opts ...grpc.CallOption) (*Contact, error)
 	CanSend(ctx context.Context, in *CanSendRequest, opts ...grpc.CallOption) (*CanSendResponse, error)
 	Upsert(ctx context.Context, in *CreateContactRequest, opts ...grpc.CallOption) (*Contact, error)
 }
@@ -87,6 +89,16 @@ func (c *contactsClient) DeleteContact(ctx context.Context, in *DeleteContactReq
 	return out, nil
 }
 
+func (c *contactsClient) Patch(ctx context.Context, in *PatchContactRequest, opts ...grpc.CallOption) (*Contact, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(Contact)
+	err := c.cc.Invoke(ctx, Contacts_Patch_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *contactsClient) CanSend(ctx context.Context, in *CanSendRequest, opts ...grpc.CallOption) (*CanSendResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(CanSendResponse)
@@ -115,6 +127,7 @@ type ContactsServer interface {
 	CreateContact(context.Context, *CreateContactRequest) (*Contact, error)
 	UpdateContact(context.Context, *UpdateContactRequest) (*Contact, error)
 	DeleteContact(context.Context, *DeleteContactRequest) (*Contact, error)
+	Patch(context.Context, *PatchContactRequest) (*Contact, error)
 	CanSend(context.Context, *CanSendRequest) (*CanSendResponse, error)
 	Upsert(context.Context, *CreateContactRequest) (*Contact, error)
 	mustEmbedUnimplementedContactsServer()
@@ -138,6 +151,9 @@ func (UnimplementedContactsServer) UpdateContact(context.Context, *UpdateContact
 }
 func (UnimplementedContactsServer) DeleteContact(context.Context, *DeleteContactRequest) (*Contact, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method DeleteContact not implemented")
+}
+func (UnimplementedContactsServer) Patch(context.Context, *PatchContactRequest) (*Contact, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Patch not implemented")
 }
 func (UnimplementedContactsServer) CanSend(context.Context, *CanSendRequest) (*CanSendResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CanSend not implemented")
@@ -238,6 +254,24 @@ func _Contacts_DeleteContact_Handler(srv interface{}, ctx context.Context, dec f
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Contacts_Patch_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PatchContactRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ContactsServer).Patch(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Contacts_Patch_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ContactsServer).Patch(ctx, req.(*PatchContactRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _Contacts_CanSend_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(CanSendRequest)
 	if err := dec(in); err != nil {
@@ -296,6 +330,10 @@ var Contacts_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "DeleteContact",
 			Handler:    _Contacts_DeleteContact_Handler,
+		},
+		{
+			MethodName: "Patch",
+			Handler:    _Contacts_Patch_Handler,
 		},
 		{
 			MethodName: "CanSend",
