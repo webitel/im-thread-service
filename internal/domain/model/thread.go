@@ -6,7 +6,8 @@ import (
 	"github.com/webitel/im-thread-service/internal/domain/shared"
 )
 
-type ThreadKind = int
+//go:generate stringer -type=ThreadKind
+type ThreadKind int
 
 const (
 	ThreadUnspecified ThreadKind = iota

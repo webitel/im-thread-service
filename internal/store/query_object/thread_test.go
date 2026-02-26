@@ -183,19 +183,19 @@ func TestThreadQueryObject_WithDomainIDFilter(t *testing.T) {
 func TestThreadQueryObject_WithKindFilter(t *testing.T) {
 	tests := []struct {
 		name  string
-		kinds []int
+		kinds []model.ThreadKind
 	}{
 		{
 			name:  "empty kinds",
-			kinds: []int{},
+			kinds: []model.ThreadKind{},
 		},
 		{
 			name:  "single kind",
-			kinds: []int{model.ThreadDirect},
+			kinds: []model.ThreadKind{model.ThreadDirect},
 		},
 		{
 			name:  "multiple kinds",
-			kinds: []int{model.ThreadDirect, model.ThreadGroup},
+			kinds: []model.ThreadKind{model.ThreadDirect, model.ThreadGroup},
 		},
 	}
 
