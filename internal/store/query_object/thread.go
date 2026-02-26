@@ -180,7 +180,7 @@ func (q *threadQueryObject) WithDomainIDFilter(ids ...int) *threadQueryObject {
 	return q
 }
 
-func (q *threadQueryObject) WithKindFilter(kinds ...int) *threadQueryObject {
+func (q *threadQueryObject) WithKindFilter(kinds ...model.ThreadKind) *threadQueryObject {
 	if len(kinds) != 0 {
 		q.builder = q.builder.Where(squirrel.Eq{threadAlias + ".kind": kinds})
 	}

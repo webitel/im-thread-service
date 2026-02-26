@@ -217,16 +217,18 @@ func (t *thread) createDirectThread(ctx context.Context, req *dto.EnsureDirectTh
 		return nil, err
 	}
 
+	members := uuid.UUIDs{req.PeerTo.ID, req.PeerFrom.ID}
+
 	directThread.AddEvents(
 		event.NewThreadCreatedBuilder().
 			WithDomainID(int32(directThread.DomainID)).WithCreatedAt(directThread.CreatedAt).
 			WithID(directThread.ID).WithRecipient(event.NewRecipient(req.PeerFrom.ID, req.PeerFrom.Identity.Name)).
-			WithSubject(memberSettings.Title).Build(),
+			WithMembers(members).WithSubject(memberSettings.Title).WithKind(model.ThreadDirect.String()).Build(),
 
 			event.NewThreadCreatedBuilder().
 				WithDomainID(int32(directThread.DomainID)).WithCreatedAt(directThread.CreatedAt).
 				WithID(directThread.ID).WithRecipient(event.NewRecipient(req.PeerTo.ID, req.PeerTo.Identity.Name)).
-				WithSubject(directToSettings.Title).Build(),
+				WithSubject(directToSettings.Title).WithMembers(members).WithKind(model.ThreadDirect.String()).Build(),
 	)
 
 	return directThread, nil
