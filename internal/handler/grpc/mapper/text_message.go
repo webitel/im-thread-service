@@ -16,6 +16,7 @@ func MapToSendTextRequest(in *impb.SendTextRequest) *dto.SendTextRequest {
 		To:       MapPeerFromProto(in.GetTo()),
 		Body:     in.GetBody(),
 		DomainID: in.GetDomainId(),
+		SendID:   in.GetSendId(),
 	}
 }
 
