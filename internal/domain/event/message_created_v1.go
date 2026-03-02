@@ -63,6 +63,7 @@ type MessageCreated struct {
 	DomainID   int32             `json:"domain_id"`
 	From       *shared.Peer      `json:"from"`
 	To         *shared.Peer      `json:"to"`
+	SendID     string            `json:"send_id"`
 	Body       string            `json:"body"`
 	Type       int16             `json:"type"` // 1:TEXT, 2:FILE, 3:IMAGE, 4:SYSTEM
 	OccurredAt time.Time         `json:"occurred_at"`

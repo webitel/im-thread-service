@@ -48,12 +48,10 @@ var _ Messager = (*MessageService)(nil)
 
 // SendText handles normalization and multi-recipient distribution of text messages.
 func (s *MessageService) SendText(ctx context.Context, in *dto.SendTextRequest) (*dto.SendTextResponse, error) {
-	// [VALIDATE] ENSURE PAYLOAD INTEGRITY
 	if err := guards.SendTextGuard(in); err != nil {
 		return nil, fmt.Errorf("validation: %w", err)
 	}
 
-	// [THREAD] RESOLVE OR INITIALIZE COMMUNICATION CHANNEL
 	t, err := s.threader.EnsureDirectThread(ctx, &dto.EnsureDirectThreadRequest{
 		PeerFrom: &in.From,
 		PeerTo:   &in.To,
@@ -64,10 +62,16 @@ func (s *MessageService) SendText(ctx context.Context, in *dto.SendTextRequest) 
 		return nil, err
 	}
 
-	// [MODEL] CONSTRUCT DOMAIN ENTITY
-	msg := model.NewTextMessage(t.ID, int32(in.DomainID), in.From, []shared.Peer{{ID: in.To.ID, Type: in.To.Type}}, in.Body)
+	// [CLEAN] Using named structure instead of positional arguments
+	msg := model.NewTextMessage(model.MessageCreate{
+		ThreadID:   t.ID,
+		DomainID:   int32(in.DomainID),
+		From:       in.From,
+		Recipients: []shared.Peer{{ID: in.To.ID, Type: in.To.Type}},
+		Body:       in.Body,
+		SendID:     in.SendID,
+	})
 
-	// [ATOMIC] EXECUTE PERSISTENCE AND DISPATCH WITHIN TRANSACTION
 	if err := s.executeMessageTransaction(ctx, msg); err != nil {
 		return nil, err
 	}
@@ -77,12 +81,10 @@ func (s *MessageService) SendText(ctx context.Context, in *dto.SendTextRequest) 
 
 // SendImage handles media attachments and transactional event propagation.
 func (s *MessageService) SendImage(ctx context.Context, in *dto.SendImageRequest) (*dto.SendImageResponse, error) {
-	// [VALIDATE] CHECK MEDIA CONSTRAINTS
 	if err := guards.SendImageGuard(in); err != nil {
 		return nil, fmt.Errorf("validation: %w", err)
 	}
 
-	// [THREAD] ENSURE CHANNEL EXISTENCE
 	t, err := s.threader.EnsureDirectThread(ctx, &dto.EnsureDirectThreadRequest{
 		PeerFrom: &in.From,
 		PeerTo:   &in.To,
@@ -93,7 +95,6 @@ func (s *MessageService) SendImage(ctx context.Context, in *dto.SendImageRequest
 		return nil, err
 	}
 
-	// [PROCESS] CONVERT AND UPLOAD MEDIA ATTACHMENTS
 	attachments := make([]AttachmentProcessor, len(in.Image.Images))
 	for i, img := range in.Image.Images {
 		attachments[i] = img
@@ -102,17 +103,17 @@ func (s *MessageService) SendImage(ctx context.Context, in *dto.SendImageRequest
 		return nil, err
 	}
 
-	// [MODEL] INITIALIZE IMAGE DOMAIN ENTITY
-	msg := model.NewImageMessage(
-		t.ID,
-		int32(in.DomainID),
-		in.From,
-		[]shared.Peer{{ID: in.To.ID, Type: in.To.Type}},
-		in.Image.Body,
-		s.mapImageInputs(in.Image.Images),
-	)
+	// [CLEAN] Initializing image message with clear intent
+	msg := model.NewImageMessage(model.MessageCreate{
+		ThreadID:   t.ID,
+		DomainID:   int32(in.DomainID),
+		From:       in.From,
+		Recipients: []shared.Peer{{ID: in.To.ID, Type: in.To.Type}},
+		Body:       in.Image.Body,
+		SendID:     in.SendID,
+		Images:     s.mapImageInputs(in.Image.Images),
+	})
 
-	// [ATOMIC] SAVE MESSAGE AND ATTACHMENTS
 	err = s.uow.WithinTransaction(ctx, func(txCtx context.Context, uow store.UnitOfWork) error {
 		saved, err := uow.Messages().SaveMessage(txCtx, msg)
 		if err != nil {
@@ -123,7 +124,6 @@ func (s *MessageService) SendImage(ctx context.Context, in *dto.SendImageRequest
 		}
 		return s.dispatchEvents(txCtx, uow, msg)
 	})
-
 	if err != nil {
 		s.logger.ErrorContext(ctx, "send_image_failed", "err", err)
 		return nil, err
@@ -134,12 +134,10 @@ func (s *MessageService) SendImage(ctx context.Context, in *dto.SendImageRequest
 
 // SendDocument processes document attachments and ensures transactional integrity.
 func (s *MessageService) SendDocument(ctx context.Context, in *dto.SendDocumentRequest) (*dto.SendDocumentResponse, error) {
-	// [VALIDATE]
 	if err := guards.SendDocumentGuard(in); err != nil {
 		return nil, fmt.Errorf("validation: %w", err)
 	}
 
-	// [THREAD]
 	t, err := s.threader.EnsureDirectThread(ctx, &dto.EnsureDirectThreadRequest{
 		PeerFrom: &in.From,
 		PeerTo:   &in.To,
@@ -150,7 +148,6 @@ func (s *MessageService) SendDocument(ctx context.Context, in *dto.SendDocumentR
 		return nil, err
 	}
 
-	// [PROCESS] MEDIA
 	attachments := make([]AttachmentProcessor, len(in.Document.Documents))
 	for i, doc := range in.Document.Documents {
 		attachments[i] = doc
@@ -159,17 +156,17 @@ func (s *MessageService) SendDocument(ctx context.Context, in *dto.SendDocumentR
 		return nil, err
 	}
 
-	// [MODEL]
-	msg := model.NewDocumentMessage(
-		t.ID,
-		int32(in.DomainID),
-		in.From,
-		[]shared.Peer{{ID: in.To.ID, Type: in.To.Type}},
-		in.Document.Body,
-		s.mapDocumentInputs(in.Document.Documents),
-	)
+	// [CLEAN] Unified parameter handling
+	msg := model.NewDocumentMessage(model.MessageCreate{
+		ThreadID:   t.ID,
+		DomainID:   int32(in.DomainID),
+		From:       in.From,
+		Recipients: []shared.Peer{{ID: in.To.ID, Type: in.To.Type}},
+		Body:       in.Document.Body,
+		SendID:     in.SendID,
+		Documents:  s.mapDocumentInputs(in.Document.Documents),
+	})
 
-	// [ATOMIC]
 	err = s.uow.WithinTransaction(ctx, func(txCtx context.Context, uow store.UnitOfWork) error {
 		saved, err := uow.Messages().SaveMessage(txCtx, msg)
 		if err != nil {
@@ -180,7 +177,6 @@ func (s *MessageService) SendDocument(ctx context.Context, in *dto.SendDocumentR
 		}
 		return s.dispatchEvents(txCtx, uow, msg)
 	})
-
 	if err != nil {
 		s.logger.ErrorContext(ctx, "send_document_failed", "err", err)
 		return nil, err
@@ -191,22 +187,6 @@ func (s *MessageService) SendDocument(ctx context.Context, in *dto.SendDocumentR
 
 // --- Internal Helpers ---
 
-// [INTERNAL] RESOLVEREPCIPIENT HANDLES PERMISSIONS AND IDENTITY DISCOVERY
-func (s *MessageService) resolveRecipient(ctx context.Context, from, to shared.Peer, domainID int32) error {
-	// CHECK COMMUNICATION RIGHTS
-	cansend, err := s.contactClient.CanSend(ctx, dto.NewCanSendRequestDtoFromPeers(from, to, domainID))
-	if err != nil {
-		s.logger.Error("rights validation failed", "err", err)
-		return err
-	}
-	if err = guards.CanSendRightsViolationGuard(cansend.CanSend); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-// [INTERNAL] EXECUTEMESSAGETRANSACTION HANDLES BASE MESSAGE PERSISTENCE AND EVENT DISPATCH
 func (s *MessageService) executeMessageTransaction(ctx context.Context, msg *model.Message) error {
 	err := s.uow.WithinTransaction(ctx, func(txCtx context.Context, uow store.UnitOfWork) error {
 		if _, err := uow.Messages().SaveMessage(txCtx, msg); err != nil {
@@ -220,7 +200,6 @@ func (s *MessageService) executeMessageTransaction(ctx context.Context, msg *mod
 	return err
 }
 
-// dispatchEvents handles the propagation of staged domain events to the persistent Outbox.
 func (s *MessageService) dispatchEvents(ctx context.Context, uow store.UnitOfWork, msg *model.Message) error {
 	evs := msg.Events()
 	if len(evs) == 0 {
@@ -241,7 +220,6 @@ func (s *MessageService) dispatchEvents(ctx context.Context, uow store.UnitOfWor
 	return nil
 }
 
-// mapImageInputs transforms transport-layer DTOs into domain-layer inputs.
 func (s *MessageService) mapImageInputs(dtoImages []*dto.Image) []model.ImageInput {
 	inputs := make([]model.ImageInput, 0, len(dtoImages))
 	for _, img := range dtoImages {
@@ -255,7 +233,6 @@ func (s *MessageService) mapImageInputs(dtoImages []*dto.Image) []model.ImageInp
 	return inputs
 }
 
-// mapDocumentInputs transforms DTOs to domain models.
 func (s *MessageService) mapDocumentInputs(dtoDocs []*dto.Document) []model.DocumentInput {
 	inputs := make([]model.DocumentInput, 0, len(dtoDocs))
 	for _, doc := range dtoDocs {

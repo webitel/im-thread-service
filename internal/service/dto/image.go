@@ -23,6 +23,7 @@ type (
 		To       shared.Peer  `json:"to"`
 		Image    ImageRequest `json:"image"`
 		DomainID int64        `json:"domain_id"`
+		SendID   string       `json:"send_id"`
 	}
 
 	SendImageResponse struct {

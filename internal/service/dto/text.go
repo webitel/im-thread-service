@@ -11,6 +11,7 @@ type (
 		To       shared.Peer `json:"to"`
 		Body     string      `json:"body"`
 		DomainID int64       `json:"domain_id"`
+		SendID   string      `json:"send_id"`
 	}
 
 	SendTextResponse struct {

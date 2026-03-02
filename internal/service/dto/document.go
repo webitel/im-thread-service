@@ -22,7 +22,8 @@ type SendDocumentRequest struct {
 	From     shared.Peer
 	To       shared.Peer
 	Document DocumentRequest
-	DomainID int64 `json:"domain_id"`
+	DomainID int64  `json:"domain_id"`
+	SendID   string `json:"send_id"`
 }
 
 type SendDocumentResponse struct {
