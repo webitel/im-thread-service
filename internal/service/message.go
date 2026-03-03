@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"strconv"
 
+	"github.com/google/uuid"
 	imcontact "github.com/webitel/im-thread-service/infra/webitel/im-contact"
 	"github.com/webitel/im-thread-service/internal/domain/model"
 	"github.com/webitel/im-thread-service/internal/domain/shared"
@@ -18,6 +19,7 @@ type Messager interface {
 	SendText(ctx context.Context, in *dto.SendTextRequest) (*dto.SendTextResponse, error)
 	SendImage(ctx context.Context, in *dto.SendImageRequest) (*dto.SendImageResponse, error)
 	SendDocument(ctx context.Context, in *dto.SendDocumentRequest) (*dto.SendDocumentResponse, error)
+	Read(ctx context.Context, in *dto.ReadMessageRequest) error
 }
 
 type MessageService struct {
@@ -183,6 +185,39 @@ func (s *MessageService) SendDocument(ctx context.Context, in *dto.SendDocumentR
 	}
 
 	return &dto.SendDocumentResponse{ID: msg.ID, To: in.To}, nil
+}
+
+func (s *MessageService) Read(ctx context.Context, in *dto.ReadMessageRequest) error {
+	// 1. Validate basic constraints
+	if err := guards.ValidateReadMessage(in); err != nil {
+		return fmt.Errorf("validation: %w", err)
+	}
+
+	// 2. Parse string IDs to UUIDs
+	tID, _ := uuid.Parse(in.ThreadID)
+	mID, _ := uuid.Parse(in.MessageID)
+	uID, _ := uuid.Parse(in.UserID)
+
+	// 3. Execute logic
+	return s.uow.WithinTransaction(ctx, func(txCtx context.Context, uow store.UnitOfWork) error {
+		// Pass the anonymous struct as a single argument
+		err := uow.Messages().ReadMessage(txCtx, struct {
+			DomainID  int32
+			ThreadID  uuid.UUID
+			MessageID uuid.UUID
+			UserID    uuid.UUID
+		}{
+			DomainID:  in.DomainID,
+			ThreadID:  tID,
+			MessageID: mID,
+			UserID:    uID,
+		})
+		if err != nil {
+			return fmt.Errorf("read_message: %w", err)
+		}
+
+		return nil
+	})
 }
 
 // --- Internal Helpers ---

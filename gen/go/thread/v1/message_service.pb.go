@@ -21,6 +21,115 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+type ReadMessageRequest struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Id       string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	UserId   string `protobuf:"bytes,2,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	ThreadId string `protobuf:"bytes,3,opt,name=thread_id,json=threadId,proto3" json:"thread_id,omitempty"`
+	DomainId int32  `protobuf:"varint,4,opt,name=domain_id,json=domainId,proto3" json:"domain_id,omitempty"`
+}
+
+func (x *ReadMessageRequest) Reset() {
+	*x = ReadMessageRequest{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_service_thread_v1_message_service_proto_msgTypes[0]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *ReadMessageRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ReadMessageRequest) ProtoMessage() {}
+
+func (x *ReadMessageRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_service_thread_v1_message_service_proto_msgTypes[0]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ReadMessageRequest.ProtoReflect.Descriptor instead.
+func (*ReadMessageRequest) Descriptor() ([]byte, []int) {
+	return file_service_thread_v1_message_service_proto_rawDescGZIP(), []int{0}
+}
+
+func (x *ReadMessageRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *ReadMessageRequest) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
+}
+
+func (x *ReadMessageRequest) GetThreadId() string {
+	if x != nil {
+		return x.ThreadId
+	}
+	return ""
+}
+
+func (x *ReadMessageRequest) GetDomainId() int32 {
+	if x != nil {
+		return x.DomainId
+	}
+	return 0
+}
+
+type ReadMessageResponse struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+}
+
+func (x *ReadMessageResponse) Reset() {
+	*x = ReadMessageResponse{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_service_thread_v1_message_service_proto_msgTypes[1]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *ReadMessageResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ReadMessageResponse) ProtoMessage() {}
+
+func (x *ReadMessageResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_service_thread_v1_message_service_proto_msgTypes[1]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ReadMessageResponse.ProtoReflect.Descriptor instead.
+func (*ReadMessageResponse) Descriptor() ([]byte, []int) {
+	return file_service_thread_v1_message_service_proto_rawDescGZIP(), []int{1}
+}
+
 type SendTextRequest struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
@@ -36,7 +145,7 @@ type SendTextRequest struct {
 func (x *SendTextRequest) Reset() {
 	*x = SendTextRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_service_thread_v1_message_service_proto_msgTypes[0]
+		mi := &file_service_thread_v1_message_service_proto_msgTypes[2]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -49,7 +158,7 @@ func (x *SendTextRequest) String() string {
 func (*SendTextRequest) ProtoMessage() {}
 
 func (x *SendTextRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_service_thread_v1_message_service_proto_msgTypes[0]
+	mi := &file_service_thread_v1_message_service_proto_msgTypes[2]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -62,7 +171,7 @@ func (x *SendTextRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SendTextRequest.ProtoReflect.Descriptor instead.
 func (*SendTextRequest) Descriptor() ([]byte, []int) {
-	return file_service_thread_v1_message_service_proto_rawDescGZIP(), []int{0}
+	return file_service_thread_v1_message_service_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *SendTextRequest) GetFrom() *Peer {
@@ -113,7 +222,7 @@ type SendTextResponse struct {
 func (x *SendTextResponse) Reset() {
 	*x = SendTextResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_service_thread_v1_message_service_proto_msgTypes[1]
+		mi := &file_service_thread_v1_message_service_proto_msgTypes[3]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -126,7 +235,7 @@ func (x *SendTextResponse) String() string {
 func (*SendTextResponse) ProtoMessage() {}
 
 func (x *SendTextResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_service_thread_v1_message_service_proto_msgTypes[1]
+	mi := &file_service_thread_v1_message_service_proto_msgTypes[3]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -139,7 +248,7 @@ func (x *SendTextResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SendTextResponse.ProtoReflect.Descriptor instead.
 func (*SendTextResponse) Descriptor() ([]byte, []int) {
-	return file_service_thread_v1_message_service_proto_rawDescGZIP(), []int{1}
+	return file_service_thread_v1_message_service_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *SendTextResponse) GetTo() *Peer {
@@ -174,7 +283,7 @@ type DocumentInput struct {
 func (x *DocumentInput) Reset() {
 	*x = DocumentInput{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_service_thread_v1_message_service_proto_msgTypes[2]
+		mi := &file_service_thread_v1_message_service_proto_msgTypes[4]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -187,7 +296,7 @@ func (x *DocumentInput) String() string {
 func (*DocumentInput) ProtoMessage() {}
 
 func (x *DocumentInput) ProtoReflect() protoreflect.Message {
-	mi := &file_service_thread_v1_message_service_proto_msgTypes[2]
+	mi := &file_service_thread_v1_message_service_proto_msgTypes[4]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -200,7 +309,7 @@ func (x *DocumentInput) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DocumentInput.ProtoReflect.Descriptor instead.
 func (*DocumentInput) Descriptor() ([]byte, []int) {
-	return file_service_thread_v1_message_service_proto_rawDescGZIP(), []int{2}
+	return file_service_thread_v1_message_service_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *DocumentInput) GetId() string {
@@ -250,7 +359,7 @@ type DocumentRequest struct {
 func (x *DocumentRequest) Reset() {
 	*x = DocumentRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_service_thread_v1_message_service_proto_msgTypes[3]
+		mi := &file_service_thread_v1_message_service_proto_msgTypes[5]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -263,7 +372,7 @@ func (x *DocumentRequest) String() string {
 func (*DocumentRequest) ProtoMessage() {}
 
 func (x *DocumentRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_service_thread_v1_message_service_proto_msgTypes[3]
+	mi := &file_service_thread_v1_message_service_proto_msgTypes[5]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -276,7 +385,7 @@ func (x *DocumentRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DocumentRequest.ProtoReflect.Descriptor instead.
 func (*DocumentRequest) Descriptor() ([]byte, []int) {
-	return file_service_thread_v1_message_service_proto_rawDescGZIP(), []int{3}
+	return file_service_thread_v1_message_service_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *DocumentRequest) GetDocuments() []*DocumentInput {
@@ -309,7 +418,7 @@ type SendDocumentRequest struct {
 func (x *SendDocumentRequest) Reset() {
 	*x = SendDocumentRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_service_thread_v1_message_service_proto_msgTypes[4]
+		mi := &file_service_thread_v1_message_service_proto_msgTypes[6]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -322,7 +431,7 @@ func (x *SendDocumentRequest) String() string {
 func (*SendDocumentRequest) ProtoMessage() {}
 
 func (x *SendDocumentRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_service_thread_v1_message_service_proto_msgTypes[4]
+	mi := &file_service_thread_v1_message_service_proto_msgTypes[6]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -335,7 +444,7 @@ func (x *SendDocumentRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SendDocumentRequest.ProtoReflect.Descriptor instead.
 func (*SendDocumentRequest) Descriptor() ([]byte, []int) {
-	return file_service_thread_v1_message_service_proto_rawDescGZIP(), []int{4}
+	return file_service_thread_v1_message_service_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *SendDocumentRequest) GetFrom() *Peer {
@@ -386,7 +495,7 @@ type SendDocumentResponse struct {
 func (x *SendDocumentResponse) Reset() {
 	*x = SendDocumentResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_service_thread_v1_message_service_proto_msgTypes[5]
+		mi := &file_service_thread_v1_message_service_proto_msgTypes[7]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -399,7 +508,7 @@ func (x *SendDocumentResponse) String() string {
 func (*SendDocumentResponse) ProtoMessage() {}
 
 func (x *SendDocumentResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_service_thread_v1_message_service_proto_msgTypes[5]
+	mi := &file_service_thread_v1_message_service_proto_msgTypes[7]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -412,7 +521,7 @@ func (x *SendDocumentResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SendDocumentResponse.ProtoReflect.Descriptor instead.
 func (*SendDocumentResponse) Descriptor() ([]byte, []int) {
-	return file_service_thread_v1_message_service_proto_rawDescGZIP(), []int{5}
+	return file_service_thread_v1_message_service_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *SendDocumentResponse) GetTo() *Peer {
@@ -445,7 +554,7 @@ type ImageInput struct {
 func (x *ImageInput) Reset() {
 	*x = ImageInput{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_service_thread_v1_message_service_proto_msgTypes[6]
+		mi := &file_service_thread_v1_message_service_proto_msgTypes[8]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -458,7 +567,7 @@ func (x *ImageInput) String() string {
 func (*ImageInput) ProtoMessage() {}
 
 func (x *ImageInput) ProtoReflect() protoreflect.Message {
-	mi := &file_service_thread_v1_message_service_proto_msgTypes[6]
+	mi := &file_service_thread_v1_message_service_proto_msgTypes[8]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -471,7 +580,7 @@ func (x *ImageInput) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ImageInput.ProtoReflect.Descriptor instead.
 func (*ImageInput) Descriptor() ([]byte, []int) {
-	return file_service_thread_v1_message_service_proto_rawDescGZIP(), []int{6}
+	return file_service_thread_v1_message_service_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *ImageInput) GetId() string {
@@ -514,7 +623,7 @@ type ImageRequest struct {
 func (x *ImageRequest) Reset() {
 	*x = ImageRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_service_thread_v1_message_service_proto_msgTypes[7]
+		mi := &file_service_thread_v1_message_service_proto_msgTypes[9]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -527,7 +636,7 @@ func (x *ImageRequest) String() string {
 func (*ImageRequest) ProtoMessage() {}
 
 func (x *ImageRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_service_thread_v1_message_service_proto_msgTypes[7]
+	mi := &file_service_thread_v1_message_service_proto_msgTypes[9]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -540,7 +649,7 @@ func (x *ImageRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ImageRequest.ProtoReflect.Descriptor instead.
 func (*ImageRequest) Descriptor() ([]byte, []int) {
-	return file_service_thread_v1_message_service_proto_rawDescGZIP(), []int{7}
+	return file_service_thread_v1_message_service_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *ImageRequest) GetImages() []*ImageInput {
@@ -573,7 +682,7 @@ type SendImageRequest struct {
 func (x *SendImageRequest) Reset() {
 	*x = SendImageRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_service_thread_v1_message_service_proto_msgTypes[8]
+		mi := &file_service_thread_v1_message_service_proto_msgTypes[10]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -586,7 +695,7 @@ func (x *SendImageRequest) String() string {
 func (*SendImageRequest) ProtoMessage() {}
 
 func (x *SendImageRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_service_thread_v1_message_service_proto_msgTypes[8]
+	mi := &file_service_thread_v1_message_service_proto_msgTypes[10]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -599,7 +708,7 @@ func (x *SendImageRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SendImageRequest.ProtoReflect.Descriptor instead.
 func (*SendImageRequest) Descriptor() ([]byte, []int) {
-	return file_service_thread_v1_message_service_proto_rawDescGZIP(), []int{8}
+	return file_service_thread_v1_message_service_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *SendImageRequest) GetFrom() *Peer {
@@ -650,7 +759,7 @@ type SendImageResponse struct {
 func (x *SendImageResponse) Reset() {
 	*x = SendImageResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_service_thread_v1_message_service_proto_msgTypes[9]
+		mi := &file_service_thread_v1_message_service_proto_msgTypes[11]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -663,7 +772,7 @@ func (x *SendImageResponse) String() string {
 func (*SendImageResponse) ProtoMessage() {}
 
 func (x *SendImageResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_service_thread_v1_message_service_proto_msgTypes[9]
+	mi := &file_service_thread_v1_message_service_proto_msgTypes[11]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -676,7 +785,7 @@ func (x *SendImageResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SendImageResponse.ProtoReflect.Descriptor instead.
 func (*SendImageResponse) Descriptor() ([]byte, []int) {
-	return file_service_thread_v1_message_service_proto_rawDescGZIP(), []int{9}
+	return file_service_thread_v1_message_service_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *SendImageResponse) GetTo() *Peer {
@@ -704,7 +813,16 @@ var file_service_thread_v1_message_service_proto_rawDesc = []byte{
 	0x2f, 0x74, 0x68, 0x72, 0x65, 0x61, 0x64, 0x2f, 0x76, 0x31, 0x2f, 0x70, 0x65, 0x65, 0x72, 0x2e,
 	0x70, 0x72, 0x6f, 0x74, 0x6f, 0x1a, 0x1c, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x2f, 0x61, 0x70,
 	0x69, 0x2f, 0x61, 0x6e, 0x6e, 0x6f, 0x74, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x73, 0x2e, 0x70, 0x72,
-	0x6f, 0x74, 0x6f, 0x22, 0xc7, 0x01, 0x0a, 0x0f, 0x53, 0x65, 0x6e, 0x64, 0x54, 0x65, 0x78, 0x74,
+	0x6f, 0x74, 0x6f, 0x22, 0x77, 0x0a, 0x12, 0x52, 0x65, 0x61, 0x64, 0x4d, 0x65, 0x73, 0x73, 0x61,
+	0x67, 0x65, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x0e, 0x0a, 0x02, 0x69, 0x64, 0x18,
+	0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x02, 0x69, 0x64, 0x12, 0x17, 0x0a, 0x07, 0x75, 0x73, 0x65,
+	0x72, 0x5f, 0x69, 0x64, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x06, 0x75, 0x73, 0x65, 0x72,
+	0x49, 0x64, 0x12, 0x1b, 0x0a, 0x09, 0x74, 0x68, 0x72, 0x65, 0x61, 0x64, 0x5f, 0x69, 0x64, 0x18,
+	0x03, 0x20, 0x01, 0x28, 0x09, 0x52, 0x08, 0x74, 0x68, 0x72, 0x65, 0x61, 0x64, 0x49, 0x64, 0x12,
+	0x1b, 0x0a, 0x09, 0x64, 0x6f, 0x6d, 0x61, 0x69, 0x6e, 0x5f, 0x69, 0x64, 0x18, 0x04, 0x20, 0x01,
+	0x28, 0x05, 0x52, 0x08, 0x64, 0x6f, 0x6d, 0x61, 0x69, 0x6e, 0x49, 0x64, 0x22, 0x15, 0x0a, 0x13,
+	0x52, 0x65, 0x61, 0x64, 0x4d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x52, 0x65, 0x73, 0x70, 0x6f,
+	0x6e, 0x73, 0x65, 0x22, 0xc7, 0x01, 0x0a, 0x0f, 0x53, 0x65, 0x6e, 0x64, 0x54, 0x65, 0x78, 0x74,
 	0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x36, 0x0a, 0x04, 0x66, 0x72, 0x6f, 0x6d, 0x18,
 	0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x22, 0x2e, 0x77, 0x65, 0x62, 0x69, 0x74, 0x65, 0x6c, 0x2e,
 	0x69, 0x6d, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x2e, 0x74, 0x68, 0x72, 0x65, 0x61,
@@ -795,7 +913,7 @@ var file_service_thread_v1_message_service_proto_rawDesc = []byte{
 	0x65, 0x62, 0x69, 0x74, 0x65, 0x6c, 0x2e, 0x69, 0x6d, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x69, 0x63,
 	0x65, 0x2e, 0x74, 0x68, 0x72, 0x65, 0x61, 0x64, 0x2e, 0x76, 0x31, 0x2e, 0x50, 0x65, 0x65, 0x72,
 	0x52, 0x02, 0x74, 0x6f, 0x12, 0x0e, 0x0a, 0x02, 0x69, 0x64, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09,
-	0x52, 0x02, 0x69, 0x64, 0x32, 0xd2, 0x03, 0x0a, 0x07, 0x4d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65,
+	0x52, 0x02, 0x69, 0x64, 0x32, 0xe0, 0x04, 0x0a, 0x07, 0x4d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65,
 	0x12, 0x90, 0x01, 0x0a, 0x08, 0x53, 0x65, 0x6e, 0x64, 0x54, 0x65, 0x78, 0x74, 0x12, 0x2d, 0x2e,
 	0x77, 0x65, 0x62, 0x69, 0x74, 0x65, 0x6c, 0x2e, 0x69, 0x6d, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x69,
 	0x63, 0x65, 0x2e, 0x74, 0x68, 0x72, 0x65, 0x61, 0x64, 0x2e, 0x76, 0x31, 0x2e, 0x53, 0x65, 0x6e,
@@ -824,24 +942,33 @@ var file_service_thread_v1_message_service_proto_rawDesc = []byte{
 	0x53, 0x65, 0x6e, 0x64, 0x49, 0x6d, 0x61, 0x67, 0x65, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73,
 	0x65, 0x22, 0x26, 0x82, 0xd3, 0xe4, 0x93, 0x02, 0x20, 0x3a, 0x01, 0x2a, 0x22, 0x1b, 0x6d, 0x65,
 	0x73, 0x73, 0x61, 0x67, 0x69, 0x6e, 0x67, 0x2f, 0x76, 0x31, 0x2f, 0x6d, 0x65, 0x73, 0x73, 0x61,
-	0x67, 0x65, 0x73, 0x2f, 0x69, 0x6d, 0x61, 0x67, 0x65, 0x42, 0x82, 0x02, 0x0a, 0x20, 0x63, 0x6f,
-	0x6d, 0x2e, 0x77, 0x65, 0x62, 0x69, 0x74, 0x65, 0x6c, 0x2e, 0x69, 0x6d, 0x2e, 0x73, 0x65, 0x72,
-	0x76, 0x69, 0x63, 0x65, 0x2e, 0x74, 0x68, 0x72, 0x65, 0x61, 0x64, 0x2e, 0x76, 0x31, 0x42, 0x13,
-	0x4d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x53, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x50, 0x72,
-	0x6f, 0x74, 0x6f, 0x50, 0x01, 0x5a, 0x34, 0x67, 0x69, 0x74, 0x68, 0x75, 0x62, 0x2e, 0x63, 0x6f,
-	0x6d, 0x2f, 0x77, 0x65, 0x62, 0x69, 0x74, 0x65, 0x6c, 0x2f, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x73,
-	0x2f, 0x67, 0x65, 0x6e, 0x2f, 0x67, 0x6f, 0x2f, 0x69, 0x6d, 0x2f, 0x74, 0x68, 0x72, 0x65, 0x61,
-	0x64, 0x2f, 0x76, 0x31, 0x3b, 0x74, 0x68, 0x72, 0x65, 0x61, 0x64, 0xa2, 0x02, 0x04, 0x57, 0x49,
-	0x53, 0x54, 0xaa, 0x02, 0x1c, 0x57, 0x65, 0x62, 0x69, 0x74, 0x65, 0x6c, 0x2e, 0x49, 0x6d, 0x2e,
-	0x53, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x2e, 0x54, 0x68, 0x72, 0x65, 0x61, 0x64, 0x2e, 0x56,
-	0x31, 0xca, 0x02, 0x1c, 0x57, 0x65, 0x62, 0x69, 0x74, 0x65, 0x6c, 0x5c, 0x49, 0x6d, 0x5c, 0x53,
-	0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x5c, 0x54, 0x68, 0x72, 0x65, 0x61, 0x64, 0x5c, 0x56, 0x31,
-	0xe2, 0x02, 0x28, 0x57, 0x65, 0x62, 0x69, 0x74, 0x65, 0x6c, 0x5c, 0x49, 0x6d, 0x5c, 0x53, 0x65,
-	0x72, 0x76, 0x69, 0x63, 0x65, 0x5c, 0x54, 0x68, 0x72, 0x65, 0x61, 0x64, 0x5c, 0x56, 0x31, 0x5c,
-	0x47, 0x50, 0x42, 0x4d, 0x65, 0x74, 0x61, 0x64, 0x61, 0x74, 0x61, 0xea, 0x02, 0x20, 0x57, 0x65,
-	0x62, 0x69, 0x74, 0x65, 0x6c, 0x3a, 0x3a, 0x49, 0x6d, 0x3a, 0x3a, 0x53, 0x65, 0x72, 0x76, 0x69,
-	0x63, 0x65, 0x3a, 0x3a, 0x54, 0x68, 0x72, 0x65, 0x61, 0x64, 0x3a, 0x3a, 0x56, 0x31, 0x62, 0x06,
-	0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
+	0x67, 0x65, 0x73, 0x2f, 0x69, 0x6d, 0x61, 0x67, 0x65, 0x12, 0x8b, 0x01, 0x0a, 0x04, 0x52, 0x65,
+	0x61, 0x64, 0x12, 0x30, 0x2e, 0x77, 0x65, 0x62, 0x69, 0x74, 0x65, 0x6c, 0x2e, 0x69, 0x6d, 0x2e,
+	0x73, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x2e, 0x74, 0x68, 0x72, 0x65, 0x61, 0x64, 0x2e, 0x76,
+	0x31, 0x2e, 0x52, 0x65, 0x61, 0x64, 0x4d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x52, 0x65, 0x71,
+	0x75, 0x65, 0x73, 0x74, 0x1a, 0x31, 0x2e, 0x77, 0x65, 0x62, 0x69, 0x74, 0x65, 0x6c, 0x2e, 0x69,
+	0x6d, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x2e, 0x74, 0x68, 0x72, 0x65, 0x61, 0x64,
+	0x2e, 0x76, 0x31, 0x2e, 0x52, 0x65, 0x61, 0x64, 0x4d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x52,
+	0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22, 0x1e, 0x82, 0xd3, 0xe4, 0x93, 0x02, 0x18, 0x22,
+	0x16, 0x2f, 0x76, 0x31, 0x2f, 0x6d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x73, 0x2f, 0x7b, 0x69,
+	0x64, 0x7d, 0x2f, 0x72, 0x65, 0x61, 0x64, 0x42, 0x82, 0x02, 0x0a, 0x20, 0x63, 0x6f, 0x6d, 0x2e,
+	0x77, 0x65, 0x62, 0x69, 0x74, 0x65, 0x6c, 0x2e, 0x69, 0x6d, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x69,
+	0x63, 0x65, 0x2e, 0x74, 0x68, 0x72, 0x65, 0x61, 0x64, 0x2e, 0x76, 0x31, 0x42, 0x13, 0x4d, 0x65,
+	0x73, 0x73, 0x61, 0x67, 0x65, 0x53, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x50, 0x72, 0x6f, 0x74,
+	0x6f, 0x50, 0x01, 0x5a, 0x34, 0x67, 0x69, 0x74, 0x68, 0x75, 0x62, 0x2e, 0x63, 0x6f, 0x6d, 0x2f,
+	0x77, 0x65, 0x62, 0x69, 0x74, 0x65, 0x6c, 0x2f, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x73, 0x2f, 0x67,
+	0x65, 0x6e, 0x2f, 0x67, 0x6f, 0x2f, 0x69, 0x6d, 0x2f, 0x74, 0x68, 0x72, 0x65, 0x61, 0x64, 0x2f,
+	0x76, 0x31, 0x3b, 0x74, 0x68, 0x72, 0x65, 0x61, 0x64, 0xa2, 0x02, 0x04, 0x57, 0x49, 0x53, 0x54,
+	0xaa, 0x02, 0x1c, 0x57, 0x65, 0x62, 0x69, 0x74, 0x65, 0x6c, 0x2e, 0x49, 0x6d, 0x2e, 0x53, 0x65,
+	0x72, 0x76, 0x69, 0x63, 0x65, 0x2e, 0x54, 0x68, 0x72, 0x65, 0x61, 0x64, 0x2e, 0x56, 0x31, 0xca,
+	0x02, 0x1c, 0x57, 0x65, 0x62, 0x69, 0x74, 0x65, 0x6c, 0x5c, 0x49, 0x6d, 0x5c, 0x53, 0x65, 0x72,
+	0x76, 0x69, 0x63, 0x65, 0x5c, 0x54, 0x68, 0x72, 0x65, 0x61, 0x64, 0x5c, 0x56, 0x31, 0xe2, 0x02,
+	0x28, 0x57, 0x65, 0x62, 0x69, 0x74, 0x65, 0x6c, 0x5c, 0x49, 0x6d, 0x5c, 0x53, 0x65, 0x72, 0x76,
+	0x69, 0x63, 0x65, 0x5c, 0x54, 0x68, 0x72, 0x65, 0x61, 0x64, 0x5c, 0x56, 0x31, 0x5c, 0x47, 0x50,
+	0x42, 0x4d, 0x65, 0x74, 0x61, 0x64, 0x61, 0x74, 0x61, 0xea, 0x02, 0x20, 0x57, 0x65, 0x62, 0x69,
+	0x74, 0x65, 0x6c, 0x3a, 0x3a, 0x49, 0x6d, 0x3a, 0x3a, 0x53, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65,
+	0x3a, 0x3a, 0x54, 0x68, 0x72, 0x65, 0x61, 0x64, 0x3a, 0x3a, 0x56, 0x31, 0x62, 0x06, 0x70, 0x72,
+	0x6f, 0x74, 0x6f, 0x33,
 }
 
 var (
@@ -856,42 +983,46 @@ func file_service_thread_v1_message_service_proto_rawDescGZIP() []byte {
 	return file_service_thread_v1_message_service_proto_rawDescData
 }
 
-var file_service_thread_v1_message_service_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
+var file_service_thread_v1_message_service_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
 var file_service_thread_v1_message_service_proto_goTypes = []interface{}{
-	(*SendTextRequest)(nil),      // 0: webitel.im.service.thread.v1.SendTextRequest
-	(*SendTextResponse)(nil),     // 1: webitel.im.service.thread.v1.SendTextResponse
-	(*DocumentInput)(nil),        // 2: webitel.im.service.thread.v1.DocumentInput
-	(*DocumentRequest)(nil),      // 3: webitel.im.service.thread.v1.DocumentRequest
-	(*SendDocumentRequest)(nil),  // 4: webitel.im.service.thread.v1.SendDocumentRequest
-	(*SendDocumentResponse)(nil), // 5: webitel.im.service.thread.v1.SendDocumentResponse
-	(*ImageInput)(nil),           // 6: webitel.im.service.thread.v1.ImageInput
-	(*ImageRequest)(nil),         // 7: webitel.im.service.thread.v1.ImageRequest
-	(*SendImageRequest)(nil),     // 8: webitel.im.service.thread.v1.SendImageRequest
-	(*SendImageResponse)(nil),    // 9: webitel.im.service.thread.v1.SendImageResponse
-	(*Peer)(nil),                 // 10: webitel.im.service.thread.v1.Peer
+	(*ReadMessageRequest)(nil),   // 0: webitel.im.service.thread.v1.ReadMessageRequest
+	(*ReadMessageResponse)(nil),  // 1: webitel.im.service.thread.v1.ReadMessageResponse
+	(*SendTextRequest)(nil),      // 2: webitel.im.service.thread.v1.SendTextRequest
+	(*SendTextResponse)(nil),     // 3: webitel.im.service.thread.v1.SendTextResponse
+	(*DocumentInput)(nil),        // 4: webitel.im.service.thread.v1.DocumentInput
+	(*DocumentRequest)(nil),      // 5: webitel.im.service.thread.v1.DocumentRequest
+	(*SendDocumentRequest)(nil),  // 6: webitel.im.service.thread.v1.SendDocumentRequest
+	(*SendDocumentResponse)(nil), // 7: webitel.im.service.thread.v1.SendDocumentResponse
+	(*ImageInput)(nil),           // 8: webitel.im.service.thread.v1.ImageInput
+	(*ImageRequest)(nil),         // 9: webitel.im.service.thread.v1.ImageRequest
+	(*SendImageRequest)(nil),     // 10: webitel.im.service.thread.v1.SendImageRequest
+	(*SendImageResponse)(nil),    // 11: webitel.im.service.thread.v1.SendImageResponse
+	(*Peer)(nil),                 // 12: webitel.im.service.thread.v1.Peer
 }
 var file_service_thread_v1_message_service_proto_depIdxs = []int32{
-	10, // 0: webitel.im.service.thread.v1.SendTextRequest.from:type_name -> webitel.im.service.thread.v1.Peer
-	10, // 1: webitel.im.service.thread.v1.SendTextRequest.to:type_name -> webitel.im.service.thread.v1.Peer
-	10, // 2: webitel.im.service.thread.v1.SendTextResponse.to:type_name -> webitel.im.service.thread.v1.Peer
-	2,  // 3: webitel.im.service.thread.v1.DocumentRequest.documents:type_name -> webitel.im.service.thread.v1.DocumentInput
-	10, // 4: webitel.im.service.thread.v1.SendDocumentRequest.from:type_name -> webitel.im.service.thread.v1.Peer
-	10, // 5: webitel.im.service.thread.v1.SendDocumentRequest.to:type_name -> webitel.im.service.thread.v1.Peer
-	3,  // 6: webitel.im.service.thread.v1.SendDocumentRequest.document:type_name -> webitel.im.service.thread.v1.DocumentRequest
-	10, // 7: webitel.im.service.thread.v1.SendDocumentResponse.to:type_name -> webitel.im.service.thread.v1.Peer
-	6,  // 8: webitel.im.service.thread.v1.ImageRequest.images:type_name -> webitel.im.service.thread.v1.ImageInput
-	10, // 9: webitel.im.service.thread.v1.SendImageRequest.from:type_name -> webitel.im.service.thread.v1.Peer
-	10, // 10: webitel.im.service.thread.v1.SendImageRequest.to:type_name -> webitel.im.service.thread.v1.Peer
-	7,  // 11: webitel.im.service.thread.v1.SendImageRequest.image:type_name -> webitel.im.service.thread.v1.ImageRequest
-	10, // 12: webitel.im.service.thread.v1.SendImageResponse.to:type_name -> webitel.im.service.thread.v1.Peer
-	0,  // 13: webitel.im.service.thread.v1.Message.SendText:input_type -> webitel.im.service.thread.v1.SendTextRequest
-	4,  // 14: webitel.im.service.thread.v1.Message.SendDocument:input_type -> webitel.im.service.thread.v1.SendDocumentRequest
-	8,  // 15: webitel.im.service.thread.v1.Message.SendImage:input_type -> webitel.im.service.thread.v1.SendImageRequest
-	1,  // 16: webitel.im.service.thread.v1.Message.SendText:output_type -> webitel.im.service.thread.v1.SendTextResponse
-	5,  // 17: webitel.im.service.thread.v1.Message.SendDocument:output_type -> webitel.im.service.thread.v1.SendDocumentResponse
-	9,  // 18: webitel.im.service.thread.v1.Message.SendImage:output_type -> webitel.im.service.thread.v1.SendImageResponse
-	16, // [16:19] is the sub-list for method output_type
-	13, // [13:16] is the sub-list for method input_type
+	12, // 0: webitel.im.service.thread.v1.SendTextRequest.from:type_name -> webitel.im.service.thread.v1.Peer
+	12, // 1: webitel.im.service.thread.v1.SendTextRequest.to:type_name -> webitel.im.service.thread.v1.Peer
+	12, // 2: webitel.im.service.thread.v1.SendTextResponse.to:type_name -> webitel.im.service.thread.v1.Peer
+	4,  // 3: webitel.im.service.thread.v1.DocumentRequest.documents:type_name -> webitel.im.service.thread.v1.DocumentInput
+	12, // 4: webitel.im.service.thread.v1.SendDocumentRequest.from:type_name -> webitel.im.service.thread.v1.Peer
+	12, // 5: webitel.im.service.thread.v1.SendDocumentRequest.to:type_name -> webitel.im.service.thread.v1.Peer
+	5,  // 6: webitel.im.service.thread.v1.SendDocumentRequest.document:type_name -> webitel.im.service.thread.v1.DocumentRequest
+	12, // 7: webitel.im.service.thread.v1.SendDocumentResponse.to:type_name -> webitel.im.service.thread.v1.Peer
+	8,  // 8: webitel.im.service.thread.v1.ImageRequest.images:type_name -> webitel.im.service.thread.v1.ImageInput
+	12, // 9: webitel.im.service.thread.v1.SendImageRequest.from:type_name -> webitel.im.service.thread.v1.Peer
+	12, // 10: webitel.im.service.thread.v1.SendImageRequest.to:type_name -> webitel.im.service.thread.v1.Peer
+	9,  // 11: webitel.im.service.thread.v1.SendImageRequest.image:type_name -> webitel.im.service.thread.v1.ImageRequest
+	12, // 12: webitel.im.service.thread.v1.SendImageResponse.to:type_name -> webitel.im.service.thread.v1.Peer
+	2,  // 13: webitel.im.service.thread.v1.Message.SendText:input_type -> webitel.im.service.thread.v1.SendTextRequest
+	6,  // 14: webitel.im.service.thread.v1.Message.SendDocument:input_type -> webitel.im.service.thread.v1.SendDocumentRequest
+	10, // 15: webitel.im.service.thread.v1.Message.SendImage:input_type -> webitel.im.service.thread.v1.SendImageRequest
+	0,  // 16: webitel.im.service.thread.v1.Message.Read:input_type -> webitel.im.service.thread.v1.ReadMessageRequest
+	3,  // 17: webitel.im.service.thread.v1.Message.SendText:output_type -> webitel.im.service.thread.v1.SendTextResponse
+	7,  // 18: webitel.im.service.thread.v1.Message.SendDocument:output_type -> webitel.im.service.thread.v1.SendDocumentResponse
+	11, // 19: webitel.im.service.thread.v1.Message.SendImage:output_type -> webitel.im.service.thread.v1.SendImageResponse
+	1,  // 20: webitel.im.service.thread.v1.Message.Read:output_type -> webitel.im.service.thread.v1.ReadMessageResponse
+	17, // [17:21] is the sub-list for method output_type
+	13, // [13:17] is the sub-list for method input_type
 	13, // [13:13] is the sub-list for extension type_name
 	13, // [13:13] is the sub-list for extension extendee
 	0,  // [0:13] is the sub-list for field type_name
@@ -905,7 +1036,7 @@ func file_service_thread_v1_message_service_proto_init() {
 	file_service_thread_v1_peer_proto_init()
 	if !protoimpl.UnsafeEnabled {
 		file_service_thread_v1_message_service_proto_msgTypes[0].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*SendTextRequest); i {
+			switch v := v.(*ReadMessageRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -917,7 +1048,7 @@ func file_service_thread_v1_message_service_proto_init() {
 			}
 		}
 		file_service_thread_v1_message_service_proto_msgTypes[1].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*SendTextResponse); i {
+			switch v := v.(*ReadMessageResponse); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -929,7 +1060,7 @@ func file_service_thread_v1_message_service_proto_init() {
 			}
 		}
 		file_service_thread_v1_message_service_proto_msgTypes[2].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*DocumentInput); i {
+			switch v := v.(*SendTextRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -941,7 +1072,7 @@ func file_service_thread_v1_message_service_proto_init() {
 			}
 		}
 		file_service_thread_v1_message_service_proto_msgTypes[3].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*DocumentRequest); i {
+			switch v := v.(*SendTextResponse); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -953,7 +1084,7 @@ func file_service_thread_v1_message_service_proto_init() {
 			}
 		}
 		file_service_thread_v1_message_service_proto_msgTypes[4].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*SendDocumentRequest); i {
+			switch v := v.(*DocumentInput); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -965,7 +1096,7 @@ func file_service_thread_v1_message_service_proto_init() {
 			}
 		}
 		file_service_thread_v1_message_service_proto_msgTypes[5].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*SendDocumentResponse); i {
+			switch v := v.(*DocumentRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -977,7 +1108,7 @@ func file_service_thread_v1_message_service_proto_init() {
 			}
 		}
 		file_service_thread_v1_message_service_proto_msgTypes[6].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*ImageInput); i {
+			switch v := v.(*SendDocumentRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -989,7 +1120,7 @@ func file_service_thread_v1_message_service_proto_init() {
 			}
 		}
 		file_service_thread_v1_message_service_proto_msgTypes[7].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*ImageRequest); i {
+			switch v := v.(*SendDocumentResponse); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -1001,7 +1132,7 @@ func file_service_thread_v1_message_service_proto_init() {
 			}
 		}
 		file_service_thread_v1_message_service_proto_msgTypes[8].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*SendImageRequest); i {
+			switch v := v.(*ImageInput); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -1013,6 +1144,30 @@ func file_service_thread_v1_message_service_proto_init() {
 			}
 		}
 		file_service_thread_v1_message_service_proto_msgTypes[9].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*ImageRequest); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_service_thread_v1_message_service_proto_msgTypes[10].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*SendImageRequest); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_service_thread_v1_message_service_proto_msgTypes[11].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*SendImageResponse); i {
 			case 0:
 				return &v.state
@@ -1025,14 +1180,14 @@ func file_service_thread_v1_message_service_proto_init() {
 			}
 		}
 	}
-	file_service_thread_v1_message_service_proto_msgTypes[2].OneofWrappers = []interface{}{}
+	file_service_thread_v1_message_service_proto_msgTypes[4].OneofWrappers = []interface{}{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: file_service_thread_v1_message_service_proto_rawDesc,
 			NumEnums:      0,
-			NumMessages:   10,
+			NumMessages:   12,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

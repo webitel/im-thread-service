@@ -9,7 +9,7 @@ import (
 	"github.com/webitel/im-thread-service/internal/service"
 )
 
-var _ impb.MessageServer = &MessageService{}
+var _ impb.MessageServer = (*MessageService)(nil)
 
 type MessageService struct {
 	impb.UnimplementedMessageServer
@@ -48,6 +48,16 @@ func (m *MessageService) SendDocument(ctx context.Context, in *impb.SendDocument
 	}
 
 	return mapper.MapToSendDocumentResponse(out), nil
+}
+
+func (m *MessageService) Read(ctx context.Context, in *impb.ReadMessageRequest) (*impb.ReadMessageResponse, error) {
+	err := m.handler.Read(ctx, mapper.MapToReadMessageRequest(in))
+	if err != nil {
+		m.logger.Error("failed to read message", "error", err)
+		return nil, err
+	}
+
+	return &impb.ReadMessageResponse{}, nil
 }
 
 func NewMessageService(logger *slog.Logger, handler service.Messager) *MessageService {

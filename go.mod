@@ -25,6 +25,7 @@ require (
 	github.com/webitel/webitel-go-kit/infra/discovery v0.0.0-20260202112708-f7b4e7cc68eb
 	github.com/webitel/webitel-go-kit/infra/otel v0.0.0-20251224105820-8d9bcb902593
 	github.com/webitel/webitel-go-kit/infra/transport v0.0.0-20260120140602-6f20efe1524e
+	github.com/webitel/webitel-go-kit/pkg/errors v0.0.0-20251222125635-d60448d23a82
 	github.com/webitel/webitel-go-kit/pkg/interceptors v0.0.0-20251224105820-8d9bcb902593
 	go.opentelemetry.io/contrib/bridges/otelslog v0.14.0
 	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.64.0
@@ -86,7 +87,6 @@ require (
 	github.com/stoewer/go-strcase v1.3.1 // indirect
 	github.com/tklauser/go-sysconf v0.3.12 // indirect
 	github.com/tklauser/numcpus v0.6.1 // indirect
-	github.com/webitel/webitel-go-kit/pkg/errors v0.0.0-20251222125635-d60448d23a82 // indirect
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.60.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploggrpc v0.12.2 // indirect

@@ -24,6 +24,12 @@ type (
 		// [ATTACHMENTS] Persistence
 		SaveImages(ctx context.Context, messageID uuid.UUID, images []*model.MessageImage) ([]*model.MessageImage, error)
 		SaveDocuments(ctx context.Context, messageID uuid.UUID, docs []*model.MessageDocument) ([]*model.MessageDocument, error)
+		ReadMessage(ctx context.Context, read struct {
+			DomainID  int32
+			ThreadID  uuid.UUID
+			MessageID uuid.UUID
+			UserID    uuid.UUID
+		}) error
 	}
 
 	OutboxStore interface {
@@ -50,9 +56,9 @@ type (
 		Create(ctx context.Context, setting *model.DirectThreadSetting) (*model.DirectThreadSetting, error)
 		Search(ctx context.Context, query queryobject.QueryObject) ([]*model.DirectThreadSetting, error)
 
-		//NOT IMPLEMENTED!
+		// NOT IMPLEMENTED!
 		Update(ctx context.Context) ([]*model.DirectThreadSetting, error)
-		//NOT IMPLEMENTED!
+		// NOT IMPLEMENTED!
 		Delete(ctx context.Context) error
 	}
 

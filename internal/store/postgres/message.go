@@ -2,10 +2,12 @@ package postgres
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/webitel/im-thread-service/internal/domain/model"
 	"github.com/webitel/im-thread-service/internal/store"
 )
@@ -43,12 +45,12 @@ func (m *messageStore) SaveMessage(ctx context.Context, msg *model.Message) (*mo
 	`
 
 	args := pgx.NamedArgs{
-		"DomainID":   msg.DomainID,
-		"ThreadID":   msg.ThreadID,
-		"SenderID":   msg.From.ID,
-		"Type":       msg.Type,
-		"Body":       msg.Text,
-		"Metadata":   msg.Metadata,
+		"DomainID": msg.DomainID,
+		"ThreadID": msg.ThreadID,
+		"SenderID": msg.From.ID,
+		"Type":     msg.Type,
+		"Body":     msg.Text,
+		"Metadata": msg.Metadata,
 	}
 
 	rows, err := m.q.Query(ctx, query, args)
@@ -210,4 +212,41 @@ func (m *messageStore) SaveDocuments(ctx context.Context, messageID uuid.UUID, d
 	}
 
 	return savedDocuments, nil
+}
+
+// ReadMessage marks a message as read.
+// It uses ON CONFLICT DO NOTHING to handle idempotent calls.
+func (m *messageStore) ReadMessage(ctx context.Context, read struct {
+	DomainID  int32
+	ThreadID  uuid.UUID
+	MessageID uuid.UUID
+	UserID    uuid.UUID
+},
+) error {
+	const query = `
+		INSERT INTO im_message.message_reads (domain_id, thread_id, message_id, user_id)
+		VALUES (@DomainID, @ThreadID, @MessageID, @UserID)
+		ON CONFLICT (message_id, user_id) DO NOTHING;
+	`
+
+	args := pgx.NamedArgs{
+		"DomainID":  read.DomainID,
+		"MessageID": read.MessageID,
+		"ThreadID":  read.ThreadID,
+		"UserID":    read.UserID,
+	}
+
+	_, err := m.q.Exec(ctx, query, args)
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) {
+			// 23503 is the PostgreSQL code for foreign_key_violation
+			if pgErr.Code == "23503" {
+				return fmt.Errorf("read_message: message or thread not found: %w", err)
+			}
+		}
+		return fmt.Errorf("read_message: failed to execute insert: %w", err)
+	}
+
+	return nil
 }
