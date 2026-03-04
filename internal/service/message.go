@@ -9,7 +9,6 @@ import (
 	"github.com/google/uuid"
 	imcontact "github.com/webitel/im-thread-service/infra/webitel/im-contact"
 	"github.com/webitel/im-thread-service/internal/domain/model"
-	"github.com/webitel/im-thread-service/internal/domain/shared"
 	"github.com/webitel/im-thread-service/internal/service/dto"
 	guards "github.com/webitel/im-thread-service/internal/service/guards"
 	"github.com/webitel/im-thread-service/internal/store"
@@ -69,7 +68,7 @@ func (s *MessageService) SendText(ctx context.Context, in *dto.SendTextRequest) 
 		ThreadID:   t.ID,
 		DomainID:   int32(in.DomainID),
 		From:       in.From,
-		Recipients: []shared.Peer{{ID: in.To.ID, Type: in.To.Type}},
+		Recipients: t.Members,
 		Body:       in.Body,
 		SendID:     in.SendID,
 	})
@@ -110,7 +109,7 @@ func (s *MessageService) SendImage(ctx context.Context, in *dto.SendImageRequest
 		ThreadID:   t.ID,
 		DomainID:   int32(in.DomainID),
 		From:       in.From,
-		Recipients: []shared.Peer{{ID: in.To.ID, Type: in.To.Type}},
+		Recipients: t.Members,
 		Body:       in.Image.Body,
 		SendID:     in.SendID,
 		Images:     s.mapImageInputs(in.Image.Images),
@@ -163,7 +162,7 @@ func (s *MessageService) SendDocument(ctx context.Context, in *dto.SendDocumentR
 		ThreadID:   t.ID,
 		DomainID:   int32(in.DomainID),
 		From:       in.From,
-		Recipients: []shared.Peer{{ID: in.To.ID, Type: in.To.Type}},
+		Recipients: t.Members,
 		Body:       in.Document.Body,
 		SendID:     in.SendID,
 		Documents:  s.mapDocumentInputs(in.Document.Documents),
