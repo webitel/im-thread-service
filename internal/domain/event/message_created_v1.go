@@ -62,7 +62,7 @@ type MessageCreated struct {
 	ThreadID   uuid.UUID         `json:"thread_id"`
 	DomainID   int32             `json:"domain_id"`
 	From       *shared.Peer      `json:"from"`
-	To         *shared.Peer      `json:"to"`
+	To    uuid.UUIDs        `json:"to"`
 	SendID     string            `json:"send_id"`
 	Body       string            `json:"body"`
 	Type       int16             `json:"type"` // 1:TEXT, 2:FILE, 3:IMAGE, 4:SYSTEM
@@ -74,7 +74,7 @@ type MessageCreated struct {
 // [OUTBOXER_IMPLEMENTATION]
 func (MessageCreated) EventType() string        { return MessageCreatedEvent }
 func (m MessageCreated) Version() string        { return MessageVersionV1 }
-func (m MessageCreated) RecipientID() uuid.UUID { return m.To.ID }
+func (m MessageCreated) RecipientID() uuid.UUID { return m.ThreadID }
 func (m MessageCreated) ToOutbox() (OutboxEvent, error) {
 	return m.serialize(m, m.Version())
 }
@@ -92,7 +92,7 @@ type MessageCreatedV2 struct {
 // [OUTBOXER_IMPLEMENTATION]
 func (MessageCreatedV2) EventType() string        { return MessageCreatedEvent }
 func (m MessageCreatedV2) Version() string        { return MessageVersionV2 }
-func (m MessageCreatedV2) RecipientID() uuid.UUID { return m.To.ID }
+func (m MessageCreatedV2) RecipientID() uuid.UUID { return m.ThreadID }
 func (m MessageCreatedV2) ToOutbox() (OutboxEvent, error) {
 	return m.serialize(m, m.Version())
 }

@@ -92,7 +92,8 @@ func (t *thread) Search(ctx context.Context, searchRequest *dto.SearchThreadRequ
 // If any error occurs during the transaction, it rolls back all operations and returns the error.
 func (t *thread) EnsureDirectThread(ctx context.Context, req *dto.EnsureDirectThreadRequest) (*dto.EnsureDirectThreadResponse, error) {
 	if indirect := t.indirectThreadContext(req); indirect != nil {
-		if isMember, err := t.uow.ThreadDialogStore().IsThreadMember(ctx, indirect.ID, req.PeerFrom.ID, indirect.DomainID); err != nil || !isMember {
+		threadMd, err := t.uow.ThreadDialogStore().ThreadMembers(ctx, indirect.ID, req.PeerFrom.ID, indirect.DomainID)
+		if err != nil || len(threadMd.Members) == 0 {
 			t.logger.ErrorContext(
 				ctx,
 				"sender is not part of thread or internal DB error",
@@ -100,11 +101,13 @@ func (t *thread) EnsureDirectThread(ctx context.Context, req *dto.EnsureDirectTh
 				slog.String("thread_id", indirect.ID.String()),
 				slog.String("member_id", req.PeerFrom.ID.String()),
 				slog.Any("err", err),
-				slog.Bool("is_member", isMember),
 			)			
 
 			return nil, errors.Wrap(notThreadMemberError, errors.WithValue("err", err))
-		}
+		} 
+
+		indirect.Members = threadMd.Members
+
 		return indirect, nil
 	} 
 	
@@ -120,7 +123,11 @@ func (t *thread) EnsureDirectThread(ctx context.Context, req *dto.EnsureDirectTh
 
 	// SUCCESSFULLY FOUND!
 	if directThread != nil {
-		return dto.NewEnsureDirectThreadResponse(directThread.ID, int32(directThread.DomainID)), nil
+		return dto.NewEnsureDirectThreadResponse(
+			directThread.ID,
+			int32(directThread.DomainID),
+			[]uuid.UUID{req.PeerFrom.ID, req.PeerTo.ID},
+		), nil
 	}
 
 	// IF NOT FOUND WE NEED TO CREATE NEW THREAD AND TWO NEW THREAD DIALOG FOR PEERS WITHIN ONE TRANSACTION!
@@ -143,7 +150,7 @@ func (t *thread) EnsureDirectThread(ctx context.Context, req *dto.EnsureDirectTh
 		return nil, err
 	}
 
-	return dto.NewEnsureDirectThreadResponse(directThread.ID, int32(directThread.DomainID)), nil
+	return dto.NewEnsureDirectThreadResponse(directThread.ID, int32(directThread.DomainID), []uuid.UUID{req.PeerFrom.ID, req.PeerTo.ID},), nil
 }
 
 // searchDirectThread resolves a direct thread by peers. If the thread is found, it returns the thread id.

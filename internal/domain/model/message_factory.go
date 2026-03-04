@@ -29,11 +29,11 @@ type MessageCreate struct {
 	ThreadID   uuid.UUID
 	DomainID   int32
 	From       shared.Peer
-	Recipients []shared.Peer
+	Recipients uuid.UUIDs
 	Body       string
 	SendID     string          // Used for client-side correlation in RabbitMQ events.
 	Images     []ImageInput    // Data for image attachments.
-	Documents  []DocumentInput // Data for file attachments.
+	Documents  []DocumentInput // Data for file attachments.	
 }
 
 // NewTextMessage initializes a standard text message and stages events for all recipients.
@@ -44,7 +44,7 @@ func NewTextMessage(in MessageCreate) *Message {
 		ThreadID:  in.ThreadID,
 		DomainID:  in.DomainID,
 		From:      in.From,
-		To:        in.Recipients[0],
+		To:        in.Recipients,
 		Text:      cleanText,
 		Type:      MessageTypeText,
 		Metadata:  buildMetadata(cleanText),
@@ -74,7 +74,7 @@ func NewImageMessage(in MessageCreate) *Message {
 		ThreadID:  in.ThreadID,
 		DomainID:  in.DomainID,
 		From:      in.From,
-		To:        in.Recipients[0],
+		To:        in.Recipients,
 		Text:      cleanText,
 		Type:      MessageTypeImage,
 		Images:    domainImages,
@@ -105,7 +105,7 @@ func NewDocumentMessage(in MessageCreate) *Message {
 		ThreadID:  in.ThreadID,
 		DomainID:  in.DomainID,
 		From:      in.From,
-		To:        in.Recipients[0],
+		To:        in.Recipients,
 		Text:      cleanText,
 		Type:      MessageTypeFile,
 		Documents: domainDocs,
@@ -122,29 +122,25 @@ func NewDocumentMessage(in MessageCreate) *Message {
 // addCreatedEvents is a private helper to avoid code duplication across factories.
 // It maps the domain message state to a set of transport-ready events.
 func addCreatedEvents(msg *Message, in MessageCreate) {
-	for _, to := range in.Recipients {
-		ev := event.MessageCreated{
-			MessageID:  msg.ID,
-			ThreadID:   msg.ThreadID,
-			DomainID:   msg.DomainID,
-			SendID:     in.SendID, // Passed through only to the event
-			From:       &shared.Peer{ID: msg.From.ID, Type: msg.From.Type},
-			To:         &shared.Peer{ID: to.ID, Type: to.Type},
-			Body:       msg.Text,
-			Type:       int16(msg.Type),
-			OccurredAt: msg.CreatedAt,
-		}
-
-		// Attach media payloads if present
-		if len(msg.Images) > 0 {
-			ev.Images = mapImagesToPayload(msg.Images)
-		}
-		if len(msg.Documents) > 0 {
-			ev.Documents = mapDocumentsToPayload(msg.Documents)
-		}
-
-		msg.AddEvent(ev)
+	ev := event.MessageCreated{
+		MessageID:  msg.ID,
+		ThreadID:   msg.ThreadID,
+		DomainID:   msg.DomainID,
+		SendID:     in.SendID, // Passed through only to the event
+		From:       &shared.Peer{ID: msg.From.ID, Type: msg.From.Type},
+		To:         in.Recipients,
+		Body:       msg.Text,
+		Type:       int16(msg.Type),
+		OccurredAt: msg.CreatedAt,
 	}
+	// Attach media payloads if present
+	if len(msg.Images) > 0 {
+		ev.Images = mapImagesToPayload(msg.Images)
+	}
+	if len(msg.Documents) > 0 {
+		ev.Documents = mapDocumentsToPayload(msg.Documents)
+	}
+	msg.AddEvent(ev)
 }
 
 func mapImagesToPayload(imgs []*MessageImage) []event.ImagePayload {

@@ -55,25 +55,39 @@ func (t *threadDialogStore) Resolve(ctx context.Context, search *dto.SearchThrea
 	return resolvedId, nil
 }
 
-func (t *threadDialogStore) IsThreadMember(ctx context.Context, threadID, memberID uuid.UUID, domainID int32) (bool, error) {
+func (t *threadDialogStore) ThreadMembers(ctx context.Context, threadID, memberID uuid.UUID, domainID int32) (*dto.ThreadMembersResponse, error) {
 	query := `
-		select exists (
-			select 1
-			from im_thread.thread_dialog td
-			where td.domain_id = @DomainID
-			and (td.thread_id, td.member_id) = (@ThreadID, @MemberID)
+		with thread_members as (
+			select array_agg(member_id) as ids
+			from (
+				select distinct td.member_id
+				from im_thread.thread_dialog td
+				where (td.domain_id, td.thread_id) = (@DomainID, @ThreadID)
+			)
 		)
+		select
+			ids as members
+		from thread_members
+		where @MemberID = any(ids);
 	`
+	
 	args := pgx.NamedArgs{
 		"DomainID": domainID,
 		"ThreadID": threadID,
 		"MemberID": memberID,
 	}
 
-	var isMember bool
-	err := t.db.QueryRow(ctx, query, args).Scan(&isMember)
+	rows, err := t.db.Query(ctx, query, args)
+	if err != nil {
+		return nil, err
+	}
+
+	members, err := pgx.CollectExactlyOneRow(rows, pgx.RowToAddrOfStructByNameLax[dto.ThreadMembersResponse])
+	if err != nil {
+		return nil, err
+	}
 	
-	return isMember, err
+	return members, nil
 }
 
 // CreateDirectPair creates two new thread dialogs for peers within one transaction.

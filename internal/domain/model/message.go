@@ -23,7 +23,7 @@ type Message struct {
 	ThreadID  uuid.UUID      `json:"thread_id" db:"thread_id"`
 	DomainID  int32          `json:"domain_id" db:"domain_id"`
 	From      shared.Peer    `json:"from" db:"from"`
-	To        shared.Peer    `json:"to" db:"to"`
+	To        uuid.UUIDs    `json:"to" db:"to"`
 	Text      string         `json:"text" db:"body"`
 	Type      MessageType    `json:"type" db:"type"`
 	Metadata  map[string]any `json:"metadata,omitempty" db:"metadata"`

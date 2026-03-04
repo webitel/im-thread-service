@@ -17,6 +17,7 @@ type (
 	EnsureDirectThreadResponse struct {
 		ID uuid.UUID
 		DomainID int32
+		Members uuid.UUIDs
 	}
 
 	SearchThreadDialogRequest struct {
@@ -48,12 +49,17 @@ type (
 		Sort      string
 		Page      int
 	}
+
+	ThreadMembersResponse struct {
+		Members uuid.UUIDs `db:"members"`
+	}
 )
 
-func NewEnsureDirectThreadResponse(id uuid.UUID, domainID int32) *EnsureDirectThreadResponse {
+func NewEnsureDirectThreadResponse(id uuid.UUID, domainID int32, members uuid.UUIDs) *EnsureDirectThreadResponse {
 	return &EnsureDirectThreadResponse{
 		ID:       id,
 		DomainID: domainID,
+		Members: members,
 	}
 }
 
