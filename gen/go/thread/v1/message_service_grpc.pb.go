@@ -19,10 +19,12 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	Message_SendText_FullMethodName     = "/webitel.im.service.thread.v1.Message/SendText"
-	Message_SendDocument_FullMethodName = "/webitel.im.service.thread.v1.Message/SendDocument"
-	Message_SendImage_FullMethodName    = "/webitel.im.service.thread.v1.Message/SendImage"
-	Message_Read_FullMethodName         = "/webitel.im.service.thread.v1.Message/Read"
+	Message_SendText_FullMethodName                = "/webitel.im.service.thread.v1.Message/SendText"
+	Message_SendDocument_FullMethodName            = "/webitel.im.service.thread.v1.Message/SendDocument"
+	Message_SendImage_FullMethodName               = "/webitel.im.service.thread.v1.Message/SendImage"
+	Message_Read_FullMethodName                    = "/webitel.im.service.thread.v1.Message/Read"
+	Message_SendInteractive_FullMethodName         = "/webitel.im.service.thread.v1.Message/SendInteractive"
+	Message_SendInteractiveCallback_FullMethodName = "/webitel.im.service.thread.v1.Message/SendInteractiveCallback"
 )
 
 // MessageClient is the client API for Message service.
@@ -41,6 +43,8 @@ type MessageClient interface {
 	SendImage(ctx context.Context, in *SendImageRequest, opts ...grpc.CallOption) (*SendImageResponse, error)
 	// Mark message as read by id.
 	Read(ctx context.Context, in *ReadMessageRequest, opts ...grpc.CallOption) (*ReadMessageResponse, error)
+	SendInteractive(ctx context.Context, in *SendInteractiveButtonsRequest, opts ...grpc.CallOption) (*SendMessageResponse, error)
+	SendInteractiveCallback(ctx context.Context, in *SendInteractiveCallbackRequest, opts ...grpc.CallOption) (*SendInteractiveCallbackResponse, error)
 }
 
 type messageClient struct {
@@ -91,6 +95,26 @@ func (c *messageClient) Read(ctx context.Context, in *ReadMessageRequest, opts .
 	return out, nil
 }
 
+func (c *messageClient) SendInteractive(ctx context.Context, in *SendInteractiveButtonsRequest, opts ...grpc.CallOption) (*SendMessageResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SendMessageResponse)
+	err := c.cc.Invoke(ctx, Message_SendInteractive_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *messageClient) SendInteractiveCallback(ctx context.Context, in *SendInteractiveCallbackRequest, opts ...grpc.CallOption) (*SendInteractiveCallbackResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SendInteractiveCallbackResponse)
+	err := c.cc.Invoke(ctx, Message_SendInteractiveCallback_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // MessageServer is the server API for Message service.
 // All implementations must embed UnimplementedMessageServer
 // for forward compatibility.
@@ -107,6 +131,8 @@ type MessageServer interface {
 	SendImage(context.Context, *SendImageRequest) (*SendImageResponse, error)
 	// Mark message as read by id.
 	Read(context.Context, *ReadMessageRequest) (*ReadMessageResponse, error)
+	SendInteractive(context.Context, *SendInteractiveButtonsRequest) (*SendMessageResponse, error)
+	SendInteractiveCallback(context.Context, *SendInteractiveCallbackRequest) (*SendInteractiveCallbackResponse, error)
 	mustEmbedUnimplementedMessageServer()
 }
 
@@ -128,6 +154,12 @@ func (UnimplementedMessageServer) SendImage(context.Context, *SendImageRequest) 
 }
 func (UnimplementedMessageServer) Read(context.Context, *ReadMessageRequest) (*ReadMessageResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Read not implemented")
+}
+func (UnimplementedMessageServer) SendInteractive(context.Context, *SendInteractiveButtonsRequest) (*SendMessageResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SendInteractive not implemented")
+}
+func (UnimplementedMessageServer) SendInteractiveCallback(context.Context, *SendInteractiveCallbackRequest) (*SendInteractiveCallbackResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SendInteractiveCallback not implemented")
 }
 func (UnimplementedMessageServer) mustEmbedUnimplementedMessageServer() {}
 func (UnimplementedMessageServer) testEmbeddedByValue()                 {}
@@ -222,6 +254,42 @@ func _Message_Read_Handler(srv interface{}, ctx context.Context, dec func(interf
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Message_SendInteractive_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SendInteractiveButtonsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MessageServer).SendInteractive(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Message_SendInteractive_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MessageServer).SendInteractive(ctx, req.(*SendInteractiveButtonsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Message_SendInteractiveCallback_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SendInteractiveCallbackRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MessageServer).SendInteractiveCallback(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Message_SendInteractiveCallback_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MessageServer).SendInteractiveCallback(ctx, req.(*SendInteractiveCallbackRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // Message_ServiceDesc is the grpc.ServiceDesc for Message service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -244,6 +312,14 @@ var Message_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Read",
 			Handler:    _Message_Read_Handler,
+		},
+		{
+			MethodName: "SendInteractive",
+			Handler:    _Message_SendInteractive_Handler,
+		},
+		{
+			MethodName: "SendInteractiveCallback",
+			Handler:    _Message_SendInteractiveCallback_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

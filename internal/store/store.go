@@ -65,4 +65,8 @@ type (
 	DirectThreadDialogOrchestration interface {
 		InitializeFullDirectThread(ctx context.Context, directThread *model.DirectThreadDialog) ([]*model.DirectThreadDialog, error)
 	}
+
+	MessageButtonInteraction interface {
+		Create(ctx context.Context, mbi *model.MessageButtonInteraction) (*model.MessageButtonInteraction, error)
+	}
 )

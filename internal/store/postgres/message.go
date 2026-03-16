@@ -10,16 +10,22 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/webitel/im-thread-service/internal/domain/model"
 	"github.com/webitel/im-thread-service/internal/store"
+	"github.com/webitel/im-thread-service/internal/store/querier"
 )
 
 type messageStore struct {
 	// [QUERIER]
 	// Supports both standalone connection pool and active transaction (Unit of Work)
 	q Querier
+
+	mq querier.MessageQuerier
 }
 
-func NewMessageStore(q Querier) store.MessageStore {
-	return &messageStore{q: q}
+func NewMessageStore(q Querier, mq querier.MessageQuerier) store.MessageStore {
+	return &messageStore{
+		q:  q,
+		mq: mq,
+	}
 }
 
 // SaveMessage saves a message to the database.
@@ -32,38 +38,14 @@ func NewMessageStore(q Querier) store.MessageStore {
 //	- *model.Message: Saved message.
 //	- error: Error if any occurs.
 func (m *messageStore) SaveMessage(ctx context.Context, msg *model.Message) (*model.Message, error) {
-	const query = `
-		insert into im_message.messages (
-			domain_id, thread_id, sender_id, type, body, metadata
-		)
-		values (
-			@DomainID, @ThreadID, @SenderID, @Type, @Body, @Metadata
-		)
-		returning
-			id, thread_id, type, body, metadata, created_at, updated_at,
-			jsonb_build_object('id', sender_id) as "from"
-	`
+	query, args := m.mq.Insert(msg)
 
-	args := pgx.NamedArgs{
-		"DomainID": msg.DomainID,
-		"ThreadID": msg.ThreadID,
-		"SenderID": msg.From.ID,
-		"Type":     msg.Type,
-		"Body":     msg.Text,
-		"Metadata": msg.Metadata,
-	}
-
-	rows, err := m.q.Query(ctx, query, args)
-	if err != nil {
+	var message model.Message
+	if err := m.q.QueryRow(ctx, query, args...).Scan(m.mq.ScanFn()(&message)...); err != nil {
 		return nil, fmt.Errorf("postgres.save_message: %w", err)
 	}
 
-	savedMessage, err := pgx.CollectExactlyOneRow(rows, pgx.RowToAddrOfStructByNameLax[model.Message])
-	if err != nil {
-		return nil, fmt.Errorf("postgres.save_message: %w", err)
-	}
-
-	return savedMessage, nil
+	return &message, nil
 }
 
 // SaveImages saves message images to the database.

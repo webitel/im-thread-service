@@ -12,6 +12,7 @@ import (
 	"github.com/webitel/im-thread-service/internal/service/dto"
 	guards "github.com/webitel/im-thread-service/internal/service/guards"
 	"github.com/webitel/im-thread-service/internal/store"
+	"github.com/webitel/webitel-go-kit/pkg/errors"
 )
 
 type Messager interface {
@@ -19,6 +20,9 @@ type Messager interface {
 	SendImage(ctx context.Context, in *dto.SendImageRequest) (*dto.SendImageResponse, error)
 	SendDocument(ctx context.Context, in *dto.SendDocumentRequest) (*dto.SendDocumentResponse, error)
 	Read(ctx context.Context, in *dto.ReadMessageRequest) error
+	SendInteractiveMessage(ctx context.Context, message *model.Message) (*model.Message, error)
+	HandleInteraction(ctx context.Context, interaction *model.MessageButtonInteraction) (*model.MessageButtonInteraction, error)
+	Threader() ThreadManager
 }
 
 type MessageService struct {
@@ -46,6 +50,8 @@ func NewMessageService(
 }
 
 var _ Messager = (*MessageService)(nil)
+
+func (s *MessageService) Threader() ThreadManager {return s.threader}
 
 // SendText handles normalization and multi-recipient distribution of text messages.
 func (s *MessageService) SendText(ctx context.Context, in *dto.SendTextRequest) (*dto.SendTextResponse, error) {
@@ -133,7 +139,6 @@ func (s *MessageService) SendImage(ctx context.Context, in *dto.SendImageRequest
 	return &dto.SendImageResponse{ID: msg.ID, To: in.To}, nil
 }
 
-// SendDocument processes document attachments and ensures transactional integrity.
 func (s *MessageService) SendDocument(ctx context.Context, in *dto.SendDocumentRequest) (*dto.SendDocumentResponse, error) {
 	if err := guards.SendDocumentGuard(in); err != nil {
 		return nil, fmt.Errorf("validation: %w", err)
@@ -157,7 +162,6 @@ func (s *MessageService) SendDocument(ctx context.Context, in *dto.SendDocumentR
 		return nil, err
 	}
 
-	// [CLEAN] Unified parameter handling
 	msg := model.NewDocumentMessage(model.MessageCreate{
 		ThreadID:   t.ID,
 		DomainID:   int32(in.DomainID),
@@ -218,6 +222,94 @@ func (s *MessageService) Read(ctx context.Context, in *dto.ReadMessageRequest) e
 		return nil
 	})
 }
+
+func (s *MessageService) SendInteractiveMessage(ctx context.Context, message *model.Message) (*model.Message, error) {
+	log := s.logger.With(slog.String("op", "SendInteractiveMessage"))
+	
+	if err := s.uow.WithinTransaction(ctx, func(ctx context.Context, uow store.UnitOfWork) error {
+		var (
+			createdMsg *model.Message
+			err error
+		)
+
+		if createdMsg, err = uow.Messages().SaveMessage(ctx, message); err != nil {
+			return err
+		}
+
+		message = createdMsg.WithCreatedEvent()
+
+		return s.dispatchEvents(ctx, uow, message)
+	}); err != nil {
+		log.ErrorContext(
+			ctx,
+			"error saving interactive message within transaction",
+			slog.Any("error", err),
+			slog.String("member_id", message.From.ID.String()),
+			slog.String("thread_id", message.ThreadID.String()),
+		)
+		return nil, err
+	}
+
+	return message, nil
+} 
+
+func (s *MessageService) HandleInteraction(ctx context.Context, interaction *model.MessageButtonInteraction) (*model.MessageButtonInteraction, error) {
+	log := s.logger.With(
+		slog.String("op", "message.HandleInteraction"),
+		slog.String("in_reply_to", interaction.InReplyTo.String()),
+		slog.Int("domain_id", interaction.DomainID),
+		slog.String("action", string(interaction.Action)),
+		slog.String("button_code", interaction.ButtonCode),
+		slog.String("pressed_by", interaction.PressedBy.String()),
+		slog.Time("pressed_at", interaction.PressedAt),
+		slog.Any("result", interaction.Result),
+	)
+
+
+	var (
+		err error
+		mbi *model.MessageButtonInteraction
+	)
+
+	err = s.uow.WithinTransaction(ctx, func(ctx context.Context, uow store.UnitOfWork) error {
+		if mbi, err = uow.MessageButtonInteraction().Create(ctx, interaction); err != nil {
+			if errors.Is(err, model.ErrInteractionConflict) {
+				log.WarnContext(
+					ctx,
+					"interaction conflict detected",
+					slog.Any("error", err),
+				)
+
+				return err
+			}
+
+			log.ErrorContext(ctx, "error saving interaction", slog.Any("error", err))
+			return errors.Internal(errors.Details(err))
+		}
+
+		mbi.AddCreatedEvent()
+
+		for _, e := range mbi.Events() {
+			if err = uow.Outbox().Publish(ctx, e.Topic(), e); err != nil {
+				return err
+			}
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		log.ErrorContext(
+			ctx,
+			"error executing saving interaction and outbox publish",
+			slog.Any("error", err),
+		)
+
+		return nil, err
+	}
+
+	return mbi, nil
+} 
 
 // --- Internal Helpers ---
 

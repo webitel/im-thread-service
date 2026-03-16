@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/webitel/im-thread-service/internal/store"
+	"github.com/webitel/im-thread-service/internal/store/querier/sqlbuilder"
 )
 
 type unitOfWork struct {
@@ -22,6 +23,7 @@ type unitOfWork struct {
 	messageHistoryStore             store.MessageHistory
 	directThreadDialogOrchestration store.DirectThreadDialogOrchestration
 	directSettings                  store.DirectSettings
+	messageButtonInteraction store.MessageButtonInteraction
 }
 
 // NewPgxUnitOfWork returns a new unit of work, given a pgx pool.
@@ -61,7 +63,7 @@ func (u *unitOfWork) ThreadDialogStore() store.ThreadDialogStore {
 
 func (u *unitOfWork) Messages() store.MessageStore {
 	if u.messageStore == nil {
-		u.messageStore = NewMessageStore(u.querier)
+		u.messageStore = NewMessageStore(u.querier, sqlbuilder.NewMessageQuerier())
 	}
 	return u.messageStore
 }
@@ -95,6 +97,14 @@ func (u *unitOfWork) DirectSettingsStore() store.DirectSettings {
 	}
 
 	return u.directSettings
+}
+
+func (u *unitOfWork) MessageButtonInteraction() store.MessageButtonInteraction {
+	if u.messageButtonInteraction == nil {
+		u.messageButtonInteraction = NewMessageButtonInteraction(u.querier, sqlbuilder.NewMessageButtonInteraction())
+	}
+
+	return u.messageButtonInteraction
 }
 
 // WithinTransaction executes a function within a transaction.

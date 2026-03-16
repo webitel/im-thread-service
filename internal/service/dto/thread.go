@@ -55,6 +55,15 @@ type (
 	}
 )
 
+func NewEnsureDirectThreadRequest(domainId int, memberId uuid.UUID, from, to *shared.Peer) *EnsureDirectThreadRequest {
+	return &EnsureDirectThreadRequest{
+		DomainID: domainId,
+		MemberID: memberId,
+		PeerFrom: from,
+		PeerTo:   to,
+	}
+}
+
 func NewEnsureDirectThreadResponse(id uuid.UUID, domainID int32, members uuid.UUIDs) *EnsureDirectThreadResponse {
 	return &EnsureDirectThreadResponse{
 		ID:       id,

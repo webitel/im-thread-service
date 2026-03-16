@@ -11,5 +11,6 @@ type (
 		Messages() MessageStore
 		Outbox() OutboxStore
 		DirectThreadDialogOrchestration() DirectThreadDialogOrchestration
+		MessageButtonInteraction() MessageButtonInteraction
 	}
 )

@@ -4,6 +4,7 @@
 package shared
 
 import (
+	"database/sql/driver"
 	"time"
 
 	"github.com/google/uuid"
@@ -28,6 +29,26 @@ type Peer struct {
 	ID       uuid.UUID `json:"id" db:"id"`
 	Type     PeerType  `json:"type" db:"type"`
 	Identity *Identity `json:"identity"`
+}
+
+func (p Peer)  Value() (driver.Value, error) {
+	return p.ID.String(), nil
+}
+
+func (p *Peer) Scan(value any) error {
+	if value == nil {
+		p = new(Peer)
+		return nil
+	}
+
+	id, err := uuid.Parse(value.(string))
+	if err != nil {
+		return err
+	}
+
+	p.ID = id
+
+	return nil
 }
 
 type BaseModel struct {

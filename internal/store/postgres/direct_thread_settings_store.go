@@ -56,7 +56,7 @@ func (d *directSettingsStore) Create(ctx context.Context, setting *model.DirectT
 		return nil, err
 	}
 
-	panic("unimplemented")
+	return setting, nil
 }
 
 // TODO: implement
