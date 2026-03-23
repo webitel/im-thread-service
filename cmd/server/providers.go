@@ -13,6 +13,8 @@ import (
 	"github.com/webitel/webitel-go-kit/infra/discovery"
 	_ "github.com/webitel/webitel-go-kit/infra/discovery/consul"
 	otelsdk "github.com/webitel/webitel-go-kit/infra/otel/sdk"
+	"github.com/webitel/webitel-go-kit/infra/profiler"
+	"github.com/webitel/webitel-go-kit/pkg/logger"
 	"go.opentelemetry.io/contrib/bridges/otelslog"
 	"go.opentelemetry.io/otel/sdk/resource"
 	semconv "go.opentelemetry.io/otel/semconv/v1.38.0"
@@ -218,4 +220,12 @@ func ProvideSD(cfg *config.Config, log *slog.Logger, lc fx.Lifecycle) (discovery
 	})
 
 	return provider, nil
+}
+
+func ProvideProfiler(cfg *config.Config, l *slog.Logger) (profiler.Config, logger.Logger) {
+	return profiler.Config{
+		Addr:                 cfg.Profiler.Addr,
+		MutexProfileFraction: cfg.Profiler.MutexFraction,
+		BlockProfileRate:     cfg.Profiler.BlockRate,
+	}, logger.NewSlog(l)
 }
