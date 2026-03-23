@@ -370,12 +370,18 @@ github.com/webitel/webitel-go-kit/infra/discovery v0.0.0-20260202112708-f7b4e7cc
 github.com/webitel/webitel-go-kit/infra/discovery v0.0.0-20260202112708-f7b4e7cc68eb/go.mod h1:IhUZHd7EYD1pCoX9dNNlkpF+/c3Q6ODgBcluGDMbJrU=
 github.com/webitel/webitel-go-kit/infra/otel v0.0.0-20251224105820-8d9bcb902593 h1:ZSxcgANKHGU5+shpyBXdKdfTqRFs8XLoQODhDfRRalI=
 github.com/webitel/webitel-go-kit/infra/otel v0.0.0-20251224105820-8d9bcb902593/go.mod h1:tbGmdVdDdUbfsI2wpOoMj7dlmgwaKQFmIoAbaWPS7j4=
+github.com/webitel/webitel-go-kit/infra/profiler v0.0.0-20260323001146-8a6a55d94da8 h1:2AzDIVwfGCFxyUu7FfcTGdletY7tlCGO6GAqw+266Lk=
+github.com/webitel/webitel-go-kit/infra/profiler v0.0.0-20260323001146-8a6a55d94da8/go.mod h1:9DpU5TYX/zupd0f4UhV1iCkB50m2F7ArErbdXDOvW5o=
 github.com/webitel/webitel-go-kit/infra/transport v0.0.0-20260120140602-6f20efe1524e h1:7oU0htys/6uYa8CxhA/3UllwgWCUHf507dLVDpzD5S0=
 github.com/webitel/webitel-go-kit/infra/transport v0.0.0-20260120140602-6f20efe1524e/go.mod h1:pDNLCygkIoDlz0m9pj9p9961FqtNqINLXJq1vtUDs2k=
 github.com/webitel/webitel-go-kit/pkg/errors v0.0.0-20251222125635-d60448d23a82 h1:0WuyeTkUyUmPAWKjvNtRfuLJzzzKeVDlTjj8tzG2g1Q=
 github.com/webitel/webitel-go-kit/pkg/errors v0.0.0-20251222125635-d60448d23a82/go.mod h1:/6hKNQ+DiFi5A+auMQmixhiWzHz8g38RblGi3GjNfuw=
 github.com/webitel/webitel-go-kit/pkg/interceptors v0.0.0-20251224105820-8d9bcb902593 h1:XQ5uSIGSwDsXR/xa7Xfq+x7iBLWXBgJKlG539zOHN2g=
 github.com/webitel/webitel-go-kit/pkg/interceptors v0.0.0-20251224105820-8d9bcb902593/go.mod h1:9WwUBMN/FgbAO8gWpOL8GgadVbvX1F9+zE3w0mbSWkI=
+github.com/webitel/webitel-go-kit/pkg/logger v0.0.0-20260320150151-882368899a56 h1:nvSWVY0l2xS4S6NGH/86oLA30g3fwT1DrGsz/uf9lyQ=
+github.com/webitel/webitel-go-kit/pkg/logger v0.0.0-20260320150151-882368899a56/go.mod h1:a97/UloRwOBgFqt2rSTztIcFDmBWvXDQEySvmUO7YLg=
+github.com/webitel/wlog v0.0.0-20250325101442-de4f125c1ec7 h1:Qi/ustGBfh13I6aZ/ljul679SPJmHbZzFn9h43eloLg=
+github.com/webitel/wlog v0.0.0-20250325101442-de4f125c1ec7/go.mod h1:mXyM8hL9tEBLM4K+Uw8QLuGLo6/eX+5Lvv1ks2Y4us8=
 github.com/xrash/smetrics v0.0.0-20250705151800-55b8f293f342 h1:FnBeRrxr7OU4VvAzt5X7s6266i6cSVkkFPS0TuXWbIg=
 github.com/xrash/smetrics v0.0.0-20250705151800-55b8f293f342/go.mod h1:Ohn+xnUBiLI6FVj/9LpzZWtj1/D6lUovWYBkxHVV3aM=
 github.com/yusufpapurcu/wmi v1.2.4 h1:zFUKzehAFReQwLys1b/iSMl+JQGSCSjtVqQn9bBrPo0=
@@ -384,6 +390,8 @@ go.opentelemetry.io/auto/sdk v1.2.1 h1:jXsnJ4Lmnqd11kwkBV2LgLoFMZKizbCi5fNZ/ipaZ
 go.opentelemetry.io/auto/sdk v1.2.1/go.mod h1:KRTj+aOaElaLi+wW1kO/DZRXwkF4C5xPbEe3ZiIhN7Y=
 go.opentelemetry.io/contrib/bridges/otelslog v0.14.0 h1:eypSOd+0txRKCXPNyqLPsbSfA0jULgJcGmSAdFAnrCM=
 go.opentelemetry.io/contrib/bridges/otelslog v0.14.0/go.mod h1:CRGvIBL/aAxpQU34ZxyQVFlovVcp67s4cAmQu8Jh9mc=
+go.opentelemetry.io/contrib/bridges/otelzap v0.11.0 h1:u2E32P7j1a/gRgZDWhIXC+Shd4rLg70mnE7QLI/Ssnw=
+go.opentelemetry.io/contrib/bridges/otelzap v0.11.0/go.mod h1:pJPCLM8gzX4ASqLlyAXjHBEYxgbOQJ/9bidWxD6PEPQ=
 go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.64.0 h1:RN3ifU8y4prNWeEnQp2kRRHz8UwonAEYZl8tUzHEXAk=
 go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.64.0/go.mod h1:habDz3tEWiFANTo6oUE99EmaFUrCNYAAg3wiVmusm70=
 go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.60.0 h1:sbiXRNDSWJOTobXh5HyQKjq6wUC5tNybqjIqDpAY4CU=
@@ -412,6 +420,8 @@ go.opentelemetry.io/otel/exporters/stdout/stdouttrace v1.36.0 h1:G8Xec/SgZQricwW
 go.opentelemetry.io/otel/exporters/stdout/stdouttrace v1.36.0/go.mod h1:PD57idA/AiFD5aqoxGxCvT/ILJPeHy3MjqU/NS7KogY=
 go.opentelemetry.io/otel/log v0.15.0 h1:0VqVnc3MgyYd7QqNVIldC3dsLFKgazR6P3P3+ypkyDY=
 go.opentelemetry.io/otel/log v0.15.0/go.mod h1:9c/G1zbyZfgu1HmQD7Qj84QMmwTp2QCQsZH1aeoWDE4=
+go.opentelemetry.io/otel/log/logtest v0.0.0-20250605073931-9fabec1f4432 h1:CIKBH3ag4CSCyBJfvAFMy7gSIIN+A2e0r/nDcmeGv44=
+go.opentelemetry.io/otel/log/logtest v0.0.0-20250605073931-9fabec1f4432/go.mod h1:DqYX8Lp2A/RnuxXuoVtsRqYvx6Io0PtSxF5v9MnHJyU=
 go.opentelemetry.io/otel/metric v1.39.0 h1:d1UzonvEZriVfpNKEVmHXbdf909uGTOQjA0HF0Ls5Q0=
 go.opentelemetry.io/otel/metric v1.39.0/go.mod h1:jrZSWL33sD7bBxg1xjrqyDjnuzTUB0x1nBERXd7Ftcs=
 go.opentelemetry.io/otel/sdk v1.39.0 h1:nMLYcjVsvdui1B/4FRkwjzoRVsMK8uL/cj0OyhKzt18=

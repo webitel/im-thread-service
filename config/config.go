@@ -17,6 +17,7 @@ type Config struct {
 	Redis    RedisConfig    `mapstructure:"redis"`
 	Consul   ConsulConfig   `mapstructure:"consul"`
 	Pubsub   PubsubConfig   `mapstructure:"pubsub"`
+	Profiler ProfilerConfig `mapstructure:"profiler"`
 }
 
 type ServiceConfig struct {
@@ -62,6 +63,12 @@ type ConsulConfig struct {
 type PubsubConfig struct {
 	URL    string `mapstructure:"broker_url"`
 	Driver string `mapstructure:"broker_driver"`
+}
+
+type ProfilerConfig struct {
+	Addr          string `mapstructure:"addr"`
+	MutexFraction int    `mapstructure:"mutex_fraction"`
+	BlockRate     int    `mapstructure:"block_rate"`
 }
 
 func LoadConfig() (*Config, error) {
@@ -146,6 +153,10 @@ func defineFlags() {
 
 	pflag.String("pubsub.broker_url", "", "PubSub broker URL")
 	pflag.String("pubsub.broker_driver", "", "PubSub broker driver")
+
+	pflag.String("profiler.addr", "", "Profiler address")
+	pflag.Int("profiler.mutex_fraction", 1, "Mutex profiler fraction")
+	pflag.Int("profiler.block_rate", 1, "Mutex profiler rate")
 }
 
 func (c *Config) validate() error {
