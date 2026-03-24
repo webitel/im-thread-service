@@ -4,11 +4,11 @@ import (
 	"context"
 	"log/slog"
 
+	"github.com/google/uuid"
 	impb "github.com/webitel/im-thread-service/gen/go/thread/v1"
 	"github.com/webitel/im-thread-service/internal/domain/model"
 	"github.com/webitel/im-thread-service/internal/handler/grpc/mapper"
 	"github.com/webitel/im-thread-service/internal/service"
-	"github.com/webitel/im-thread-service/internal/service/chain"
 )
 
 var (
@@ -68,38 +68,109 @@ func (m *MessageService) Read(ctx context.Context, in *impb.ReadMessageRequest) 
 	return &impb.ReadMessageResponse{}, nil
 }
 
-func (m *MessageService) SendInteractive(ctx context.Context, in *impb.SendInteractiveButtonsRequest) (*impb.SendMessageResponse, error) {
-	msg := mapper.InteractiveRequestToMessage(in)
-	
-	handler := chain.Process(
-		m.handler.SendInteractiveMessage,
-		chain.ValidationWrapper,
-		chain.EnsureThreadWrapper[*model.Message, *model.Message](m.handler.Threader().EnsureDirectThread),
-	)
+func (m *MessageService) SendInteractive(ctx context.Context, in *impb.SendInteractiveMessageRequest) (*impb.SendMessageResponse, error) {
+	interactive, err := mapper.MapInteractive(in.GetInteractive())
+	if err != nil {
+		m.logger.Error("error mapping interactive message", "error", err)
+		return nil, err
+	}
 
-	msg, err := handler(ctx, msg)
+	message := &model.Message{
+		DomainID:    in.GetDomainId(),
+		From:        mapper.MapPeerFromProto(in.GetFrom()),
+		SendTo:      mapper.MapPeerFromProto(in.GetTo()),
+		Text:        in.GetInteractive().GetBody(),
+		Type:        model.MessageTypeInteractive,
+		Metadata:    in.GetMetadata().AsMap(),
+		Interactive: interactive,
+	}
+
+	saved, err := m.handler.SendInteractive(ctx, message)
 	if err != nil {
 		return nil, err
 	}
 
 	return &impb.SendMessageResponse{
-		Id: msg.ID.String(),
-		To: []*impb.Peer{in.To},
+		To: []*impb.Peer{mapper.MapPeerToProto(saved.SendTo)},
+		Id: saved.ID.String(),
 	}, nil
 }
 
-func (m *MessageService) SendInteractiveCallback(ctx context.Context, r *impb.SendInteractiveCallbackRequest) (*impb.SendInteractiveCallbackResponse, error) {
-	interactionModel := mapper.InteractiveCallbackRequestToInteraction(r)
+func (m *MessageService) SendLocation(ctx context.Context, r *impb.SendLocationRequest) (*impb.SendMessageResponse, error) {
+	msg := &model.Message{
+		DomainID: r.GetDomainId(),
+		From:     mapper.MapPeerFromProto(r.GetFrom()),
+		SendTo:   mapper.MapPeerFromProto(r.GetTo()),
+		Type:     model.MessageTypeLocation,
+		Metadata: r.GetMetadata().AsMap(),
+		Location: &model.Location{
+			Address:   r.Address,
+			Latitude:  r.Latitude,
+			Longitude: r.Longitude,
+			Name:      r.Name,
+		},
+	}
 
-	handler := chain.Process(
-		m.handler.HandleInteraction,
-		chain.ValidationWrapper,
-	)
-
-	resultCallback, err := handler(ctx, interactionModel)
+	result, err := m.handler.SendLocation(ctx, msg)
 	if err != nil {
 		return nil, err
 	}
 
-	return mapper.InteractionToCallbackResponse(resultCallback), nil
+	return &impb.SendMessageResponse{
+		To: []*impb.Peer{mapper.MapPeerToProto(result.SendTo)},
+		Id: result.ID.String(),
+	}, nil
+}
+
+func (m *MessageService) SendContact(ctx context.Context, r *impb.SendContactRequest) (*impb.SendMessageResponse, error) {
+	msg := &model.Message{
+		DomainID: r.GetDomainId(),
+		From:     mapper.MapPeerFromProto(r.GetFrom()),
+		SendTo:   mapper.MapPeerFromProto(r.To),
+		Type:     model.MessageTypeContact,
+		Metadata: r.GetMetadata().AsMap(),
+		Contact: &model.Contact{
+			Name:        r.Name,
+			Email:       r.Email,
+			PhoneNumber: r.PhoneNumber,
+			Metadata:    r.GetContactMetadata(),
+		},
+	}
+
+	saved, err := m.handler.SendContact(ctx, msg)
+	if err != nil {
+		return nil, err
+	}
+
+	return &impb.SendMessageResponse{
+		To: []*impb.Peer{mapper.MapPeerToProto(saved.SendTo)},
+		Id: saved.ID.String(),
+	}, nil
+}
+
+func (m *MessageService) SendInteractionCallback(ctx context.Context, in *impb.InteractionCallback) (*impb.InteractionCallback, error) {
+	var (
+		messageID, _ = uuid.Parse(in.GetInReplyTo())
+		clickedBy = mapper.MapPeerFromProto(in.GetClickedBy())
+	)
+	
+	var callback = &model.ButtonsCallback{
+		MessageID:    messageID,
+		ButtonCode:   in.GetButtonCode(),
+		CallbackData: in.GetCallbackData(),
+		ClickedBy:    clickedBy.ID,
+	}
+
+	saved, err := m.handler.HandleInteractiveCallback(ctx, callback)
+	if err != nil {
+		return nil, err
+	}
+
+	return &impb.InteractionCallback{
+		InReplyTo:    saved.MessageID.String(),
+		ButtonCode:   saved.ButtonCode,
+		CallbackData: saved.CallbackData,
+		ClickedAt:    saved.GetClickedAtUnix(),
+		ClickedBy:    mapper.MapPeerToProto(clickedBy),
+	}, nil
 }

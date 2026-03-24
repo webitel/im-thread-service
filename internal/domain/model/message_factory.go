@@ -140,6 +140,7 @@ func addCreatedEvents(msg *Message, in MessageCreate) {
 	if len(msg.Documents) > 0 {
 		ev.Documents = mapDocumentsToPayload(msg.Documents)
 	}
+
 	msg.AddEvent(ev)
 }
 

@@ -41,7 +41,7 @@ func (m *messageStore) SaveMessage(ctx context.Context, msg *model.Message) (*mo
 	query, args := m.mq.Insert(msg)
 
 	var message model.Message
-	if err := m.q.QueryRow(ctx, query, args...).Scan(m.mq.ScanFn()(&message)...); err != nil {
+	if err := m.q.QueryRow(ctx, query, args...).Scan(m.mq.ScanFn(&message)...); err != nil {
 		return nil, fmt.Errorf("postgres.save_message: %w", err)
 	}
 
@@ -231,4 +231,36 @@ func (m *messageStore) ReadMessage(ctx context.Context, read struct {
 	}
 
 	return nil
+}
+
+func(m *messageStore) SaveLocation(ctx context.Context, msg *model.Message) (*model.Message, error) {
+	sql, args := m.mq.InsertLocation(msg)
+
+	var saved model.Message
+	{
+		saved.Location = new(model.Location)
+		saved.SendTo = msg.SendTo
+	}
+
+	if err := m.q.QueryRow(ctx, sql, args...).Scan(m.mq.LocationScanFn(&saved, saved.Location)...); err != nil {
+		return nil, err
+	}
+
+	return &saved, nil
+}
+
+func (m *messageStore) SaveContact(ctx context.Context, msg *model.Message) (*model.Message, error) {
+	sql, args := m.mq.InsertContact(msg)
+
+	var saved model.Message
+	{
+		saved.Contact = new(model.Contact)
+		saved.SendTo = msg.SendTo
+	}
+
+	if err := m.q.QueryRow(ctx, sql, args...).Scan(m.mq.ContactScanFn(&saved)...); err != nil {
+		return nil, err
+	}
+
+	return &saved, nil
 }

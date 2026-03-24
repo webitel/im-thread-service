@@ -20,9 +20,11 @@ type Messager interface {
 	SendImage(ctx context.Context, in *dto.SendImageRequest) (*dto.SendImageResponse, error)
 	SendDocument(ctx context.Context, in *dto.SendDocumentRequest) (*dto.SendDocumentResponse, error)
 	Read(ctx context.Context, in *dto.ReadMessageRequest) error
-	SendInteractiveMessage(ctx context.Context, message *model.Message) (*model.Message, error)
-	HandleInteraction(ctx context.Context, interaction *model.MessageButtonInteraction) (*model.MessageButtonInteraction, error)
+	SendLocation(ctx context.Context, msg *model.Message) (*model.Message, error)
+	SendContact(ctx context.Context, msg *model.Message) (*model.Message, error)
+	SendInteractive(ctx context.Context, msg *model.Message) (*model.Message, error)
 	Threader() ThreadManager
+	HandleInteractiveCallback(ctx context.Context, callback *model.ButtonsCallback) (*model.ButtonsCallback, error)
 }
 
 type MessageService struct {
@@ -51,7 +53,7 @@ func NewMessageService(
 
 var _ Messager = (*MessageService)(nil)
 
-func (s *MessageService) Threader() ThreadManager {return s.threader}
+func (s *MessageService) Threader() ThreadManager { return s.threader }
 
 // SendText handles normalization and multi-recipient distribution of text messages.
 func (s *MessageService) SendText(ctx context.Context, in *dto.SendTextRequest) (*dto.SendTextResponse, error) {
@@ -223,76 +225,145 @@ func (s *MessageService) Read(ctx context.Context, in *dto.ReadMessageRequest) e
 	})
 }
 
-func (s *MessageService) SendInteractiveMessage(ctx context.Context, message *model.Message) (*model.Message, error) {
-	log := s.logger.With(slog.String("op", "SendInteractiveMessage"))
-	
-	if err := s.uow.WithinTransaction(ctx, func(ctx context.Context, uow store.UnitOfWork) error {
-		var (
-			createdMsg *model.Message
-			err error
-		)
-
-		if createdMsg, err = uow.Messages().SaveMessage(ctx, message); err != nil {
-			return err
-		}
-
-		message = createdMsg.WithCreatedEvent()
-
-		return s.dispatchEvents(ctx, uow, message)
-	}); err != nil {
-		log.ErrorContext(
-			ctx,
-			"error saving interactive message within transaction",
-			slog.Any("error", err),
-			slog.String("member_id", message.From.ID.String()),
-			slog.String("thread_id", message.ThreadID.String()),
-		)
+func (s *MessageService) SendLocation(ctx context.Context, msg *model.Message) (*model.Message, error) {
+	if err := s.prepareMessage(ctx, msg); err != nil {
+		s.logger.WarnContext(ctx, "error preparing message", slog.Any("error", err))
 		return nil, err
 	}
-
-	return message, nil
-} 
-
-func (s *MessageService) HandleInteraction(ctx context.Context, interaction *model.MessageButtonInteraction) (*model.MessageButtonInteraction, error) {
+	
 	log := s.logger.With(
-		slog.String("op", "message.HandleInteraction"),
-		slog.String("in_reply_to", interaction.InReplyTo.String()),
-		slog.Int("domain_id", interaction.DomainID),
-		slog.String("action", string(interaction.Action)),
-		slog.String("button_code", interaction.ButtonCode),
-		slog.String("pressed_by", interaction.PressedBy.String()),
-		slog.Time("pressed_at", interaction.PressedAt),
-		slog.Any("result", interaction.Result),
+		slog.String("op", "SendLocation"),
+		slog.String("thread_id", msg.ThreadID.String()),
+		slog.Int("domain_id", int(msg.DomainID)),
+		slog.String("from", msg.From.ID.String()),
 	)
-
 
 	var (
-		err error
-		mbi *model.MessageButtonInteraction
+		savedMsg *model.Message
+		err      error
 	)
 
-	err = s.uow.WithinTransaction(ctx, func(ctx context.Context, uow store.UnitOfWork) error {
-		if mbi, err = uow.MessageButtonInteraction().Create(ctx, interaction); err != nil {
-			if errors.Is(err, model.ErrInteractionConflict) {
-				log.WarnContext(
+	err = s.uow.WithinTransaction(
+		ctx,
+		func(ctx context.Context, uow store.UnitOfWork) error {
+			if savedMsg, err = uow.Messages().SaveLocation(ctx, msg); err != nil {
+				log.ErrorContext(
 					ctx,
-					"interaction conflict detected",
+					"error saving message with location",
 					slog.Any("error", err),
 				)
 
 				return err
 			}
 
-			log.ErrorContext(ctx, "error saving interaction", slog.Any("error", err))
-			return errors.Internal(errors.Details(err))
-		}
+			savedMsg.WithCreatedEvent()
 
-		mbi.AddCreatedEvent()
+			if err = s.dispatchEvents(ctx, uow, savedMsg); err != nil {
+				log.ErrorContext(
+					ctx,
+					"error dispatching events to DB",
+					slog.Any("error", err),
+				)
 
-		for _, e := range mbi.Events() {
-			if err = uow.Outbox().Publish(ctx, e.Topic(), e); err != nil {
 				return err
 			}
+
+			return nil
+		},
+	)
+
+	if err != nil {
+		return nil, errors.Internal(
+			"error processing SendLocation request",
+			errors.WithCause(err),
+		)
+	}
+
+	return savedMsg, nil
+}
+
+func (s *MessageService) SendContact(ctx context.Context, msg *model.Message) (*model.Message, error) {
+	if err := s.prepareMessage(ctx, msg); err != nil {
+		s.logger.WarnContext(ctx, "error preparing message", slog.Any("error", err))
+		return nil, err
+	}
+
+	log := s.logger.With(
+		slog.String("op", "SendLocation"),
+		slog.String("thread_id", msg.ThreadID.String()),
+		slog.String("from", msg.From.ID.String()),
+	)
+
+	var saved *model.Message
+	err := s.uow.WithinTransaction(
+		ctx,
+		func(ctx context.Context, uow store.UnitOfWork) error {
+			processedMsg, err := uow.Messages().SaveContact(ctx, msg)
+			if err != nil {
+				return err
+			}
+
+			processedMsg.WithCreatedEvent()
+
+			if err = s.dispatchEvents(ctx, uow, processedMsg); err != nil {
+				return err
+			}
+
+			saved = processedMsg
+
+			return err
+		},
+	)
+
+	if err != nil {
+		log.ErrorContext(
+			ctx,
+			"error saving contact message",
+			slog.Any("error", err),
+		)
+
+		return nil, err
+	}
+
+	return saved, nil
+}
+
+func (s *MessageService) SendInteractive(ctx context.Context, msg *model.Message) (*model.Message, error) {
+	if err := s.prepareMessage(ctx, msg); err != nil {
+		s.logger.WarnContext(ctx, "error preparing message", slog.Any("error", err))
+		return nil, err
+	}
+	
+	log := s.logger.With(
+		slog.String("op", "SendInteractive"),
+		slog.String("thread_id", msg.ThreadID.String()),
+		slog.Int("domain_id", int(msg.DomainID)),
+		slog.String("from", msg.From.ID.String()),
+	)
+
+	if err := s.prepareInteractiveHeaderContent(ctx, msg.Interactive.Header, int64(msg.DomainID)); err != nil {
+		log.ErrorContext(ctx, "error preparing message header content via storage", slog.Any("error", err))
+		return nil, err
+	}
+
+	var savedMsg *model.Message
+
+	err := s.uow.WithinTransaction(ctx, func(ctx context.Context, uow store.UnitOfWork) error {
+		var err error
+		if savedMsg, err = uow.Messages().SaveMessage(ctx, msg); err != nil {
+			return err
+		}
+
+		if err = s.processInteractiveHeaderContent(ctx, uow, savedMsg, msg.Interactive.Header); err != nil {
+			return err
+		}
+
+		savedMsg.SendTo = msg.SendTo
+
+		savedMsg.WithCreatedEvent()
+
+		if err = s.dispatchEvents(ctx, uow, savedMsg); err != nil {
+			return err
 		}
 
 		return nil
@@ -301,17 +372,78 @@ func (s *MessageService) HandleInteraction(ctx context.Context, interaction *mod
 	if err != nil {
 		log.ErrorContext(
 			ctx,
-			"error executing saving interaction and outbox publish",
+			"error saving interactive message",
 			slog.Any("error", err),
 		)
 
 		return nil, err
 	}
 
-	return mbi, nil
-} 
+	return savedMsg, nil
+}
 
-// --- Internal Helpers ---
+func (s *MessageService) HandleInteractiveCallback(ctx context.Context, callback *model.ButtonsCallback) (*model.ButtonsCallback, error) {
+	log := s.logger.With(
+		slog.String("op", "HandleInteractiveCallback"),
+		slog.String("message_id", callback.MessageID.String()),
+		slog.String("button_code", callback.ButtonCode),
+		slog.String("clicked_by", callback.ClickedBy.String()),
+	)
+
+	var saved, err = s.uow.ButtonsCallback().Create(ctx, callback)
+	if err != nil {
+		log.ErrorContext(ctx, "error saving callback response", slog.Any("error", err))
+		return nil, err
+	}
+
+	return saved, nil
+}
+
+// #region Private
+
+func (s *MessageService) prepareInteractiveHeaderContent(ctx context.Context, header *model.InteractiveHeader, domainID int64) error {
+	var (
+		imagesLen    = len(header.Images)
+		documentsLen = len(header.Images)
+		attachments  = make([]AttachmentProcessor, 0, documentsLen+imagesLen)
+	)
+
+	if imagesLen > 0 {
+		attachments = append(attachments, toAttachments(header.Images)...)
+	}
+
+	if documentsLen > 0 {
+		attachments = append(attachments, toAttachments(header.Documents)...)
+	}
+
+	if err := s.mediaProcessor.Process(ctx, domainID, attachments); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (s *MessageService) processInteractiveHeaderContent(ctx context.Context, uow store.UnitOfWork, saved *model.Message, header *model.InteractiveHeader) error {
+	if len(header.Documents) > 0 {
+		var savedDocuments, err = uow.Messages().SaveDocuments(ctx, saved.ID, header.Documents)
+		if err != nil {
+			return err
+		}
+
+		saved.Documents = savedDocuments
+	}
+
+	if len(header.Images) > 0 {
+		var savedImages, err = uow.Messages().SaveImages(ctx, saved.ID, header.Images)
+		if err != nil {
+			return err
+		}
+
+		saved.Images = savedImages
+	}
+
+	return nil
+}
 
 func (s *MessageService) executeMessageTransaction(ctx context.Context, msg *model.Message) error {
 	err := s.uow.WithinTransaction(ctx, func(txCtx context.Context, uow store.UnitOfWork) error {
@@ -371,3 +503,38 @@ func (s *MessageService) mapDocumentInputs(dtoDocs []*dto.Document) []model.Docu
 	}
 	return inputs
 }
+
+func toAttachments[T AttachmentProcessor](attachments []T) []AttachmentProcessor {
+	var converted []AttachmentProcessor = make([]AttachmentProcessor, len(attachments))
+	for i, att := range attachments {
+		converted[i] = att
+	}
+
+	return converted
+}
+
+func (s *MessageService) prepareMessage(ctx context.Context, msg *model.Message) error {
+	if err := msg.Validate(); err != nil {
+		return err
+	}
+
+	thread, err := s.threader.EnsureDirectThread(
+		ctx,
+		&dto.EnsureDirectThreadRequest{
+			DomainID: msg.GetDomainID(),
+			MemberID: msg.From.ID,
+			PeerFrom: &msg.From,
+			PeerTo:   &msg.SendTo,
+		},
+	)
+
+	if err != nil {
+		return err
+	}
+
+	msg.SetThread(thread.ID, thread.Members)
+	
+	return nil
+}
+
+// #endregion

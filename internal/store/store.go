@@ -30,6 +30,8 @@ type (
 			MessageID uuid.UUID
 			UserID    uuid.UUID
 		}) error
+		SaveLocation(ctx context.Context, msg *model.Message) (*model.Message, error)
+		SaveContact(ctx context.Context, msg *model.Message) (*model.Message, error)
 	}
 
 	OutboxStore interface {
@@ -66,7 +68,7 @@ type (
 		InitializeFullDirectThread(ctx context.Context, directThread *model.DirectThreadDialog) ([]*model.DirectThreadDialog, error)
 	}
 
-	MessageButtonInteraction interface {
-		Create(ctx context.Context, mbi *model.MessageButtonInteraction) (*model.MessageButtonInteraction, error)
+	ButtonsCallback interface {
+		Create(ctx context.Context, callback *model.ButtonsCallback) (*model.ButtonsCallback, error)
 	}
 )

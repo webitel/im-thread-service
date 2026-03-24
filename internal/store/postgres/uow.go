@@ -23,7 +23,7 @@ type unitOfWork struct {
 	messageHistoryStore             store.MessageHistory
 	directThreadDialogOrchestration store.DirectThreadDialogOrchestration
 	directSettings                  store.DirectSettings
-	messageButtonInteraction store.MessageButtonInteraction
+	buttonsCallback store.ButtonsCallback
 }
 
 // NewPgxUnitOfWork returns a new unit of work, given a pgx pool.
@@ -37,10 +37,14 @@ func NewPgxUnitOfWork(pool *pgxpool.Pool, wmlogger watermill.LoggerAdapter) *uni
 	}
 }
 
-// ThreadStore returns the thread store for the given unit of work.
-// It caches the underlying store, so subsequent calls with the same unit of work will return the same store instance.
-// If the store is not cached, it creates a new store by calling NewThreadStore with the given querier.
-// The store is used to resolve a direct thread by peers and to create a new direct thread with peers within one transaction.
+func (u *unitOfWork) ButtonsCallback() store.ButtonsCallback {
+	if u.buttonsCallback == nil {
+		u.buttonsCallback = NewButtonsCallback(u.querier)
+	}
+
+	return u.buttonsCallback
+} 
+
 func (u *unitOfWork) ThreadStore() store.ThreadStore {
 	if u.threadStore == nil {
 		u.threadStore = NewThreadStore(u.querier)
@@ -99,28 +103,11 @@ func (u *unitOfWork) DirectSettingsStore() store.DirectSettings {
 	return u.directSettings
 }
 
-func (u *unitOfWork) MessageButtonInteraction() store.MessageButtonInteraction {
-	if u.messageButtonInteraction == nil {
-		u.messageButtonInteraction = NewMessageButtonInteraction(u.querier, sqlbuilder.NewMessageButtonInteraction())
-	}
-
-	return u.messageButtonInteraction
-}
-
-// WithinTransaction executes a function within a transaction.
-// If the function panics, WithinTransaction will rollback all changes.
-// If the function returns an error, WithinTransaction will rollback all changes
-// and return the error.
-// If the function returns nil, WithinTransaction will commit all changes.
-// Nested transactions are not supported, WithinTransaction will return an error
-// if the given uow is already part of an open transaction.
 func (u *unitOfWork) WithinTransaction(ctx context.Context, fn func(ctx context.Context, uow store.UnitOfWork) error) error {
-	// NESTED TRANSACTION ARE NOT SUPPORTED, RETURN!
 	if _, ok := u.querier.(pgx.Tx); ok {
 		return fn(ctx, u)
 	}
 
-	// [BEGIN]
 	tx, err := u.pool.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to start transaction: %w", err)
@@ -128,10 +115,9 @@ func (u *unitOfWork) WithinTransaction(ctx context.Context, fn func(ctx context.
 
 	txUow := &unitOfWork{
 		pool:    u.pool,
-		querier: tx, // SET OPENED TRANSACTION AS QUERY CONTEXT
+		querier: tx,
 	}
 
-	// ROLLBACK CHANGES IN CASE OF PANIC
 	defer func() {
 		if p := recover(); p != nil {
 			_ = tx.Rollback(ctx) // [ROLLBACK]
@@ -139,15 +125,13 @@ func (u *unitOfWork) WithinTransaction(ctx context.Context, fn func(ctx context.
 		}
 	}()
 
-	// EXECUTE CALLBACK FUNCTION WITHIN ONE TRANSACTION!
 	if err := fn(ctx, txUow); err != nil {
-		if rbErr := tx.Rollback(ctx); rbErr != nil { // [ROLLBACK]
+		if rbErr := tx.Rollback(ctx); rbErr != nil {
 			return fmt.Errorf("tx error: %w, rollback error: %v", err, rbErr)
 		}
 		return err
 	}
 
-	// [COMMIT]
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("failed to commit transaction: %w", err)
 	}

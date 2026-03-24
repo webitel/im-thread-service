@@ -23,6 +23,15 @@ type MessageImage struct {
 	URL        string         `json:"url"`
 }
 
+func (mi *MessageImage) GetID() int64 { return mi.FileID }
+func (mi *MessageImage) GetURL() string { return mi.URL }
+func (mi *MessageImage) GetMimeType() string { return mi.Mime }
+func (mi *MessageImage) GetName() string { return mi.Name }
+func (mi *MessageImage) SetID(fileId int64) {mi.FileID = fileId }
+func (mi *MessageImage) SetMime(mime string) { mi.Mime = mime }
+func (mi *MessageImage) SetURL(url string) { mi.URL = url }
+func (mi *MessageImage) SetName(name string) { mi.Name = name }
+
 func (mi *MessageImage) GetFileID() int64 { return mi.FileID }
 
 type MessageDocument struct {
@@ -35,5 +44,14 @@ type MessageDocument struct {
 	CreatedAt time.Time `json:"created_at" db:"created_at"`
 	URL       string    `json:"url,omitempty"`
 }
+
+func (mi *MessageDocument) GetID() int64 { return mi.FileID }
+func (mi *MessageDocument) GetURL() string { return mi.URL }
+func (mi *MessageDocument) GetMimeType() string { return mi.Mime }
+func (mi *MessageDocument) GetName() string { return mi.Name }
+func (mi *MessageDocument) SetID(fileId int64) {mi.FileID = fileId }
+func (mi *MessageDocument) SetMime(mime string) { mi.Mime = mime }
+func (mi *MessageDocument) SetURL(url string) { mi.URL = url }
+func (mi *MessageDocument) SetName(name string) { mi.Name = name }
 
 func (md *MessageDocument) GetFileID() int64 { return md.FileID }

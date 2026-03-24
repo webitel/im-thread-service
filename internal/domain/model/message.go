@@ -2,7 +2,7 @@ package model
 
 import (
 	"encoding/json"
-	"log/slog"
+	"maps"
 	"time"
 
 	"github.com/google/uuid"
@@ -17,22 +17,24 @@ type Validator interface {
 }
 
 type ThreadTarget interface {
-    GetDomainID() int
-    GetFrom() shared.Peer
-    GetSendTo() shared.Peer
-    SetThread(id uuid.UUID, members uuid.UUIDs)
+	GetDomainID() int
+	GetFrom() shared.Peer
+	GetSendTo() shared.Peer
+	SetThread(id uuid.UUID, members uuid.UUIDs)
 }
 
 //go:generate stringer -type=MessageType
 type MessageType int16
 
 const (
-	MessageTypeUnknown MessageType = iota //WARNING: used only in down migrations to update check_message_type constraint 
-	MessageTypeText   						 // 1: TEXT
-	MessageTypeFile                          // 2: FILE (DOC)
-	MessageTypeImage                         // 3: IMAGE
-	MessageTypeSystem                        // 4: SYSTEM
+	MessageTypeUnknown MessageType = iota //WARNING: used only in down migrations to update check_message_type constraint
+	MessageTypeText                       // 1: TEXT
+	MessageTypeFile                       // 2: FILE (DOC)
+	MessageTypeImage                      // 3: IMAGE
+	MessageTypeSystem                     // 4: SYSTEM
 	MessageTypeInteractive
+	MessageTypeLocation
+	MessageTypeContact
 )
 
 type Message struct {
@@ -41,16 +43,18 @@ type Message struct {
 	DomainID  int32          `json:"domain_id" db:"domain_id"`
 	From      shared.Peer    `json:"from" db:"sender_id"`
 	To        uuid.UUIDs     `json:"to" db:"-"`
-	SendTo shared.Peer     `json:"-" db:"-"`
+	SendTo    shared.Peer    `json:"-" db:"-"`
 	Text      string         `json:"text" db:"body"`
 	Type      MessageType    `json:"type" db:"type"`
 	Metadata  map[string]any `json:"metadata,omitempty" db:"metadata"`
 	CreatedAt time.Time      `json:"created_at" db:"created_at" fieldtag:"ign"`
 	UpdatedAt time.Time      `json:"updated_at" db:"updated_at" fieldtag:"ign"`
 
-	Images         []*MessageImage    `json:"images,omitempty" db:"-"`
-	Documents      []*MessageDocument `json:"documents,omitempty" db:"-"`
-	MessageButtons MessageButtonsMatrix  `json:"message_buttons" db:"buttons"`
+	Images         []*MessageImage      `json:"images,omitempty" db:"-"`
+	Documents      []*MessageDocument   `json:"documents,omitempty" db:"-"`
+	Location       *Location            `json:"location" db:"-" fieldtag:"ign"`
+	Contact        *Contact             `json:"contact" db:"-" fieldtag:"ign"`
+	Interactive    *Interactive         `json:"interactive" db:"interactive"`
 
 	domainEvents []event.Outboxer
 }
@@ -64,8 +68,10 @@ func (m *Message) Validate() error {
 		return errors.InvalidArgument("invalid domain")
 	}
 
-	if err := m.MessageButtons.Validate(); err != nil {
-		return err
+	if m.Contact != nil {
+		if err := m.Contact.Validate(); err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -80,7 +86,6 @@ func (m *Message) Events() []event.Outboxer {
 	m.domainEvents = nil
 	return e
 }
-
 
 func (m *Message) WithCreatedEvent() *Message {
 	e := event.MessageCreated{
@@ -103,25 +108,40 @@ func (m *Message) WithCreatedEvent() *Message {
 		e.Documents = mapDocumentsToPayload(m.Documents)
 	}
 
-	if len(m.MessageButtons) > 0 {
-		btns, err := json.Marshal(m.MessageButtons)
-		if err != nil {
-			//TODO: add internal logger
-			slog.Error("error parsing buttons", slog.Any("error", err))
-		} else {
-			e.Buttons = btns
+	if m.Interactive != nil {
+		interactivePart, err := json.Marshal(m.Interactive)
+		if err == nil {
+			e.Interactive = interactivePart
 		}
 	}
-	
+
+	if m.Location != nil {
+		e.Location = &event.LocationPayload{
+			Address:   m.Location.Address,
+			Latitude:  m.Location.Latitude,
+			Longitude: m.Location.Longitude,
+			Name:      m.Location.Name,
+		}
+	}
+
+	if m.Contact != nil {
+		e.Contact = &event.ContactPayload{
+			Name:        m.Contact.Name,
+			Email:       m.Contact.Email,
+			PhoneNumber: m.Contact.PhoneNumber,
+			Metadata:    maps.Clone(m.Contact.Metadata),
+		}
+	}
+
 	m.domainEvents = append(m.domainEvents, e)
 
 	return m
 }
 
-func (m *Message) GetDomainID() int         { return int(m.DomainID) }
-func (m *Message) GetFrom() shared.Peer     { return m.From }
-func (m *Message) GetSendTo() shared.Peer   { return m.SendTo }
+func (m *Message) GetDomainID() int       { return int(m.DomainID) }
+func (m *Message) GetFrom() shared.Peer   { return m.From }
+func (m *Message) GetSendTo() shared.Peer { return m.SendTo }
 func (m *Message) SetThread(id uuid.UUID, members uuid.UUIDs) {
-    m.ThreadID = id
-    m.To = members
+	m.ThreadID = id
+	m.To = members
 }

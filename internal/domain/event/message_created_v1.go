@@ -58,18 +58,20 @@ var (
 
 // MessageCreated is the baseline schema for message distribution events.
 type MessageCreated struct {
-	MessageID  uuid.UUID         `json:"message_id"`
-	ThreadID   uuid.UUID         `json:"thread_id"`
-	DomainID   int32             `json:"domain_id"`
-	From       *shared.Peer      `json:"from"`
-	To         uuid.UUIDs        `json:"to"`
-	SendID     string            `json:"send_id"`
-	Body       string            `json:"body"`
-	Type       int16             `json:"type"` // 1:TEXT, 2:FILE, 3:IMAGE, 4:SYSTEM
-	OccurredAt time.Time         `json:"occurred_at"`
-	Images     []ImagePayload    `json:"images,omitempty"`
-	Documents  []DocumentPayload `json:"documents,omitempty"`
-	Buttons    []byte            `json:"buttons,omitempty"`
+	MessageID   uuid.UUID         `json:"message_id"`
+	ThreadID    uuid.UUID         `json:"thread_id"`
+	DomainID    int32             `json:"domain_id"`
+	From        *shared.Peer      `json:"from"`
+	To          uuid.UUIDs        `json:"to"`
+	SendID      string            `json:"send_id"`
+	Body        string            `json:"body"`
+	Type        int16             `json:"type"` // 1:TEXT, 2:FILE, 3:IMAGE, 4:SYSTEM
+	OccurredAt  time.Time         `json:"occurred_at"`
+	Images      []ImagePayload    `json:"images,omitempty"`
+	Documents   []DocumentPayload `json:"documents,omitempty"`
+	Location    *LocationPayload  `json:"location,omitempty"`
+	Contact     *ContactPayload   `json:"contact,omitempty"`
+	Interactive []byte            `json:"interactive,omitempty"`
 }
 
 // [OUTBOXER_IMPLEMENTATION]
@@ -132,4 +134,18 @@ type DocumentPayload struct {
 	Mime   string `json:"mime"`
 	Name   string `json:"name"`
 	Size   int64  `json:"size"`
+}
+
+type LocationPayload struct {
+	Address   *string `json:"address"`
+	Latitude  float64 `json:"latitude"`
+	Longitude float64 `json:"longitude"`
+	Name      *string `json:"name"`
+}
+
+type ContactPayload struct {
+	Name        *string           `json:"name,omitempty"`
+	Email       *string           `json:"email,omitempty"`
+	PhoneNumber *string           `json:"phone_number,omitempty"`
+	Metadata    map[string]string `json:"metadata,omitempty"`
 }

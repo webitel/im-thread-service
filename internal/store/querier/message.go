@@ -4,14 +4,16 @@ import (
 	"github.com/webitel/im-thread-service/internal/domain/model"
 )
 
-type ScanFn func(any) []any
 
 type MessageQuerier interface {
-	ScanFn() ScanFn
+	ScanFn(message *model.Message) []any
 	Insert(message *model.Message) (string, []any)
+	InsertLocation(message *model.Message) (string, []any)
+	LocationScanFn(msg *model.Message, location *model.Location) []any
+	InsertContact(message *model.Message) (string, []any)
+	ContactScanFn(message *model.Message) []any
 }
 
-type MessageButtonInteractionQuerier interface {
-	ScanFn(mbi *model.MessageButtonInteraction, result model.InteractionResult) ([]any, error)
-	Insert(mbi *model.MessageButtonInteraction) (string, []any, error)
+type ButtonsCallback interface {
+	Insert(callback *model.ButtonsCallback) (string, []any)
 }
