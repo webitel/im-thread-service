@@ -8,11 +8,9 @@ import (
 	queryobject "github.com/webitel/im-thread-service/internal/store/query_object"
 )
 
-type (
-	messageHistoryStore struct {
-		db Querier
-	}
-)
+type messageHistoryStore struct {
+	db Querier
+}
 
 func NewMessageHistoryStore(db Querier) *messageHistoryStore {
 	return &messageHistoryStore{

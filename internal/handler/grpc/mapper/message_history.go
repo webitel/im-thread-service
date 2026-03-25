@@ -1,8 +1,6 @@
 package mapper
 
 import (
-	"time"
-
 	"github.com/google/uuid"
 	impb "github.com/webitel/im-thread-service/gen/go/thread/v1"
 	"github.com/webitel/im-thread-service/internal/domain/model"
@@ -27,8 +25,7 @@ func MapSearchMessageHistoryRequest2HistoryMessageInputDTO(mhr *impb.SearchMessa
 		{
 			id, _ := uuid.Parse(mhr.Cursor.Id)
 			cursor.Id = id
-			cursor.CreatedAt = time.UnixMicro(mhr.Cursor.CreatedAt)
-			cursor.Direction = mhr.Cursor.Direction
+			cursor.Direction = mhr.GetBefore()
 		}
 	}
 
@@ -71,8 +68,7 @@ func MapMessage2SearchMessageHistoryResponse(messages []*model.Message) *impb.Se
 	})
 
 	return &impb.SearchMessageHistoryResponse{
-		Messages: responseMessages,
-		Next:     true,
+		Items: responseMessages,
 	}
 }
 
@@ -88,38 +84,6 @@ func GetUniqueFrom(messages []*model.Message) []string {
 	return utils.Map(set.Slice(), func(p uuid.UUID) string { return p.String() })
 }
 
-func MapPaging(paging *model.Paging) *impb.Paging {
-	if paging == nil {
-		return nil
-	}
-
-	var (
-		after, before *impb.HistoryMessageCursor
-	)
-
-	if paging.After != nil {
-		after = newPBHistoryCursor(paging.After.Id, paging.After.CreatedAt, paging.After.Direction)
-	}
-
-	if paging.Before != nil {
-		before = newPBHistoryCursor(paging.Before.Id, paging.Before.CreatedAt, paging.Before.Direction)
-	}
-
-	return &impb.Paging{
-		Cursors: &impb.Cursors{
-			After:  after,
-			Before: before,
-		},
-	}
-}
-
-func newPBHistoryCursor(id uuid.UUID, createdAt time.Time, direction bool) *impb.HistoryMessageCursor {
-	return &impb.HistoryMessageCursor{
-		CreatedAt: createdAt.UnixMicro(),
-		Id:        id.String(),
-		Direction: direction,
-	}
-}
 
 func mapDocs(docs []*model.MessageDocument) []*impb.Document {
 	return utils.Map(docs, func(md *model.MessageDocument) *impb.Document {
