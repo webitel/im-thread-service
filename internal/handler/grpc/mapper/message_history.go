@@ -25,7 +25,7 @@ func MapSearchMessageHistoryRequest2HistoryMessageInputDTO(mhr *impb.SearchMessa
 		{
 			id, _ := uuid.Parse(mhr.Cursor.Id)
 			cursor.Id = id
-			cursor.Direction = mhr.GetBefore()
+			cursor.Direction = mhr.GetCursor().GetBefore()
 		}
 	}
 

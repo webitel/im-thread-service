@@ -31,13 +31,13 @@ func (s *MessageHistoryService) SearchThreadMessagesHistory(ctx context.Context,
 	resp.From = mapper.GetUniqueFrom(messages)
 
 	if pageInfo.HasNextPage {
-		resp.NextCursor = &impb.HistoryMessageCursor{
+		resp.NextCursor = &impb.HistoryMessageCursorResponse{
 			Id: pageInfo.NextCursor.ID.String(),
 		}
 	}
 
 	if pageInfo.HasPrevPage {
-		resp.PrevCursor = &impb.HistoryMessageCursor{
+		resp.PrevCursor = &impb.HistoryMessageCursorResponse{
 			Id: pageInfo.PrevCursor.ID.String(),
 		}
 	}
