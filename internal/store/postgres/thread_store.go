@@ -2,42 +2,10 @@ package postgres
 
 import (
 	"context"
-	"time"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/webitel/im-thread-service/internal/domain/model"
-	"github.com/webitel/im-thread-service/internal/domain/shared"
 	queryobject "github.com/webitel/im-thread-service/internal/store/query_object"
-	"github.com/webitel/im-thread-service/internal/utils"
-)
-
-// [D]ata [A]cess [O]bjects
-type (
-	threadRecord struct {
-		ID          uuid.UUID             `json:"id,omitempty" db:"id"`
-		DomainID    int                   `json:"domain_id,omitempty" db:"domain_id"`
-		Subject     string                `json:"subject,omitempty" db:"subject"`
-		CreatedAt   time.Time             `json:"created_at,omitempty" db:"created_at"`
-		UpdatedAt   time.Time             `json:"updated_at,omitempty" db:"updated_at"`
-		Kind        model.ThreadKind      `json:"kind,omitempty" db:"kind"`
-		Owner       uuid.UUID             `json:"owner,omitempty" db:"owner"`
-		Description string                `json:"description,omitempty" db:"description"`
-		MemberIDs   uuid.UUIDs            `json:"member_ids,omitempty" db:"member_ids"`
-		Members     []*threadMemberRecord `json:"members,omitempty" db:"members"`
-	}
-	threadMemberRecord struct {
-		ID             uuid.UUID                   `json:"id,omitempty" db:"id"`
-		DirectSettings *directThreadSettingsRecord `json:"direct_settings,omitempty" db:"direct_settings"`
-	}
-
-	directThreadSettingsRecord struct {
-		ID        uuid.UUID `json:"id,omitempty" db:"id"`
-		Title     string    `json:"title,omitempty" db:"title"`
-		DomainID  int       `json:"domain_id,omitempty" db:"domain_id"`
-		CreatedAt time.Time `json:"created_at,omitempty" db:"created_at"`
-		UpdatedAt time.Time `json:"updated_at,omitempty" db:"updated_at"`
-	}
 )
 
 type threadStore struct {
@@ -50,18 +18,14 @@ func NewThreadStore(db Querier) *threadStore {
 	}
 }
 
-// Create creates a new thread with the given request.
-// It returns the newly created thread or an error if the operation fails.
-// If the operation succeeds, it returns the newly created thread with the id set.
-// If the operation fails, it returns nil and the error.
-func (t *threadStore) Create(ctx context.Context, req *model.Thread) (*model.Thread, error) {
+func (s *threadStore) Create(ctx context.Context, req *model.Thread) (*model.Thread, error) {
 	var (
 		query = `
 			insert into im_thread.thread (
-				domain_id, created_by, created_at, updated_by, updated_at, 
+				domain_id, created_at, updated_at, 
 				kind, owner, subject, description
 			)
-			values (@DomainId, @CreatedBy, @CreatedAt, @UpdatedBy, 
+			values (@DomainId, @CreatedAt, 
 				@UpdatedAt, @Kind, @Owner, @Subject,
 				@Description
 			)
@@ -69,9 +33,7 @@ func (t *threadStore) Create(ctx context.Context, req *model.Thread) (*model.Thr
 		`
 		args = pgx.NamedArgs{
 			"DomainId":    req.DomainID,
-			"CreatedBy":   req.CreatedBy,
 			"CreatedAt":   req.CreatedAt,
-			"UpdatedBy":   req.UpdatedBy,
 			"UpdatedAt":   req.UpdatedAt,
 			"Kind":        req.Kind,
 			"Owner":       req.Owner,
@@ -80,83 +42,28 @@ func (t *threadStore) Create(ctx context.Context, req *model.Thread) (*model.Thr
 		}
 	)
 
-	// SCAN ONLY ID AS OTHER PARAMS ALREADY HAS BEEN SET ON APP LEVEL
-	if err := t.db.QueryRow(ctx, query, args).Scan(&req.ID); err != nil {
+	if err := s.db.QueryRow(ctx, query, args).Scan(&req.ID); err != nil {
 		return nil, err
 	}
 
 	return req, nil
 }
 
-// Search searches for threads based on the given request.
-// It returns the threads found by the search, or an error if the operation fails.
-// If the operation succeeds, it returns the threads found by the search.
-// If the operation fails, it returns nil and the error.
-func (t *threadStore) Search(ctx context.Context, query queryobject.QueryObject) ([]*model.Thread, error) {
+func (s *threadStore) Search(ctx context.Context, query queryobject.QueryObject) ([]*model.Thread, error) {
 	sql, args, err := query.ToSql()
 	if err != nil {
 		return nil, err
 	}
 
-	rows, err := t.db.Query(ctx, sql, args...)
+	rows, err := s.db.Query(ctx, sql, args...)
 	if err != nil {
 		return nil, err
 	}
 
-	records, err := pgx.CollectRows(rows, pgx.RowToAddrOfStructByNameLax[threadRecord])
+	records, err := pgx.CollectRows(rows, pgx.RowToAddrOfStructByNameLax[model.Thread])
 	if err != nil {
 		return nil, err
 	}
 
-	threads := utils.Map(records, mapThreadRecordToModel)
-
-	return threads, nil
-}
-
-// mapThreadRecordToModel maps a *threadRecord to a *model.Thread.
-// It iterates over the thread members and maps each *threadMemberRecord to a *model.ThreadMember.
-// If the thread member record has a direct settings record, it is mapped to a *model.DirectThreadSetting.
-// The function then returns the mapped *model.Thread record.
-func mapThreadRecordToModel(record *threadRecord) *model.Thread {
-	members := utils.Map(record.Members, func(tmr *threadMemberRecord) *model.ThreadMember {
-		var (
-			directSettings *model.DirectThreadSetting
-		)
-
-		if tmr.DirectSettings != nil {
-			directSettings = &model.DirectThreadSetting{
-				BaseThreadSetting: model.BaseThreadSetting{
-					BaseModel: shared.BaseModel{
-						ID:        tmr.DirectSettings.ID,
-						DomainID:  tmr.DirectSettings.DomainID,
-						CreatedAt: tmr.DirectSettings.CreatedAt,
-						UpdatedAt: tmr.DirectSettings.UpdatedAt,
-					},
-					Title: tmr.DirectSettings.Title,
-				},
-			}
-		}
-
-		return &model.ThreadMember{
-			Id:             tmr.ID,
-			DirectSettings: directSettings,
-		}
-	})
-
-	thread := &model.Thread{
-		BaseModel: shared.BaseModel{
-			ID:        record.ID,
-			DomainID:  record.DomainID,
-			CreatedAt: record.CreatedAt,
-			UpdatedAt: record.UpdatedAt,
-		},
-		Kind:        record.Kind,
-		Owner:       record.Owner,
-		MembersIds:  record.MemberIDs,
-		Subject:     record.Subject,
-		Description: record.Description,
-		Members:     members,
-	}
-
-	return thread
+	return records, nil
 }

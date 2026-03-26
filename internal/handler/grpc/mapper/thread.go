@@ -6,6 +6,7 @@ import (
 	"github.com/webitel/im-thread-service/internal/domain/model"
 	"github.com/webitel/im-thread-service/internal/service/dto"
 	"github.com/webitel/im-thread-service/internal/utils"
+	"google.golang.org/protobuf/types/known/structpb"
 )
 
 func MapThreadSearchRequestToDTO(request *impb.ThreadSearchRequest) *dto.SearchThreadRequest {
@@ -34,7 +35,7 @@ func MapThreadsToProtoThreadList(threads []*model.Thread) *impb.SearchThreadResp
 	protoThreads := utils.Map(threads, MapThreadModelToProtoSearchResponse)
 
 	return &impb.SearchThreadResponse{
-		Threads: protoThreads,
+		Items: protoThreads,
 	}
 }
 
@@ -44,23 +45,39 @@ func MapThreadModelToProtoSearchResponse(thread *model.Thread) *impb.Thread {
 	}
 
 	var (
-		memberIds = utils.Map(thread.MembersIds, func(u uuid.UUID) string { return u.String() })
-		admins    = utils.Map(thread.Admins, func(u uuid.UUID) string { return u.String() })
+		memberIds = utils.Map(thread.MembersIDs, func(u uuid.UUID) string { return u.String() })
 		members   = utils.Map(thread.Members, mapThreadMemberToProtoResponse)
 	)
+
+	var lstMsg *impb.HistoryMessage
+	if thread.LastMessage != nil {
+		lstMsgMD, _ := structpb.NewStruct(thread.LastMessage.Metadata)
+
+		lstMsg = &impb.HistoryMessage{
+			Id:        thread.LastMessage.ID.String(),
+			SenderId:  thread.LastMessage.SenderID.String(),
+			Type:      int32(thread.LastMessage.Type),
+			Body:      thread.LastMessage.Body,
+			Metadata:  lstMsgMD,
+			CreatedAt: thread.LastMessage.CreatedAt.UTC().UnixMilli(),
+			UpdatedAt: thread.LastMessage.UpdatedAt.UTC().UnixMilli(),
+			Documents: mapDocs(thread.LastMessage.Documents),
+			Images:    mapImages(thread.LastMessage.Images),
+		}
+	}
 
 	return &impb.Thread{
 		Id:          thread.ID.String(),
 		DomainId:    int32(thread.DomainID),
-		CreatedAt:   thread.CreatedAtMilliseconds(),
-		UpdatedAt:   thread.UpdatedAtMilliseconds(),
+		CreatedAt:   thread.CreatedAtUnix(),
+		UpdatedAt:   thread.UpdatedAtUnix(),
 		Kind:        impb.ThreadKind(thread.Kind),
-		Owner:       thread.Owner.String(),
+		Owner:       thread.OwnerID.String(),
 		Subject:     thread.Subject,
 		Description: thread.Description,
 		MemberIds:   memberIds,
-		Admins:      admins,
 		Members:     members,
+		LastMsg:     lstMsg,
 	}
 }
 
@@ -76,9 +93,8 @@ func mapThreadMemberToProtoResponse(member *model.ThreadMember) *impb.ThreadMemb
 	if member.DirectSettings != nil {
 		directSettings = &impb.ThreadDirectSettings{
 			Id:        member.DirectSettings.ID.String(),
-			DomainId:  int32(member.DirectSettings.DomainID),
-			CreatedAt: member.DirectSettings.CreatedAtMilliseconds(),
-			UpdatedAt: member.DirectSettings.UpdatedAtMilliseconds(),
+			DomainId:  int32(member.DirectSettings.DomainID),			
+			UpdatedAt: member.DirectSettings.UpdatedAt.UTC().UnixMilli(),
 			Title:     member.DirectSettings.Title,
 		}
 	}

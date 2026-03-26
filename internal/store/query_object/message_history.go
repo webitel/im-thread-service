@@ -29,13 +29,12 @@ var (
 )
 
 type MessageHistoryQuery struct {
-	base   sq.SelectBuilder
-	fields []string
+	base         sq.SelectBuilder
+	fields       []string
 	paginatorCfg Config[MessageHistoryCursor]
 
 	pag *SquirrelPaginator[MessageHistoryCursor]
 }
-
 
 func NewMessageHistoryQuery() *MessageHistoryQuery {
 	return &MessageHistoryQuery{
@@ -46,7 +45,6 @@ func NewMessageHistoryQuery() *MessageHistoryQuery {
 		pag: New[MessageHistoryCursor](),
 	}
 }
-
 
 func (q *MessageHistoryQuery) WithFields(fields []string) *MessageHistoryQuery {
 	if len(fields) == 0 {
@@ -106,7 +104,7 @@ func (q *MessageHistoryQuery) WithCursor(cursor *dto.HistoryMessageCursor) *Mess
 	cfg, err := NewMessageHistoryConfigFromRaw(
 		uint64(q.limitOrDefault()),
 		MessageHistoryCursor{
-			ID:        cursor.Id,
+			ID: cursor.Id,
 		},
 		cursor.Direction,
 	)
@@ -152,12 +150,11 @@ func (q *MessageHistoryQuery) ToSql() (string, []any, error) {
 }
 
 func (q *MessageHistoryQuery) BuildPageInfo(
-	rows *[]*dto.HistoryMessage, 
+	rows *[]*dto.HistoryMessage,
 	extract CursorExtractor[*dto.HistoryMessage, MessageHistoryCursor],
 ) (PageInfo[MessageHistoryCursor], error) {
 	return BuildPageInfo(rows, q.paginatorCfg, extract)
 }
-
 
 func (q *MessageHistoryQuery) limitOrDefault() int {
 	if q.paginatorCfg.Limit > 0 {

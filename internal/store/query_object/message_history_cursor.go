@@ -6,8 +6,8 @@ import (
 	"github.com/google/uuid"
 )
 
-type MessageHistoryCursor struct {	
-	ID        uuid.UUID `json:"id"`
+type MessageHistoryCursor struct {
+	ID     uuid.UUID `json:"id"`
 	Before bool
 }
 
@@ -23,7 +23,7 @@ func (MessageHistoryCursorMapper) ToValues(c MessageHistoryCursor) (CursorValues
 	}
 
 	return CursorValues{
-		"id":         c.ID,
+		"id": c.ID,
 	}, nil
 }
 
@@ -130,9 +130,9 @@ func parseMessageHistoryRawCursor(raw Cursor) (MessageHistoryCursor, bool, error
 func parseMessageHistoryFields(rawID uuid.UUID) (MessageHistoryCursor, bool, error) {
 	if rawID == uuid.Nil {
 		return MessageHistoryCursor{}, false, nil
-	}	
+	}
 
 	return MessageHistoryCursor{
-		ID:        rawID,
+		ID: rawID,
 	}, true, nil
 }

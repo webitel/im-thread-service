@@ -125,7 +125,7 @@ func New[C any]() *SquirrelPaginator[C] {
 }
 
 func (p *SquirrelPaginator[C]) Apply(builder sq.SelectBuilder, cfg Config[C]) (sq.SelectBuilder, error) {
-	if err := validateConfig(cfg); err != nil {
+	if err := ValidateConfig(cfg); err != nil {
 		return builder, err
 	}
 
@@ -158,7 +158,7 @@ func BuildPageInfo[Row any, C any](
 	cfg Config[C],
 	extract CursorExtractor[Row, C],
 ) (PageInfo[C], error) {
-	if err := validateConfig(cfg); err != nil {
+	if err := ValidateConfig(cfg); err != nil {
 		return PageInfo[C]{}, err
 	}
 
@@ -219,7 +219,7 @@ func BuildPageInfo[Row any, C any](
 	return info, nil
 }
 
-func validateConfig[C any](cfg Config[C]) error {
+func ValidateConfig[C any](cfg Config[C]) error {
 	if cfg.Limit == 0 {
 		return fmt.Errorf("paginator: Limit must be > 0")
 	}
@@ -252,7 +252,7 @@ func validateConfig[C any](cfg Config[C]) error {
 	return nil
 }
 
-func effectiveOrder(col Column, dir Direction) Order {
+func EffectiveOrder(col Column, dir Direction) Order {
 	if dir == DirectionBefore {
 		return col.Order.reverse()
 	}
@@ -261,7 +261,7 @@ func effectiveOrder(col Column, dir Direction) Order {
 
 func applyOrderBy(builder sq.SelectBuilder, cols []Column, dir Direction) sq.SelectBuilder {
 	for _, col := range cols {
-		builder = builder.OrderBy(fmt.Sprintf("%s %s", col.Name, effectiveOrder(col, dir)))
+		builder = builder.OrderBy(fmt.Sprintf("%s %s", col.Name, EffectiveOrder(col, dir)))
 	}
 	return builder
 }

@@ -70,7 +70,7 @@ func (t *threadDialogStore) ThreadMembers(ctx context.Context, threadID, memberI
 		from thread_members
 		where @MemberID = any(ids);
 	`
-	
+
 	args := pgx.NamedArgs{
 		"DomainID": domainID,
 		"ThreadID": threadID,
@@ -86,7 +86,7 @@ func (t *threadDialogStore) ThreadMembers(ctx context.Context, threadID, memberI
 	if err != nil {
 		return nil, err
 	}
-	
+
 	return members, nil
 }
 

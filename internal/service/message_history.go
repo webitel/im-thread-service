@@ -47,7 +47,7 @@ func (s *messageHistory) Search(ctx context.Context, hmiDTO *dto.HistoryMessageI
 
 	pageInfo, err := query.BuildPageInfo(&historyMessages, func(m *dto.HistoryMessage) (queryobject.MessageHistoryCursor, error) {
 		return queryobject.MessageHistoryCursor{
-			ID:        m.ID,			
+			ID: m.ID,
 		}, nil
 	})
 
@@ -70,7 +70,7 @@ func mapHistoryMessagesToMessage(history []*dto.HistoryMessage) []*model.Message
 			ID:        histMsg.ID,
 			ThreadID:  histMsg.ThreadID,
 			From:      shared.Peer{ID: histMsg.SenderID},
-			Text:      histMsg.Body,
+			Body:      histMsg.Body,
 			Type:      model.MessageType(histMsg.Type),
 			CreatedAt: histMsg.CreatedAt,
 			UpdatedAt: histMsg.UpdatedAt,

@@ -7,17 +7,16 @@ import (
 	"github.com/webitel/im-thread-service/internal/service/dto"
 	"github.com/webitel/im-thread-service/internal/utils"
 	"github.com/webitel/im-thread-service/internal/utils/set"
-	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
 func MapSearchMessageHistoryRequest2HistoryMessageInputDTO(mhr *impb.SearchMessageHistoryRequest) *dto.HistoryMessageInputDTO {
 	var (
-		ids         = utils.Map(mhr.Ids, utils.IdsParser)
-		threadIds   = utils.Map([]string{mhr.ThreadId}, utils.IdsParser)
-		senderIds   = utils.Map(mhr.SenderIds, utils.IdsParser)
-		types       = utils.Map(mhr.Types, func(i int32) int { return int(i) })
-		cursor      *dto.HistoryMessageCursor
+		ids       = utils.Map(mhr.Ids, utils.IdsParser)
+		threadIds = utils.Map([]string{mhr.ThreadId}, utils.IdsParser)
+		senderIds = utils.Map(mhr.SenderIds, utils.IdsParser)
+		types     = utils.Map(mhr.Types, func(i int32) int { return int(i) })
+		cursor    *dto.HistoryMessageCursor
 	)
 
 	if mhr.Cursor != nil {
@@ -30,14 +29,14 @@ func MapSearchMessageHistoryRequest2HistoryMessageInputDTO(mhr *impb.SearchMessa
 	}
 
 	return &dto.HistoryMessageInputDTO{
-		Fields:      mhr.Fields,
-		Ids:         ids,
-		ThreadIds:   threadIds,
-		SenderIds:   senderIds,
-		Size:        int(mhr.GetSize()),
-		Types:       types,
-		Cursor:      cursor,
-		DomainID:    int(mhr.GetDomainId()),
+		Fields:    mhr.Fields,
+		Ids:       ids,
+		ThreadIds: threadIds,
+		SenderIds: senderIds,
+		Size:      int(mhr.GetSize()),
+		Types:     types,
+		Cursor:    cursor,
+		DomainID:  int(mhr.GetDomainId()),
 	}
 }
 
@@ -48,22 +47,22 @@ func MapMessage2SearchMessageHistoryResponse(messages []*model.Message) *impb.Se
 			images = mapImages(m.Images)
 		)
 
-		md, err := toAnyMap(m.Metadata)
+		md, err := structpb.NewStruct(m.Metadata)
 		if err != nil {
 			return nil
 		}
 
 		return &impb.HistoryMessage{
-			Id:         m.ID.String(),
-			ThreadId:   m.ThreadID.String(),
-			SenderId:   m.From.ID.String(),
-			Body:       m.Text,
-			Type:       int32(m.Type),
-			Metadata:   md,
-			CreatedAt:  max(m.CreatedAt.UnixMilli(), 0),
-			UpdatedAt:  max(m.UpdatedAt.UnixMilli(), 0),
-			Documents:  docs,
-			Images:     images,
+			Id:        m.ID.String(),
+			ThreadId:  m.ThreadID.String(),
+			SenderId:  m.From.ID.String(),
+			Body:      m.Body,
+			Type:      int32(m.Type),
+			Metadata:  md,
+			CreatedAt: max(m.CreatedAt.UnixMilli(), 0),
+			UpdatedAt: max(m.UpdatedAt.UnixMilli(), 0),
+			Documents: docs,
+			Images:    images,
 		}
 	})
 
@@ -83,7 +82,6 @@ func GetUniqueFrom(messages []*model.Message) []string {
 
 	return utils.Map(set.Slice(), func(p uuid.UUID) string { return p.String() })
 }
-
 
 func mapDocs(docs []*model.MessageDocument) []*impb.Document {
 	return utils.Map(docs, func(md *model.MessageDocument) *impb.Document {
@@ -113,19 +111,4 @@ func mapImages(images []*model.MessageImage) []*impb.Image {
 			Url:       mi.URL,
 		}
 	})
-}
-
-func toAnyMap(src map[string]any) (map[string]*anypb.Any, error) {
-	dst := make(map[string]*anypb.Any, len(src))
-
-	for k, v := range src {
-		spb, _ := structpb.NewValue(v)
-		a, err := anypb.New(spb)
-		if err != nil {
-			return nil, err
-		}
-		dst[k] = a
-	}
-
-	return dst, nil
 }
