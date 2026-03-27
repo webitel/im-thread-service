@@ -15,9 +15,9 @@ type (
 	}
 
 	EnsureDirectThreadResponse struct {
-		ID uuid.UUID
+		ID       uuid.UUID
 		DomainID int32
-		Members uuid.UUIDs
+		Members  uuid.UUIDs
 	}
 
 	SearchThreadDialogRequest struct {
@@ -59,7 +59,7 @@ func NewEnsureDirectThreadResponse(id uuid.UUID, domainID int32, members uuid.UU
 	return &EnsureDirectThreadResponse{
 		ID:       id,
 		DomainID: domainID,
-		Members: members,
+		Members:  members,
 	}
 }
 

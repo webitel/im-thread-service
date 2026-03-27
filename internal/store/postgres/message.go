@@ -49,7 +49,7 @@ func (m *messageStore) SaveMessage(ctx context.Context, msg *model.Message) (*mo
 		"ThreadID": msg.ThreadID,
 		"SenderID": msg.From.ID,
 		"Type":     msg.Type,
-		"Body":     msg.Text,
+		"Body":     msg.Body,
 		"Metadata": msg.Metadata,
 	}
 

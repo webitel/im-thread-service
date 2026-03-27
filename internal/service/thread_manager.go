@@ -41,7 +41,7 @@ type (
 	}
 
 	thread struct {
-		uow store.UnitOfWork
+		uow    store.UnitOfWork
 		logger *slog.Logger
 	}
 )
@@ -51,23 +51,18 @@ func NewThreadService(logger *slog.Logger, uow store.UnitOfWork) *thread {
 	log := logger.With(slog.String("component", "thread"))
 
 	return &thread{
-		uow: uow,
+		uow:    uow,
 		logger: log,
 	}
 }
 
-// Search searches for threads based on the given request.
-// It returns the threads found by the search, or an error if the operation fails.
-// If the operation succeeds, it returns the threads found by the search.
-// If the operation fails, it returns nil and the error.
-// The request can contain filters on thread id, domain id, kind, member id, owner id, subject, limit, sort, and offset.
-// The response contains the threads found by the search.
 func (t *thread) Search(ctx context.Context, searchRequest *dto.SearchThreadRequest) ([]*model.Thread, error) {
 	if err := guards.SearchThreadValidationGuard(searchRequest); err != nil {
 		return nil, err
 	}
 
 	query := queryobject.NewThreadQueryObject().
+		WithSubject().
 		WithFields(searchRequest.Fields).
 		WithIDFilter(searchRequest.Ids...).
 		WithDomainIDFilter(searchRequest.DomainIds...).
@@ -101,16 +96,16 @@ func (t *thread) EnsureDirectThread(ctx context.Context, req *dto.EnsureDirectTh
 				slog.String("thread_id", indirect.ID.String()),
 				slog.String("member_id", req.PeerFrom.ID.String()),
 				slog.Any("err", err),
-			)			
+			)
 
 			return nil, errors.Wrap(notThreadMemberError, errors.WithValue("err", err))
-		} 
+		}
 
 		indirect.Members = threadMd.Members
 
 		return indirect, nil
-	} 
-	
+	}
+
 	var (
 		err          error
 		directThread *model.Thread
@@ -150,7 +145,7 @@ func (t *thread) EnsureDirectThread(ctx context.Context, req *dto.EnsureDirectTh
 		return nil, err
 	}
 
-	return dto.NewEnsureDirectThreadResponse(directThread.ID, int32(directThread.DomainID), []uuid.UUID{req.PeerFrom.ID, req.PeerTo.ID},), nil
+	return dto.NewEnsureDirectThreadResponse(directThread.ID, int32(directThread.DomainID), []uuid.UUID{req.PeerFrom.ID, req.PeerTo.ID}), nil
 }
 
 // searchDirectThread resolves a direct thread by peers. If the thread is found, it returns the thread id.
@@ -165,7 +160,10 @@ func (t *thread) searchDirectThread(ctx context.Context, req *dto.EnsureDirectTh
 
 	directThreadId, err := t.uow.ThreadDialogStore().Resolve(ctx, searchDirectThreadRequest)
 	if err == nil && directThreadId != uuid.Nil {
-		return model.NewThreadBuilder().WithID(directThreadId).WithDomainID(req.DomainID).Build(), nil
+		return &model.Thread{
+			ID:       directThreadId,
+			DomainID: int32(req.DomainID),
+		}, nil
 	}
 
 	return nil, err
@@ -180,11 +178,11 @@ func (t *thread) createDirectThread(ctx context.Context, req *dto.EnsureDirectTh
 		err          error
 		now          = time.Now().UTC()
 		directThread = &model.Thread{
-			BaseModel: shared.BaseModel{
-				DomainID:  req.DomainID,
-				CreatedAt: now,
-				UpdatedAt: now,
-			},
+
+			DomainID:  int32(req.DomainID),
+			CreatedAt: now,
+			UpdatedAt: now,
+
 			Kind: model.ThreadDirect,
 		}
 	)
@@ -232,15 +230,14 @@ func (t *thread) createDirectThread(ctx context.Context, req *dto.EnsureDirectTh
 			WithID(directThread.ID).WithRecipient(event.NewRecipient(req.PeerFrom.ID, req.PeerFrom.Identity.Name)).
 			WithMembers(members).WithSubject(memberSettings.Title).WithKind(model.ThreadDirect.String()).Build(),
 
-			event.NewThreadCreatedBuilder().
-				WithDomainID(int32(directThread.DomainID)).WithCreatedAt(directThread.CreatedAt).
-				WithID(directThread.ID).WithRecipient(event.NewRecipient(req.PeerTo.ID, req.PeerTo.Identity.Name)).
-				WithSubject(directToSettings.Title).WithMembers(members).WithKind(model.ThreadDirect.String()).Build(),
+		event.NewThreadCreatedBuilder().
+			WithDomainID(int32(directThread.DomainID)).WithCreatedAt(directThread.CreatedAt).
+			WithID(directThread.ID).WithRecipient(event.NewRecipient(req.PeerTo.ID, req.PeerTo.Identity.Name)).
+			WithSubject(directToSettings.Title).WithMembers(members).WithKind(model.ThreadDirect.String()).Build(),
 	)
 
 	return directThread, nil
 }
-
 
 func (t *thread) indirectThreadContext(req *dto.EnsureDirectThreadRequest) *dto.EnsureDirectThreadResponse {
 	if req.PeerTo.Type == shared.PeerContact {

@@ -22,14 +22,14 @@ const (
 	threadLinkDirectSettings
 	threadLinkMembersLateral
 	threadLinkFullMembersLateral
+	threadLinkLastMessageLateral
 )
 
-type (
-	threadQueryObject struct {
-		*baseQueryObject[*threadQueryObject]
-		mustIncludeComputedSubject bool
-	}
-)
+type threadQueryObject struct {
+	*baseQueryObject[*threadQueryObject]
+	mustIncludeComputedSubject bool
+}
+
 
 func NewThreadQueryObject() *threadQueryObject {
 	from := fmt.Sprintf("%s %s", ThreadTable, threadAlias)
@@ -110,7 +110,7 @@ func (q *threadQueryObject) FieldsMetadata() map[string]fieldMetadata {
 		},
 		"owner": {
 			sqlExpr:      "t.owner",
-			aliasedExpr:  "t.owner as owner",
+			aliasedExpr:  "t.owner as owner_id",
 			requiresJoin: 0,
 			sortable:     true,
 			filterExpr:   "t.owner",
@@ -143,6 +143,20 @@ func (q *threadQueryObject) FieldsMetadata() map[string]fieldMetadata {
 			sortable:     false,
 			filterExpr:   "m.members_data",
 		},
+		"last_msg": {
+			sqlExpr:      "msg.last_msg as last_msg",
+			aliasedExpr:  "msg.last_msg as last_msg",
+			requiresJoin: threadLinkLastMessageLateral,
+			sortable:     false,
+			filterExpr:   "",
+		},
+		"last_msg_at": {
+			sqlExpr:      "msg.id",
+			aliasedExpr:  "msg.id as last_message_id",
+			requiresJoin: threadLinkLastMessageLateral,
+			sortable:     true,
+			filterExpr:   "",
+		},
 	}
 }
 
@@ -162,6 +176,10 @@ func (q *threadQueryObject) EnsureJoins(requiredJoin int) {
 	if requiredJoin&threadLinkFullMembersLateral != 0 {
 		q.linkFullMembersLateral()
 	}
+
+	if requiredJoin&threadLinkLastMessageLateral != 0 {
+		q.linkLastMessageLateral()
+	}
 }
 
 func (q *threadQueryObject) WithIDFilter(ids ...uuid.UUID) *threadQueryObject {
@@ -169,6 +187,11 @@ func (q *threadQueryObject) WithIDFilter(ids ...uuid.UUID) *threadQueryObject {
 		q.builder = q.builder.Where(squirrel.Eq{threadAlias + ".id": ids})
 	}
 
+	return q
+}
+
+func (q *threadQueryObject) WithSubject() *threadQueryObject {
+	q.mustIncludeComputedSubject=true
 	return q
 }
 
@@ -306,4 +329,49 @@ func (q *threadQueryObject) linkFullMembersLateral() {
 			where %[1]s.thread_id = %[5]s.id
 		) %[6]s on true
 	`, threadThreadDialogAlias, threadDirectSettingsAlias, DirectSettingsTable, ThreadDialogTable, threadAlias, threadMembersFullLateralAlias))
+}
+
+func (q *threadQueryObject) linkLastMessageLateral() {
+	if q.join&threadLinkLastMessageLateral != 0 {
+		return
+	}
+
+	q.join |= threadLinkLastMessageLateral
+
+	q.builder = q.builder.CrossJoin(`
+		lateral (
+			select
+				m.id,
+				jsonb_build_object(
+					'id', m.id,
+					'sender_id', m.sender_id,
+					'type', m.type,
+					'body', m.body,
+					'metadata', m.metadata,
+					'created_at', m.created_at,
+					'updated_at', m.updated_at,
+					'documents', (
+						select jsonb_agg(jsonb_build_object(
+							'id', md.id, 'file_id', md.file_id, 'name', md.name,
+							'mime', md.mime, 'size', md.size, 'created_at', md.created_at
+						))
+						from im_message.message_documents md
+						where md.message_id = md.id and m.type = 2 
+					),
+					'images', (
+						select jsonb_agg(jsonb_build_object(
+							'id', mi.id, 'file_id', mi.file_id, 'mime', mi.mime,
+							'thumbnails', mi.thumbnails, 'width', mi.width, 
+                        	'height', mi.height, 'created_at', mi.created_at
+						))
+						from im_message.message_images mi
+						where mi.message_id = m.id and m.type = 3
+					)
+				) as last_msg
+			from im_message.messages m
+			where m.thread_id = t.id
+			order by m.id desc
+			limit 1
+		) as msg
+	`)
 }

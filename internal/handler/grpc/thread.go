@@ -9,13 +9,11 @@ import (
 	"github.com/webitel/im-thread-service/internal/utils"
 )
 
-type (
-	ThreadService struct {
-		impb.UnimplementedThreadManagementServer
+type ThreadService struct {
+	impb.UnimplementedThreadManagementServer
 
-		threadManager service.ThreadManager
-	}
-)
+	threadManager service.ThreadManager
+}
 
 func NewThreadService(threadManager service.ThreadManager) *ThreadService {
 	return &ThreadService{
