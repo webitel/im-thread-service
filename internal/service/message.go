@@ -133,6 +133,9 @@ func (s *MessageService) SendImage(ctx context.Context, in *dto.SendImageRequest
 		if _, err := uow.Messages().SaveImages(txCtx, saved.ID, msg.Images); err != nil {
 			return err
 		}
+
+		msg.ID = saved.ID
+
 		return s.dispatchEvents(txCtx, uow, msg)
 	})
 	if err != nil {
@@ -186,6 +189,9 @@ func (s *MessageService) SendDocument(ctx context.Context, in *dto.SendDocumentR
 		if _, err := uow.Messages().SaveDocuments(txCtx, saved.ID, msg.Documents); err != nil {
 			return err
 		}
+
+		msg.ID = saved.ID
+
 		return s.dispatchEvents(txCtx, uow, msg)
 	})
 	if err != nil {
