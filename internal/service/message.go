@@ -53,6 +53,8 @@ func (s *MessageService) SendText(ctx context.Context, in *dto.SendTextRequest) 
 		return nil, fmt.Errorf("validation: %w", err)
 	}
 
+	log := s.logger.With("operation", "message.SendText")
+
 	t, err := s.threader.EnsureDirectThread(ctx, &dto.EnsureDirectThreadRequest{
 		PeerFrom: &in.From,
 		PeerTo:   &in.To,
@@ -60,6 +62,14 @@ func (s *MessageService) SendText(ctx context.Context, in *dto.SendTextRequest) 
 		MemberID: in.From.ID,
 	})
 	if err != nil {
+		log.Error(
+			"failed to ensure direct thread", "err", err,
+			slog.Any("from", in.From),
+			slog.Any("to", in.To),
+			slog.Any("domain_id", in.DomainID),
+			slog.String("member_id", in.From.ID.String()),
+		)
+
 		return nil, err
 	}
 
