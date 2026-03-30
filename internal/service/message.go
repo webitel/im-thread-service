@@ -233,9 +233,16 @@ func (s *MessageService) Read(ctx context.Context, in *dto.ReadMessageRequest) e
 
 func (s *MessageService) executeMessageTransaction(ctx context.Context, msg *model.Message) error {
 	err := s.uow.WithinTransaction(ctx, func(txCtx context.Context, uow store.UnitOfWork) error {
-		if _, err := uow.Messages().SaveMessage(txCtx, msg); err != nil {
+		var (
+			savedMsg *model.Message
+			err      error
+		)
+		if savedMsg, err = uow.Messages().SaveMessage(txCtx, msg); err != nil {
 			return err
 		}
+
+		msg.ID = savedMsg.ID
+
 		return s.dispatchEvents(txCtx, uow, msg)
 	})
 	if err != nil {
