@@ -23,7 +23,7 @@ func prepareText(s string) string {
 	return norm.NFC.String(s)
 }
 
-func buildMetadata(text string) map[string]any {
+func BuildMetadata(text string) map[string]any {
 	return map[string]any{
 		"entities":  extractEntities(text),
 		"graphemes": uniseg.GraphemeClusterCount(text),

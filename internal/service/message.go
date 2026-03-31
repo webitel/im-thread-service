@@ -12,6 +12,7 @@ import (
 	"github.com/webitel/im-thread-service/internal/service/dto"
 	guards "github.com/webitel/im-thread-service/internal/service/guards"
 	"github.com/webitel/im-thread-service/internal/store"
+	"github.com/webitel/webitel-go-kit/pkg/errors"
 )
 
 type Messager interface {
@@ -47,7 +48,6 @@ func NewMessageService(
 
 var _ Messager = (*MessageService)(nil)
 
-// SendText handles normalization and multi-recipient distribution of text messages.
 func (s *MessageService) SendText(ctx context.Context, in *dto.SendTextRequest) (*dto.SendTextResponse, error) {
 	if err := guards.SendTextGuard(in); err != nil {
 		return nil, fmt.Errorf("validation: %w", err)
@@ -73,24 +73,50 @@ func (s *MessageService) SendText(ctx context.Context, in *dto.SendTextRequest) 
 		return nil, err
 	}
 
-	// [CLEAN] Using named structure instead of positional arguments
-	msg := model.NewTextMessage(model.MessageCreate{
-		ThreadID:   t.ID,
-		DomainID:   int32(in.DomainID),
-		From:       in.From,
-		Recipients: t.Members,
-		Body:       in.Body,
-		SendID:     in.SendID,
+	msg := &model.Message{
+		ThreadID: t.ID,
+		DomainID: int32(in.DomainID),
+		From:     in.From,
+		Body:     in.Body,
+		To:       t.Members,
+		Type:     model.MessageTypeText,
+		SenderID: in.From.ID,
+		Metadata: model.BuildMetadata(in.Body),
+	}
+
+	err = s.uow.WithinTransaction(ctx, func(ctx context.Context, uow store.UnitOfWork) error {
+		saved, err := uow.Messages().SaveMessage(ctx, msg)
+		if err != nil {
+			return err
+		}
+
+		saved.To = t.Members
+		saved.WithCreatedEvent(in.SendID)
+
+		if err = s.dispatchEvents(ctx, uow, saved); err != nil {
+			return err
+		}
+
+		msg = saved
+
+		return nil
 	})
 
-	if err := s.executeMessageTransaction(ctx, msg); err != nil {
-		return nil, err
+	if err != nil {
+		log.ErrorContext(
+			ctx,
+			"error saving text message",
+			slog.Any("error", err),
+			slog.String("thread_id", t.ID.String()),
+			slog.String("from", msg.From.ID.String()),
+		)
+
+		return nil, errors.Internal("error saving text message", errors.WithCause(err))
 	}
 
 	return &dto.SendTextResponse{ID: msg.ID, To: in.To}, nil
 }
 
-// SendImage handles media attachments and transactional event propagation.
 func (s *MessageService) SendImage(ctx context.Context, in *dto.SendImageRequest) (*dto.SendImageResponse, error) {
 	if err := guards.SendImageGuard(in); err != nil {
 		return nil, fmt.Errorf("validation: %w", err)
@@ -114,7 +140,6 @@ func (s *MessageService) SendImage(ctx context.Context, in *dto.SendImageRequest
 		return nil, err
 	}
 
-	// [CLEAN] Initializing image message with clear intent
 	msg := model.NewImageMessage(model.MessageCreate{
 		ThreadID:   t.ID,
 		DomainID:   int32(in.DomainID),
@@ -170,7 +195,6 @@ func (s *MessageService) SendDocument(ctx context.Context, in *dto.SendDocumentR
 		return nil, err
 	}
 
-	// [CLEAN] Unified parameter handling
 	msg := model.NewDocumentMessage(model.MessageCreate{
 		ThreadID:   t.ID,
 		DomainID:   int32(in.DomainID),
@@ -203,19 +227,15 @@ func (s *MessageService) SendDocument(ctx context.Context, in *dto.SendDocumentR
 }
 
 func (s *MessageService) Read(ctx context.Context, in *dto.ReadMessageRequest) error {
-	// 1. Validate basic constraints
 	if err := guards.ValidateReadMessage(in); err != nil {
 		return fmt.Errorf("validation: %w", err)
 	}
 
-	// 2. Parse string IDs to UUIDs
 	tID, _ := uuid.Parse(in.ThreadID)
 	mID, _ := uuid.Parse(in.MessageID)
 	uID, _ := uuid.Parse(in.UserID)
 
-	// 3. Execute logic
 	return s.uow.WithinTransaction(ctx, func(txCtx context.Context, uow store.UnitOfWork) error {
-		// Pass the anonymous struct as a single argument
 		err := uow.Messages().ReadMessage(txCtx, struct {
 			DomainID  int32
 			ThreadID  uuid.UUID
