@@ -49,3 +49,33 @@ func (m *Message) Events() []event.Outboxer {
 	m.domainEvents = nil
 	return e
 }
+
+func (m *Message) WithCreatedEvent(sendID string) *Message {
+	if m == nil {
+		return m
+	}
+
+	e := event.MessageCreated{
+		MessageID:  m.ID,
+		ThreadID:   m.ThreadID,
+		DomainID:   m.DomainID,
+		From:       &m.From,
+		To:         m.To,
+		SendID:     sendID,
+		Body:       m.Body,
+		Type:       int16(m.Type),
+		OccurredAt: m.CreatedAt,
+	}
+
+	if len(m.Images) > 0 {
+		e.Images = mapImagesToPayload(m.Images)
+	}
+
+	if len(m.Documents) > 0 {
+		e.Documents = mapDocumentsToPayload(m.Documents)
+	}
+
+	m.AddEvent(e)
+
+	return m
+}

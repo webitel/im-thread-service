@@ -47,7 +47,7 @@ func NewTextMessage(in MessageCreate) *Message {
 		To:        in.Recipients,
 		Body:      cleanText,
 		Type:      MessageTypeText,
-		Metadata:  buildMetadata(cleanText),
+		Metadata:  BuildMetadata(cleanText),
 		CreatedAt: time.Now().UTC(),
 	}
 
@@ -78,7 +78,7 @@ func NewImageMessage(in MessageCreate) *Message {
 		Body:      cleanText,
 		Type:      MessageTypeImage,
 		Images:    domainImages,
-		Metadata:  buildMetadata(cleanText),
+		Metadata:  BuildMetadata(cleanText),
 		CreatedAt: time.Now().UTC(),
 	}
 
@@ -109,7 +109,7 @@ func NewDocumentMessage(in MessageCreate) *Message {
 		Body:      cleanText,
 		Type:      MessageTypeFile,
 		Documents: domainDocs,
-		Metadata:  buildMetadata(cleanText),
+		Metadata:  BuildMetadata(cleanText),
 		CreatedAt: time.Now().UTC(),
 	}
 
