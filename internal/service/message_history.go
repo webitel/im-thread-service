@@ -12,27 +12,24 @@ import (
 )
 
 // interface guards!
-var (
-	_ MessageHistorySearcher = (*messageHistory)(nil)
-)
 
 type (
-	MessageHistorySearcher interface {
-		Search(context.Context, *dto.HistoryMessageInputDTO) (model.MessageSlice, error)
+	MessageHistoryStore interface {
+		Search(ctx context.Context, query queryobject.QueryObject) ([]*dto.HistoryMessage, error)
 	}
 
-	messageHistory struct {
-		messageHistoryStore store.MessageHistory
+	MessageHistoryService struct {
+		messageHistoryStore MessageHistoryStore
 	}
 )
 
-func NewMessageHistory(messageHistoryStore store.MessageHistory) *messageHistory {
-	return &messageHistory{
+func NewMessageHistory(messageHistoryStore store.MessageHistory) *MessageHistoryService {
+	return &MessageHistoryService{
 		messageHistoryStore: messageHistoryStore,
 	}
 }
 
-func (s *messageHistory) Search(ctx context.Context, hmiDTO *dto.HistoryMessageInputDTO) (model.MessageSlice, error) {
+func (s *MessageHistoryService) Search(ctx context.Context, hmiDTO *dto.HistoryMessageInputDTO) (model.MessageSlice, error) {
 	var (
 		query  queryobject.QueryObject
 		err    error

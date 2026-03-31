@@ -1,70 +1,77 @@
 package mapper
 
 import (
+	"time"
+
 	"github.com/google/uuid"
 	impb "github.com/webitel/im-thread-service/gen/go/thread/v1"
 	"github.com/webitel/im-thread-service/internal/domain/model"
 	"github.com/webitel/im-thread-service/internal/service/dto"
-	"github.com/webitel/im-thread-service/internal/utils"
 )
 
-func MapThreadSearchRequestToDTO(request *impb.ThreadSearchRequest) *dto.SearchThreadRequest {
-	var (
-		ids     = utils.Map(request.Ids, utils.IdsParser)
-		owners  = utils.Map(request.Owners, utils.IdsParser)
-		members = utils.Map(request.MemberIds, utils.IdsParser)
-		kinds   = utils.Map(request.Kinds, func(tk impb.ThreadKind) model.ThreadKind { return model.ThreadKind(tk) })
-	)
+//go:generate goverter gen .
 
-	return &dto.SearchThreadRequest{
-		Fields:    request.Fields,
-		Ids:       ids,
-		DomainIds: utils.ConvertInts[int](request.DomainIds),
-		Kinds:     kinds,
-		Owners:    owners,
-		Q:         request.Q,
-		MemberIds: members,
-		Limit:     int(request.Size),
-		Sort:      request.Sort,
-		Page:      int(request.Page),
-	}
+// goverter:converter
+// goverter:output:file ./generated/thread_to_dto.go
+// goverter:matchIgnoreCase
+// goverter:extend github.com/google/uuid:Parse
+// goverter:extend ConvertInt32ToInt
+// goverter:extend ConvertThreadKindToInternal
+type ThreadInConverter interface {
+	ConvertCreateGroup(*impb.CreateGroupRequest) *dto.CreateGroupRequest
+	// goverter:map Size Limit
+	ConvertSearch(*impb.ThreadSearchRequest) (*dto.ThreadSearchRequest, error)
 }
 
-func MapThreadsToProtoThreadList(threads []*model.Thread) *impb.SearchThreadResponse {
-	protoThreads := utils.Map(threads, MapThreadModelToProtoSearchResponse)
-
-	return &impb.SearchThreadResponse{
-		Threads: protoThreads,
-	}
+// goverter:converter
+// goverter:matchIgnoreCase
+// goverter:output:file ./generated/thread_to_pb.go
+// goverter:ignoreUnexported
+// goverter:extend ConvertUUIDToString
+// goverter:extend ConvertIntToInt32
+// goverter:extend ConvertTimeToInt64
+// goverter:extend ConvertThreadKindToExternal
+// goverter:extend ConvertThreadMemberToProto
+type ThreadOutConverter interface {
+	ConvertCreateGroup(*dto.CreateGroupRequest) *impb.CreateGroupRequest
+	// goverter:autoMap BaseModel
+	// goverter:map MembersIds MemberIds
+	// goverter:ignore Admins
+	ConvertToThread(*model.Thread) *impb.Thread
 }
 
-func MapThreadModelToProtoSearchResponse(thread *model.Thread) *impb.Thread {
-	if thread == nil {
-		return nil
-	}
-
-	var (
-		memberIds = utils.Map(thread.MembersIds, func(u uuid.UUID) string { return u.String() })
-		admins    = utils.Map(thread.Admins, func(u uuid.UUID) string { return u.String() })
-		members   = utils.Map(thread.Members, mapThreadMemberToProtoResponse)
-	)
-
-	return &impb.Thread{
-		Id:          thread.ID.String(),
-		DomainId:    int32(thread.DomainID),
-		CreatedAt:   thread.CreatedAtMilliseconds(),
-		UpdatedAt:   thread.UpdatedAtMilliseconds(),
-		Kind:        impb.ThreadKind(thread.Kind),
-		Owner:       thread.Owner.String(),
-		Subject:     thread.Subject,
-		Description: thread.Description,
-		MemberIds:   memberIds,
-		Admins:      admins,
-		Members:     members,
-	}
+func ConvertInt32ToInt(num int32) int {
+	return int(num)
 }
 
-func mapThreadMemberToProtoResponse(member *model.ThreadMember) *impb.ThreadMember {
+func ConvertIntToInt32(num int) int32 {
+	return int32(num)
+}
+
+func ConvertUUIDToString(id uuid.UUID) string {
+	return id.String()
+}
+
+func ConvertTimeToInt64(in time.Time) int64 {
+	return in.UnixMilli()
+}
+
+func ConvertThreadKindToInternal(in impb.ThreadKind) model.ThreadKind {
+	return model.ThreadKind(in)
+}
+
+func ConvertThreadKindToExternal(in model.ThreadKind) impb.ThreadKind {
+	return impb.ThreadKind(in)
+}
+
+func ConvertMemberToID(in *model.ThreadMember) string {
+	if in == nil {
+		return ""
+	}
+	return in.Id.String()
+}
+
+func ConvertThreadMemberToProto(member *model.ThreadMember) *impb.ThreadMember {
 	if member == nil {
 		return nil
 	}

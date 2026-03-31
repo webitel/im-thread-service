@@ -9,7 +9,6 @@ import (
 	"github.com/webitel/im-thread-service/gen/go/storage"
 	storageclient "github.com/webitel/im-thread-service/infra/webitel/storage"
 	"github.com/webitel/im-thread-service/internal/domain/model"
-	"github.com/webitel/im-thread-service/internal/service"
 	"github.com/webitel/im-thread-service/internal/service/dto"
 )
 
@@ -28,9 +27,13 @@ const (
 	UseImageStorageMD
 )
 
+type MessageHistorySearcher interface {
+	Search(ctx context.Context, hmiDTO *dto.HistoryMessageInputDTO) (model.MessageSlice, error)
+}
+
 type (
-	messageHistoryEnricher struct {
-		service.MessageHistorySearcher
+	MessageHistoryEnricher struct {
+		MessageHistorySearcher
 
 		storage *storageclient.Client
 	}
@@ -44,8 +47,8 @@ type (
 //
 // Returns:
 // An instance of messageHistoryEnricher.
-func NewMessageHistoryEnricher(base service.MessageHistorySearcher, storage *storageclient.Client) *messageHistoryEnricher {
-	return &messageHistoryEnricher{
+func NewMessageHistoryEnricher(base MessageHistorySearcher, storage *storageclient.Client) *MessageHistoryEnricher {
+	return &MessageHistoryEnricher{
 		MessageHistorySearcher: base,
 		storage:                storage,
 	}
@@ -60,7 +63,7 @@ func NewMessageHistoryEnricher(base service.MessageHistorySearcher, storage *sto
 // Returns:
 // The enriched messages.
 // An error if occurred during the enrichment process.
-func (m *messageHistoryEnricher) Search(ctx context.Context, hmiDTO *dto.HistoryMessageInputDTO) (model.MessageSlice, error) {
+func (m *MessageHistoryEnricher) Search(ctx context.Context, hmiDTO *dto.HistoryMessageInputDTO) (model.MessageSlice, error) {
 	messages, err := m.MessageHistorySearcher.Search(ctx, hmiDTO)
 	if err != nil {
 		return nil, err
@@ -108,7 +111,7 @@ func (m *messageHistoryEnricher) Search(ctx context.Context, hmiDTO *dto.History
 //
 //	A map of file IDs to their corresponding file links.
 //	An error if occurred during the fetch process.
-func (m *messageHistoryEnricher) fetchFileLinks(ctx context.Context, fileIDs []int64, domainID int, loadMetadata bool) (map[int64]*storage.GenerateFileLinkResponse, error) {
+func (m *MessageHistoryEnricher) fetchFileLinks(ctx context.Context, fileIDs []int64, domainID int, loadMetadata bool) (map[int64]*storage.GenerateFileLinkResponse, error) {
 	requests := make([]*storage.GenerateFileLinkRequest, len(fileIDs))
 	for i, fileID := range fileIDs {
 		requests[i] = &storage.GenerateFileLinkRequest{
@@ -217,7 +220,7 @@ func shouldLoadMetadata(fields []string, requestedMetadata int) int {
 // Returns:
 //
 //	An error if occurred during the enrichment process.
-func (m *messageHistoryEnricher) enrichMessages(messages model.MessageSlice, linkMap map[int64]*storage.GenerateFileLinkResponse, requestedMetadata int) error {
+func (m *MessageHistoryEnricher) enrichMessages(messages model.MessageSlice, linkMap map[int64]*storage.GenerateFileLinkResponse, requestedMetadata int) error {
 	useDocMD := (UseDocumentStorageMD&requestedMetadata != 0)
 	useImgMD := (UseImageStorageMD&requestedMetadata != 0)
 

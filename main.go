@@ -6,6 +6,8 @@ import (
 	"github.com/webitel/im-thread-service/cmd"
 )
 
+//go:generate mockery
+
 func main() {
 	if err := cmd.Run(); err != nil {
 		fmt.Println(err.Error())

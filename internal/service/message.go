@@ -14,11 +14,8 @@ import (
 	"github.com/webitel/im-thread-service/internal/store"
 )
 
-type Messager interface {
-	SendText(ctx context.Context, in *dto.SendTextRequest) (*dto.SendTextResponse, error)
-	SendImage(ctx context.Context, in *dto.SendImageRequest) (*dto.SendImageResponse, error)
-	SendDocument(ctx context.Context, in *dto.SendDocumentRequest) (*dto.SendDocumentResponse, error)
-	Read(ctx context.Context, in *dto.ReadMessageRequest) error
+type ThreadManager interface {
+	EnsureDirectThread(ctx context.Context, req *dto.EnsureDirectThreadRequest) (*dto.EnsureDirectThreadResponse, error)
 }
 
 type MessageService struct {
@@ -45,8 +42,6 @@ func NewMessageService(
 	}
 }
 
-var _ Messager = (*MessageService)(nil)
-
 // SendText handles normalization and multi-recipient distribution of text messages.
 func (s *MessageService) SendText(ctx context.Context, in *dto.SendTextRequest) (*dto.SendTextResponse, error) {
 	if err := guards.SendTextGuard(in); err != nil {
@@ -54,10 +49,9 @@ func (s *MessageService) SendText(ctx context.Context, in *dto.SendTextRequest) 
 	}
 
 	t, err := s.threader.EnsureDirectThread(ctx, &dto.EnsureDirectThreadRequest{
-		PeerFrom: &in.From,
-		PeerTo:   &in.To,
+		From:     &in.From,
+		To:       &in.To,
 		DomainID: int(in.DomainID),
-		MemberID: in.From.ID,
 	})
 	if err != nil {
 		return nil, err
@@ -87,10 +81,9 @@ func (s *MessageService) SendImage(ctx context.Context, in *dto.SendImageRequest
 	}
 
 	t, err := s.threader.EnsureDirectThread(ctx, &dto.EnsureDirectThreadRequest{
-		PeerFrom: &in.From,
-		PeerTo:   &in.To,
+		From:     &in.From,
+		To:       &in.To,
 		DomainID: int(in.DomainID),
-		MemberID: in.From.ID,
 	})
 	if err != nil {
 		return nil, err
@@ -140,10 +133,9 @@ func (s *MessageService) SendDocument(ctx context.Context, in *dto.SendDocumentR
 	}
 
 	t, err := s.threader.EnsureDirectThread(ctx, &dto.EnsureDirectThreadRequest{
-		PeerFrom: &in.From,
-		PeerTo:   &in.To,
+		From:     &in.From,
+		To:       &in.To,
 		DomainID: int(in.DomainID),
-		MemberID: in.From.ID,
 	})
 	if err != nil {
 		return nil, err

@@ -23,16 +23,15 @@ func Test_thread_EnsureDirectThread(t *testing.T) {
 		mockUOW         = mock_store.NewMockUnitOfWork(ctrl)
 		mockThreadStore = mock_store.NewMockThreadStore(ctrl)
 		mockDialogStore = mock_store.NewMockThreadDialogStore(ctrl)
-		svc             = NewThreadService(nil, nil)
+		svc             = NewThreadService(nil, nil, nil)
 		ctx             = context.Background()
 	)
 
 	t.Run("Success_FoundExisting", func(t *testing.T) {
 		req := &dto.EnsureDirectThreadRequest{
 			DomainID: 1,
-			MemberID: uuid.New(),
-			PeerFrom: &shared.Peer{ID: uuid.New()},
-			PeerTo:   &shared.Peer{ID: uuid.New()},
+			From:     &shared.Peer{ID: uuid.New()},
+			To:       &shared.Peer{ID: uuid.New()},
 		}
 		expectedId := uuid.New()
 
@@ -48,9 +47,8 @@ func Test_thread_EnsureDirectThread(t *testing.T) {
 	t.Run("Success_CreateNew", func(t *testing.T) {
 		req := &dto.EnsureDirectThreadRequest{
 			DomainID: 1,
-			MemberID: uuid.New(),
-			PeerFrom: &shared.Peer{ID: uuid.New()},
-			PeerTo:   &shared.Peer{ID: uuid.New()},
+			From:     &shared.Peer{ID: uuid.New()},
+			To:       &shared.Peer{ID: uuid.New()},
 		}
 		newThreadID := uuid.New()
 

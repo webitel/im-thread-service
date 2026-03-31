@@ -10,7 +10,6 @@ import (
 	"github.com/webitel/im-thread-service/internal/domain/model"
 	"github.com/webitel/im-thread-service/internal/domain/shared"
 	"github.com/webitel/im-thread-service/internal/service/dto"
-	"github.com/webitel/im-thread-service/internal/service/guards"
 	"github.com/webitel/im-thread-service/internal/store"
 	queryobject "github.com/webitel/im-thread-service/internal/store/query_object"
 	"github.com/webitel/webitel-go-kit/pkg/errors"
@@ -20,53 +19,33 @@ var (
 	notThreadMemberError = errors.New("member is not part of thread")
 )
 
-var (
-	_ ThreadManager     = (*thread)(nil)
-	_ ThreadProvisioner = (*thread)(nil)
-	_ ThreadSearcher    = (*thread)(nil)
-)
-
 type (
-	ThreadManager interface {
-		ThreadProvisioner
-		ThreadSearcher
+	ThreadManagementService struct {
+		uow            store.UnitOfWork
+		logger         *slog.Logger
+		privacyChecker ThreadPrivacyChecker
 	}
 
-	ThreadProvisioner interface {
-		EnsureDirectThread(ctx context.Context, req *dto.EnsureDirectThreadRequest) (*dto.EnsureDirectThreadResponse, error)
-	}
-
-	ThreadSearcher interface {
-		Search(ctx context.Context, searchRequest *dto.SearchThreadRequest) ([]*model.Thread, error)
-	}
-
-	thread struct {
-		uow store.UnitOfWork
-		logger *slog.Logger
+	ThreadPrivacyChecker interface {
+		CanInvite(ctx context.Context, initiatorID, targetID uuid.UUID) error
 	}
 )
 
 // NewThreadService returns a new thread manager, given a unit of work.
-func NewThreadService(logger *slog.Logger, uow store.UnitOfWork) *thread {
+func NewThreadService(logger *slog.Logger, uow store.UnitOfWork, privacyChecker ThreadPrivacyChecker) *ThreadManagementService {
 	log := logger.With(slog.String("component", "thread"))
 
-	return &thread{
-		uow: uow,
-		logger: log,
+	return &ThreadManagementService{
+		uow:            uow,
+		logger:         log,
+		privacyChecker: privacyChecker,
 	}
 }
 
-// Search searches for threads based on the given request.
-// It returns the threads found by the search, or an error if the operation fails.
-// If the operation succeeds, it returns the threads found by the search.
-// If the operation fails, it returns nil and the error.
-// The request can contain filters on thread id, domain id, kind, member id, owner id, subject, limit, sort, and offset.
-// The response contains the threads found by the search.
-func (t *thread) Search(ctx context.Context, searchRequest *dto.SearchThreadRequest) ([]*model.Thread, error) {
-	if err := guards.SearchThreadValidationGuard(searchRequest); err != nil {
-		return nil, err
+func (t *ThreadManagementService) Search(ctx context.Context, searchRequest *dto.ThreadSearchRequest) ([]*model.Thread, error) {
+	if searchRequest == nil {
+		return nil, errors.New("search request cannot be nil")
 	}
-
 	query := queryobject.NewThreadQueryObject().
 		WithFields(searchRequest.Fields).
 		WithIDFilter(searchRequest.Ids...).
@@ -87,61 +66,222 @@ func (t *thread) Search(ctx context.Context, searchRequest *dto.SearchThreadRequ
 	return threads, nil
 }
 
-// EnsureDirectThread resolves a direct thread by peers. If the thread is found, it returns the thread id.
-// If not found, it creates a new thread and two new thread dialogs for peers within one transaction.
-// If any error occurs during the transaction, it rolls back all operations and returns the error.
-func (t *thread) EnsureDirectThread(ctx context.Context, req *dto.EnsureDirectThreadRequest) (*dto.EnsureDirectThreadResponse, error) {
-	if indirect := t.indirectThreadContext(req); indirect != nil {
-		threadMd, err := t.uow.ThreadDialogStore().ThreadMembers(ctx, indirect.ID, req.PeerFrom.ID, indirect.DomainID)
-		if err != nil || len(threadMd.Members) == 0 {
-			t.logger.ErrorContext(
-				ctx,
-				"sender is not part of thread or internal DB error",
-				slog.Int("domain_id", int(indirect.DomainID)),
-				slog.String("thread_id", indirect.ID.String()),
-				slog.String("member_id", req.PeerFrom.ID.String()),
-				slog.Any("err", err),
-			)			
+func (t *ThreadManagementService) AddMember(ctx context.Context, req *dto.AddMemberRequest) error {
+	if req == nil {
+		return errors.New("add member request cannot be nil")
+	}
 
-			return nil, errors.Wrap(notThreadMemberError, errors.WithValue("err", err))
-		} 
+	threadDialogs, err := t.uow.ThreadDialogStore().GetFullView(ctx, &model.ThreadDialogStoreFilter{
+		ThreadID: &req.ThreadID,
+		MemberID: &req.InitiatorMemberID,
+	})
+	if err != nil {
+		return err
+	}
+	if len(threadDialogs) == 0 {
+		return notThreadMemberError
+	}
 
-		indirect.Members = threadMd.Members
+	initiatorThreadDialog := threadDialogs[0]
 
-		return indirect, nil
-	} 
-	
+	err = t.verifyAddMemberInitiatorPermissions(ctx, initiatorThreadDialog.ThreadRole, req.NewMemberRole, &initiatorThreadDialog.Permissions)
+	if err != nil {
+		return err
+	}
+	err = t.verifyAddMemberTargetPrivacy(ctx, req.InitiatorMemberID, req.NewMemberID)
+	if err != nil {
+		return err
+	}
+
+	rolePermissions, err := getDefaultPermissionsByRole(req.NewMemberRole)
+	if err != nil {
+		return err
+	}
+
+	_, err = t.uow.ThreadDialogStore().Create(ctx, &model.ThreadDialog{
+		BaseModel: shared.BaseModel{
+			DomainID:  initiatorThreadDialog.DomainID,
+			CreatedAt: time.Now().UTC(),
+			UpdatedAt: time.Now().UTC(),
+		},
+		ThreadID:    req.ThreadID,
+		MemberID:    req.NewMemberID,
+		ThreadRole:  req.NewMemberRole,
+		Permissions: *rolePermissions,
+		Settings: model.BaseThreadSetting{
+			Title: initiatorThreadDialog.Settings.Title,
+		},
+	})
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (t *ThreadManagementService) verifyAddMemberInitiatorPermissions(ctx context.Context, initiatorRole model.MemberRole, targetRole model.MemberRole, initiatorPermissions *model.ThreadPermissions) error {
+	if initiatorPermissions == nil {
+		return errors.New("permissions cannot be nil")
+	}
+	if !initiatorPermissions.CanAddMembers {
+		return errors.New("initiator does not have permission to invite members")
+	}
+	if initiatorRole <= targetRole {
+		return errors.New("initiator does not have permission to invite a member with same or higher role")
+	}
+
+	return nil
+}
+func (t *ThreadManagementService) verifyAddMemberTargetPrivacy(ctx context.Context, initiatorID, targetID uuid.UUID) error {
+	err := t.privacyChecker.CanInvite(ctx, initiatorID, targetID)
+	if err != nil {
+		return errors.New("initiator does not have permission to invite the target", errors.WithCause(err))
+	}
+	return nil
+}
+
+func (t *ThreadManagementService) RemoveMember(ctx context.Context, req *dto.RemoveMemberRequest) error {
+	if req == nil {
+		return errors.New("remove member request cannot be nil")
+	}
+
+	threadDialogs, err := t.uow.ThreadDialogStore().GetFullView(ctx, &model.ThreadDialogStoreFilter{
+		ThreadID: &req.ThreadID,
+	})
+	if err != nil {
+		return err
+	}
+	if len(threadDialogs) == 0 {
+		return notThreadMemberError
+	}
+
 	var (
-		err          error
-		directThread *model.Thread
+		initiator, target *model.ThreadDialog
 	)
 
-	// RESOLVE DIRECT THREAD BY PEERS!
-	if directThread, err = t.searchDirectThread(ctx, req); err != nil {
+	for _, dialog := range threadDialogs {
+		if dialog.MemberID == req.InitiatorMemberID {
+			initiator = dialog
+		}
+		if dialog.MemberID == req.TargetMemberID {
+			target = dialog
+		}
+	}
+
+	if initiator == nil {
+		return notThreadMemberError
+	}
+	if target == nil {
+		return errors.New("target member is not part of the thread")
+	}
+
+	err = t.verifyRemoveMemberInitiatorPermissions(initiator.ThreadRole, target.ThreadRole, &initiator.Permissions)
+	if err != nil {
+		return err
+	}
+
+	return t.uow.ThreadDialogStore().Delete(ctx, req.ThreadID, req.TargetMemberID)
+}
+
+func (t *ThreadManagementService) verifyRemoveMemberInitiatorPermissions(initiatorRole model.MemberRole, targetRole model.MemberRole, initiatorPermissions *model.ThreadPermissions) error {
+	if initiatorPermissions == nil {
+		return errors.New("permissions cannot be nil")
+	}
+	if !initiatorPermissions.CanRemoveMembers {
+		return errors.New("initiator does not have permission to remove members")
+	}
+	if initiatorRole <= targetRole {
+		return errors.New("initiator does not have permission to remove a member with same or higher role")
+	}
+
+	return nil
+}
+
+func (t *ThreadManagementService) EnsureDirectThread(ctx context.Context, req *dto.EnsureDirectThreadRequest) (*dto.EnsureDirectThreadResponse, error) {
+	if req == nil {
+		return nil, errors.New("request cannot be nil")
+	}
+	directThread, err := t.searchDirectThread(ctx, req.From, req.To)
+	if err != nil {
 		return nil, err
 	}
+	if directThread == nil {
+		directThread, err = t.orchestrateDirectThreadCreation(ctx, req)
+		if err != nil {
+			return nil, err
+		}
 
-	// SUCCESSFULLY FOUND!
-	if directThread != nil {
-		return dto.NewEnsureDirectThreadResponse(
-			directThread.ID,
-			int32(directThread.DomainID),
-			[]uuid.UUID{req.PeerFrom.ID, req.PeerTo.ID},
-		), nil
 	}
 
-	// IF NOT FOUND WE NEED TO CREATE NEW THREAD AND TWO NEW THREAD DIALOG FOR PEERS WITHIN ONE TRANSACTION!
+	return dto.NewEnsureDirectThreadResponse(directThread.ID, int32(directThread.DomainID), []uuid.UUID{req.From.ID, req.To.ID}), nil
+}
+
+func (t *ThreadManagementService) searchDirectThread(ctx context.Context, from, to *shared.Peer) (*model.Thread, error) {
+	if from == nil || to == nil {
+		return nil, errors.New("from and to peers cannot be nil")
+	}
+	var (
+		thread *model.Thread
+		err    error
+	)
+
+	switch to.Type {
+	case shared.PeerContact:
+		thread, err = t.uow.ThreadStore().ResolveDirect(ctx, from.ID, to.ID)
+		if err != nil {
+			return nil, err
+		}
+	case shared.PeerThread:
+		threadID := to.ID
+		threads, err := t.uow.ThreadStore().Search(ctx, queryobject.NewThreadQueryObject().WithIDFilter(threadID).WithMemberIDFilter(from.ID).WithKindFilter(model.ThreadDirect))
+		if err != nil {
+			return nil, err
+		}
+		if len(threads) == 0 {
+			return nil, nil
+		}
+		thread = threads[0]
+	default:
+		return nil, errors.New("invalid peer type for direct")
+	}
+
+	return thread, nil
+
+}
+
+func (t *ThreadManagementService) orchestrateDirectThreadCreation(ctx context.Context, req *dto.EnsureDirectThreadRequest) (*model.Thread, error) {
+	if req == nil {
+		return nil, errors.New("request cannot be nil")
+	}
+	var (
+		err           error
+		createdThread *model.Thread
+	)
 	err = t.uow.WithinTransaction(ctx, func(ctx context.Context, uow store.UnitOfWork) error {
-		directThread, err = t.createDirectThread(ctx, req, uow)
-		// ROLLBACK ALL OPERATION IN CAUSE OF ONE FAILURE!
+
+		createdThread, err = t.createDirectThread(ctx, uow, req.DomainID, req.From, req.To)
 		if err != nil {
 			return err
 		}
 
-		for _, e := range directThread.PullEvents() {
-			if err = uow.Outbox().Publish(ctx, e.Topic(), e); err != nil {
+		threadDalogs, err := t.initializeDirectThreadDialogs(ctx, uow, createdThread.ID, req.From, req.To)
+		if err != nil {
+			return err
+		}
+
+		for _, dialog := range threadDalogs {
+			if _, err := t.initializeDirectMemberPermission(ctx, uow, dialog); err != nil {
 				return err
 			}
+		}
+
+		events, err := t.buildDirectThreadCreatedEvents(createdThread, req.From, req.To)
+		if err != nil {
+			return err
+		}
+
+		if err := t.publishThreadCreatedEvents(ctx, uow, events); err != nil {
+			return err
 		}
 
 		return nil
@@ -149,106 +289,142 @@ func (t *thread) EnsureDirectThread(ctx context.Context, req *dto.EnsureDirectTh
 	if err != nil {
 		return nil, err
 	}
-
-	return dto.NewEnsureDirectThreadResponse(directThread.ID, int32(directThread.DomainID), []uuid.UUID{req.PeerFrom.ID, req.PeerTo.ID},), nil
+	return createdThread, nil
 }
 
-// searchDirectThread resolves a direct thread by peers. If the thread is found, it returns the thread id.
-// If not found, it returns nil and the error.
-func (t *thread) searchDirectThread(ctx context.Context, req *dto.EnsureDirectThreadRequest) (*model.Thread, error) {
-	searchDirectThreadRequest := dto.NewSearchThreadRequest(
-		req.DomainID,
-		model.ThreadDirect,
-		req.PeerFrom,
-		req.PeerTo,
-	)
-
-	directThreadId, err := t.uow.ThreadDialogStore().Resolve(ctx, searchDirectThreadRequest)
-	if err == nil && directThreadId != uuid.Nil {
-		return model.NewThreadBuilder().WithID(directThreadId).WithDomainID(req.DomainID).Build(), nil
+func (t *ThreadManagementService) createDirectThread(ctx context.Context, uow store.UnitOfWork, domainID int, from, to *shared.Peer) (*model.Thread, error) {
+	if from == nil || to == nil {
+		return nil, errors.New("from and to peers cannot be nil")
 	}
-
-	return nil, err
-}
-
-// createDirectThread creates a new direct thread and two new thread dialogs for peers within one transaction.
-// It returns the newly created thread id or an error if the operation fails.
-// If the operation succeeds, it returns a new EnsureDirectThreadResponse with the newly created thread id.
-// If the operation fails, it returns nil and the error.
-func (t *thread) createDirectThread(ctx context.Context, req *dto.EnsureDirectThreadRequest, uow store.UnitOfWork) (*model.Thread, error) {
+	if uow == nil {
+		return nil, errors.New("unit of work cannot be nil")
+	}
 	var (
-		err          error
 		now          = time.Now().UTC()
 		directThread = &model.Thread{
 			BaseModel: shared.BaseModel{
-				DomainID:  req.DomainID,
+				DomainID:  domainID,
 				CreatedAt: now,
 				UpdatedAt: now,
 			},
 			Kind: model.ThreadDirect,
 		}
 	)
-
-	if directThread, err = uow.ThreadStore().Create(ctx, directThread); err != nil {
+	createdThread, err := uow.ThreadStore().Create(ctx, directThread)
+	if err != nil {
 		return nil, err
 	}
-
-	dialog := &model.ThreadDialog{
-		BaseModel: shared.BaseModel{
-			DomainID:  req.DomainID,
-			CreatedAt: now,
-			UpdatedAt: now,
-		},
-		MemberID: req.MemberID,
-		ThreadID: directThread.ID,
-		DirectTo: &req.PeerTo.ID,
-	}
-
-	var (
-		baseMemberSettings = model.NewBaseThreadSettingBuilder().WithDomainID(req.DomainID).WithTitle(req.PeerTo.Identity.Name).Build()
-		memberSettings     = model.NewDirectThreadSettingBuilder().WithBaseSettings(baseMemberSettings).Build()
-
-		baseDirectToSettings = model.NewBaseThreadSettingBuilder().WithDomainID(req.DomainID).WithTitle(req.PeerFrom.Identity.Name).Build()
-		directToSettings     = model.NewDirectThreadSettingBuilder().WithBaseSettings(baseDirectToSettings).Build()
-	)
-
-	directThreadDialog := model.NewDirectThreadDialogBuilder().
-		WithThreadDialog(dialog).
-		WithDirectToSettings(directToSettings).
-		WithMemberSettings(memberSettings).
-		WithDomainID(req.DomainID).
-		Build()
-
-	// CREATE TWO RECORDS WITH PAIR member_id <-> direct_to AND REVERSED direct_to <-> member_id and specific user settings
-	if _, err = uow.DirectThreadDialogOrchestration().InitializeFullDirectThread(ctx, directThreadDialog); err != nil {
-		return nil, err
-	}
-
-	members := uuid.UUIDs{req.PeerTo.ID, req.PeerFrom.ID}
-
-	directThread.AddEvents(
-		event.NewThreadCreatedBuilder().
-			WithDomainID(int32(directThread.DomainID)).WithCreatedAt(directThread.CreatedAt).
-			WithID(directThread.ID).WithRecipient(event.NewRecipient(req.PeerFrom.ID, req.PeerFrom.Identity.Name)).
-			WithMembers(members).WithSubject(memberSettings.Title).WithKind(model.ThreadDirect.String()).Build(),
-
-			event.NewThreadCreatedBuilder().
-				WithDomainID(int32(directThread.DomainID)).WithCreatedAt(directThread.CreatedAt).
-				WithID(directThread.ID).WithRecipient(event.NewRecipient(req.PeerTo.ID, req.PeerTo.Identity.Name)).
-				WithSubject(directToSettings.Title).WithMembers(members).WithKind(model.ThreadDirect.String()).Build(),
-	)
-
-	return directThread, nil
+	return createdThread, nil
 }
 
+func (t *ThreadManagementService) initializeDirectThreadDialogs(ctx context.Context, uow store.UnitOfWork, threadID uuid.UUID, from, to *shared.Peer) ([]*model.DirectThreadDialog, error) {
+	if from == nil || to == nil {
+		return nil, errors.New("from and to peers cannot be nil")
+	}
+	if uow == nil {
+		return nil, errors.New("unit of work cannot be nil")
+	}
+	var (
+		initiatorRole               = model.RoleOwner
+		peerRole                    = model.RoleOwner
+		directInitializationRequest = &model.CreateDirectThreadDialogRequest{
+			ThreadID: threadID,
+			From: model.CreateDirectPeer{
+				ID:   from.ID,
+				Name: from.Identity.Name,
+				Role: initiatorRole,
+				Settings: &model.DirectThreadSetting{
+					BaseThreadSetting: model.BaseThreadSetting{
+						Title: to.Identity.Name,
+					},
+				},
+			},
+			To: model.CreateDirectPeer{
+				ID:   to.ID,
+				Name: to.Identity.Name,
+				Role: peerRole,
+				Settings: &model.DirectThreadSetting{
+					BaseThreadSetting: model.BaseThreadSetting{
+						Title: from.Identity.Name,
+					},
+				},
+			},
+		}
+	)
 
-func (t *thread) indirectThreadContext(req *dto.EnsureDirectThreadRequest) *dto.EnsureDirectThreadResponse {
-	if req.PeerTo.Type == shared.PeerContact {
-		return nil
+	records, err := uow.DirectThreadDialogOrchestration().InitializeFullDirectThread(ctx, directInitializationRequest)
+	if err != nil {
+		return nil, err
 	}
 
-	return &dto.EnsureDirectThreadResponse{
-		ID:       req.PeerTo.ID,
-		DomainID: int32(req.DomainID),
+	return records, nil
+}
+
+func (t *ThreadManagementService) initializeDirectMemberPermission(ctx context.Context, uow store.UnitOfWork, member *model.DirectThreadDialog) (*model.ThreadPermission, error) {
+	if member == nil {
+		return nil, errors.New("member cannot be nil")
 	}
+	var (
+		role = member.ThreadRole
+	)
+	defaultRolePermissions, err := getDefaultPermissionsByRole(role)
+	if err != nil {
+		return nil, err
+	}
+	permission := &model.ThreadPermission{
+		ThreadPermissions: *defaultRolePermissions,
+		ThreadID:          member.ThreadID,
+		ThreadDialogID:    member.ID,
+	}
+	permisions, err := uow.ThreadPermissionStore().Create(ctx, permission)
+	if err != nil {
+		return nil, err
+	}
+
+	return permisions, nil
+}
+func (t *ThreadManagementService) buildDirectThreadCreatedEvents(thread *model.Thread, from, to *shared.Peer) ([]*event.ThreadCreated, error) {
+	if thread == nil || from == nil || to == nil {
+		return nil, errors.New("thread, from and to cannot be nil")
+	}
+	var (
+		events []*event.ThreadCreated
+	)
+	events = append(events,
+		event.NewThreadCreatedBuilder().
+			WithDomainID(int32(thread.DomainID)).
+			WithCreatedAt(thread.CreatedAt).
+			WithID(thread.ID).
+			WithMembers(thread.MembersIds).
+			WithSubject(to.Identity.Name).
+			WithKind(thread.Kind.String()).
+			WithRecipient(&event.Recipient{
+				ID:   from.ID,
+				Name: from.Identity.Name,
+			}).
+			Build(),
+		event.NewThreadCreatedBuilder().
+			WithDomainID(int32(thread.DomainID)).
+			WithCreatedAt(thread.CreatedAt).
+			WithID(thread.ID).
+			WithMembers(thread.MembersIds).
+			WithSubject(from.Identity.Name).
+			WithKind(thread.Kind.String()).
+			WithRecipient(&event.Recipient{
+				ID:   to.ID,
+				Name: to.Identity.Name,
+			}).
+			Build(),
+	)
+
+	return events, nil
+}
+
+func (t *ThreadManagementService) publishThreadCreatedEvents(ctx context.Context, uow store.UnitOfWork, events []*event.ThreadCreated) error {
+	for _, e := range events {
+		if err := uow.Outbox().Publish(ctx, e.Topic(), e); err != nil {
+			return err
+		}
+	}
+	return nil
 }

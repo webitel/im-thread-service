@@ -45,3 +45,4 @@ go.work
 env
 debug
 deploy/docker/config/config.yaml
+.zed

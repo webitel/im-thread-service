@@ -2,6 +2,9 @@ package postgres
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -10,6 +13,13 @@ import (
 	"github.com/webitel/im-thread-service/internal/domain/shared"
 	queryobject "github.com/webitel/im-thread-service/internal/store/query_object"
 	"github.com/webitel/im-thread-service/internal/utils"
+)
+
+var (
+	threadFields = []string{
+		"id", "domain_id", "created_by", "created_at", "updated_by", "updated_at",
+		"kind", "owner", "subject", "description",
+	}
 )
 
 // [D]ata [A]cess [O]bjects
@@ -159,4 +169,59 @@ func mapThreadRecordToModel(record *threadRecord) *model.Thread {
 	}
 
 	return thread
+}
+
+func (t *threadStore) ResolveDirect(ctx context.Context, from, to uuid.UUID) (*model.Thread, error) {
+	var (
+		query = fmt.Sprintf(`
+		SELECT %s FROM im_thread.thread
+				WHERE kind = @Kind
+
+				AND id IN (
+	           		select thread_id
+	            	from im_thread.thread_dialog
+	            	where 
+					(
+						(member_id = @FromId and direct_to = @DirectTo)
+						 or
+						(member_id = @DirectTo and direct_to = @FromId)
+					)
+		            limit 1
+				)
+        `, strings.Join(threadFields, ","))
+		args = pgx.NamedArgs{
+			"FromId":   from,
+			"DirectTo": to,
+			"Kind":     model.ThreadDirect,
+		}
+	)
+
+	row, err := t.db.Query(ctx, query, args)
+	if err != nil {
+		return nil, err
+	}
+	records, err := pgx.CollectExactlyOneRow(row, pgx.RowToAddrOfStructByNameLax[threadRecord])
+	if err != nil {
+		return nil, err
+	}
+	return mapThreadRecordToModel(records), nil
+}
+
+func (t *threadStore) Delete(ctx context.Context, threadID uuid.UUID) error {
+	if threadID == uuid.Nil {
+		return errors.New("threadID cannot be nil")
+	}
+
+	query := `DELETE FROM im_thread.thread WHERE id = $1`
+
+	cmdTag, err := t.db.Exec(ctx, query, threadID)
+	if err != nil {
+		return err
+	}
+
+	if cmdTag.RowsAffected() == 0 {
+		return fmt.Errorf("no thread found with id %s", threadID)
+	}
+
+	return nil
 }

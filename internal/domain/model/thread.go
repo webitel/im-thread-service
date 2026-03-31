@@ -21,7 +21,6 @@ type Thread struct {
 
 	Kind       ThreadKind      `json:"kind"`
 	Owner      uuid.UUID       `json:"owner"`
-	Admins     []uuid.UUID     `json:"admins"`
 	MembersIds []uuid.UUID     `json:"members_ids"`
 	Members    []*ThreadMember `json:"members"`
 
@@ -37,10 +36,9 @@ func (t *Thread) AddEvents(e ...event.Base) {
 
 func (t *Thread) PullEvents() []event.Base {
 	events := t.events
-    t.events = nil
-    return events
+	t.events = nil
+	return events
 }
-
 
 type ThreadBuilder struct {
 	thread *Thread
@@ -50,13 +48,12 @@ func NewThreadBuilder() *ThreadBuilder {
 	return &ThreadBuilder{
 		// Initialize the thread with default values
 		thread: &Thread{
-			BaseModel: shared.BaseModel{},
-			Kind:      ThreadUnspecified,
-			Owner:     uuid.Nil,
-			Admins:    []uuid.UUID{},
-			MembersIds: []uuid.UUID{},
-			Members:    []*ThreadMember{},
-			Subject:    "",
+			BaseModel:   shared.BaseModel{},
+			Kind:        ThreadUnspecified,
+			Owner:       uuid.Nil,
+			MembersIds:  []uuid.UUID{},
+			Members:     []*ThreadMember{},
+			Subject:     "",
 			Description: "",
 		},
 	}
@@ -69,16 +66,6 @@ func (b *ThreadBuilder) WithKind(kind ThreadKind) *ThreadBuilder {
 
 func (b *ThreadBuilder) WithOwner(owner uuid.UUID) *ThreadBuilder {
 	b.thread.Owner = owner
-	return b
-}
-
-func (b *ThreadBuilder) WithAdmins(admins []uuid.UUID) *ThreadBuilder {
-	b.thread.Admins = admins
-	return b
-}
-
-func (b *ThreadBuilder) WithMembersIds(memberIds []uuid.UUID) *ThreadBuilder {
-	b.thread.MembersIds = memberIds
 	return b
 }
 

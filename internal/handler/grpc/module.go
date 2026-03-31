@@ -11,10 +11,7 @@ import (
 var Module = fx.Module("message_grpc",
 	fx.Provide(
 		NewMessageService,
-		fx.Annotate(
-			NewMessageHistoryService,
-			fx.ParamTags(`name:"enriched_message_history"`),
-		),
+		NewMessageHistoryServer,
 		NewThreadService,
 	),
 	fx.Invoke(RegisterMessageService),
@@ -24,15 +21,15 @@ var Module = fx.Module("message_grpc",
 
 func RegisterMessageService(
 	server *grpcsrv.Server,
-	service *MessageService,
+	service *MessageServer,
 ) {
 	impb.RegisterMessageServer(server.Server, service)
 }
 
-func RegisterMessageHistoryService(srv *grpcsrv.Server, svc *MessageHistoryService) {
+func RegisterMessageHistoryService(srv *grpcsrv.Server, svc *MessageHistoryServer) {
 	impb.RegisterMessageHistoryServer(srv.Server, svc)
 }
 
-func RegisterThreadService(srv *grpcsrv.Server, svc *ThreadService) {
+func RegisterThreadService(srv *grpcsrv.Server, svc *ThreadManagementServer) {
 	impb.RegisterThreadManagementServer(srv.Server, svc)
 }

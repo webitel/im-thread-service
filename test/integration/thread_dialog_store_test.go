@@ -14,6 +14,7 @@ import (
 	"github.com/webitel/im-thread-service/cmd/migrate"
 	"github.com/webitel/im-thread-service/config"
 	"github.com/webitel/im-thread-service/internal/domain/model"
+	"github.com/webitel/im-thread-service/internal/domain/shared"
 	"github.com/webitel/im-thread-service/internal/service/dto"
 	"github.com/webitel/im-thread-service/internal/store"
 	"github.com/webitel/im-thread-service/internal/store/postgres"
@@ -81,7 +82,7 @@ func (s *ThreadDialogStoreTestSuite) TestCreateDirectPair_Success() {
 	now := time.Now().UTC().Truncate(time.Microsecond)
 
 	dialog := &model.ThreadDialog{
-		BaseModel: model.BaseModel{
+		BaseModel: shared.BaseModel{
 			DomainID:  1,
 			CreatedAt: now,
 			UpdatedAt: now,
@@ -111,7 +112,7 @@ func (s *ThreadDialogStoreTestSuite) TestResolve_Success() {
 	memberB := uuid.New()
 
 	_, err := s.repo.CreateDirectPair(ctx, &model.ThreadDialog{
-		BaseModel: model.BaseModel{DomainID: domainID},
+		BaseModel: shared.BaseModel{DomainID: domainID},
 		MemberID:  memberA,
 		ThreadID:  threadID,
 		DirectTo:  &memberB,
@@ -121,8 +122,8 @@ func (s *ThreadDialogStoreTestSuite) TestResolve_Success() {
 	search := &dto.SearchThreadDialogRequest{
 		DomainID: domainID,
 		Kind:     model.ThreadDirect,
-		From:     &model.Peer{ID: memberA},
-		To:       &model.Peer{ID: memberB},
+		From:     &shared.Peer{ID: memberA},
+		To:       &shared.Peer{ID: memberB},
 	}
 
 	foundID, err := s.repo.Resolve(ctx, search)
@@ -138,7 +139,7 @@ func (s *ThreadDialogStoreTestSuite) TestCreateDirectPair_UniqueViolation() {
 	memberB := uuid.New()
 
 	dialog := &model.ThreadDialog{
-		BaseModel: model.BaseModel{DomainID: 1},
+		BaseModel: shared.BaseModel{DomainID: 1},
 		MemberID:  memberA,
 		ThreadID:  threadID,
 		DirectTo:  &memberB,

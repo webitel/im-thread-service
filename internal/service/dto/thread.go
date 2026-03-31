@@ -9,15 +9,14 @@ import (
 type (
 	EnsureDirectThreadRequest struct {
 		DomainID int
-		MemberID uuid.UUID
-		PeerFrom *shared.Peer
-		PeerTo   *shared.Peer
+		From     *shared.Peer
+		To       *shared.Peer
 	}
 
 	EnsureDirectThreadResponse struct {
-		ID uuid.UUID
+		ID       uuid.UUID
 		DomainID int32
-		Members uuid.UUIDs
+		Members  uuid.UUIDs
 	}
 
 	SearchThreadDialogRequest struct {
@@ -27,17 +26,13 @@ type (
 		To       *shared.Peer
 	}
 
-	CanSendRequest struct {
-		From     shared.Peer
-		To       shared.Peer
-		DomainID int32
+	CreateGroupRequest struct {
+		Subject     string
+		Description string
+		MemberIDs   []string
 	}
 
-	CanSendResponse struct {
-		CanSend bool
-	}
-
-	SearchThreadRequest struct {
+	ThreadSearchRequest struct {
 		Fields    []string
 		Ids       uuid.UUIDs
 		DomainIds []int
@@ -55,11 +50,23 @@ type (
 	}
 )
 
+type AddMemberRequest struct {
+	ThreadID          uuid.UUID
+	NewMemberID       uuid.UUID
+	InitiatorMemberID uuid.UUID
+	NewMemberRole     model.MemberRole
+}
+type RemoveMemberRequest struct {
+	ThreadID          uuid.UUID
+	TargetMemberID    uuid.UUID
+	InitiatorMemberID uuid.UUID
+}
+
 func NewEnsureDirectThreadResponse(id uuid.UUID, domainID int32, members uuid.UUIDs) *EnsureDirectThreadResponse {
 	return &EnsureDirectThreadResponse{
 		ID:       id,
 		DomainID: domainID,
-		Members: members,
+		Members:  members,
 	}
 }
 
@@ -69,19 +76,5 @@ func NewSearchThreadRequest(domainID int, kind model.ThreadKind, from, to *share
 		Kind:     kind,
 		From:     from,
 		To:       to,
-	}
-}
-
-func NewCanSendRequestDtoFromPeers(from, to shared.Peer, domainID int32) *CanSendRequest {
-	return &CanSendRequest{
-		From:     from,
-		To:       to,
-		DomainID: domainID,
-	}
-}
-
-func NewCanSendResponse(canSend bool) *CanSendResponse {
-	return &CanSendResponse{
-		CanSend: canSend,
 	}
 }
