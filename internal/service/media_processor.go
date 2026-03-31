@@ -9,7 +9,6 @@ import (
 	"github.com/webitel/im-thread-service/internal/utils"
 )
 
-// [ATTACHMENT] CONTRACT FOR ANY MEDIA DATA
 type AttachmentProcessor interface {
 	GetID() int64
 	GetURL() string
@@ -21,7 +20,6 @@ type AttachmentProcessor interface {
 	SetName(string)
 }
 
-// [MEDIA_PROCESSOR] DEFINES THE LOGIC FOR EXTERNAL STORAGE OPERATIONS
 type MediaProcessor interface {
 	Process(ctx context.Context, domainID int64, items []AttachmentProcessor) error
 }
@@ -30,30 +28,10 @@ type storageProcessor struct {
 	client *storageclient.Client
 }
 
-// NewMediaProcessor creates a new MediaProcessor instance from the given storage client.
-//
-//	Args:
-//	client: The storage client to use for external storage operations.
-//
-//	Returns:
-//	A new MediaProcessor instance.
 func NewMediaProcessor(client *storageclient.Client) MediaProcessor {
 	return &storageProcessor{client: client}
 }
 
-// Process processes media files in parallel by splitting them into two groups:
-// files with IDs and files with URLs. It then calls statFile and uploadFile
-// respectively for each group. The function waits for both channels to
-// finish before returning the result. If any error occurs during the
-// processing, it returns the error immediately.
-//
-//	Args:
-//	ctx: The context of the request.
-//	domainID: The ID of the domain to which the files belong.
-//	items: The media files to process.
-//
-//	Returns:
-//	An error if any error occurs during the processing.
 func (p *storageProcessor) Process(ctx context.Context, domainID int64, items []AttachmentProcessor) error {
 	if len(items) == 0 {
 		return nil
@@ -72,17 +50,12 @@ func (p *storageProcessor) Process(ctx context.Context, domainID int64, items []
 		}
 	}
 
-	statChan := p.statFile(ctx, itemsWithID)
+	// statChan := p.statFile(ctx, itemsWithID)
 	uploadChan := p.uploadFile(ctx, domainID, itemsWithURL)
 
-	var isStatFileFinished, isUploadFinished bool
-	for !isStatFileFinished || !isUploadFinished {
+	var isUploadFinished bool
+	for !isUploadFinished {
 		select {
-		case err, ok := <-statChan:
-			if ok && err != nil {
-				return err
-			}
-			isStatFileFinished = true
 		case err, ok := <-uploadChan:
 			if ok && err != nil {
 				return err
@@ -96,16 +69,6 @@ func (p *storageProcessor) Process(ctx context.Context, domainID int64, items []
 	return nil
 }
 
-// UploadFile uploads media files to the storage service.
-//
-//	Args:
-//	ctx: The context of the request.
-//	domainID: The ID of the domain to which the files belong.
-//	itemsWithURL: The media files to be uploaded.
-//
-//	Returns:
-//	A channel of errors for each uploaded file. If an error occurs, the error is sent on the channel.
-//	The channel is closed once all files have been uploaded.
 func (p *storageProcessor) uploadFile(ctx context.Context, domainID int64, itemsWithURL []AttachmentProcessor) <-chan error {
 	resultChan := make(chan error, 1)
 
@@ -143,15 +106,6 @@ func (p *storageProcessor) uploadFile(ctx context.Context, domainID int64, items
 	return resultChan
 }
 
-// StatFile checks if the given attachments exist in the storage service.
-//
-//	Args:
-//	ctx: The context of the request.
-//	itemsWithID: The attachments to check for existence.
-//
-//	Returns:
-//	A channel of errors for each attachment. If an attachment does not exist, the error is sent on the channel.
-//	The channel is closed once all attachments have been checked.
 func (p *storageProcessor) statFile(ctx context.Context, itemsWithID []AttachmentProcessor) <-chan error {
 	resultChan := make(chan error, 1)
 
