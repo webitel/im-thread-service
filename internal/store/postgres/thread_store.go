@@ -162,7 +162,6 @@ func mapThreadRecordToModel(record *threadRecord) *model.Thread {
 		},
 		Kind:        record.Kind,
 		Owner:       record.Owner,
-		MembersIds:  record.MemberIDs,
 		Subject:     record.Subject,
 		Description: record.Description,
 		Members:     members,

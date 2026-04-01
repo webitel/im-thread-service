@@ -11,6 +11,5 @@ type (
 		MessageHistory() MessageHistory
 		Messages() MessageStore
 		Outbox() OutboxStore
-		DirectThreadDialogOrchestration() DirectThreadDialogOrchestration
 	}
 )

@@ -19,10 +19,9 @@ const (
 type Thread struct {
 	shared.BaseModel
 
-	Kind       ThreadKind      `json:"kind"`
-	Owner      uuid.UUID       `json:"owner"`
-	MembersIds []uuid.UUID     `json:"members_ids"`
-	Members    []*ThreadMember `json:"members"`
+	Kind    ThreadKind      `json:"kind"`
+	Owner   uuid.UUID       `json:"owner"`
+	Members []*ThreadMember `json:"members"`
 
 	Subject     string `json:"subject"`
 	Description string `json:"description"`
@@ -51,7 +50,6 @@ func NewThreadBuilder() *ThreadBuilder {
 			BaseModel:   shared.BaseModel{},
 			Kind:        ThreadUnspecified,
 			Owner:       uuid.Nil,
-			MembersIds:  []uuid.UUID{},
 			Members:     []*ThreadMember{},
 			Subject:     "",
 			Description: "",

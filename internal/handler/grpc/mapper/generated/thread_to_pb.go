@@ -38,18 +38,12 @@ func (c *ThreadOutConverterImpl) ConvertToThread(source *model.Thread) *v1.Threa
 		threadThread.UpdatedAt = mapper.ConvertTimeToInt64((*source).BaseModel.UpdatedAt)
 		threadThread.Kind = mapper.ConvertThreadKindToExternal((*source).Kind)
 		threadThread.Owner = mapper.ConvertUUIDToString((*source).Owner)
-		if (*source).MembersIds != nil {
-			threadThread.MemberIds = make([]string, len((*source).MembersIds))
-			for i := 0; i < len((*source).MembersIds); i++ {
-				threadThread.MemberIds[i] = mapper.ConvertUUIDToString((*source).MembersIds[i])
-			}
-		}
 		threadThread.Subject = (*source).Subject
 		threadThread.Description = (*source).Description
 		if (*source).Members != nil {
 			threadThread.Members = make([]*v1.ThreadMember, len((*source).Members))
-			for j := 0; j < len((*source).Members); j++ {
-				threadThread.Members[j] = mapper.ConvertThreadMemberToProto((*source).Members[j])
+			for i := 0; i < len((*source).Members); i++ {
+				threadThread.Members[i] = mapper.ConvertThreadMemberToProto((*source).Members[i])
 			}
 		}
 		pThreadThread = &threadThread

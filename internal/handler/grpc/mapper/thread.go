@@ -35,8 +35,8 @@ type ThreadInConverter interface {
 type ThreadOutConverter interface {
 	ConvertCreateGroup(*dto.CreateGroupRequest) *impb.CreateGroupRequest
 	// goverter:autoMap BaseModel
-	// goverter:map MembersIds MemberIds
 	// goverter:ignore Admins
+	// goverter:ignore MemberIds
 	ConvertToThread(*model.Thread) *impb.Thread
 }
 

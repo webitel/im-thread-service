@@ -443,34 +443,6 @@ func TestThreadQueryObject_linkDirectSettings(t *testing.T) {
 	})
 }
 
-func TestThreadQueryObject_linkMembersLateral(t *testing.T) {
-	t.Run("creates lateral join for member_ids", func(t *testing.T) {
-		qo := NewThreadQueryObject()
-		qo.linkMembersLateral()
-
-		sql, _, err := qo.ToSql()
-		require.NoError(t, err)
-
-		assert.Contains(t, sql, "LEFT JOIN")
-		assert.Contains(t, sql, "lateral")
-		assert.Contains(t, sql, "array_agg")
-		assert.Contains(t, sql, "member_ids")
-		assert.Equal(t, threadLinkMembersLateral, qo.join&threadLinkMembersLateral)
-	})
-
-	t.Run("does not duplicate lateral join", func(t *testing.T) {
-		qo := NewThreadQueryObject()
-		qo.linkMembersLateral()
-		qo.linkMembersLateral()
-
-		sql, _, err := qo.ToSql()
-		require.NoError(t, err)
-
-		lateralCount := strings.Count(strings.ToLower(sql), "lateral")
-		assert.Equal(t, 1, lateralCount)
-	})
-}
-
 func TestThreadQueryObject_linkFullMembersLateral(t *testing.T) {
 	t.Run("creates lateral join for full members", func(t *testing.T) {
 		qo := NewThreadQueryObject()

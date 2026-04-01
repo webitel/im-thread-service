@@ -129,13 +129,6 @@ func (q *threadQueryObject) FieldsMetadata() map[string]fieldMetadata {
 			sortable:     true,
 			filterExpr:   "t.description",
 		},
-		"member_ids": {
-			sqlExpr:      "ml.member_ids",
-			aliasedExpr:  "ml.member_ids as member_ids",
-			requiresJoin: threadLinkMembersLateral,
-			sortable:     false,
-			filterExpr:   "ml.member_ids",
-		},
 		"members": {
 			sqlExpr:      "m.members_data",
 			aliasedExpr:  "coalesce(m.members_data, '[]'::jsonb) as members",
@@ -153,10 +146,6 @@ func (q *threadQueryObject) EnsureJoins(requiredJoin int) {
 
 	if requiredJoin&threadLinkDirectSettings != 0 {
 		q.linkDirectSettings()
-	}
-
-	if requiredJoin&threadLinkMembersLateral != 0 {
-		q.linkMembersLateral()
 	}
 
 	if requiredJoin&threadLinkFullMembersLateral != 0 {
@@ -258,22 +247,6 @@ func (q *threadQueryObject) linkDirectSettings() {
 		threadDirectSettingsAlias,
 		threadThreadDialogAlias,
 	))
-}
-
-func (q *threadQueryObject) linkMembersLateral() {
-	if q.join&threadLinkMembersLateral != 0 {
-		return
-	}
-
-	q.join |= threadLinkMembersLateral
-
-	q.builder = q.builder.LeftJoin(fmt.Sprintf(`
-		lateral (
-			select array_agg(%s.member_id) as member_ids
-			from %s %s
-			where %s.thread_id = %s.id 
-		) %s on true
-	`, threadThreadDialogAlias, ThreadDialogTable, threadThreadDialogAlias, threadThreadDialogAlias, threadAlias, threadMembersLateralAlias))
 }
 
 func (q *threadQueryObject) linkFullMembersLateral() {

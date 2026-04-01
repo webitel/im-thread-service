@@ -84,7 +84,7 @@ func (t *ThreadManagementService) AddMember(ctx context.Context, req *dto.AddMem
 
 	initiatorThreadDialog := threadDialogs[0]
 
-	err = t.verifyAddMemberInitiatorPermissions(ctx, initiatorThreadDialog.ThreadRole, req.NewMemberRole, &initiatorThreadDialog.Permissions)
+	err = t.verifyAddMemberInitiatorPermissions(initiatorThreadDialog.ThreadRole, req.NewMemberRole, &initiatorThreadDialog.Permissions)
 	if err != nil {
 		return err
 	}
@@ -98,28 +98,54 @@ func (t *ThreadManagementService) AddMember(ctx context.Context, req *dto.AddMem
 		return err
 	}
 
-	_, err = t.uow.ThreadDialogStore().Create(ctx, &model.ThreadDialog{
-		BaseModel: shared.BaseModel{
-			DomainID:  initiatorThreadDialog.DomainID,
-			CreatedAt: time.Now().UTC(),
-			UpdatedAt: time.Now().UTC(),
-		},
-		ThreadID:    req.ThreadID,
-		MemberID:    req.NewMemberID,
-		ThreadRole:  req.NewMemberRole,
-		Permissions: *rolePermissions,
-		Settings: model.BaseThreadSetting{
-			Title: initiatorThreadDialog.Settings.Title,
-		},
-	})
-	if err != nil {
-		return err
+	var eventRecipients []uuid.UUID
+	for _, dialog := range threadDialogs {
+		eventRecipients = append(eventRecipients, dialog.MemberID)
 	}
+
+	err = t.uow.WithinTransaction(ctx, func(ctx context.Context, uow store.UnitOfWork) error {
+		createdThreadDialog, err := t.uow.ThreadDialogStore().Create(ctx, &model.ThreadDialog{
+			BaseModel: shared.BaseModel{
+				DomainID:  initiatorThreadDialog.DomainID,
+				CreatedAt: time.Now().UTC(),
+				UpdatedAt: time.Now().UTC(),
+			},
+			ThreadID:    req.ThreadID,
+			MemberID:    req.NewMemberID,
+			ThreadRole:  req.NewMemberRole,
+			Permissions: *rolePermissions,
+			Settings: model.BaseThreadSetting{
+				Title: initiatorThreadDialog.Settings.Title,
+			},
+		})
+		if err != nil {
+			return err
+		}
+		eventRecipients = append(eventRecipients, req.NewMemberID)
+
+		var (
+			eventTemplate = &event.MemberAddedV1{
+				ThreadID:          req.ThreadID,
+				MemberID:          createdThreadDialog.MemberID,
+				NewThreadDialogID: createdThreadDialog.ID,
+				InitiatorMemberID: req.InitiatorMemberID,
+			}
+		)
+		for _, recipientID := range eventRecipients {
+			eventTemplate.Recipient = recipientID
+			err = uow.Outbox().Publish(ctx, eventTemplate.Topic(), eventTemplate)
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+
+	})
 
 	return nil
 }
 
-func (t *ThreadManagementService) verifyAddMemberInitiatorPermissions(ctx context.Context, initiatorRole model.MemberRole, targetRole model.MemberRole, initiatorPermissions *model.ThreadPermissions) error {
+func (t *ThreadManagementService) verifyAddMemberInitiatorPermissions(initiatorRole model.MemberRole, targetRole model.MemberRole, initiatorPermissions *model.ThreadPermissions) error {
 	if initiatorPermissions == nil {
 		return errors.New("permissions cannot be nil")
 	}
@@ -160,6 +186,9 @@ func (t *ThreadManagementService) RemoveMember(ctx context.Context, req *dto.Rem
 	)
 
 	for _, dialog := range threadDialogs {
+		if initiator != nil && target != nil {
+			break
+		}
 		if dialog.MemberID == req.InitiatorMemberID {
 			initiator = dialog
 		}
@@ -264,15 +293,9 @@ func (t *ThreadManagementService) orchestrateDirectThreadCreation(ctx context.Co
 			return err
 		}
 
-		threadDalogs, err := t.initializeDirectThreadDialogs(ctx, uow, createdThread.ID, req.From, req.To)
+		_, err := t.initializeDirectThreadDialogs(ctx, uow, createdThread.ID, req.DomainID, req.From, req.To)
 		if err != nil {
 			return err
-		}
-
-		for _, dialog := range threadDalogs {
-			if _, err := t.initializeDirectMemberPermission(ctx, uow, dialog); err != nil {
-				return err
-			}
 		}
 
 		events, err := t.buildDirectThreadCreatedEvents(createdThread, req.From, req.To)
@@ -280,7 +303,7 @@ func (t *ThreadManagementService) orchestrateDirectThreadCreation(ctx context.Co
 			return err
 		}
 
-		if err := t.publishThreadCreatedEvents(ctx, uow, events); err != nil {
+		if err := t.publishThreadCreatedEvents(ctx, uow, events...); err != nil {
 			return err
 		}
 
@@ -317,47 +340,63 @@ func (t *ThreadManagementService) createDirectThread(ctx context.Context, uow st
 	return createdThread, nil
 }
 
-func (t *ThreadManagementService) initializeDirectThreadDialogs(ctx context.Context, uow store.UnitOfWork, threadID uuid.UUID, from, to *shared.Peer) ([]*model.DirectThreadDialog, error) {
+func (t *ThreadManagementService) initializeDirectThreadDialogs(ctx context.Context, uow store.UnitOfWork, threadID uuid.UUID, domainID int, from, to *shared.Peer) ([]*model.ThreadDialog, error) {
 	if from == nil || to == nil {
 		return nil, errors.New("from and to peers cannot be nil")
 	}
 	if uow == nil {
 		return nil, errors.New("unit of work cannot be nil")
 	}
-	var (
-		initiatorRole               = model.RoleOwner
-		peerRole                    = model.RoleOwner
-		directInitializationRequest = &model.CreateDirectThreadDialogRequest{
-			ThreadID: threadID,
-			From: model.CreateDirectPeer{
-				ID:   from.ID,
-				Name: from.Identity.Name,
-				Role: initiatorRole,
-				Settings: &model.DirectThreadSetting{
-					BaseThreadSetting: model.BaseThreadSetting{
-						Title: to.Identity.Name,
-					},
-				},
-			},
-			To: model.CreateDirectPeer{
-				ID:   to.ID,
-				Name: to.Identity.Name,
-				Role: peerRole,
-				Settings: &model.DirectThreadSetting{
-					BaseThreadSetting: model.BaseThreadSetting{
-						Title: from.Identity.Name,
-					},
-				},
-			},
-		}
-	)
-
-	records, err := uow.DirectThreadDialogOrchestration().InitializeFullDirectThread(ctx, directInitializationRequest)
+	initiatorRole := model.RoleOwner
+	peerRole := model.RoleOwner
+	initiatorPermissions, err := getDefaultPermissionsByRole(initiatorRole)
+	if err != nil {
+		return nil, err
+	}
+	targetPermissions, err := getDefaultPermissionsByRole(peerRole)
 	if err != nil {
 		return nil, err
 	}
 
-	return records, nil
+	var (
+		baseModel = shared.BaseModel{
+			DomainID: domainID,
+		}
+
+		initiatorThreadDialog = &model.ThreadDialog{
+			BaseModel:   baseModel,
+			ThreadID:    threadID,
+			MemberID:    from.ID,
+			ThreadRole:  initiatorRole,
+			DirectTo:    &to.ID,
+			Permissions: *initiatorPermissions,
+			Settings: model.BaseThreadSetting{
+				Title: to.Identity.Name,
+			},
+		}
+		targerPermissions = &model.ThreadDialog{
+			BaseModel:   baseModel,
+			ThreadID:    threadID,
+			MemberID:    to.ID,
+			ThreadRole:  peerRole,
+			DirectTo:    &from.ID,
+			Permissions: *targetPermissions,
+			Settings: model.BaseThreadSetting{
+				Title: from.Identity.Name,
+			},
+		}
+	)
+
+	initiatorCreatedThreadDialog, err := uow.ThreadDialogStore().Create(ctx, initiatorThreadDialog)
+	if err != nil {
+		return nil, err
+	}
+	targetCreatedThreadDialog, err := uow.ThreadDialogStore().Create(ctx, targerPermissions)
+	if err != nil {
+		return nil, err
+	}
+
+	return []*model.ThreadDialog{initiatorCreatedThreadDialog, targetCreatedThreadDialog}, nil
 }
 
 func (t *ThreadManagementService) initializeDirectMemberPermission(ctx context.Context, uow store.UnitOfWork, member *model.DirectThreadDialog) (*model.ThreadPermission, error) {
@@ -376,26 +415,27 @@ func (t *ThreadManagementService) initializeDirectMemberPermission(ctx context.C
 		ThreadID:          member.ThreadID,
 		ThreadDialogID:    member.ID,
 	}
-	permisions, err := uow.ThreadPermissionStore().Create(ctx, permission)
+	permissions, err := uow.ThreadPermissionStore().Create(ctx, permission)
 	if err != nil {
 		return nil, err
 	}
 
-	return permisions, nil
+	return permissions, nil
 }
-func (t *ThreadManagementService) buildDirectThreadCreatedEvents(thread *model.Thread, from, to *shared.Peer) ([]*event.ThreadCreated, error) {
+func (t *ThreadManagementService) buildDirectThreadCreatedEvents(thread *model.Thread, from, to *shared.Peer) ([]ThreadEvent, error) {
 	if thread == nil || from == nil || to == nil {
 		return nil, errors.New("thread, from and to cannot be nil")
 	}
 	var (
-		events []*event.ThreadCreated
+		events     []ThreadEvent
+		membersIDs = []uuid.UUID{from.ID, to.ID}
 	)
 	events = append(events,
 		event.NewThreadCreatedBuilder().
 			WithDomainID(int32(thread.DomainID)).
 			WithCreatedAt(thread.CreatedAt).
 			WithID(thread.ID).
-			WithMembers(thread.MembersIds).
+			WithMembers(membersIDs).
 			WithSubject(to.Identity.Name).
 			WithKind(thread.Kind.String()).
 			WithRecipient(&event.Recipient{
@@ -407,7 +447,7 @@ func (t *ThreadManagementService) buildDirectThreadCreatedEvents(thread *model.T
 			WithDomainID(int32(thread.DomainID)).
 			WithCreatedAt(thread.CreatedAt).
 			WithID(thread.ID).
-			WithMembers(thread.MembersIds).
+			WithMembers(membersIDs).
 			WithSubject(from.Identity.Name).
 			WithKind(thread.Kind.String()).
 			WithRecipient(&event.Recipient{
@@ -420,7 +460,13 @@ func (t *ThreadManagementService) buildDirectThreadCreatedEvents(thread *model.T
 	return events, nil
 }
 
-func (t *ThreadManagementService) publishThreadCreatedEvents(ctx context.Context, uow store.UnitOfWork, events []*event.ThreadCreated) error {
+type ThreadEvent interface {
+	Topic() string
+	MustBeThreadEvent()
+	event.Outboxer
+}
+
+func (t *ThreadManagementService) publishThreadCreatedEvents(ctx context.Context, uow store.UnitOfWork, events ...ThreadEvent) error {
 	for _, e := range events {
 		if err := uow.Outbox().Publish(ctx, e.Topic(), e); err != nil {
 			return err

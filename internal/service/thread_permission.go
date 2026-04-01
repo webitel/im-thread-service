@@ -75,7 +75,7 @@ var (
 //mockery:generate: true
 type ThreadPermissionStore interface {
 	Create(ctx context.Context, req *model.ThreadPermission) (*model.ThreadPermission, error)
-	Get(ctx context.Context, req *model.GetThreadPermissionRequest) (*model.ThreadPermission, error)
+	Get(ctx context.Context, req *model.GetThreadPermissionRequest) ([]*model.ThreadPermission, error)
 	Update(ctx context.Context, req *model.UpdateThreadPermissionRequest) (*model.ThreadPermission, error)
 }
 
@@ -91,7 +91,7 @@ func NewThreadPermissionService(store ThreadPermissionStore, logger *slog.Logger
 	}, nil
 }
 
-func (s *ThreadPermissionService) Get(ctx context.Context, req *model.GetThreadPermissionRequest) (*model.ThreadPermission, error) {
+func (s *ThreadPermissionService) Get(ctx context.Context, req *model.GetThreadPermissionRequest) ([]*model.ThreadPermission, error) {
 	if req == nil {
 		return nil, errors.InvalidArgument("invalid permission get request")
 	}

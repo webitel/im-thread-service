@@ -52,7 +52,8 @@ type (
 	}
 
 	ThreadPermissionStore interface {
-		Get(ctx context.Context, in *model.GetThreadPermissionRequest) (*model.ThreadPermission, error)
+		Create(ctx context.Context, in *model.ThreadPermission) (*model.ThreadPermission, error)
+		Get(ctx context.Context, in *model.GetThreadPermissionRequest) ([]*model.ThreadPermission, error)
 		Update(ctx context.Context, in *model.UpdateThreadPermissionRequest) (*model.ThreadPermission, error)
 	}
 

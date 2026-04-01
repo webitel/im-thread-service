@@ -60,6 +60,8 @@ func (e *ThreadCreated) Version() string { return ThreadVersionV1 }
 
 func (e *ThreadCreated) RecipientID() uuid.UUID { return e.Recipient.ID }
 
+func (e *ThreadCreated) MustBeThreadEvent() {}
+
 func (e *ThreadCreated) ToOutbox() (OutboxEvent, error) {
 	return e.serialize(e, e.Version())
 }

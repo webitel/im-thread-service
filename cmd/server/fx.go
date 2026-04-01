@@ -7,6 +7,7 @@ import (
 	grpcsrv "github.com/webitel/im-thread-service/infra/server/grpc"
 	"github.com/webitel/im-thread-service/infra/tls"
 	webiteldi "github.com/webitel/im-thread-service/infra/webitel/di"
+	imcontact "github.com/webitel/im-thread-service/infra/webitel/im-contact"
 	grpchandler "github.com/webitel/im-thread-service/internal/handler/grpc"
 	"github.com/webitel/im-thread-service/internal/service"
 	"github.com/webitel/im-thread-service/internal/service/decorators"
@@ -17,7 +18,11 @@ import (
 )
 
 func NewApp(cfg *config.Config) *fx.App {
-	return fx.New(
+	return fx.New(MainModule(cfg))
+}
+
+func MainModule(cfg *config.Config) fx.Option {
+	return fx.Options(
 		fx.Provide(
 			func() *config.Config { return cfg },
 			ProvideLogger,
@@ -30,10 +35,14 @@ func NewApp(cfg *config.Config) *fx.App {
 
 		postgres.Module,
 		leader.Module,
-		webiteldi.Module,
 		storeBridgeModule,
+
+		webiteldi.Module,
+		grpcClientsBridgeModule,
+
 		service.Module,
 		serviceToHandlerBridgeModule,
+
 		grpchandler.Module,
 		grpcsrv.Module,
 	)
@@ -51,10 +60,23 @@ var storeBridgeModule = fx.Module(
 	),
 )
 
+var grpcClientsBridgeModule = fx.Module(
+	"clientsToServiceBridge",
+	fx.Provide(
+		func(c *imcontact.Client) service.ThreadPrivacyChecker {
+			return c
+		},
+	),
+)
+
 var serviceToHandlerBridgeModule = fx.Module(
 	"serviceToHandlerBridge",
 	fx.Provide(
+
 		func(s *service.ThreadManagementService) grpchandler.ThreadManagementService {
+			return s
+		},
+		func(s *service.ThreadManagementService) service.ThreadManager {
 			return s
 		},
 		func(s *service.MessageService) grpchandler.MessageService {
