@@ -4,7 +4,10 @@ import (
 	"context"
 	"log/slog"
 
+	"github.com/google/uuid"
 	impb "github.com/webitel/im-thread-service/gen/go/thread/v1"
+	"github.com/webitel/im-thread-service/internal/domain/model"
+	"github.com/webitel/im-thread-service/internal/domain/shared"
 	"github.com/webitel/im-thread-service/internal/handler/grpc/mapper"
 	"github.com/webitel/im-thread-service/internal/service/dto"
 )
@@ -25,8 +28,14 @@ type MessageServer struct {
 	handler MessageService
 }
 
-// SendText implements threadv1.MessageServer.
-func (m *MessageServer) SendText(ctx context.Context, in *impb.SendTextRequest) (*impb.SendTextResponse, error) {
+func NewMessageService(logger *slog.Logger, handler service.Messager) *MessageService {
+	return &MessageService{
+		logger:  logger,
+		handler: handler,
+	}
+}
+
+func (m *MessageService) SendText(ctx context.Context, in *impb.SendTextRequest) (*impb.SendTextResponse, error) {
 	out, err := m.handler.SendText(ctx, mapper.MapToSendTextRequest(in))
 	if err != nil {
 		return nil, err
@@ -35,8 +44,7 @@ func (m *MessageServer) SendText(ctx context.Context, in *impb.SendTextRequest) 
 	return mapper.MapToSendTextResponse(out), nil
 }
 
-// SendImage implements threadv1.MessageServer.
-func (m *MessageServer) SendImage(ctx context.Context, in *impb.SendImageRequest) (*impb.SendImageResponse, error) {
+func (m *MessageService) SendImage(ctx context.Context, in *impb.SendImageRequest) (*impb.SendImageResponse, error) {
 	out, err := m.handler.SendImage(ctx, mapper.MapToSendImageRequest(in))
 	if err != nil {
 		m.logger.Error("failed to send image", "error", err)
@@ -46,8 +54,7 @@ func (m *MessageServer) SendImage(ctx context.Context, in *impb.SendImageRequest
 	return mapper.MapToSendImageResponse(out), nil
 }
 
-// SendDocument implements threadv1.MessageServer.
-func (m *MessageServer) SendDocument(ctx context.Context, in *impb.SendDocumentRequest) (*impb.SendDocumentResponse, error) {
+func (m *MessageService) SendDocument(ctx context.Context, in *impb.SendDocumentRequest) (*impb.SendDocumentResponse, error) {
 	out, err := m.handler.SendDocument(ctx, mapper.MapToSendDocumentRequest(in))
 	if err != nil {
 		m.logger.Error("failed to send document", "error", err)
@@ -67,9 +74,116 @@ func (m *MessageServer) Read(ctx context.Context, in *impb.ReadMessageRequest) (
 	return &impb.ReadMessageResponse{}, nil
 }
 
-func NewMessageService(logger *slog.Logger, handler MessageService) *MessageServer {
-	return &MessageServer{
-		logger:  logger,
-		handler: handler,
+func (m *MessageService) SendLocation(ctx context.Context, in *impb.SendLocationRequest) (*impb.SendMessageResponse, error) {
+	msg := &model.Message{
+		DomainID:       in.GetDomainId(),
+		IdempotencyKey: in.GetSendId(),
+		From:           mapper.MapPeerFromProto(in.From),
+		SendTo:         mapper.MapPeerFromProto(in.To),
+		Type:           model.MessageTypeLocation,
+		Metadata:       in.Metadata.AsMap(),
+		SenderID:       uuid.UUID{},
+		Location: &model.MessageLocation{
+			Address:   in.Address,
+			Latitude:  in.Latitude,
+			Longitude: in.Longitude,
+			Name:      in.Name,
+		},
 	}
+
+	saved, err := m.handler.SendLocation(ctx, msg)
+	if err != nil {
+		return nil, err
+	}
+
+	return &impb.SendMessageResponse{
+		To: []*impb.Peer{
+			in.To,
+		},
+		Id: saved.ID.String(),
+	}, nil
+}
+
+func (m *MessageService) SendContact(ctx context.Context, in *impb.SendContactRequest) (*impb.SendMessageResponse, error) {
+	msg := &model.Message{
+		IdempotencyKey: in.GetSendId(),
+		DomainID:       in.GetDomainId(),
+		From:           mapper.MapPeerFromProto(in.From),
+		SendTo:         mapper.MapPeerFromProto(in.To),
+		Type:           model.MessageTypeContact,
+		Metadata:       in.Metadata.AsMap(),
+		Contact: &model.MessageContact{
+			Name:        in.Name,
+			PhoneNumber: in.PhoneNumber,
+			Email:       in.Email,
+		},
+	}
+
+	saved, err := m.handler.SendContact(ctx, msg)
+	if err != nil {
+		return nil, err
+	}
+
+	return &impb.SendMessageResponse{
+		To: []*impb.Peer{
+			in.To,
+		},
+		Id: saved.ID.String(),
+	}, nil
+}
+
+func (m *MessageService) SendInteractive(ctx context.Context, in *impb.SendInteractiveMessageRequest) (*impb.SendMessageResponse, error) {
+	interactive, err := mapper.ConvertInteractivePbToDomain(in.GetInteractive())
+	if err != nil {
+		return nil, err
+	}
+
+	msg := &model.Message{
+		IdempotencyKey: in.GetSendId(),
+		DomainID:       in.GetDomainId(),
+		From:           mapper.MapPeerFromProto(in.GetFrom()),
+		SendTo:         mapper.MapPeerFromProto(in.GetTo()),
+		Body:           in.GetBody(),
+		Type:           model.MessageTypeInteractive,
+		Metadata:       in.Metadata.AsMap(),
+		Interactive:    interactive,
+		Images:         mapper.ConvertPbImagesToDomain(in.GetInteractive().GetImages()),
+		Documents:      mapper.ConvertPbDocumentsToDomain(in.GetInteractive().GetDocuments()),
+	}
+
+	processed, err := m.handler.SendInteractive(ctx, msg)
+	if err != nil {
+		return nil, err
+	}
+
+	return &impb.SendMessageResponse{
+		To: []*impb.Peer{
+			in.To,
+		},
+		Id: processed.ID.String(),
+	}, nil
+}
+
+func (m *MessageService) SendInteractiveCallback(ctx context.Context, in *impb.InteractiveCallbackRequest) (*impb.InteractiveCallbackResponse, error) {
+	from := mapper.MapPeerFromProto(in.GetReactedBy())
+
+	callback := &model.InteractiveCallback{
+		ReactedBy:    from.ID,
+		InReplyTo:    uuid.MustParse(in.GetInReplyTo()),
+		ButtonCode:   in.GetButtonCode(),
+		CallbackData: in.GetCallbackData(),
+	}
+
+	processed, err := m.handler.SendInteractiveCallback(ctx, callback)
+	if err != nil {
+		return nil, err
+	}
+
+	return &impb.InteractiveCallbackResponse{
+		ReactedBy:    mapper.MapPeerToProto(shared.Peer{ID: processed.ReactedBy, Type: from.Type}),
+		InReplyTo:    processed.InReplyTo.String(),
+		ButtonCode:   processed.ButtonCode,
+		CallbackData: processed.CallbackData,
+		ReactedAt:    processed.ReactedAtUnix(),
+	}, nil
 }

@@ -1,0 +1,125 @@
+package model
+
+import (
+	"database/sql/driver"
+	"encoding/json"
+	"slices"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/webitel/im-thread-service/internal/domain/event"
+	"github.com/webitel/im-thread-service/internal/domain/shared"
+	"github.com/webitel/webitel-go-kit/pkg/errors"
+)
+
+type MessageLocation struct {
+	MessageID string  `json:"message_id" db:"message_id"`
+	Address   *string `json:"address" db:"address"`
+	Latitude  float64 `json:"latitude" db:"latitude"`
+	Longitude float64 `json:"longitude" db:"longitude"`
+	Name      *string `json:"name" db:"name"`
+}
+
+type MessageContact struct {
+	MessageID   string  `json:"message_id" db:"message_id"`
+	PhoneNumber *string `json:"phone_number" db:"phone_number"`
+	Name        *string `json:"name" db:"name"`
+	Email       *string `json:"email" db:"email"`
+}
+
+type MessageInteractive struct {
+	Attachments *MessageContent `json:"attachments" db:"attachments"`
+	SingleUse   bool            `json:"single_use" db:"single_use"`
+	Kind        InteractiveKind `json:"kind" db:"kind"`
+}
+
+func (m *MessageInteractive) Value() (driver.Value, error) {
+	payload, err := json.Marshal(m)
+	if err != nil {
+		return nil, err
+	}
+	return payload, nil
+}
+
+func (m *MessageInteractive) Scan(value any) error {
+	payload, ok := value.([]byte)
+	if !ok {
+		return errors.Internal("error scaning interactive message")
+	}
+	return json.Unmarshal(payload, m)
+}
+
+type InteractiveKind struct {
+	Markup    *KeyboardButtonMarkup `json:"markup,omitempty"`
+	ListReply *KeyboardListReply    `json:"list_reply,omitempty"`
+}
+
+type MessageContent struct {
+	Images    bool `json:"images" db:"images"`
+	Documents bool `json:"documents" db:"documents"`
+}
+
+const (
+	ActionTypeNone     = "unknown"
+	ActionTypeURL      = "url"
+	ActionTypeCallback = "callback"
+	ActionTypeRequest  = "request"
+)
+
+type KeyboardButtonMarkup struct {
+	Rows []*KeyboardButtonRow `json:"rows"`
+}
+
+type KeyboardButtonRow struct {
+	Buttons []*KeyboardButton `json:"buttons"`
+}
+
+type KeyboardButton struct {
+	ID       string         `json:"id"`
+	Label    string         `json:"label"`
+	Metadata map[string]any `json:"metadata"`
+	Type     string         `json:"type"`
+	URL      *string        `json:"url,omitempty"`
+	Data     *string        `json:"data,omitempty"`
+	Action   *string        `json:"action,omitempty"`
+}
+
+type ListReplySection struct {
+	Section string            `json:"section"`
+	Buttons []*KeyboardButton `json:"buttons"`
+}
+
+type KeyboardListReply struct {
+	Title    string              `json:"title"`
+	Sections []*ListReplySection `json:"sections"`
+}
+
+type InteractiveCallback struct {
+	ReactedBy    uuid.UUID `json:"reacted_by" db:"reacted_by"`
+	InReplyTo    uuid.UUID `json:"in_reply_to" db:"in_reply_to"`
+	ButtonCode   string    `json:"button_code" db:"button_code"`
+	CallbackData string    `json:"callback_data" db:"callback_data"`
+	ReactedAt    time.Time `json:"reacted_at" db:"reacted_at"`
+
+	events []event.Outboxer
+}
+
+func (c *InteractiveCallback) WithCreatedEvent() *InteractiveCallback {
+	c.events = append(c.events, &event.InteractiveCallbackPayload{
+		ReactedBy: shared.Peer{
+			ID:   c.ReactedBy,
+			Type: shared.PeerContact,
+		},
+		InReplyTo:    c.InReplyTo,
+		ButtonCode:   c.ButtonCode,
+		CallbackData: c.CallbackData,
+		ReactedAt:    c.ReactedAt,
+	})
+	return c
+}
+
+func (c *InteractiveCallback) Events() []event.Outboxer { return slices.Clone(c.events) }
+
+func (c *InteractiveCallback) ReactedAtUnix() int64 {
+	return c.ReactedAt.UTC().Unix()
+}

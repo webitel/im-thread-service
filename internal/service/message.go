@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	imcontact "github.com/webitel/im-thread-service/infra/webitel/im-contact"
+	"github.com/webitel/im-thread-service/internal/domain/event"
 	"github.com/webitel/im-thread-service/internal/domain/model"
 	"github.com/webitel/im-thread-service/internal/service/dto"
 	guards "github.com/webitel/im-thread-service/internal/service/guards"
@@ -15,8 +16,15 @@ import (
 	"github.com/webitel/webitel-go-kit/pkg/errors"
 )
 
-type ThreadManager interface {
-	EnsureDirectThread(ctx context.Context, req *dto.EnsureDirectThreadRequest) (*dto.EnsureDirectThreadResponse, error)
+type Messager interface {
+	SendText(ctx context.Context, in *dto.SendTextRequest) (*dto.SendTextResponse, error)
+	SendImage(ctx context.Context, in *dto.SendImageRequest) (*dto.SendImageResponse, error)
+	SendDocument(ctx context.Context, in *dto.SendDocumentRequest) (*dto.SendDocumentResponse, error)
+	Read(ctx context.Context, in *dto.ReadMessageRequest) error
+	SendLocation(ctx context.Context, msg *model.Message) (*model.Message, error)
+	SendContact(ctx context.Context, msg *model.Message) (*model.Message, error)
+	SendInteractive(ctx context.Context, msg *model.Message) (*model.Message, error)
+	SendInteractiveCallback(ctx context.Context, callback *model.InteractiveCallback) (*model.InteractiveCallback, error)
 }
 
 type MessageService struct {
@@ -85,9 +93,9 @@ func (s *MessageService) SendText(ctx context.Context, in *dto.SendTextRequest) 
 		}
 
 		saved.To = t.Members
-		saved.WithCreatedEvent(in.SendID)
+		saved.WithCreatedEvent(in.SendID, &in.From)
 
-		if err = s.dispatchEvents(ctx, uow, saved); err != nil {
+		if err = s.dispatchMessageEvents(ctx, uow, saved); err != nil {
 			return err
 		}
 
@@ -154,7 +162,7 @@ func (s *MessageService) SendImage(ctx context.Context, in *dto.SendImageRequest
 
 		msg.ID = saved.ID
 
-		return s.dispatchEvents(txCtx, uow, msg)
+		return s.dispatchMessageEvents(txCtx, uow, msg)
 	})
 	if err != nil {
 		s.logger.ErrorContext(ctx, "send_image_failed", "err", err)
@@ -208,7 +216,7 @@ func (s *MessageService) SendDocument(ctx context.Context, in *dto.SendDocumentR
 
 		msg.ID = saved.ID
 
-		return s.dispatchEvents(txCtx, uow, msg)
+		return s.dispatchMessageEvents(txCtx, uow, msg)
 	})
 	if err != nil {
 		s.logger.ErrorContext(ctx, "send_document_failed", "err", err)
@@ -247,40 +255,197 @@ func (s *MessageService) Read(ctx context.Context, in *dto.ReadMessageRequest) e
 	})
 }
 
-// --- Internal Helpers ---
+func (s *MessageService) SendLocation(ctx context.Context, msg *model.Message) (*model.Message, error) {
+	log := s.logger.With("operation", "send_location")
 
-func (s *MessageService) executeMessageTransaction(ctx context.Context, msg *model.Message) error {
+	if err := s.prepareMessageForSending(ctx, msg); err != nil {
+		log.ErrorContext(ctx, "prepare_message_failed", "err", err)
+		return nil, err
+	}
+
+	var savedMsg *model.Message
 	err := s.uow.WithinTransaction(ctx, func(txCtx context.Context, uow store.UnitOfWork) error {
-		var (
-			savedMsg *model.Message
-			err      error
-		)
-		if savedMsg, err = uow.Messages().SaveMessage(txCtx, msg); err != nil {
+		var err error
+		if savedMsg, err = uow.Messages().SaveMessageLocation(txCtx, msg); err != nil {
+			return err
+		}
+		savedMsg.To = msg.To
+		savedMsg.IdempotencyKey = msg.IdempotencyKey
+
+		savedMsg.WithCreatedEvent(msg.IdempotencyKey, &msg.From)
+
+		return s.dispatchMessageEvents(txCtx, uow, savedMsg)
+	})
+
+	if err != nil {
+		log.ErrorContext(ctx, "location_transaction_failed", "err", err)
+		return nil, err
+	}
+
+	return savedMsg, err
+}
+
+func (s *MessageService) SendContact(ctx context.Context, msg *model.Message) (*model.Message, error) {
+	log := s.logger.With("operation", "send_contact")
+
+	if err := s.prepareMessageForSending(ctx, msg); err != nil {
+		log.ErrorContext(ctx, "prepare_message_failed", "err", err)
+		return nil, err
+	}
+
+	var savedMsg *model.Message
+	err := s.uow.WithinTransaction(ctx, func(txCtx context.Context, uow store.UnitOfWork) error {
+		var err error
+		if savedMsg, err = uow.Messages().SaveMessageContact(txCtx, msg); err != nil {
+			return err
+		}
+		savedMsg.To = msg.To
+		savedMsg.IdempotencyKey = msg.IdempotencyKey
+
+		savedMsg.WithCreatedEvent(msg.IdempotencyKey, &msg.From)
+
+		return s.dispatchMessageEvents(txCtx, uow, savedMsg)
+	})
+
+	if err != nil {
+		log.ErrorContext(ctx, "contact_transaction_failed", "err", err)
+		return nil, err
+	}
+
+	return savedMsg, err
+}
+
+func (s *MessageService) SendInteractive(ctx context.Context, msg *model.Message) (*model.Message, error) {
+	log := s.logger.With("operation", "send_interactive")
+
+	if err := s.prepareMessageForSending(ctx, msg); err != nil {
+		log.ErrorContext(ctx, "prepare_message_failed", "err", err)
+		return nil, err
+	}
+
+	if len(msg.Documents) > 0 || len(msg.Images) > 0 {
+		attachments := make([]AttachmentProcessor, 0, len(msg.Documents)+len(msg.Images))
+		for _, doc := range msg.Documents {
+			attachments = append(attachments, doc)
+		}
+		for _, img := range msg.Images {
+			attachments = append(attachments, img)
+		}
+
+		if err := s.mediaProcessor.Process(ctx, int64(msg.DomainID), attachments); err != nil {
+			log.ErrorContext(ctx, "media_process_failed", "err", err)
+			return nil, errors.Internal(
+				"media_process_failed",
+				errors.WithCause(err),
+				errors.WithID("service.message.save_interactive.media_process_failed"),
+			)
+		}
+	}
+
+	var savedMsg *model.Message
+	err := s.uow.WithinTransaction(ctx, func(ctx context.Context, uow store.UnitOfWork) error {
+		var err error
+		if savedMsg, err = uow.Messages().SaveInteractiveMessage(ctx, msg); err != nil {
 			return err
 		}
 
-		msg.ID = savedMsg.ID
+		savedMsg.To = msg.To
+		savedMsg.WithCreatedEvent(msg.IdempotencyKey, &msg.From)
 
-		return s.dispatchEvents(txCtx, uow, msg)
+		return s.dispatchMessageEvents(ctx, uow, savedMsg)
 	})
+
 	if err != nil {
-		s.logger.ErrorContext(ctx, "transaction_failed", "err", err)
+		log.ErrorContext(ctx, "transaction_failed", "err", err)
+		return nil, err
 	}
-	return err
+
+	return savedMsg, nil
 }
 
-func (s *MessageService) dispatchEvents(ctx context.Context, uow store.UnitOfWork, msg *model.Message) error {
+func (s *MessageService) SendInteractiveCallback(ctx context.Context, callback *model.InteractiveCallback) (*model.InteractiveCallback, error) {
+	log := s.logger.With("operation", "send_interactive_callback")
+
+	var savedCallback *model.InteractiveCallback
+	err := s.uow.WithinTransaction(ctx, func(ctx context.Context, uow store.UnitOfWork) error {
+		var err error
+		if savedCallback, err = uow.InteractiveCallback().Save(ctx, callback); err != nil {
+			return err
+		}
+
+		savedCallback.WithCreatedEvent()
+
+		return s.dispatchInteractiveCallbackEvents(ctx, uow, savedCallback)
+	})
+
+	if err != nil {
+		log.ErrorContext(
+			ctx,
+			"save_failed",
+			"err", err,
+			"reacted_by", callback.ReactedBy,
+			"in_reply_to", callback.InReplyTo,
+			"button_code", callback.ButtonCode,
+		)
+		return nil, err
+	}
+
+	return savedCallback, nil
+}
+
+func (s *MessageService) prepareMessageForSending(ctx context.Context, msg *model.Message) error {
+	t, err := s.threader.EnsureDirectThread(ctx, &dto.EnsureDirectThreadRequest{
+		DomainID: int(msg.DomainID),
+		MemberID: msg.From.ID,
+		PeerFrom: &msg.From,
+		PeerTo:   &msg.SendTo,
+	})
+
+	if err != nil {
+		return err
+	}
+
+	msg.ThreadID = t.ID
+	msg.To = t.Members
+
+	return nil
+}
+
+// --- Internal Helpers ---
+func (s *MessageService) dispatchInteractiveCallbackEvents(ctx context.Context, uow store.UnitOfWork, callback *model.InteractiveCallback) error {
+	evs := callback.Events()
+	if len(evs) == 0 {
+		s.logger.Warn("service.message.dispatchInteractiveCallbackEvents: no events to dispatch")
+		return nil
+	}
+
+	return s.dispatchEvents(ctx, uow, evs, func(e event.Outboxer) string {
+		return fmt.Sprintf("im_message.%s.interactive_callback.%s.%s",
+			e.RecipientID(),
+			e.EventType(),
+			e.Version(),
+		)
+	})
+}
+
+func (s *MessageService) dispatchMessageEvents(ctx context.Context, uow store.UnitOfWork, msg *model.Message) error {
 	evs := msg.Events()
 	if len(evs) == 0 {
 		return fmt.Errorf("domain events queue is empty: transaction aborted")
 	}
 
-	for _, event := range evs {
-		topic := fmt.Sprintf("im_message.%s.message.%s.%s",
-			event.RecipientID(),
+	return s.dispatchEvents(ctx, uow, evs, func(e event.Outboxer) string {
+		return fmt.Sprintf("im_message.%s.message.%s.%s",
+			e.RecipientID(),
 			"created",
-			event.Version(),
+			e.Version(),
 		)
+	})
+}
+
+func (s *MessageService) dispatchEvents(ctx context.Context, uow store.UnitOfWork, eventss []event.Outboxer, topicCallback func(event.Outboxer) string) error {
+	for _, event := range eventss {
+		topic := topicCallback(event)
 
 		if err := uow.Outbox().Publish(ctx, topic, event); err != nil {
 			return fmt.Errorf("outbox publish failed: %w", err)
