@@ -19,9 +19,7 @@ type (
 	}
 
 	MessageStore interface {
-		// [MESSAGE] Persistence
 		SaveMessage(ctx context.Context, msg *model.Message) (*model.Message, error)
-		// [ATTACHMENTS] Persistence
 		SaveImages(ctx context.Context, messageID uuid.UUID, images []*model.MessageImage) ([]*model.MessageImage, error)
 		SaveDocuments(ctx context.Context, messageID uuid.UUID, docs []*model.MessageDocument) ([]*model.MessageDocument, error)
 		ReadMessage(ctx context.Context, read struct {
@@ -47,7 +45,6 @@ type (
 	ThreadStore interface {
 		Create(ctx context.Context, req *model.Thread) (*model.Thread, error)
 		Search(ctx context.Context, query queryobject.QueryObject) ([]*model.Thread, error)
-		// ResolveDirect find a direct between two peers. Returns thread ID.
 		ResolveDirect(ctx context.Context, from, to uuid.UUID) (*model.Thread, error)
 	}
 

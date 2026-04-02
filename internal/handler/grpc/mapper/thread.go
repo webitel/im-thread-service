@@ -32,11 +32,12 @@ type ThreadInConverter interface {
 // goverter:extend ConvertTimeToInt64
 // goverter:extend ConvertThreadKindToExternal
 // goverter:extend ConvertThreadMemberToProto
+// goverter:extend ConvertMessageType
 type ThreadOutConverter interface {
 	ConvertCreateGroup(*dto.CreateGroupRequest) *impb.CreateGroupRequest
-	// goverter:autoMap BaseModel
 	// goverter:ignore Admins
 	// goverter:ignore MemberIds
+	// goverter:map LastMessage LastMsg
 	ConvertToThread(*model.Thread) *impb.Thread
 }
 
@@ -64,6 +65,10 @@ func ConvertThreadKindToExternal(in model.ThreadKind) impb.ThreadKind {
 	return impb.ThreadKind(in)
 }
 
+func ConvertMessageType(in model.MessageType) int32 {
+	return int32(in)
+}
+
 func ConvertMemberToID(in *model.ThreadMember) string {
 	if in == nil {
 		return ""
@@ -84,8 +89,7 @@ func ConvertThreadMemberToProto(member *model.ThreadMember) *impb.ThreadMember {
 		directSettings = &impb.ThreadDirectSettings{
 			Id:        member.DirectSettings.ID.String(),
 			DomainId:  int32(member.DirectSettings.DomainID),
-			CreatedAt: member.DirectSettings.CreatedAtMilliseconds(),
-			UpdatedAt: member.DirectSettings.UpdatedAtMilliseconds(),
+			UpdatedAt: member.DirectSettings.UpdatedAt.UTC().UnixMilli(),
 			Title:     member.DirectSettings.Title,
 		}
 	}

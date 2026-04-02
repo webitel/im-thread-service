@@ -29,30 +29,30 @@ type (
 	}
 
 	HistoryMessage struct {
-		ID         uuid.UUID      `json:"id" db:"id"`
-		DomainID   int            `json:"domain_id" db:"domain_id"`
-		ThreadID   uuid.UUID      `json:"thread_id" db:"thread_id"`
-		SenderID   uuid.UUID      `json:"sender_id" db:"sender_id"`
-		Type       int            `json:"type" db:"type"`
-		Body       string         `json:"body" db:"body"`
-		Metadata   map[string]any `json:"metadata" db:"metadata"`
-		CreatedAt  time.Time      `json:"created_at" db:"created_at"`
-		UpdatedAt  time.Time      `json:"updated_at" db:"updated_at"`
+		ID        uuid.UUID      `json:"id" db:"id"`
+		DomainID  int            `json:"domain_id" db:"domain_id"`
+		ThreadID  uuid.UUID      `json:"thread_id" db:"thread_id"`
+		SenderID  uuid.UUID      `json:"sender_id" db:"sender_id"`
+		Type      int            `json:"type" db:"type"`
+		Body      string         `json:"body" db:"body"`
+		Metadata  map[string]any `json:"metadata" db:"metadata"`
+		CreatedAt time.Time      `json:"created_at" db:"created_at"`
+		UpdatedAt time.Time      `json:"updated_at" db:"updated_at"`
 
 		Documents []*HistoryDocument `json:"documents" db:"documents"`
 		Images    []*HistoryImage    `json:"images" db:"images"`
 	}
 
 	HistoryMessageInputDTO struct {
-		DomainID    int
-		Fields      []string
-		Ids         uuid.UUIDs
-		ThreadIds   uuid.UUIDs
-		SenderIds   uuid.UUIDs
-		Types       []int
-		Cursor      *HistoryMessageCursor
-		Sort        string
-		Size        int
+		DomainID  int
+		Fields    []string
+		Ids       uuid.UUIDs
+		ThreadIds uuid.UUIDs
+		SenderIds uuid.UUIDs
+		Types     []int
+		Cursor    *HistoryMessageCursor
+		Sort      string
+		Size      int
 	}
 
 	HistoryMessageCursor struct {

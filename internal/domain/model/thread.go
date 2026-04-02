@@ -1,10 +1,20 @@
 package model
 
 import (
+	"time"
+
 	"github.com/google/uuid"
 	"github.com/webitel/im-thread-service/internal/domain/event"
-	"github.com/webitel/im-thread-service/internal/domain/shared"
 )
+
+// #region Queries
+type SearchThreadQuery struct {
+	Fields  []string
+	OrderBy []string
+	Size    int32
+}
+
+// #endregion
 
 //go:generate stringer -type=ThreadKind
 type ThreadKind int
@@ -17,17 +27,26 @@ const (
 )
 
 type Thread struct {
-	shared.BaseModel
+	ID          uuid.UUID  `json:"id" db:"id"`
+	DomainID    int        `json:"domain_id" db:"domain_id"`
+	CreatedAt   time.Time  `json:"created_at" db:"created_at"`
+	UpdatedAt   time.Time  `json:"updated_at" db:"updated_at"`
+	Kind        ThreadKind `json:"kind" db:"kind"`
+	Subject     string     `json:"subject" db:"subject"`
+	Description string     `json:"description" db:"description"`
+	Owner       uuid.UUID  `json:"owner"`
 
-	Kind    ThreadKind      `json:"kind"`
-	Owner   uuid.UUID       `json:"owner"`
-	Members []*ThreadMember `json:"members"`
+	MembersIDs []uuid.UUID     `json:"members_ids" db:"member_ids"`
+	Members    []*ThreadMember `json:"members,omitempty" db:"members"`
 
-	Subject     string `json:"subject"`
-	Description string `json:"description"`
+	LastMessageID uuid.UUID `json:"last_message_id" db:"last_message_id"`
+	LastMessage   *Message  `json:"last_msg,omitempty" db:"last_msg"`
 
-	events []event.Base
+	events []event.Base `db:"-"`
 }
+
+func (t *Thread) CreatedAtUnix() int64 { return max(t.CreatedAt.UTC().UnixMilli(), 0) }
+func (t *Thread) UpdatedAtUnix() int64 { return max(t.UpdatedAt.UTC().UnixMilli(), 0) }
 
 func (t *Thread) AddEvents(e ...event.Base) {
 	t.events = append(t.events, e...)
@@ -37,61 +56,4 @@ func (t *Thread) PullEvents() []event.Base {
 	events := t.events
 	t.events = nil
 	return events
-}
-
-type ThreadBuilder struct {
-	thread *Thread
-}
-
-func NewThreadBuilder() *ThreadBuilder {
-	return &ThreadBuilder{
-		// Initialize the thread with default values
-		thread: &Thread{
-			BaseModel:   shared.BaseModel{},
-			Kind:        ThreadUnspecified,
-			Owner:       uuid.Nil,
-			Members:     []*ThreadMember{},
-			Subject:     "",
-			Description: "",
-		},
-	}
-}
-
-func (b *ThreadBuilder) WithKind(kind ThreadKind) *ThreadBuilder {
-	b.thread.Kind = kind
-	return b
-}
-
-func (b *ThreadBuilder) WithOwner(owner uuid.UUID) *ThreadBuilder {
-	b.thread.Owner = owner
-	return b
-}
-
-func (b *ThreadBuilder) WithMembers(members []*ThreadMember) *ThreadBuilder {
-	b.thread.Members = members
-	return b
-}
-
-func (b *ThreadBuilder) WithSubject(subject string) *ThreadBuilder {
-	b.thread.Subject = subject
-	return b
-}
-
-func (b *ThreadBuilder) WithDescription(description string) *ThreadBuilder {
-	b.thread.Description = description
-	return b
-}
-
-func (b *ThreadBuilder) WithID(id uuid.UUID) *ThreadBuilder {
-	b.thread.ID = id
-	return b
-}
-
-func (b *ThreadBuilder) WithDomainID(domainID int) *ThreadBuilder {
-	b.thread.DomainID = domainID
-	return b
-}
-
-func (b *ThreadBuilder) Build() *Thread {
-	return b.thread
 }

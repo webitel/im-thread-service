@@ -33,7 +33,7 @@ type MessageCreate struct {
 	Body       string
 	SendID     string          // Used for client-side correlation in RabbitMQ events.
 	Images     []ImageInput    // Data for image attachments.
-	Documents  []DocumentInput // Data for file attachments.	
+	Documents  []DocumentInput // Data for file attachments.
 }
 
 // NewTextMessage initializes a standard text message and stages events for all recipients.
@@ -45,9 +45,9 @@ func NewTextMessage(in MessageCreate) *Message {
 		DomainID:  in.DomainID,
 		From:      in.From,
 		To:        in.Recipients,
-		Text:      cleanText,
+		Body:      cleanText,
 		Type:      MessageTypeText,
-		Metadata:  buildMetadata(cleanText),
+		Metadata:  BuildMetadata(cleanText),
 		CreatedAt: time.Now().UTC(),
 	}
 
@@ -75,10 +75,10 @@ func NewImageMessage(in MessageCreate) *Message {
 		DomainID:  in.DomainID,
 		From:      in.From,
 		To:        in.Recipients,
-		Text:      cleanText,
+		Body:      cleanText,
 		Type:      MessageTypeImage,
 		Images:    domainImages,
-		Metadata:  buildMetadata(cleanText),
+		Metadata:  BuildMetadata(cleanText),
 		CreatedAt: time.Now().UTC(),
 	}
 
@@ -106,10 +106,10 @@ func NewDocumentMessage(in MessageCreate) *Message {
 		DomainID:  in.DomainID,
 		From:      in.From,
 		To:        in.Recipients,
-		Text:      cleanText,
+		Body:      cleanText,
 		Type:      MessageTypeFile,
 		Documents: domainDocs,
-		Metadata:  buildMetadata(cleanText),
+		Metadata:  BuildMetadata(cleanText),
 		CreatedAt: time.Now().UTC(),
 	}
 
@@ -129,7 +129,7 @@ func addCreatedEvents(msg *Message, in MessageCreate) {
 		SendID:     in.SendID, // Passed through only to the event
 		From:       &shared.Peer{ID: msg.From.ID, Type: msg.From.Type},
 		To:         in.Recipients,
-		Body:       msg.Text,
+		Body:       msg.Body,
 		Type:       int16(msg.Type),
 		OccurredAt: msg.CreatedAt,
 	}

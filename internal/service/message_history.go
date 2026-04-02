@@ -29,21 +29,10 @@ func NewMessageHistory(messageHistoryStore store.MessageHistory) *MessageHistory
 	}
 }
 
-func (s *MessageHistoryService) Search(ctx context.Context, hmiDTO *dto.HistoryMessageInputDTO) (model.MessageSlice, error) {
-	var (
-		query  queryobject.QueryObject
-		err    error
-		cursor *queryobject.MessageHistoryCursor
-	)
-
-	if hmiDTO.Cursor != nil {
-		cursor = queryobject.NewMessageHistoryCursorFromDTOCursor(hmiDTO.Cursor)
-	}
-
-	// build query object based on request
-	query = queryobject.NewMessageHistoryQuery().
+func (s *MessageHistoryService) Search(ctx context.Context, hmiDTO *dto.HistoryMessageInputDTO) (model.MessageSlice, queryobject.PageInfo[queryobject.MessageHistoryCursor], error) {
+	query := queryobject.NewMessageHistoryQuery().
 		WithFields(hmiDTO.Fields).
-		WithCursor(cursor).
+		WithCursor(hmiDTO.Cursor).
 		WithDomainIDsFilter(hmiDTO.DomainID).
 		WithIdsFilter(hmiDTO.Ids...).
 		WithSenderIdsFilter(hmiDTO.SenderIds...).
@@ -51,15 +40,24 @@ func (s *MessageHistoryService) Search(ctx context.Context, hmiDTO *dto.HistoryM
 		WithLimit(hmiDTO.Size).
 		WithTypeFilter(hmiDTO.Types...)
 
-	// execute database request
 	historyMessages, err := s.messageHistoryStore.Search(ctx, query)
 	if err != nil {
-		return nil, err
+		return nil, queryobject.PageInfo[queryobject.MessageHistoryCursor]{}, err
+	}
+
+	pageInfo, err := query.BuildPageInfo(&historyMessages, func(m *dto.HistoryMessage) (queryobject.MessageHistoryCursor, error) {
+		return queryobject.MessageHistoryCursor{
+			ID: m.ID,
+		}, nil
+	})
+
+	if err != nil {
+		return nil, queryobject.PageInfo[queryobject.MessageHistoryCursor]{}, err
 	}
 
 	messages := mapHistoryMessagesToMessage(historyMessages)
 
-	return messages, nil
+	return messages, pageInfo, nil
 }
 
 func mapHistoryMessagesToMessage(history []*dto.HistoryMessage) []*model.Message {
@@ -72,7 +70,7 @@ func mapHistoryMessagesToMessage(history []*dto.HistoryMessage) []*model.Message
 			ID:        histMsg.ID,
 			ThreadID:  histMsg.ThreadID,
 			From:      shared.Peer{ID: histMsg.SenderID},
-			Text:      histMsg.Body,
+			Body:      histMsg.Body,
 			Type:      model.MessageType(histMsg.Type),
 			CreatedAt: histMsg.CreatedAt,
 			UpdatedAt: histMsg.UpdatedAt,

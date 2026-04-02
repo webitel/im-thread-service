@@ -57,7 +57,7 @@ func (d *directThreadDialogOrchestration) InitializeFullDirectThread(ctx context
 				domain_id, created_at, updated_at,
 				member_id, thread_id, direct_to
 			)
-			values 
+			values
 				(@DomainID, now(), now(), @From, @ThreadID, @To),
 				(@DomainID, now(), now(), @To, @ThreadID, @From)
 			returning
@@ -80,7 +80,7 @@ func (d *directThreadDialogOrchestration) InitializeFullDirectThread(ctx context
 			from inserted_dialogs d
 			returning id, domain_id, thread_dialog_id, created_at, updated_at, title
 		)
-		select 
+		select
 			d.id,
 			d.domain_id,
 			d.created_at,

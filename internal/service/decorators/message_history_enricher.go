@@ -10,6 +10,7 @@ import (
 	storageclient "github.com/webitel/im-thread-service/infra/webitel/storage"
 	"github.com/webitel/im-thread-service/internal/domain/model"
 	"github.com/webitel/im-thread-service/internal/service/dto"
+	queryobject "github.com/webitel/im-thread-service/internal/store/query_object"
 )
 
 const (
@@ -28,7 +29,7 @@ const (
 )
 
 type MessageHistorySearcher interface {
-	Search(ctx context.Context, hmiDTO *dto.HistoryMessageInputDTO) (model.MessageSlice, error)
+	Search(ctx context.Context, hmiDTO *dto.HistoryMessageInputDTO) (model.MessageSlice, queryobject.PageInfo[queryobject.MessageHistoryCursor], error)
 }
 
 type (
@@ -39,14 +40,6 @@ type (
 	}
 )
 
-// NewMessageHistoryEnricher creates a new messageHistoryEnricher instance.
-//
-// Args:
-// base: The base message history searcher.
-// storage: The storage client.
-//
-// Returns:
-// An instance of messageHistoryEnricher.
 func NewMessageHistoryEnricher(base MessageHistorySearcher, storage *storageclient.Client) *MessageHistoryEnricher {
 	return &MessageHistoryEnricher{
 		MessageHistorySearcher: base,
@@ -54,28 +47,19 @@ func NewMessageHistoryEnricher(base MessageHistorySearcher, storage *storageclie
 	}
 }
 
-// Search enriches the given messages with file links based on the given request.
-//
-// Args:
-// ctx: The context of the request.
-// hmiDTO: The history message input DTO containing the request.
-//
-// Returns:
-// The enriched messages.
-// An error if occurred during the enrichment process.
-func (m *MessageHistoryEnricher) Search(ctx context.Context, hmiDTO *dto.HistoryMessageInputDTO) (model.MessageSlice, error) {
-	messages, err := m.MessageHistorySearcher.Search(ctx, hmiDTO)
+func (m *MessageHistoryEnricher) Search(ctx context.Context, hmiDTO *dto.HistoryMessageInputDTO) (model.MessageSlice, queryobject.PageInfo[queryobject.MessageHistoryCursor], error) {
+	messages, pageInfo, err := m.MessageHistorySearcher.Search(ctx, hmiDTO)
 	if err != nil {
-		return nil, err
+		return nil, pageInfo, err
 	}
 
 	if len(messages) == 0 {
-		return messages, nil
+		return messages, pageInfo, nil
 	}
 
 	fileIDs := collectUniqueFileIDs(messages)
 	if len(fileIDs) == 0 {
-		return messages, nil
+		return messages, pageInfo, nil
 	}
 
 	var (
@@ -88,14 +72,14 @@ func (m *MessageHistoryEnricher) Search(ctx context.Context, hmiDTO *dto.History
 
 	linkMap, err := m.fetchFileLinks(ctx, fileIDs, hmiDTO.DomainID, loadMetadata)
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch file links: %w", err)
+		return nil, pageInfo, fmt.Errorf("failed to fetch file links: %w", err)
 	}
 
 	if err := m.enrichMessages(messages, linkMap, requestedMetadata); err != nil {
-		return nil, fmt.Errorf("failed to enrich messages: %w", err)
+		return nil, pageInfo, fmt.Errorf("failed to enrich messages: %w", err)
 	}
 
-	return messages, nil
+	return messages, pageInfo, nil
 }
 
 // fetchFileLinks fetches file links from the storage service for the given file IDs.

@@ -7,11 +7,11 @@ import (
 	"github.com/webitel/im-thread-service/internal/domain/model"
 	"github.com/webitel/im-thread-service/internal/handler/grpc/mapper"
 	"github.com/webitel/im-thread-service/internal/service/dto"
-	"github.com/webitel/im-thread-service/internal/utils"
+	queryobject "github.com/webitel/im-thread-service/internal/store/query_object"
 )
 
 type MessageHistoryService interface {
-	Search(context.Context, *dto.HistoryMessageInputDTO) (model.MessageSlice, error)
+	Search(context.Context, *dto.HistoryMessageInputDTO) (model.MessageSlice, queryobject.PageInfo[queryobject.MessageHistoryCursor], error)
 }
 
 type (
@@ -27,36 +27,27 @@ func NewMessageHistoryServer(messageHistorySearcher MessageHistoryService) *Mess
 		messageHistorySearcher: messageHistorySearcher,
 	}
 }
-
 func (s *MessageHistoryServer) SearchThreadMessagesHistory(ctx context.Context, req *impb.SearchMessageHistoryRequest) (*impb.SearchMessageHistoryResponse, error) {
-	var (
-		resp   *impb.SearchMessageHistoryResponse
-		err    error
-		hmiDTO = mapper.MapSearchMessageHistoryRequest2HistoryMessageInputDTO(req)
-		next   bool
-	)
+	hmiDTO := mapper.MapSearchMessageHistoryRequest2HistoryMessageInputDTO(req)
 
-	messages, err := s.messageHistorySearcher.Search(ctx, hmiDTO)
+	messages, pageInfo, err := s.messageHistorySearcher.Search(ctx, hmiDTO)
 	if err != nil {
 		return nil, err
 	}
-	next, messages = utils.ProcessPagination(int(req.Size), messages)
 
-	var isBackward bool
-	hadCursor := req.Cursor != nil
+	resp := mapper.MapMessage2SearchMessageHistoryResponse(messages)
+	resp.From = mapper.GetUniqueFrom(messages)
 
-	if hadCursor {
-		isBackward = !req.Cursor.Direction
-	} else {
-		isBackward = true
+	if pageInfo.HasNextPage {
+		resp.NextCursor = &impb.HistoryMessageCursorResponse{
+			Id: pageInfo.NextCursor.ID.String(),
+		}
 	}
 
-	paging := messages.GetPaging(next, isBackward, hadCursor)
-	{
-		resp = mapper.MapMessage2SearchMessageHistoryResponse(messages)
-		resp.From = mapper.GetUniqueFrom(messages)
-		resp.Next = next
-		resp.Paging = mapper.MapPaging(paging)
+	if pageInfo.HasPrevPage {
+		resp.PrevCursor = &impb.HistoryMessageCursorResponse{
+			Id: pageInfo.PrevCursor.ID.String(),
+		}
 	}
 
 	return resp, nil

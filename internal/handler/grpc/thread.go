@@ -59,7 +59,7 @@ func (ts *ThreadManagementServer) Search(ctx context.Context, req *impb.ThreadSe
 	)
 
 	for _, threadModel := range threads {
-		res.Threads = append(res.Threads, ts.outMapper.ConvertToThread(threadModel))
+		res.Items = append(res.Items, ts.outMapper.ConvertToThread(threadModel))
 	}
 
 	return &res, nil

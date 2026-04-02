@@ -47,6 +47,7 @@ func (t *ThreadManagementService) Search(ctx context.Context, searchRequest *dto
 		return nil, errors.New("search request cannot be nil")
 	}
 	query := queryobject.NewThreadQueryObject().
+		WithSubject().
 		WithFields(searchRequest.Fields).
 		WithIDFilter(searchRequest.Ids...).
 		WithDomainIDFilter(searchRequest.DomainIds...).
@@ -325,12 +326,10 @@ func (t *ThreadManagementService) createDirectThread(ctx context.Context, uow st
 	var (
 		now          = time.Now().UTC()
 		directThread = &model.Thread{
-			BaseModel: shared.BaseModel{
-				DomainID:  domainID,
-				CreatedAt: now,
-				UpdatedAt: now,
-			},
-			Kind: model.ThreadDirect,
+			DomainID:  domainID,
+			CreatedAt: now,
+			UpdatedAt: now,
+			Kind:      model.ThreadDirect,
 		}
 	)
 	createdThread, err := uow.ThreadStore().Create(ctx, directThread)

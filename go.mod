@@ -25,9 +25,11 @@ require (
 	github.com/webitel/storage v0.0.0-20260109145042-79404a35fcce
 	github.com/webitel/webitel-go-kit/infra/discovery v0.0.0-20260202112708-f7b4e7cc68eb
 	github.com/webitel/webitel-go-kit/infra/otel v0.0.0-20251224105820-8d9bcb902593
+	github.com/webitel/webitel-go-kit/infra/profiler v0.0.0-20260323001146-8a6a55d94da8
 	github.com/webitel/webitel-go-kit/infra/transport v0.0.0-20260120140602-6f20efe1524e
 	github.com/webitel/webitel-go-kit/pkg/errors v0.0.0-20251222125635-d60448d23a82
 	github.com/webitel/webitel-go-kit/pkg/interceptors v0.0.0-20251224105820-8d9bcb902593
+	github.com/webitel/webitel-go-kit/pkg/logger v0.0.0-20260320150151-882368899a56
 	go.opentelemetry.io/contrib/bridges/otelslog v0.14.0
 	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.64.0
 	go.opentelemetry.io/otel v1.39.0
@@ -60,6 +62,9 @@ require (
 	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/go-ole/go-ole v1.2.6 // indirect
 	github.com/google/cel-go v0.26.1 // indirect
+	github.com/huandu/go-clone v1.7.3 // indirect
+	github.com/huandu/go-sqlbuilder v1.40.0 // indirect
+	github.com/huandu/xstrings v1.4.0 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
 	github.com/jackc/puddle/v2 v2.2.2 // indirect
@@ -89,7 +94,9 @@ require (
 	github.com/stretchr/objx v0.5.2 // indirect
 	github.com/tklauser/go-sysconf v0.3.12 // indirect
 	github.com/tklauser/numcpus v0.6.1 // indirect
+	github.com/webitel/wlog v0.0.0-20250325101442-de4f125c1ec7 // indirect
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
+	go.opentelemetry.io/contrib/bridges/otelzap v0.11.0 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.60.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploggrpc v0.12.2 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp v0.12.2 // indirect

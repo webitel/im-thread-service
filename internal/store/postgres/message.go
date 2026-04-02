@@ -40,7 +40,7 @@ func (m *messageStore) SaveMessage(ctx context.Context, msg *model.Message) (*mo
 			@DomainID, @ThreadID, @SenderID, @Type, @Body, @Metadata
 		)
 		returning
-			id, thread_id, type, body, metadata, created_at, updated_at,
+			id, domain_id, thread_id, type, body, metadata, created_at, updated_at,
 			jsonb_build_object('id', sender_id) as "from"
 	`
 
@@ -49,7 +49,7 @@ func (m *messageStore) SaveMessage(ctx context.Context, msg *model.Message) (*mo
 		"ThreadID": msg.ThreadID,
 		"SenderID": msg.From.ID,
 		"Type":     msg.Type,
-		"Body":     msg.Text,
+		"Body":     msg.Body,
 		"Metadata": msg.Metadata,
 	}
 
@@ -103,7 +103,7 @@ func (m *messageStore) SaveImages(ctx context.Context, messageID uuid.UUID, imag
 		insert into im_message.message_images (
 			message_id, file_id, mime, thumbnails, width, height
 		)
-		select 
+		select
 			@MessageID,
 			u.file_id,
 			u.mime,

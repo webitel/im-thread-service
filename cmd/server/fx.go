@@ -14,6 +14,7 @@ import (
 	"github.com/webitel/im-thread-service/internal/store"
 	"github.com/webitel/im-thread-service/internal/store/postgres"
 	"github.com/webitel/webitel-go-kit/infra/discovery"
+	"github.com/webitel/webitel-go-kit/infra/profiler"
 	"go.uber.org/fx"
 )
 
@@ -28,6 +29,7 @@ func MainModule(cfg *config.Config) fx.Option {
 			ProvideLogger,
 			ProvideWatermillLogger,
 			ProvideSD,
+			ProvideProfiler,
 		),
 		fx.Invoke(func(discovery discovery.DiscoveryProvider) error { return nil }),
 		tls.Module,
@@ -45,6 +47,7 @@ func MainModule(cfg *config.Config) fx.Option {
 
 		grpchandler.Module,
 		grpcsrv.Module,
+		profiler.Module,
 	)
 }
 
