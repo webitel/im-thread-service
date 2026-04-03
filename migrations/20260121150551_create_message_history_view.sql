@@ -29,7 +29,8 @@ SELECT id,
                         doc.created_at
                     ) AS document
                 FROM im_message.message_documents doc
-                WHERE doc.message_id = m.id
+                WHERE m.type = 2
+                AND doc.message_id = m.id
             ) unnamed_subquery
     ) AS documents,
     (
@@ -52,7 +53,8 @@ SELECT id,
                         img.created_at
                     ) AS image
                 FROM im_message.message_images img
-                WHERE img.message_id = m.id
+                WHERE m.type = 3
+                AND img.message_id = m.id
             ) unnamed_subquery
     ) AS images,
     domain_id
