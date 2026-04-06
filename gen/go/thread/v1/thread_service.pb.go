@@ -10,6 +10,7 @@ import (
 	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+	structpb "google.golang.org/protobuf/types/known/structpb"
 	reflect "reflect"
 	sync "sync"
 )
@@ -158,7 +159,8 @@ type Thread struct {
 	// Detailed member information.
 	Members []*ThreadMember `protobuf:"bytes,11,rep,name=members,proto3" json:"members,omitempty"`
 	// Last message of the linked thread.
-	LastMsg *HistoryMessage `protobuf:"bytes,12,opt,name=last_msg,json=lastMsg,proto3" json:"last_msg,omitempty"`
+	LastMsg   *HistoryMessage  `protobuf:"bytes,12,opt,name=last_msg,json=lastMsg,proto3" json:"last_msg,omitempty"`
+	Variables *ThreadVariables `protobuf:"bytes,13,opt,name=variables,proto3" json:"variables,omitempty"`
 }
 
 func (x *Thread) Reset() {
@@ -252,6 +254,13 @@ func (x *Thread) GetMembers() []*ThreadMember {
 func (x *Thread) GetLastMsg() *HistoryMessage {
 	if x != nil {
 		return x.LastMsg
+	}
+	return nil
+}
+
+func (x *Thread) GetVariables() *ThreadVariables {
+	if x != nil {
+		return x.Variables
 	}
 	return nil
 }

@@ -41,6 +41,8 @@ type Thread struct {
 	LastMessageID uuid.UUID `json:"last_message_id" db:"last_message_id"`
 	LastMessage   *Message  `json:"last_msg,omitempty" db:"last_msg"`
 
+	Variables *ThreadVariables `json:"variables,omitempty" db:"variables"`
+
 	events []event.Base `db:"-"`
 }
 

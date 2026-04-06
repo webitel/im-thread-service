@@ -3,6 +3,7 @@ package grpc
 import (
 	"context"
 
+	"github.com/google/uuid"
 	impb "github.com/webitel/im-thread-service/gen/go/thread/v1"
 	"github.com/webitel/im-thread-service/internal/domain/model"
 	"github.com/webitel/im-thread-service/internal/handler/grpc/mapper"
@@ -37,6 +38,13 @@ func NewThreadService(threadManager ThreadManagementService) *ThreadManagementSe
 		threadManager: threadManager,
 		inMapper:      &mapper.ThreadInConverter{},
 		outMapper:     &mapper.ThreadOutConverter{},
+type ThreadVariablesOperator interface {
+	Set(ctx context.Context, variables *model.SetThreadVariablesCommand) (*model.ThreadVariables, error)
+	Search(ctx context.Context, query model.GetThreadVariablesQuery) (model.Page[*model.ThreadVariables], error)
+	Locate(ctx context.Context, threadID uuid.UUID) (*model.ThreadVariables, error)
+	Flush(ctx context.Context, flushCmd model.FlushVariablesCommand) (*model.ThreadVariables, error)
+}
+
 	}
 }
 
@@ -98,4 +106,60 @@ func (ts *ThreadManagementServer) CreateGroup(ctx context.Context, request *impb
 	// internalRequest := ts.inMapper.ConvertCreateGroup(request)
 
 	return nil, errors.Internal("method not implemented yet")
+}
+
+func (ts *ThreadService) SetVariables(ctx context.Context, req *impb.SetVariablesRequest) (*impb.ThreadVariables, error) {
+	setVarsCmd, err := mapper.MapSetVariablesRequestToCommand(req)
+	if err != nil {
+		return nil, err
+	}
+
+	settedVars, err := ts.threadVariables.Set(ctx, setVarsCmd)
+	if err != nil {
+		return nil, err
+	}
+
+	return mapper.MapThreadVariablesToProto(settedVars), nil
+}
+
+func (ts *ThreadService) SearchVariables(ctx context.Context, req *impb.SearchVariablesRequest) (*impb.SearchVariablesResponse, error) {
+	searchQuery, err := mapper.MapSearchVariablesRequestToQuery(req)
+	if err != nil {
+		return nil, err
+	}
+
+	page, err := ts.threadVariables.Search(ctx, searchQuery)
+	if err != nil {
+		return nil, err
+	}
+
+	return mapper.MapThreadVariablesPageToProto(&page), nil
+}
+
+func (ts *ThreadService) LocateVariables(ctx context.Context, req *impb.LocateVariablesRequest) (*impb.ThreadVariables, error) {
+	threadId, err := uuid.Parse(req.GetThreadId())
+	if err != nil {
+		return nil, errors.InvalidArgument("invalid thread id format", errors.WithCause(err))
+	}
+
+	vars, err := ts.threadVariables.Locate(ctx, threadId)
+	if err != nil {
+		return nil, err
+	}
+
+	return mapper.MapThreadVariablesToProto(vars), nil
+}
+
+func (ts *ThreadService) FlushVariables(ctx context.Context, req *impb.FlushVariablesRequest) (*impb.ThreadVariables, error) {
+	cmd, err := mapper.MapFlushVariablesRequestToCommand(req)
+	if err != nil {
+		return nil, err
+	}
+
+	vars, err := ts.threadVariables.Flush(ctx, *cmd)
+	if err != nil {
+		return nil, err
+	}
+
+	return mapper.MapThreadVariablesToProto(vars), nil
 }

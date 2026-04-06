@@ -98,7 +98,6 @@ func ProvideLogger(cfg *config.Config, lc fx.Lifecycle) (*slog.Logger, error) {
 			return nil, err
 		}
 
-		handlers = append(handlers)
 		lc.Append(fx.Hook{
 			OnStop: func(ctx context.Context) error {
 				return shutdown(ctx)
