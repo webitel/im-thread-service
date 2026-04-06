@@ -13,6 +13,7 @@ import (
 	"github.com/webitel/im-thread-service/cmd/migrate"
 	"github.com/webitel/im-thread-service/config"
 	"github.com/webitel/im-thread-service/internal/domain/model"
+	"github.com/webitel/im-thread-service/internal/domain/shared"
 	"github.com/webitel/im-thread-service/internal/store"
 	"github.com/webitel/im-thread-service/internal/store/postgres"
 	testhelpers "github.com/webitel/im-thread-service/test/integration/test_helpers"
@@ -66,7 +67,7 @@ func (s *ThreadStoreTestSuite) TestCreate_Success() {
 	now := time.Now().UTC().Truncate(time.Microsecond)
 
 	req := &model.Thread{
-		BaseModel: model.BaseModel{
+		BaseModel: shared.BaseModel{
 			DomainID:  1,
 			CreatedAt: now,
 			UpdatedAt: now,
@@ -106,7 +107,7 @@ func (s *ThreadStoreTestSuite) TestCreate_SpecialCharactersAndLongText() {
 	longDescription := "Very long long text with special characters 🤡 and emoji: \n \t ' \" ; --"
 
 	req := &model.Thread{
-		BaseModel: model.BaseModel{
+		BaseModel: shared.BaseModel{
 			DomainID:  1,
 			CreatedAt: time.Now().UTC(),
 			UpdatedAt: time.Now().UTC(),
@@ -131,7 +132,7 @@ func (s *ThreadStoreTestSuite) TestCreate_Concurrent() {
 	for i := range concurrency {
 		go func(idx int) {
 			req := &model.Thread{
-				BaseModel: model.BaseModel{
+				BaseModel: shared.BaseModel{
 					DomainID:  1,
 					CreatedAt: time.Now().UTC(),
 					UpdatedAt: time.Now().UTC(),

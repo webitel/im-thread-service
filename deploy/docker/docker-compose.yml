@@ -175,7 +175,7 @@ services:
     build:
       context: ../../
       dockerfile: ./Dockerfile
-    image: docker-im-thread-service:v1
+    image: docker-im-thread-service:latest
     pull_policy: never
     command: [ "migrate", "--config_file=/config/config.yaml" ]
     volumes:
@@ -187,7 +187,7 @@ services:
         condition: service_healthy
 
   im-thread-service:
-    image: docker-im-thread-service:v1
+    image: docker-im-thread-service:latest
     container_name: im-thread-service
     pull_policy: never
     restart: no

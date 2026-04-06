@@ -5,102 +5,156 @@ import (
 	impb "github.com/webitel/im-thread-service/gen/go/thread/v1"
 	"github.com/webitel/im-thread-service/internal/domain/model"
 	"github.com/webitel/im-thread-service/internal/service/dto"
-	"github.com/webitel/im-thread-service/internal/utils"
-	"google.golang.org/protobuf/types/known/structpb"
 )
 
-func MapThreadSearchRequestToDTO(request *impb.ThreadSearchRequest) *dto.SearchThreadRequest {
-	var (
-		ids     = utils.Map(request.Ids, utils.IdsParser)
-		owners  = utils.Map(request.Owners, utils.IdsParser)
-		members = utils.Map(request.MemberIds, utils.IdsParser)
-		kinds   = utils.Map(request.Kinds, func(tk impb.ThreadKind) model.ThreadKind { return model.ThreadKind(tk) })
-	)
+type ThreadInConverter struct {
+}
 
-	return &dto.SearchThreadRequest{
-		Fields:    request.Fields,
+func (s *ThreadInConverter) ConvertSearch(in *impb.ThreadSearchRequest) (*dto.ThreadSearchRequest, error) {
+	ids, err := convertToUUIDs(in.GetIds())
+	if err != nil {
+		return nil, err
+	}
+	owners, err := convertToUUIDs(in.GetOwners())
+	if err != nil {
+		return nil, err
+	}
+	var domains []int
+	for _, domain := range in.GetDomainIds() {
+		domains = append(domains, int(domain))
+	}
+
+	members, err := convertToUUIDs(in.GetMemberIds())
+	if err != nil {
+		return nil, err
+	}
+
+	return &dto.ThreadSearchRequest{
+		Fields:    in.GetFields(),
+		Q:         in.GetQ(),
+		Sort:      in.GetSort(),
+		Page:      int(in.GetPage()),
+		Size:      int(in.GetSize()),
 		Ids:       ids,
-		DomainIds: utils.ConvertInts[int](request.DomainIds),
-		Kinds:     kinds,
+		DomainIds: domains,
+		Kinds:     s.convertThreadKinds(in.GetKinds()),
 		Owners:    owners,
-		Q:         request.Q,
 		MemberIds: members,
-		Limit:     int(request.Size),
-		Sort:      request.Sort,
-		Page:      int(request.Page),
-	}
+	}, nil
 }
 
-func MapThreadsToProtoThreadList(threads []*model.Thread) *impb.SearchThreadResponse {
-	protoThreads := utils.Map(threads, MapThreadModelToProtoSearchResponse)
-
-	return &impb.SearchThreadResponse{
-		Items: protoThreads,
-	}
-}
-
-func MapThreadModelToProtoSearchResponse(thread *model.Thread) *impb.Thread {
-	if thread == nil {
+func (s *ThreadInConverter) convertThreadKinds(kinds []impb.ThreadKind) []model.ThreadKind {
+	if kinds == nil {
 		return nil
 	}
-
-	var (
-		memberIds = utils.Map(thread.MembersIDs, func(u uuid.UUID) string { return u.String() })
-		members   = utils.Map(thread.Members, mapThreadMemberToProtoResponse)
-	)
-
-	var lstMsg *impb.HistoryMessage
-	if thread.LastMessage != nil {
-		lstMsgMD, _ := structpb.NewStruct(thread.LastMessage.Metadata)
-
-		lstMsg = &impb.HistoryMessage{
-			Id:        thread.LastMessage.ID.String(),
-			SenderId:  thread.LastMessage.SenderID.String(),
-			Type:      int32(thread.LastMessage.Type),
-			Body:      thread.LastMessage.Body,
-			Metadata:  lstMsgMD,
-			CreatedAt: thread.LastMessage.CreatedAt.UTC().UnixMilli(),
-			UpdatedAt: thread.LastMessage.UpdatedAt.UTC().UnixMilli(),
-			Documents: mapDocs(thread.LastMessage.Documents),
-			Images:    mapImages(thread.LastMessage.Images),
-		}
+	out := make([]model.ThreadKind, len(kinds))
+	for i, kind := range kinds {
+		out[i] = model.ThreadKind(kind)
 	}
+	return out
+}
 
+func (s *ThreadInConverter) ConvertAddMemberRequest(in *impb.AddMemberRequest) (*dto.AddMemberRequest, error) {
+	threadID, err := uuid.Parse(in.GetThreadId())
+	if err != nil {
+		return nil, err
+	}
+	newMemberID, err := uuid.Parse(in.GetNewMemberId())
+	if err != nil {
+		return nil, err
+	}
+	initiatorMemberID, err := uuid.Parse(in.GetInitiatorId())
+	if err != nil {
+		return nil, err
+	}
+	return &dto.AddMemberRequest{
+		ThreadID:          threadID,
+		NewMemberID:       newMemberID,
+		InitiatorMemberID: initiatorMemberID,
+		NewMemberRole:     s.convertMemberRole(in.GetRole()),
+	}, nil
+}
+
+func (s *ThreadInConverter) ConvertRemoveMemberRequest(in *impb.RemoveMemberRequest) (*dto.RemoveMemberRequest, error) {
+	threadID, err := uuid.Parse(in.GetThreadId())
+	if err != nil {
+		return nil, err
+	}
+	targetMemberID, err := uuid.Parse(in.GetTargetMemberId())
+	if err != nil {
+		return nil, err
+	}
+	initiatorMemberID, err := uuid.Parse(in.GetInitiatorMemberId())
+	if err != nil {
+		return nil, err
+	}
+	return &dto.RemoveMemberRequest{
+		ThreadID:          threadID,
+		InitiatorMemberID: initiatorMemberID,
+		TargetMemberID:    targetMemberID,
+	}, nil
+}
+
+func (s *ThreadInConverter) convertMemberRole(in impb.ThreadRole) model.ThreadRole {
+	switch in {
+	case impb.ThreadRole_ROLE_OWNER:
+		return model.RoleOwner
+	case impb.ThreadRole_ROLE_ADMIN:
+		return model.RoleAdmin
+	case impb.ThreadRole_ROLE_MEMBER:
+		return model.RoleMember
+	case impb.ThreadRole_ROLE_SUPERVISOR:
+		return model.RoleSupervisor
+	default:
+		return model.UnspecifiedRole
+	}
+}
+
+type ThreadOutConverter struct {
+}
+
+func (s *ThreadOutConverter) ConvertToThread(source *model.Thread) *impb.Thread {
+	if source == nil {
+		return nil
+	}
 	return &impb.Thread{
-		Id:          thread.ID.String(),
-		DomainId:    int32(thread.DomainID),
-		CreatedAt:   thread.CreatedAtUnix(),
-		UpdatedAt:   thread.UpdatedAtUnix(),
-		Kind:        impb.ThreadKind(thread.Kind),
-		Owner:       thread.OwnerID.String(),
-		Subject:     thread.Subject,
-		Description: thread.Description,
-		MemberIds:   memberIds,
-		Members:     members,
-		LastMsg:     lstMsg,
+		Id:          source.ID.String(),
+		DomainId:    int32(source.DomainID),
+		CreatedAt:   source.CreatedAt.UnixMilli(),
+		UpdatedAt:   source.UpdatedAt.UnixMilli(),
+		Kind:        impb.ThreadKind(source.Kind),
+		Subject:     source.Subject,
+		Description: source.Description,
+		Members:     s.convertThreadMembers(source.Members),
 	}
 }
 
-func mapThreadMemberToProtoResponse(member *model.ThreadMember) *impb.ThreadMember {
-	if member == nil {
+func (s *ThreadOutConverter) convertThreadMembers(members []*model.ThreadDialog) []*impb.ThreadMember {
+	if members == nil {
 		return nil
 	}
-
-	var (
-		directSettings *impb.ThreadDirectSettings
-	)
-
-	if member.DirectSettings != nil {
-		directSettings = &impb.ThreadDirectSettings{
-			Id:        member.DirectSettings.ID.String(),
-			DomainId:  int32(member.DirectSettings.DomainID),			
-			UpdatedAt: member.DirectSettings.UpdatedAt.UTC().UnixMilli(),
-			Title:     member.DirectSettings.Title,
+	out := make([]*impb.ThreadMember, len(members))
+	for i, member := range members {
+		out[i] = &impb.ThreadMember{
+			Id:       member.ID.String(),
+			MemberId: member.MemberID.String(),
+			Role:     s.ConvertThreadRole(member.ThreadRole),
 		}
 	}
+	return out
+}
 
-	return &impb.ThreadMember{
-		Id:             member.Id.String(),
-		DirectSettings: directSettings,
+func (s *ThreadOutConverter) ConvertThreadRole(in model.ThreadRole) impb.ThreadRole {
+	switch in {
+	case model.RoleOwner:
+		return impb.ThreadRole_ROLE_OWNER
+	case model.RoleAdmin:
+		return impb.ThreadRole_ROLE_ADMIN
+	case model.RoleMember:
+		return impb.ThreadRole_ROLE_MEMBER
+	case model.RoleSupervisor:
+		return impb.ThreadRole_ROLE_SUPERVISOR
+	default:
+		return impb.ThreadRole_ROLE_UNSPECIFIED
 	}
 }

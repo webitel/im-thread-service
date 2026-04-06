@@ -2,13 +2,13 @@ package postgres
 
 import (
 	"context"
-	"errors"
-	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/webitel/im-thread-service/internal/domain/model"
-	"github.com/webitel/im-thread-service/internal/service/dto"
+	"github.com/webitel/im-thread-service/internal/domain/shared"
+	"github.com/webitel/webitel-go-kit/pkg/errors"
 )
 
 type threadDialogStore struct {
@@ -21,80 +21,259 @@ func NewThreadDialogStore(db Querier) *threadDialogStore {
 	}
 }
 
-// Resolve resolves a direct thread by peers.
-// It returns the thread id if found, or nil and the error if not found.
-// If the operation succeeds, it returns the resolved thread id.
-// If the operation fails, it returns nil and the error.
-func (t *threadDialogStore) Resolve(ctx context.Context, search *dto.SearchThreadDialogRequest) (uuid.UUID, error) {
-	var (
-		query = `
-            select thread_id
-            from im_thread.thread_dialog
-            where domain_id = @DomainId
-                and member_id = @FromId
-                and direct_to = @DirectTo
-            limit 1
-        `
-		args = pgx.NamedArgs{
-			"DomainId": search.DomainID,
-			"FromId":   search.From.ID,
-			"DirectTo": search.To.ID,
-		}
-		resolvedId uuid.UUID
-	)
+type threadDialog struct {
+	ID        uuid.UUID `db:"id"`
+	DomainID  int
+	CreatedAt time.Time
+	UpdatedAt time.Time
+	MemberID  uuid.UUID        `db:"member_id"`
+	ThreadID  uuid.UUID        `db:"thread_id"`
+	Role      model.ThreadRole `db:"thread_role"`
 
-	err := t.db.QueryRow(ctx, query, args).Scan(&resolvedId)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return uuid.Nil, nil
-		}
+	DirectTo                    *uuid.UUID `db:"direct_to,omitempty"`
+	MemberOf                    *uuid.UUID `db:"member_of,omitempty"`
+	CanSendMessages             bool       `db:"can_send_messages"`
+	CanAddMembers               bool       `db:"can_add_members"`
+	CanChangeMembersPermissions bool       `db:"can_change_members_permissions"`
+	CanRemoveMembers            bool       `db:"can_remove_members"`
+	CanChangeThreadInfo         bool       `db:"can_change_thread_info"`
 
-		return uuid.Nil, fmt.Errorf("resolve thread dialog: %w", err)
-	}
-
-	return resolvedId, nil
+	Title string `db:"title"`
 }
 
-func (t *threadDialogStore) ThreadMembers(ctx context.Context, threadID, memberID uuid.UUID, domainID int32) (*dto.ThreadMembersResponse, error) {
-	query := `
-		with thread_members as (
-			select array_agg(member_id) as ids
-			from (
-				select distinct td.member_id
-				from im_thread.thread_dialog td
-				where (td.domain_id, td.thread_id) = (@DomainID, @ThreadID)
-			)
-		)
-		select
-			ids as members
-		from thread_members
-		where @MemberID = any(ids);
-	`
+func (t *threadDialogStore) Create(ctx context.Context, member *model.ThreadDialogExtended) (*model.ThreadDialogExtended, error) {
 
-	args := pgx.NamedArgs{
-		"DomainID": domainID,
-		"ThreadID": threadID,
-		"MemberID": memberID,
+	if member == nil {
+		return nil, errors.New("new member required")
+	}
+
+	if member.ThreadID == uuid.Nil {
+		return nil, errors.New("threadID cannot be nil")
+	}
+
+	if member.MemberID == uuid.Nil {
+		return nil, errors.New("newMemberID cannot be nil")
+	}
+
+	var (
+		query = `
+		WITH inserted_dialog AS
+		(
+			 INSERT INTO im_thread.thread_dialog(domain_id, member_id, thread_id, thread_role, direct_to, member_of)
+			(SELECT domain_id, @MemberID, id, @ThreadRole, @DirectTo, @MemberOf FROM im_thread.thread WHERE id = @ThreadID LIMIT 1)
+			RETURNING *
+		),
+		inserted_permissions AS 
+		(
+			INSERT INTO im_thread.thread_permission(thread_id, thread_dialog_id, can_send_messages, can_add_members, can_change_members_permissions, can_remove_members, can_change_thread_info)
+			(SELECT thread_id, id, 
+			@CanSendMessages,
+			@CanAddMembers,
+			@CanChangeMembersPermissions,
+			@CanRemoveMembers,
+			@CanChangeThreadInfo
+		  FROM inserted_dialog)
+		  	RETURNING *
+		),
+		inserted_thread_direct_settings AS (
+			INSERT INTO im_thread.direct_settings (thread_dialog_id, domain_id, title)
+			(SELECT id, domain_id, @ThreadTitle FROM inserted_dialog)
+			RETURNING * 
+		)
+
+		SELECT dial.id, dial.domain_id, dial.created_at, dial.updated_at, dial.member_id, dial.thread_id,
+		perm.can_send_messages, perm.can_add_members, perm.can_change_members_permissions, perm.can_remove_members, perm.can_change_thread_info,
+		sett.title
+		FROM inserted_dialog dial
+		LEFT JOIN inserted_permissions perm ON dial.id = perm.thread_dialog_id
+		LEFT JOIN inserted_thread_direct_settings sett ON dial.id = sett.thread_dialog_id
+		`
+	)
+
+	rows, err := t.db.Query(ctx, query, pgx.NamedArgs{
+		"MemberID":                    member.MemberID,
+		"ThreadID":                    member.ThreadID,
+		"ThreadRole":                  member.ThreadRole,
+		"DirectTo":                    member.DirectTo,
+		"MemberOf":                    member.MemberOf,
+		"CanSendMessages":             member.Permissions.CanSendMessages,
+		"CanAddMembers":               member.Permissions.CanAddMembers,
+		"CanChangeMembersPermissions": member.Permissions.CanChangeMembersPermissions,
+		"CanRemoveMembers":            member.Permissions.CanRemoveMembers,
+		"CanChangeThreadInfo":         member.Permissions.CanChangeThreadInfo,
+		"ThreadTitle":                 member.Settings.Title,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	result, err := pgx.CollectExactlyOneRow(rows, pgx.RowToAddrOfStructByNameLax[threadDialog])
+	if err != nil {
+		return nil, err
+	}
+
+	return mapToThreadDialogExtendedModel(result)
+}
+
+func mapToThreadDialogExtendedModel(dialog *threadDialog) (*model.ThreadDialogExtended, error) {
+	if dialog == nil {
+		return nil, errors.New("thread dialog cannot be nil")
+	}
+
+	return &model.ThreadDialogExtended{
+		BaseModel: shared.BaseModel{
+			ID:        dialog.ID,
+			DomainID:  dialog.DomainID,
+			CreatedAt: dialog.CreatedAt,
+			UpdatedAt: dialog.UpdatedAt,
+		},
+		MemberID:   dialog.MemberID,
+		ThreadID:   dialog.ThreadID,
+		ThreadRole: dialog.Role,
+
+		DirectTo: dialog.DirectTo,
+		MemberOf: dialog.MemberOf,
+		Permissions: model.ThreadPermissions{
+			CanSendMessages:             dialog.CanSendMessages,
+			CanAddMembers:               dialog.CanAddMembers,
+			CanChangeMembersPermissions: dialog.CanChangeMembersPermissions,
+			CanRemoveMembers:            dialog.CanRemoveMembers,
+			CanChangeThreadInfo:         dialog.CanChangeThreadInfo,
+		},
+		Settings: model.BaseThreadSetting{
+			Title: dialog.Title,
+		},
+	}, nil
+}
+
+func mapToThreadDialogModel(dialog *threadDialog) (*model.ThreadDialog, error) {
+	if dialog == nil {
+		return nil, errors.New("thread dialog cannot be nil")
+	}
+
+	return &model.ThreadDialog{
+		BaseModel: shared.BaseModel{
+			ID:        dialog.ID,
+			DomainID:  dialog.DomainID,
+			CreatedAt: dialog.CreatedAt,
+			UpdatedAt: dialog.UpdatedAt,
+		},
+		MemberID:   dialog.MemberID,
+		ThreadID:   dialog.ThreadID,
+		ThreadRole: dialog.Role,
+
+		DirectTo: dialog.DirectTo,
+		MemberOf: dialog.MemberOf,
+	}, nil
+}
+
+func (t *threadDialogStore) Delete(ctx context.Context, threadID, memberID uuid.UUID) error {
+
+	if threadID == uuid.Nil {
+		return errors.New("threadID cannot be nil")
+	}
+
+	if memberID == uuid.Nil {
+		return errors.New("newMemberID cannot be nil")
+	}
+
+	var (
+		query = `DELETE FROM im_thread.thread_dialog
+		WHERE thread_id = $1 AND member_id = $2`
+	)
+
+	_, err := t.db.Exec(ctx, query, threadID, memberID)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (t *threadDialogStore) GetQuickView(ctx context.Context, filter *model.ThreadDialogStoreFilter) ([]*model.ThreadDialog, error) {
+	if filter == nil {
+		return nil, errors.New("filter cannot be nil")
+	}
+
+	var (
+		query = `SELECT
+	-- basic thread dialog fields
+	 dial.id, dial.domain_id, dial.created_at, dial.updated_at, dial.member_id, dial.thread_id, dial.direct_to, dial.member_of, dial.thread_role
+
+
+	FROM im_thread.thread_dialog dial
+	WHERE (@ThreadIDs::uuid[] IS NULL OR dial.thread_id = ANY(@ThreadIDs))
+	AND (@MemberIDs::uuid[] IS NULL OR dial.member_id = ANY(@MemberIDs))
+	
+	OFFSET @Offset`
+		args = pgx.NamedArgs{
+			"ThreadIDs": filter.ThreadIDs,
+			"MemberIDs": filter.MemberIDs,
+			"Offset":    filter.Offset,
+		}
+	)
+	if filter.Limit > 0 {
+		query += " LIMIT @Limit"
+		args["Limit"] = filter.Limit
 	}
 
 	rows, err := t.db.Query(ctx, query, args)
 	if err != nil {
 		return nil, err
 	}
+	return collectRows(rows, mapToThreadDialogModel)
+}
 
-	members, err := pgx.CollectExactlyOneRow(rows, pgx.RowToAddrOfStructByNameLax[dto.ThreadMembersResponse])
+func (t *threadDialogStore) GetFullView(ctx context.Context, filter *model.ThreadDialogStoreFilter) ([]*model.ThreadDialogExtended, error) {
+	query := `
+	SELECT
+	-- basic thread dialog fields
+	 dial.id, dial.domain_id, dial.created_at, dial.updated_at, dial.member_id, dial.thread_id, dial.direct_to, dial.member_of, dial.thread_role,
+
+	-- permissions fields
+	perm.can_send_messages, perm.can_add_members, perm.can_change_members_permissions, perm.can_remove_members, perm.can_change_thread_info,
+
+	-- settings fields
+	sett.title
+
+	FROM im_thread.thread_dialog dial
+	LEFT JOIN im_thread.thread_permission perm ON perm.thread_dialog_id = dial.id
+	LEFT JOIN im_thread.direct_settings sett ON sett.thread_dialog_id = dial.id
+
+	WHERE (@ThreadIDs::uuid[] IS NULL OR dial.thread_id = ANY(@ThreadIDs))
+	AND (@MemberIDs::uuid[] IS NULL OR dial.member_id = ANY(@MemberIDs))
+	AND (@IDS::uuid[] IS NULL OR dial.id = ANY(@IDS))
+
+	OFFSET @Offset 
+	`
+
+	args := pgx.NamedArgs{
+		"ThreadIDs": filter.ThreadIDs,
+		"MemberIDs": filter.MemberIDs,
+		"Offset":    filter.Offset,
+		"IDS":       filter.IDs,
+	}
+
+	if filter.Limit > 0 {
+		query += " LIMIT @Limit"
+		args["Limit"] = filter.Limit
+	}
+
+	rows, err := t.db.Query(ctx, query, args)
 	if err != nil {
+		// return nil, errors.Internal("failed to get full view", errors.WithCause(err))
 		return nil, err
 	}
 
-	return members, nil
+	return collectRows(rows, mapToThreadDialogExtendedModel)
+
 }
 
 // CreateDirectPair creates two new thread dialogs for peers within one transaction.
 // It returns two newly created thread dialogs or an error if the operation fails.
 // If the operation succeeds, it returns two newly created thread dialogs with the id set.
 // If the operation fails, it returns nil and the error.
-func (t *threadDialogStore) CreateDirectPair(ctx context.Context, dialog *model.ThreadDialog) ([]*model.ThreadDialog, error) {
+func (t *threadDialogStore) CreateDirectPair(ctx context.Context, dialog *model.ThreadDialogExtended) ([]*model.ThreadDialogExtended, error) {
 	var (
 		query = `
 			insert into im_thread.thread_dialog (
@@ -125,7 +304,7 @@ func (t *threadDialogStore) CreateDirectPair(ctx context.Context, dialog *model.
 			"ThreadId":  dialog.ThreadID,
 			"To":        dialog.DirectTo,
 		}
-		result = make([]*model.ThreadDialog, 0, 2)
+		result = make([]*model.ThreadDialogExtended, 0, 2)
 	)
 
 	rows, err := t.db.Query(ctx, query, args)
@@ -136,7 +315,7 @@ func (t *threadDialogStore) CreateDirectPair(ctx context.Context, dialog *model.
 	defer rows.Close()
 
 	for rows.Next() {
-		createdDialog := &model.ThreadDialog{}
+		createdDialog := &model.ThreadDialogExtended{}
 		err = rows.Scan(
 			&createdDialog.ID,
 			&createdDialog.DomainID,

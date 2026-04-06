@@ -28,18 +28,15 @@ const (
 
 type Thread struct {
 	ID          uuid.UUID  `json:"id" db:"id"`
-	DomainID    int32      `json:"domain_id" db:"domain_id"`
+	DomainID    int        `json:"domain_id" db:"domain_id"`
 	CreatedAt   time.Time  `json:"created_at" db:"created_at"`
 	UpdatedAt   time.Time  `json:"updated_at" db:"updated_at"`
 	Kind        ThreadKind `json:"kind" db:"kind"`
 	Subject     string     `json:"subject" db:"subject"`
 	Description string     `json:"description" db:"description"`
+	Owner       uuid.UUID  `json:"owner"`
 
-	OwnerID uuid.UUID     `json:"owner_id" db:"owner_id"`
-	Owner   *ThreadMember `json:"owner,omitempty" db:"owner"`
-
-	MembersIDs []uuid.UUID     `json:"members_ids" db:"member_ids"`
-	Members    []*ThreadMember `json:"members,omitempty" db:"members"`
+	Members []*ThreadDialog `json:"members,omitempty" db:"members"`
 
 	LastMessageID uuid.UUID `json:"last_message_id" db:"last_message_id"`
 	LastMessage   *Message  `json:"last_msg,omitempty" db:"last_msg"`

@@ -11,25 +11,25 @@ import (
 	"github.com/webitel/im-thread-service/internal/utils"
 )
 
-var (
-	_ MessageHistorySearcher = (*messageHistory)(nil)
+// interface guards!
+
+type (
+	MessageHistoryStore interface {
+		Search(ctx context.Context, query queryobject.QueryObject) ([]*dto.HistoryMessage, error)
+	}
+
+	MessageHistoryService struct {
+		messageHistoryStore MessageHistoryStore
+	}
 )
 
-type MessageHistorySearcher interface {
-	Search(context.Context, *dto.HistoryMessageInputDTO) (model.MessageSlice, queryobject.PageInfo[queryobject.MessageHistoryCursor], error)
-}
-
-type messageHistory struct {
-	messageHistoryStore store.MessageHistory
-}
-
-func NewMessageHistory(messageHistoryStore store.MessageHistory) *messageHistory {
-	return &messageHistory{
+func NewMessageHistory(messageHistoryStore store.MessageHistory) *MessageHistoryService {
+	return &MessageHistoryService{
 		messageHistoryStore: messageHistoryStore,
 	}
 }
 
-func (s *messageHistory) Search(ctx context.Context, hmiDTO *dto.HistoryMessageInputDTO) (model.MessageSlice, queryobject.PageInfo[queryobject.MessageHistoryCursor], error) {
+func (s *MessageHistoryService) Search(ctx context.Context, hmiDTO *dto.HistoryMessageInputDTO) (model.MessageSlice, queryobject.PageInfo[queryobject.MessageHistoryCursor], error) {
 	query := queryobject.NewMessageHistoryQuery().
 		WithFields(hmiDTO.Fields).
 		WithCursor(hmiDTO.Cursor).

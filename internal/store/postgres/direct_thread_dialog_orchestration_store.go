@@ -4,11 +4,13 @@ import (
 	"context"
 	"time"
 
+	"github.com/georgysavva/scany/v2/pgxscan"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/webitel/im-thread-service/internal/domain/model"
 	"github.com/webitel/im-thread-service/internal/domain/shared"
 	"github.com/webitel/im-thread-service/internal/utils"
+	"github.com/webitel/webitel-go-kit/pkg/errors"
 )
 
 type (
@@ -45,7 +47,10 @@ func NewDirectThreadDialogOrchestration(db Querier) *directThreadDialogOrchestra
 		db: db,
 	}
 }
-func (d *directThreadDialogOrchestration) InitializeFullDirectThread(ctx context.Context, directThread *model.DirectThreadDialog) ([]*model.DirectThreadDialog, error) {
+func (d *directThreadDialogOrchestration) InitializeFullDirectThread(ctx context.Context, req *model.CreateDirectThreadDialogRequest) ([]*model.DirectThreadDialog, error) {
+	if req == nil {
+		return nil, errors.InvalidArgument("request cannot be nil")
+	}
 	query := `
 		with inserted_dialogs as (
 			insert into im_thread.thread_dialog (
@@ -96,12 +101,12 @@ func (d *directThreadDialogOrchestration) InitializeFullDirectThread(ctx context
 	`
 
 	args := pgx.NamedArgs{
-		"DomainID":  directThread.DomainID,
-		"From":      directThread.MemberID,
-		"To":        directThread.DirectTo,
-		"ThreadID":  directThread.ThreadID,
-		"TitleFrom": directThread.MemberSettings.BaseThreadSetting.Title,
-		"TitleTo":   directThread.DirectToSettings.BaseThreadSetting.Title,
+		"DomainID":  req.DomainID,
+		"From":      req.From.ID,
+		"To":        req.To.ID,
+		"ThreadID":  req.ThreadID,
+		"TitleFrom": req.From.Settings.Title,
+		"TitleTo":   req.To.Settings.Title,
 	}
 
 	rows, err := d.db.Query(ctx, query, args)
@@ -115,16 +120,14 @@ func (d *directThreadDialogOrchestration) InitializeFullDirectThread(ctx context
 	}
 
 	result := utils.Map(records, func(tdr *threadDialogRecord) *model.DirectThreadDialog {
-		isDirectTo := (tdr.MemberID == *directThread.DirectTo)
-
-		return mapThreadDialogRecordToModel(tdr, isDirectTo)
+		return mapThreadDialogRecordToModel(tdr)
 	})
 
 	return result, nil
 }
 
-func mapThreadDialogRecordToModel(record *threadDialogRecord, isDirectTo bool) *model.DirectThreadDialog {
-	threadDialog := &model.ThreadDialog{
+func mapThreadDialogRecordToModel(record *threadDialogRecord) *model.DirectThreadDialog {
+	threadDialog := &model.ThreadDialogExtended{
 		BaseModel: shared.BaseModel{
 			ID:        record.ID,
 			DomainID:  record.DomainID,
@@ -136,17 +139,12 @@ func mapThreadDialogRecordToModel(record *threadDialogRecord, isDirectTo bool) *
 		DirectTo: &record.DirectTo,
 	}
 
-	directThreadDialog := model.NewDirectThreadDialogBuilder().
-		WithDomainID(record.DomainID).
-		WithThreadDialog(threadDialog)
-
-	if isDirectTo {
-		directThreadDialog.WithDirectToSettings(mapDirectSettingsRecordToModel(record.Settings))
-	} else {
-		directThreadDialog.WithMemberSettings(mapDirectSettingsRecordToModel(record.Settings))
+	directThreadDialog := &model.DirectThreadDialog{
+		ThreadDialogExtended: *threadDialog,
+		Settings:             mapDirectSettingsRecordToModel(record.Settings),
 	}
 
-	return directThreadDialog.Build()
+	return directThreadDialog
 }
 
 func mapDirectSettingsRecordToModel(record *directSettingsRecord) *model.DirectThreadSetting {
@@ -162,4 +160,59 @@ func mapDirectSettingsRecordToModel(record *directSettingsRecord) *model.DirectT
 			Title:          record.Title,
 		},
 	}
+}
+
+func (d *directThreadDialogOrchestration) InitializePermissions(ctx context.Context, threadDialogID uuid.UUID, permissions model.ThreadPermissions) (*model.ThreadPermissions, error) {
+	query := `
+		INSERT INTO im_thread.thread_dialog_permissions (
+			thread_id,
+			thread_dialog_id,
+			can_send_messages,
+			can_add_members,
+			can_change_members_permissions,
+			can_remove_members,
+			can_change_thread_info 
+		)
+		VALUES (
+			@ThreadID,
+			@ThreadDialogID,
+			@CanSendMessages,
+			@CanAddMembers,
+			@CanChangeMembersPermissions,
+			@CanRemoveMembers,
+			@CanChangeThreadInfo
+		)
+		RETURNING 
+		id,
+		thread_id,
+		thread_dialog_id,
+		can_send_messages,
+		can_add_members,
+		can_change_members_permissions,
+		can_remove_members,
+		can_change_thread_info,
+		created_at,
+		updated_at
+	`
+	args := pgx.NamedArgs{
+		"ThreadDialogID":              threadDialogID,
+		"CanSendMessages":             permissions.CanSendMessages,
+		"CanAddMembers":               permissions.CanAddMembers,
+		"CanChangeMembersPermissions": permissions.CanChangeMembersPermissions,
+		"CanRemoveMembers":            permissions.CanRemoveMembers,
+		"CanChangeThreadInfo":         permissions.CanChangeThreadInfo,
+	}
+
+	rows, err := d.db.Query(ctx, query, args)
+	if err != nil {
+		return nil, err
+	}
+	var perm model.ThreadPermissions
+	err = pgxscan.ScanOne(&perm, rows)
+	if err != nil {
+		return nil, err
+	}
+
+	return &perm, nil
+
 }

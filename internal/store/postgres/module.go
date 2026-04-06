@@ -50,8 +50,8 @@ var Module = fx.Module("store",
 			fx.As(new(store.ThreadStore)),
 		),
 		fx.Annotate(
-			NewDirectSettingsStore,
-			fx.As(new(store.DirectSettings)),
+			NewThreadPermissionStore,
+			fx.As(new(store.ThreadPermissionStore)),
 		),
 		fx.Annotate(
 			NewPgxUnitOfWork,

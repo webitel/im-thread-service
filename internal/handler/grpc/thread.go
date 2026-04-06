@@ -4,25 +4,48 @@ import (
 	"context"
 
 	impb "github.com/webitel/im-thread-service/gen/go/thread/v1"
+	"github.com/webitel/im-thread-service/internal/domain/model"
 	"github.com/webitel/im-thread-service/internal/handler/grpc/mapper"
-	"github.com/webitel/im-thread-service/internal/service"
+	"github.com/webitel/im-thread-service/internal/service/dto"
 	"github.com/webitel/im-thread-service/internal/utils"
+	"github.com/webitel/webitel-go-kit/pkg/errors"
 )
 
-type ThreadService struct {
-	impb.UnimplementedThreadManagementServer
+var (
+	s impb.ThreadManagementServer = &ThreadManagementServer{}
+)
 
-	threadManager service.ThreadManager
+type ThreadManagementService interface {
+	Search(ctx context.Context, searchRequest *dto.ThreadSearchRequest) ([]*model.Thread, error)
+	EnsureDirectThread(ctx context.Context, req *dto.EnsureDirectThreadRequest) (*dto.EnsureDirectThreadResponse, error)
+	AddMember(context.Context, *dto.AddMemberRequest) error
+	RemoveMember(context.Context, *dto.RemoveMemberRequest) error
 }
 
-func NewThreadService(threadManager service.ThreadManager) *ThreadService {
-	return &ThreadService{
+type (
+	ThreadManagementServer struct {
+		impb.UnimplementedThreadManagementServer
+
+		inMapper      *mapper.ThreadInConverter
+		outMapper     *mapper.ThreadOutConverter
+		threadManager ThreadManagementService
+	}
+)
+
+func NewThreadService(threadManager ThreadManagementService) *ThreadManagementServer {
+	return &ThreadManagementServer{
 		threadManager: threadManager,
+		inMapper:      &mapper.ThreadInConverter{},
+		outMapper:     &mapper.ThreadOutConverter{},
 	}
 }
 
-func (ts *ThreadService) Search(ctx context.Context, req *impb.ThreadSearchRequest) (*impb.SearchThreadResponse, error) {
-	search := mapper.MapThreadSearchRequestToDTO(req)
+func (ts *ThreadManagementServer) Search(ctx context.Context, req *impb.ThreadSearchRequest) (*impb.SearchThreadResponse, error) {
+	search, err := ts.inMapper.ConvertSearch(req)
+	if err != nil {
+		return nil, err
+	}
+
 	threads, err := ts.threadManager.Search(ctx, search)
 	if err != nil {
 		return nil, err
@@ -30,10 +53,49 @@ func (ts *ThreadService) Search(ctx context.Context, req *impb.ThreadSearchReque
 
 	next, threads := utils.ProcessPagination(int(req.Size), threads)
 
-	protoResponse := mapper.MapThreadsToProtoThreadList(threads)
-	{
-		protoResponse.Next = next
+	var (
+		res = impb.SearchThreadResponse{Next: next}
+	)
+
+	for _, threadModel := range threads {
+		res.Items = append(res.Items, ts.outMapper.ConvertToThread(threadModel))
 	}
 
-	return protoResponse, nil
+	return &res, nil
+}
+
+// AddMember implements [thread.ThreadManagementServer].
+func (ts *ThreadManagementServer) AddMember(ctx context.Context, request *impb.AddMemberRequest) (*impb.AddMemberResponse, error) {
+	internalRequest, err := ts.inMapper.ConvertAddMemberRequest(request)
+	if err != nil {
+		return nil, err
+	}
+
+	err = ts.threadManager.AddMember(ctx, internalRequest)
+	if err != nil {
+		return nil, err
+	}
+
+	return &impb.AddMemberResponse{}, nil
+}
+
+func (ts *ThreadManagementServer) RemoveMember(ctx context.Context, request *impb.RemoveMemberRequest) (*impb.RemoveMemberResponse, error) {
+	internalRequest, err := ts.inMapper.ConvertRemoveMemberRequest(request)
+	if err != nil {
+		return nil, err
+	}
+
+	err = ts.threadManager.RemoveMember(ctx, internalRequest)
+	if err != nil {
+		return nil, err
+	}
+
+	return &impb.RemoveMemberResponse{}, nil
+}
+
+// CreateGroup implements [thread.ThreadManagementServer].
+func (ts *ThreadManagementServer) CreateGroup(ctx context.Context, request *impb.CreateGroupRequest) (*impb.Thread, error) {
+	// internalRequest := ts.inMapper.ConvertCreateGroup(request)
+
+	return nil, errors.Internal("method not implemented yet")
 }

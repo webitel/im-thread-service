@@ -19,9 +19,7 @@ type (
 	}
 
 	MessageStore interface {
-		// [MESSAGE] Persistence
 		SaveMessage(ctx context.Context, msg *model.Message) (*model.Message, error)
-		// [ATTACHMENTS] Persistence
 		SaveImages(ctx context.Context, messageID uuid.UUID, images []*model.MessageImage) ([]*model.MessageImage, error)
 		SaveDocuments(ctx context.Context, messageID uuid.UUID, docs []*model.MessageDocument) ([]*model.MessageDocument, error)
 		ReadMessage(ctx context.Context, read struct {
@@ -38,31 +36,29 @@ type (
 	}
 
 	ThreadDialogStore interface {
-		Resolve(ctx context.Context, search *dto.SearchThreadDialogRequest) (uuid.UUID, error)
-		CreateDirectPair(ctx context.Context, dialog *model.ThreadDialog) ([]*model.ThreadDialog, error) // or just return one?
-		ThreadMembers(ctx context.Context, threadID, memberID uuid.UUID, domainID int32) (*dto.ThreadMembersResponse, error)
+		Create(ctx context.Context, threadDialog *model.ThreadDialogExtended) (*model.ThreadDialogExtended, error)
+		Delete(ctx context.Context, threadID, memberID uuid.UUID) error
+		GetQuickView(ctx context.Context, filter *model.ThreadDialogStoreFilter) ([]*model.ThreadDialog, error)
+		GetFullView(ctx context.Context, filter *model.ThreadDialogStoreFilter) ([]*model.ThreadDialogExtended, error)
 	}
 
 	ThreadStore interface {
 		Create(ctx context.Context, req *model.Thread) (*model.Thread, error)
 		Search(ctx context.Context, query queryobject.QueryObject) ([]*model.Thread, error)
+		ResolveDirect(ctx context.Context, from, to uuid.UUID) (*model.Thread, error)
+	}
+
+	ThreadPermissionStore interface {
+		Create(ctx context.Context, in *model.ThreadPermission) (*model.ThreadPermission, error)
+		Get(ctx context.Context, in *model.ThreadPermissionStoreFilters) ([]*model.ThreadPermission, error)
+		Update(ctx context.Context, in *model.UpdateThreadPermissionRequest) (*model.ThreadPermission, error)
 	}
 
 	MessageHistory interface {
 		Search(ctx context.Context, query queryobject.QueryObject) ([]*dto.HistoryMessage, error)
 	}
 
-	DirectSettings interface {
-		Create(ctx context.Context, setting *model.DirectThreadSetting) (*model.DirectThreadSetting, error)
-		Search(ctx context.Context, query queryobject.QueryObject) ([]*model.DirectThreadSetting, error)
-
-		// NOT IMPLEMENTED!
-		Update(ctx context.Context) ([]*model.DirectThreadSetting, error)
-		// NOT IMPLEMENTED!
-		Delete(ctx context.Context) error
-	}
-
 	DirectThreadDialogOrchestration interface {
-		InitializeFullDirectThread(ctx context.Context, directThread *model.DirectThreadDialog) ([]*model.DirectThreadDialog, error)
+		InitializeFullDirectThread(ctx context.Context, req *model.CreateDirectThreadDialogRequest) ([]*model.DirectThreadDialog, error)
 	}
 )

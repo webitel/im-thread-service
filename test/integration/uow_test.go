@@ -14,6 +14,7 @@ import (
 	"github.com/webitel/im-thread-service/cmd/migrate"
 	"github.com/webitel/im-thread-service/config"
 	"github.com/webitel/im-thread-service/internal/domain/model"
+	"github.com/webitel/im-thread-service/internal/domain/shared"
 	"github.com/webitel/im-thread-service/internal/store"
 	"github.com/webitel/im-thread-service/internal/store/postgres"
 	testhelpers "github.com/webitel/im-thread-service/test/integration/test_helpers"
@@ -66,7 +67,7 @@ func (s *UoWTestSuite) TestUnitOfWork_WithinTransaction_Rollback() {
 
 	err := s.uow.WithinTransaction(ctx, func(ctx context.Context, txUow store.UnitOfWork) error {
 		thread := &model.Thread{
-			BaseModel: model.BaseModel{DomainID: domainID},
+			BaseModel: shared.BaseModel{DomainID: domainID},
 			Kind:      model.ThreadDirect,
 		}
 		createdThread, err := txUow.ThreadStore().Create(ctx, thread)
@@ -91,14 +92,14 @@ func (s *UoWTestSuite) TestUnitOfWork_WithinTransaction_Commit() {
 
 	err := s.uow.WithinTransaction(ctx, func(ctx context.Context, txUow store.UnitOfWork) error {
 		thread, _ := txUow.ThreadStore().Create(ctx, &model.Thread{
-			BaseModel: model.BaseModel{DomainID: domainID},
+			BaseModel: shared.BaseModel{DomainID: domainID},
 			Kind:      model.ThreadDirect,
 		})
 
 		directTo := uuid.New()
 
-		_, err := txUow.ThreadDialogStore().CreateDirectPair(ctx, &model.ThreadDialog{
-			BaseModel: model.BaseModel{DomainID: domainID},
+		_, err := txUow.ThreadDialogStore().CreateDirectPair(ctx, &model.ThreadDialogExtended{
+			BaseModel: shared.BaseModel{DomainID: domainID},
 			ThreadID:  thread.ID,
 			MemberID:  uuid.New(),
 			DirectTo:  &directTo,

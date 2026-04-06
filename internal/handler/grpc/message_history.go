@@ -4,22 +4,30 @@ import (
 	"context"
 
 	impb "github.com/webitel/im-thread-service/gen/go/thread/v1"
+	"github.com/webitel/im-thread-service/internal/domain/model"
 	"github.com/webitel/im-thread-service/internal/handler/grpc/mapper"
-	"github.com/webitel/im-thread-service/internal/service"
+	"github.com/webitel/im-thread-service/internal/service/dto"
+	queryobject "github.com/webitel/im-thread-service/internal/store/query_object"
 )
 
-type MessageHistoryService struct {
-	impb.UnimplementedMessageHistoryServer
-
-	messageHistorySearcher service.MessageHistorySearcher
+type MessageHistoryService interface {
+	Search(context.Context, *dto.HistoryMessageInputDTO) (model.MessageSlice, queryobject.PageInfo[queryobject.MessageHistoryCursor], error)
 }
 
-func NewMessageHistoryService(messageHistorySearcher service.MessageHistorySearcher) *MessageHistoryService {
-	return &MessageHistoryService{
+type (
+	MessageHistoryServer struct {
+		impb.UnimplementedMessageHistoryServer
+
+		messageHistorySearcher MessageHistoryService
+	}
+)
+
+func NewMessageHistoryServer(messageHistorySearcher MessageHistoryService) *MessageHistoryServer {
+	return &MessageHistoryServer{
 		messageHistorySearcher: messageHistorySearcher,
 	}
 }
-func (s *MessageHistoryService) SearchThreadMessagesHistory(ctx context.Context, req *impb.SearchMessageHistoryRequest) (*impb.SearchMessageHistoryResponse, error) {
+func (s *MessageHistoryServer) SearchThreadMessagesHistory(ctx context.Context, req *impb.SearchMessageHistoryRequest) (*impb.SearchMessageHistoryResponse, error) {
 	hmiDTO := mapper.MapSearchMessageHistoryRequest2HistoryMessageInputDTO(req)
 
 	messages, pageInfo, err := s.messageHistorySearcher.Search(ctx, hmiDTO)

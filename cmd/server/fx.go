@@ -7,8 +7,11 @@ import (
 	grpcsrv "github.com/webitel/im-thread-service/infra/server/grpc"
 	"github.com/webitel/im-thread-service/infra/tls"
 	webiteldi "github.com/webitel/im-thread-service/infra/webitel/di"
+	imcontact "github.com/webitel/im-thread-service/infra/webitel/im-contact"
 	grpchandler "github.com/webitel/im-thread-service/internal/handler/grpc"
-	"github.com/webitel/im-thread-service/internal/service/di"
+	"github.com/webitel/im-thread-service/internal/service"
+	"github.com/webitel/im-thread-service/internal/service/decorators"
+	"github.com/webitel/im-thread-service/internal/store"
 	"github.com/webitel/im-thread-service/internal/store/postgres"
 	"github.com/webitel/webitel-go-kit/infra/discovery"
 	"github.com/webitel/webitel-go-kit/infra/profiler"
@@ -16,7 +19,11 @@ import (
 )
 
 func NewApp(cfg *config.Config) *fx.App {
-	return fx.New(
+	return fx.New(MainModule(cfg))
+}
+
+func MainModule(cfg *config.Config) fx.Option {
+	return fx.Options(
 		fx.Provide(
 			func() *config.Config { return cfg },
 			ProvideLogger,
@@ -27,12 +34,63 @@ func NewApp(cfg *config.Config) *fx.App {
 		fx.Invoke(func(discovery discovery.DiscoveryProvider) error { return nil }),
 		tls.Module,
 		pubsub.Module,
+
 		postgres.Module,
 		leader.Module,
+		storeBridgeModule,
+
 		webiteldi.Module,
-		di.ServiceModule,
+		grpcClientsBridgeModule,
+
+		service.Module,
+		serviceToHandlerBridgeModule,
+
 		grpchandler.Module,
 		grpcsrv.Module,
 		profiler.Module,
 	)
 }
+
+var storeBridgeModule = fx.Module(
+	"storeToServiceBridge",
+	fx.Provide(
+		func(s store.ThreadPermissionStore) service.ThreadPermissionStore {
+			return s
+		},
+		func(s store.MessageHistory) service.MessageHistoryStore {
+			return s
+		},
+	),
+)
+
+var grpcClientsBridgeModule = fx.Module(
+	"clientsToServiceBridge",
+	fx.Provide(
+		func(c *imcontact.Client) service.ThreadPrivacyChecker {
+			return c
+		},
+	),
+)
+
+var serviceToHandlerBridgeModule = fx.Module(
+	"serviceToHandlerBridge",
+	fx.Provide(
+		func(s *service.ThreadManagementService) service.ThreadManager {
+			return s
+		},
+
+		func(s *service.ThreadManagementService) grpchandler.ThreadManagementService {
+			return s
+		},
+
+		func(s *service.ThreadPermissionService) grpchandler.ThreadPermissionManagementService {
+			return s
+		},
+		func(s *service.MessageService) grpchandler.MessageService {
+			return s
+		},
+		func(s *decorators.MessageHistoryEnricher) grpchandler.MessageHistoryService {
+			return s
+		},
+	),
+)

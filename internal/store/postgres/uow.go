@@ -17,11 +17,11 @@ type unitOfWork struct {
 
 	threadStore                     store.ThreadStore
 	threadDialogStore               store.ThreadDialogStore
+	threadPermissionsStore          store.ThreadPermissionStore
 	messageStore                    store.MessageStore
 	outboxStore                     store.OutboxStore
 	messageHistoryStore             store.MessageHistory
 	directThreadDialogOrchestration store.DirectThreadDialogOrchestration
-	directSettings                  store.DirectSettings
 }
 
 // NewPgxUnitOfWork returns a new unit of work, given a pgx pool.
@@ -59,6 +59,14 @@ func (u *unitOfWork) ThreadDialogStore() store.ThreadDialogStore {
 	return u.threadDialogStore
 }
 
+func (u *unitOfWork) ThreadPermissionStore() store.ThreadPermissionStore {
+	if u.threadPermissionsStore == nil {
+		u.threadPermissionsStore = NewThreadPermissionStore(u.querier)
+	}
+
+	return u.threadPermissionsStore
+}
+
 func (u *unitOfWork) Messages() store.MessageStore {
 	if u.messageStore == nil {
 		u.messageStore = NewMessageStore(u.querier)
@@ -87,14 +95,6 @@ func (u *unitOfWork) DirectThreadDialogOrchestration() store.DirectThreadDialogO
 	}
 
 	return u.directThreadDialogOrchestration
-}
-
-func (u *unitOfWork) DirectSettingsStore() store.DirectSettings {
-	if u.directSettings == nil {
-		u.directSettings = NewDirectSettingsStore(u.querier)
-	}
-
-	return u.directSettings
 }
 
 // WithinTransaction executes a function within a transaction.

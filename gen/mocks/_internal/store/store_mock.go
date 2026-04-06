@@ -92,10 +92,10 @@ func (m *MockThreadDialogStore) EXPECT() *MockThreadDialogStoreMockRecorder {
 }
 
 // CreateDirectPair mocks base method.
-func (m *MockThreadDialogStore) CreateDirectPair(ctx context.Context, dialog *model.ThreadDialog) ([]*model.ThreadDialog, error) {
+func (m *MockThreadDialogStore) CreateDirectPair(ctx context.Context, dialog *model.ThreadDialogExtended) ([]*model.ThreadDialogExtended, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CreateDirectPair", ctx, dialog)
-	ret0, _ := ret[0].([]*model.ThreadDialog)
+	ret0, _ := ret[0].([]*model.ThreadDialogExtended)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

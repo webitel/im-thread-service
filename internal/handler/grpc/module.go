@@ -11,28 +11,31 @@ import (
 var Module = fx.Module("message_grpc",
 	fx.Provide(
 		NewMessageService,
-		fx.Annotate(
-			NewMessageHistoryService,
-			fx.ParamTags(`name:"enriched_message_history"`),
-		),
+		NewMessageHistoryServer,
 		NewThreadService,
+		NewThreadPermissionServer,
 	),
-	fx.Invoke(RegisterMessageService),
-	fx.Invoke(RegisterMessageHistoryService),
-	fx.Invoke(RegisterThreadService),
+	fx.Invoke(RegisterMessageServer),
+	fx.Invoke(RegisterMessageHistoryServer),
+	fx.Invoke(RegisterThreadServer),
+	fx.Invoke(RegisterThreadPermissionServer),
 )
 
-func RegisterMessageService(
+func RegisterMessageServer(
 	server *grpcsrv.Server,
-	service *MessageService,
+	service *MessageServer,
 ) {
 	impb.RegisterMessageServer(server.Server, service)
 }
 
-func RegisterMessageHistoryService(srv *grpcsrv.Server, svc *MessageHistoryService) {
+func RegisterMessageHistoryServer(srv *grpcsrv.Server, svc *MessageHistoryServer) {
 	impb.RegisterMessageHistoryServer(srv.Server, svc)
 }
 
-func RegisterThreadService(srv *grpcsrv.Server, svc *ThreadService) {
+func RegisterThreadServer(srv *grpcsrv.Server, svc *ThreadManagementServer) {
 	impb.RegisterThreadManagementServer(srv.Server, svc)
+}
+
+func RegisterThreadPermissionServer(srv *grpcsrv.Server, svc *ThreadPermissionManagementServer) {
+	impb.RegisterThreadPermissionManagementServer(srv.Server, svc)
 }

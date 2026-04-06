@@ -30,7 +30,6 @@ type threadQueryObject struct {
 	mustIncludeComputedSubject bool
 }
 
-
 func NewThreadQueryObject() *threadQueryObject {
 	from := fmt.Sprintf("%s %s", ThreadTable, threadAlias)
 
@@ -129,13 +128,6 @@ func (q *threadQueryObject) FieldsMetadata() map[string]fieldMetadata {
 			sortable:     true,
 			filterExpr:   "t.description",
 		},
-		"member_ids": {
-			sqlExpr:      "ml.member_ids",
-			aliasedExpr:  "ml.member_ids as member_ids",
-			requiresJoin: threadLinkMembersLateral,
-			sortable:     false,
-			filterExpr:   "ml.member_ids",
-		},
 		"members": {
 			sqlExpr:      "m.members_data",
 			aliasedExpr:  "coalesce(m.members_data, '[]'::jsonb) as members",
@@ -169,10 +161,6 @@ func (q *threadQueryObject) EnsureJoins(requiredJoin int) {
 		q.linkDirectSettings()
 	}
 
-	if requiredJoin&threadLinkMembersLateral != 0 {
-		q.linkMembersLateral()
-	}
-
 	if requiredJoin&threadLinkFullMembersLateral != 0 {
 		q.linkFullMembersLateral()
 	}
@@ -191,7 +179,7 @@ func (q *threadQueryObject) WithIDFilter(ids ...uuid.UUID) *threadQueryObject {
 }
 
 func (q *threadQueryObject) WithSubject() *threadQueryObject {
-	q.mustIncludeComputedSubject=true
+	q.mustIncludeComputedSubject = true
 	return q
 }
 
@@ -283,22 +271,6 @@ func (q *threadQueryObject) linkDirectSettings() {
 	))
 }
 
-func (q *threadQueryObject) linkMembersLateral() {
-	if q.join&threadLinkMembersLateral != 0 {
-		return
-	}
-
-	q.join |= threadLinkMembersLateral
-
-	q.builder = q.builder.LeftJoin(fmt.Sprintf(`
-		lateral (
-			select array_agg(%s.member_id) as member_ids
-			from %s %s
-			where %s.thread_id = %s.id 
-		) %s on true
-	`, threadThreadDialogAlias, ThreadDialogTable, threadThreadDialogAlias, threadThreadDialogAlias, threadAlias, threadMembersLateralAlias))
-}
-
 func (q *threadQueryObject) linkFullMembersLateral() {
 	if q.join&threadLinkFullMembersLateral != 0 {
 		return
@@ -310,19 +282,11 @@ func (q *threadQueryObject) linkFullMembersLateral() {
 		lateral (
 			select jsonb_agg(
 				jsonb_build_object(
-					'id', %[1]s.member_id,
-					'direct_settings', (
-						select jsonb_build_object(
-							'id', %[2]s.id,
-							'domain_id', %[2]s.domain_id,
-							'created_at', %[2]s.created_at,
-							'updated_at', %[2]s.updated_at,
-							'title', %[2]s.title
-						)
-						from %[3]s %[2]s
-						where %[2]s.thread_dialog_id = %[1]s.id
-						limit 1
-					)
+					'id', %[1]s.id,
+					'member_id', %[1]s.member_id,
+					'created_at', %[1]s.created_at,
+					'updated_at', %[1]s.updated_at,
+					'role', %[1]s.thread_role
 				)
 			) as members_data
 			from %[4]s %[1]s

@@ -15,11 +15,8 @@ import (
 	"github.com/webitel/webitel-go-kit/pkg/errors"
 )
 
-type Messager interface {
-	SendText(ctx context.Context, in *dto.SendTextRequest) (*dto.SendTextResponse, error)
-	SendImage(ctx context.Context, in *dto.SendImageRequest) (*dto.SendImageResponse, error)
-	SendDocument(ctx context.Context, in *dto.SendDocumentRequest) (*dto.SendDocumentResponse, error)
-	Read(ctx context.Context, in *dto.ReadMessageRequest) error
+type ThreadManager interface {
+	EnsureDirectThread(ctx context.Context, req *dto.EnsureDirectThreadRequest) (*dto.EnsureDirectThreadResponse, error)
 }
 
 type MessageService struct {
@@ -46,8 +43,6 @@ func NewMessageService(
 	}
 }
 
-var _ Messager = (*MessageService)(nil)
-
 func (s *MessageService) SendText(ctx context.Context, in *dto.SendTextRequest) (*dto.SendTextResponse, error) {
 	if err := guards.SendTextGuard(in); err != nil {
 		return nil, fmt.Errorf("validation: %w", err)
@@ -56,10 +51,9 @@ func (s *MessageService) SendText(ctx context.Context, in *dto.SendTextRequest) 
 	log := s.logger.With("operation", "message.SendText")
 
 	t, err := s.threader.EnsureDirectThread(ctx, &dto.EnsureDirectThreadRequest{
-		PeerFrom: &in.From,
-		PeerTo:   &in.To,
+		From:     &in.From,
+		To:       &in.To,
 		DomainID: int(in.DomainID),
-		MemberID: in.From.ID,
 	})
 	if err != nil {
 		log.Error(
@@ -123,10 +117,9 @@ func (s *MessageService) SendImage(ctx context.Context, in *dto.SendImageRequest
 	}
 
 	t, err := s.threader.EnsureDirectThread(ctx, &dto.EnsureDirectThreadRequest{
-		PeerFrom: &in.From,
-		PeerTo:   &in.To,
+		From:     &in.From,
+		To:       &in.To,
 		DomainID: int(in.DomainID),
-		MemberID: in.From.ID,
 	})
 	if err != nil {
 		return nil, err
@@ -178,10 +171,9 @@ func (s *MessageService) SendDocument(ctx context.Context, in *dto.SendDocumentR
 	}
 
 	t, err := s.threader.EnsureDirectThread(ctx, &dto.EnsureDirectThreadRequest{
-		PeerFrom: &in.From,
-		PeerTo:   &in.To,
+		From:     &in.From,
+		To:       &in.To,
 		DomainID: int(in.DomainID),
-		MemberID: in.From.ID,
 	})
 	if err != nil {
 		return nil, err

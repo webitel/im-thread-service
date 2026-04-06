@@ -1,7 +1,9 @@
 package service
 
 import (
+	storageclient "github.com/webitel/im-thread-service/infra/webitel/storage"
 	"github.com/webitel/im-thread-service/internal/adapter/pubsub"
+	"github.com/webitel/im-thread-service/internal/service/decorators"
 	"go.uber.org/fx"
 )
 
@@ -9,39 +11,17 @@ var Module = fx.Module(
 	"service",
 
 	fx.Provide(
-		// Domain services
-		fx.Annotate(
-			NewMessageService,
-			fx.As(new(Messager)),
-		),
+		NewMessageService,
+		NewThreadService,
+		NewThreadPermissionService,
+		NewMessageHistory,
+		NewMediaProcessor,
 
-		fx.Annotate(
-			NewThreadService,
-			fx.As(new(ThreadManager)),
-			fx.As(new(ThreadProvisioner)),
-			fx.As(new(ThreadSearcher)),
-		),
-
-		fx.Annotate(
-			NewMessageHistory,
-			fx.As(new(MessageHistorySearcher)),
-		),
-
-		fx.Annotate(
-			NewMediaProcessor,
-			fx.As(new(MediaProcessor)),
-		),
-
-		// PubSub infrastructure
-		fx.Annotate(
-			pubsub.NewOutboxSubscriber,
-			fx.As(new(pubsub.OutboxSubscriber)),
-		),
-
-		fx.Annotate(
-			pubsub.NewRabbitPublisher,
-			fx.As(new(pubsub.EventPublisher)),
-		),
+		func(base *MessageHistoryService, storageServiceClient *storageclient.Client) *decorators.MessageHistoryEnricher {
+			return decorators.NewMessageHistoryEnricher(base, storageServiceClient)
+		},
+		pubsub.NewOutboxSubscriber,
+		pubsub.NewRabbitPublisher,
 	),
 
 	fx.Invoke(

@@ -1,20 +1,17 @@
-# configuration.yaml
-
 service:
-  id: "webitel-service-01"
-  addr: "127.0.0.1:8080"
-  secret: "your-very-secure-secret-key"
+  id: "webitel-service-08"
+  addr: "localhost:10159"
+  conn:
+    verify_certs: false
 
 
 log:
   level: "info"
-  json: true   
-  otel: false  
-  file: "/home/illia/webitel/im-thread-service/service.log"
+  otel: false
   console: true
 
 postgres:
-  dsn: "postgres://postgres:postgres@127.0.0.1:5432/postgres&sslmode=disable&connect_timeout=10"
+  dsn: "postgres://postgres:webitel@localhost:6432/webitel"
 
 redis:
   addr: "localhost:6379"
@@ -23,15 +20,9 @@ redis:
 
 
 consul:
-  addr: "127.0.0.1:8500"
-  grpc_addr: "127.0.0.1:9999"
+  addr: "localhost:8500"
 
 
 pubsub:
-  broker_url: "amqp://guest:guest@127.0.0.1:5672"
-  broker_driver: "rabbitmq"
-
-profiler:
-  addr: "127.0.0.1:6060"
-  mutex_fraction: 1
-  block_rate: 1
+  broker_url: "amqp://webitel:webitel@localhost:5673"
+  broker_driver: "amqp"

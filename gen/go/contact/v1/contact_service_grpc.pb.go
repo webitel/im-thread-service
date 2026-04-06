@@ -24,7 +24,6 @@ const (
 	Contacts_UpdateContact_FullMethodName = "/webitel.im.service.contact.v1.Contacts/UpdateContact"
 	Contacts_DeleteContact_FullMethodName = "/webitel.im.service.contact.v1.Contacts/DeleteContact"
 	Contacts_Patch_FullMethodName         = "/webitel.im.service.contact.v1.Contacts/Patch"
-	Contacts_CanSend_FullMethodName       = "/webitel.im.service.contact.v1.Contacts/CanSend"
 	Contacts_Upsert_FullMethodName        = "/webitel.im.service.contact.v1.Contacts/Upsert"
 )
 
@@ -37,7 +36,6 @@ type ContactsClient interface {
 	UpdateContact(ctx context.Context, in *UpdateContactRequest, opts ...grpc.CallOption) (*Contact, error)
 	DeleteContact(ctx context.Context, in *DeleteContactRequest, opts ...grpc.CallOption) (*Contact, error)
 	Patch(ctx context.Context, in *PatchContactRequest, opts ...grpc.CallOption) (*Contact, error)
-	CanSend(ctx context.Context, in *CanSendRequest, opts ...grpc.CallOption) (*CanSendResponse, error)
 	Upsert(ctx context.Context, in *CreateContactRequest, opts ...grpc.CallOption) (*Contact, error)
 }
 
@@ -99,16 +97,6 @@ func (c *contactsClient) Patch(ctx context.Context, in *PatchContactRequest, opt
 	return out, nil
 }
 
-func (c *contactsClient) CanSend(ctx context.Context, in *CanSendRequest, opts ...grpc.CallOption) (*CanSendResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(CanSendResponse)
-	err := c.cc.Invoke(ctx, Contacts_CanSend_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
 func (c *contactsClient) Upsert(ctx context.Context, in *CreateContactRequest, opts ...grpc.CallOption) (*Contact, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(Contact)
@@ -128,7 +116,6 @@ type ContactsServer interface {
 	UpdateContact(context.Context, *UpdateContactRequest) (*Contact, error)
 	DeleteContact(context.Context, *DeleteContactRequest) (*Contact, error)
 	Patch(context.Context, *PatchContactRequest) (*Contact, error)
-	CanSend(context.Context, *CanSendRequest) (*CanSendResponse, error)
 	Upsert(context.Context, *CreateContactRequest) (*Contact, error)
 	mustEmbedUnimplementedContactsServer()
 }
@@ -154,9 +141,6 @@ func (UnimplementedContactsServer) DeleteContact(context.Context, *DeleteContact
 }
 func (UnimplementedContactsServer) Patch(context.Context, *PatchContactRequest) (*Contact, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Patch not implemented")
-}
-func (UnimplementedContactsServer) CanSend(context.Context, *CanSendRequest) (*CanSendResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method CanSend not implemented")
 }
 func (UnimplementedContactsServer) Upsert(context.Context, *CreateContactRequest) (*Contact, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Upsert not implemented")
@@ -272,24 +256,6 @@ func _Contacts_Patch_Handler(srv interface{}, ctx context.Context, dec func(inte
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Contacts_CanSend_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(CanSendRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(ContactsServer).CanSend(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: Contacts_CanSend_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ContactsServer).CanSend(ctx, req.(*CanSendRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
 func _Contacts_Upsert_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(CreateContactRequest)
 	if err := dec(in); err != nil {
@@ -334,10 +300,6 @@ var Contacts_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Patch",
 			Handler:    _Contacts_Patch_Handler,
-		},
-		{
-			MethodName: "CanSend",
-			Handler:    _Contacts_CanSend_Handler,
 		},
 		{
 			MethodName: "Upsert",
