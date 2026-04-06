@@ -6,7 +6,6 @@ import (
 	impb "github.com/webitel/im-thread-service/gen/go/thread/v1"
 	"github.com/webitel/im-thread-service/internal/domain/model"
 	"github.com/webitel/im-thread-service/internal/handler/grpc/mapper"
-	"github.com/webitel/im-thread-service/internal/handler/grpc/mapper/generated"
 	"github.com/webitel/im-thread-service/internal/service/dto"
 	"github.com/webitel/im-thread-service/internal/utils"
 	"github.com/webitel/webitel-go-kit/pkg/errors"
@@ -27,8 +26,8 @@ type (
 	ThreadManagementServer struct {
 		impb.UnimplementedThreadManagementServer
 
-		inMapper      mapper.ThreadInConverter
-		outMapper     mapper.ThreadOutConverter
+		inMapper      *mapper.ThreadInConverter
+		outMapper     *mapper.ThreadOutConverter
 		threadManager ThreadManagementService
 	}
 )
@@ -36,8 +35,8 @@ type (
 func NewThreadService(threadManager ThreadManagementService) *ThreadManagementServer {
 	return &ThreadManagementServer{
 		threadManager: threadManager,
-		inMapper:      &generated.ThreadInConverterImpl{},
-		outMapper:     &generated.ThreadOutConverterImpl{},
+		inMapper:      &mapper.ThreadInConverter{},
+		outMapper:     &mapper.ThreadOutConverter{},
 	}
 }
 
@@ -67,12 +66,31 @@ func (ts *ThreadManagementServer) Search(ctx context.Context, req *impb.ThreadSe
 
 // AddMember implements [thread.ThreadManagementServer].
 func (ts *ThreadManagementServer) AddMember(ctx context.Context, request *impb.AddMemberRequest) (*impb.AddMemberResponse, error) {
-	return nil, nil
+	internalRequest, err := ts.inMapper.ConvertAddMemberRequest(request)
+	if err != nil {
+		return nil, err
+	}
+
+	err = ts.threadManager.AddMember(ctx, internalRequest)
+	if err != nil {
+		return nil, err
+	}
+
+	return &impb.AddMemberResponse{}, nil
 }
 
 func (ts *ThreadManagementServer) RemoveMember(ctx context.Context, request *impb.RemoveMemberRequest) (*impb.RemoveMemberResponse, error) {
+	internalRequest, err := ts.inMapper.ConvertRemoveMemberRequest(request)
+	if err != nil {
+		return nil, err
+	}
 
-	return nil, nil
+	err = ts.threadManager.RemoveMember(ctx, internalRequest)
+	if err != nil {
+		return nil, err
+	}
+
+	return &impb.RemoveMemberResponse{}, nil
 }
 
 // CreateGroup implements [thread.ThreadManagementServer].

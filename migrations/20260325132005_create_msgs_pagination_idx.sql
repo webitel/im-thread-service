@@ -1,6 +1,6 @@
 -- +goose Up
 -- +goose StatementBegin
-create index if not exists "idx_messages_pagination" on "im_messages"."messages" using btree("domain_id", "thread_id", "id");
+create index if not exists "idx_messages_pagination" on "im_message"."messages" using btree("domain_id", "thread_id", "id");
 
 drop index if exists "idx_messages_pagination_desc";
 

@@ -31,22 +31,14 @@ type (
 		CreatedAt   time.Time             `json:"created_at,omitempty" db:"created_at"`
 		UpdatedAt   time.Time             `json:"updated_at,omitempty" db:"updated_at"`
 		Kind        model.ThreadKind      `json:"kind,omitempty" db:"kind"`
-		Owner       uuid.UUID             `json:"owner,omitempty" db:"owner"`
+		Owner       uuid.UUID             `json:"owner,omitempty" db:"owner_id"`
 		Description string                `json:"description,omitempty" db:"description"`
-		MemberIDs   uuid.UUIDs            `json:"member_ids,omitempty" db:"member_ids"`
 		Members     []*threadMemberRecord `json:"members,omitempty" db:"members"`
 	}
 	threadMemberRecord struct {
-		ID             uuid.UUID                   `json:"id,omitempty" db:"id"`
-		DirectSettings *directThreadSettingsRecord `json:"direct_settings,omitempty" db:"direct_settings"`
-	}
-
-	directThreadSettingsRecord struct {
-		ID        uuid.UUID `json:"id,omitempty" db:"id"`
-		Title     string    `json:"title,omitempty" db:"title"`
-		DomainID  int       `json:"domain_id,omitempty" db:"domain_id"`
-		CreatedAt time.Time `json:"created_at,omitempty" db:"created_at"`
-		UpdatedAt time.Time `json:"updated_at,omitempty" db:"updated_at"`
+		ID       uuid.UUID `json:"id,omitempty" db:"id"`
+		MemberID uuid.UUID `json:"member_id,omitempty" db:"member_id"`
+		Role     int       `json:"role,omitempty" db:"role"`
 	}
 )
 
@@ -110,28 +102,13 @@ func (s *threadStore) Search(ctx context.Context, query queryobject.QueryObject)
 // If the thread member record has a direct settings record, it is mapped to a *model.DirectThreadSetting.
 // The function then returns the mapped *model.Thread record.
 func mapThreadRecordToModel(record *threadRecord) (*model.Thread, error) {
-	members := utils.Map(record.Members, func(tmr *threadMemberRecord) *model.ThreadMember {
-		var (
-			directSettings *model.DirectThreadSetting
-		)
-
-		if tmr.DirectSettings != nil {
-			directSettings = &model.DirectThreadSetting{
-				BaseThreadSetting: model.BaseThreadSetting{
-					BaseModel: shared.BaseModel{
-						ID:        tmr.DirectSettings.ID,
-						DomainID:  tmr.DirectSettings.DomainID,
-						CreatedAt: tmr.DirectSettings.CreatedAt,
-						UpdatedAt: tmr.DirectSettings.UpdatedAt,
-					},
-					Title: tmr.DirectSettings.Title,
-				},
-			}
-		}
-
-		return &model.ThreadMember{
-			Id:             tmr.ID,
-			DirectSettings: directSettings,
+	members := utils.Map(record.Members, func(tmr *threadMemberRecord) *model.ThreadDialog {
+		return &model.ThreadDialog{
+			BaseModel: shared.BaseModel{
+				ID: tmr.ID,
+			},
+			MemberID:   tmr.ID,
+			ThreadRole: model.ThreadRole(tmr.Role),
 		}
 	})
 
@@ -141,7 +118,6 @@ func mapThreadRecordToModel(record *threadRecord) (*model.Thread, error) {
 		CreatedAt:   record.CreatedAt,
 		UpdatedAt:   record.UpdatedAt,
 		Kind:        record.Kind,
-		Owner:       record.Owner,
 		Subject:     record.Subject,
 		Description: record.Description,
 		Members:     members,
@@ -179,7 +155,15 @@ func (t *threadStore) ResolveDirect(ctx context.Context, from, to uuid.UUID) (*m
 	if err != nil {
 		return nil, err
 	}
-	return collectRow(row, mapThreadRecordToModel)
+	res, err := collectRow(row, mapThreadRecordToModel)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	return res, nil
 }
 
 func (t *threadStore) Delete(ctx context.Context, threadID uuid.UUID) error {

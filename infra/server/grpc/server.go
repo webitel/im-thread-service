@@ -19,7 +19,6 @@ import (
 	intrcp "github.com/webitel/webitel-go-kit/pkg/interceptors"
 
 	"github.com/webitel/im-thread-service/config"
-	"github.com/webitel/im-thread-service/infra/server/grpc/interceptors"
 	infratls "github.com/webitel/im-thread-service/infra/tls"
 )
 
@@ -119,7 +118,6 @@ func New(addr string, opts ...Option) (*Server, error) {
 		grpc.StatsHandler(otelgrpc.NewServerHandler()),
 		grpc.ChainUnaryInterceptor(
 			intrcp.UnaryServerErrorInterceptor(),
-			interceptors.NewUnaryAuthInterceptor(),
 			validatemiddleware.UnaryServerInterceptor(validator),
 		),
 	)

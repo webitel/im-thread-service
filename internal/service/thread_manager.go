@@ -29,6 +29,12 @@ type (
 	ThreadPrivacyChecker interface {
 		CanInvite(ctx context.Context, initiatorID, targetID uuid.UUID) error
 	}
+
+	ThreadEvent interface {
+		Topic() string
+		MustBeThreadEvent()
+		event.Outboxer
+	}
 )
 
 // NewThreadService returns a new thread manager, given a unit of work.
@@ -55,7 +61,7 @@ func (t *ThreadManagementService) Search(ctx context.Context, searchRequest *dto
 		WithMemberIDFilter(searchRequest.MemberIds...).
 		WithOwnerFilter(searchRequest.Owners...).
 		WithSubjectFilter(searchRequest.Q).
-		WithLimit(searchRequest.Limit).
+		WithLimit(searchRequest.Size).
 		WithSort(searchRequest.Sort).
 		WithOffset(searchRequest.Page)
 
@@ -72,20 +78,18 @@ func (t *ThreadManagementService) AddMember(ctx context.Context, req *dto.AddMem
 		return errors.New("add member request cannot be nil")
 	}
 
-	threadDialogs, err := t.uow.ThreadDialogStore().GetFullView(ctx, &model.ThreadDialogStoreFilter{
-		ThreadID: &req.ThreadID,
-		MemberID: &req.InitiatorMemberID,
-	})
+	initiator, target, err := t.findActionActorsPersistence(ctx, req.ThreadID, req.InitiatorMemberID, req.NewMemberID)
 	if err != nil {
 		return err
 	}
-	if len(threadDialogs) == 0 {
+	if initiator == nil {
 		return notThreadMemberError
 	}
+	if target != nil {
+		return errors.New("target member is already part of the thread")
+	}
 
-	initiatorThreadDialog := threadDialogs[0]
-
-	err = t.verifyAddMemberInitiatorPermissions(initiatorThreadDialog.ThreadRole, req.NewMemberRole, &initiatorThreadDialog.Permissions)
+	err = t.verifyAddMemberInitiatorPermissions(initiator.ThreadRole, req.NewMemberRole, &initiator.Permissions)
 	if err != nil {
 		return err
 	}
@@ -98,16 +102,10 @@ func (t *ThreadManagementService) AddMember(ctx context.Context, req *dto.AddMem
 	if err != nil {
 		return err
 	}
-
-	var eventRecipients []uuid.UUID
-	for _, dialog := range threadDialogs {
-		eventRecipients = append(eventRecipients, dialog.MemberID)
-	}
-
 	err = t.uow.WithinTransaction(ctx, func(ctx context.Context, uow store.UnitOfWork) error {
-		createdThreadDialog, err := t.uow.ThreadDialogStore().Create(ctx, &model.ThreadDialog{
+		createdThreadDialog, err := t.uow.ThreadDialogStore().Create(ctx, &model.ThreadDialogExtended{
 			BaseModel: shared.BaseModel{
-				DomainID:  initiatorThreadDialog.DomainID,
+				DomainID:  initiator.DomainID,
 				CreatedAt: time.Now().UTC(),
 				UpdatedAt: time.Now().UTC(),
 			},
@@ -116,37 +114,40 @@ func (t *ThreadManagementService) AddMember(ctx context.Context, req *dto.AddMem
 			ThreadRole:  req.NewMemberRole,
 			Permissions: *rolePermissions,
 			Settings: model.BaseThreadSetting{
-				Title: initiatorThreadDialog.Settings.Title,
+				Title: initiator.Settings.Title,
 			},
 		})
 		if err != nil {
 			return err
 		}
-		eventRecipients = append(eventRecipients, req.NewMemberID)
 
-		var (
-			eventTemplate = &event.MemberAddedV1{
+		// TODO: optimize publishing, so we can reduce round trips to the store
+		eventReceivers, err := uow.ThreadDialogStore().GetQuickView(ctx, &model.ThreadDialogStoreFilter{
+			ThreadIDs: []uuid.UUID{req.ThreadID},
+		})
+		if err != nil {
+			return err
+		}
+		for _, receiver := range eventReceivers {
+			event := &event.MemberAddedV1{
 				ThreadID:          req.ThreadID,
-				MemberID:          createdThreadDialog.MemberID,
+				MemberID:          req.NewMemberID,
 				NewThreadDialogID: createdThreadDialog.ID,
 				InitiatorMemberID: req.InitiatorMemberID,
+				Recipient:         receiver.MemberID,
 			}
-		)
-		for _, recipientID := range eventRecipients {
-			eventTemplate.Recipient = recipientID
-			err = uow.Outbox().Publish(ctx, eventTemplate.Topic(), eventTemplate)
-			if err != nil {
-				return err
-			}
+			uow.Outbox().Publish(ctx, event.Topic(), event)
 		}
 		return nil
 
 	})
-
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
-func (t *ThreadManagementService) verifyAddMemberInitiatorPermissions(initiatorRole model.MemberRole, targetRole model.MemberRole, initiatorPermissions *model.ThreadPermissions) error {
+func (t *ThreadManagementService) verifyAddMemberInitiatorPermissions(initiatorRole model.ThreadRole, targetRole model.ThreadRole, initiatorPermissions *model.ThreadPermissions) error {
 	if initiatorPermissions == nil {
 		return errors.New("permissions cannot be nil")
 	}
@@ -162,42 +163,41 @@ func (t *ThreadManagementService) verifyAddMemberInitiatorPermissions(initiatorR
 func (t *ThreadManagementService) verifyAddMemberTargetPrivacy(ctx context.Context, initiatorID, targetID uuid.UUID) error {
 	err := t.privacyChecker.CanInvite(ctx, initiatorID, targetID)
 	if err != nil {
-		return errors.New("initiator does not have permission to invite the target", errors.WithCause(err))
+		return err
 	}
 	return nil
+}
+
+func (t *ThreadManagementService) findActionActorsPersistence(ctx context.Context, threadID uuid.UUID, initiatorID uuid.UUID, targetID uuid.UUID) (initiator *model.ThreadDialogExtended, target *model.ThreadDialogExtended, err error) {
+	threadDialogs, err := t.uow.ThreadDialogStore().GetFullView(ctx, &model.ThreadDialogStoreFilter{
+		ThreadIDs: []uuid.UUID{threadID},
+		MemberIDs: []uuid.UUID{initiatorID, targetID},
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+	if len(threadDialogs) == 0 {
+		return nil, nil, nil
+	}
+	for _, dialog := range threadDialogs {
+		if dialog.MemberID == initiatorID {
+			initiator = dialog
+		}
+		if dialog.MemberID == targetID {
+			target = dialog
+		}
+	}
+	return initiator, target, nil
 }
 
 func (t *ThreadManagementService) RemoveMember(ctx context.Context, req *dto.RemoveMemberRequest) error {
 	if req == nil {
 		return errors.New("remove member request cannot be nil")
 	}
-
-	threadDialogs, err := t.uow.ThreadDialogStore().GetFullView(ctx, &model.ThreadDialogStoreFilter{
-		ThreadID: &req.ThreadID,
-	})
+	initiator, target, err := t.findActionActorsPersistence(ctx, req.ThreadID, req.InitiatorMemberID, req.TargetMemberID)
 	if err != nil {
 		return err
 	}
-	if len(threadDialogs) == 0 {
-		return notThreadMemberError
-	}
-
-	var (
-		initiator, target *model.ThreadDialog
-	)
-
-	for _, dialog := range threadDialogs {
-		if initiator != nil && target != nil {
-			break
-		}
-		if dialog.MemberID == req.InitiatorMemberID {
-			initiator = dialog
-		}
-		if dialog.MemberID == req.TargetMemberID {
-			target = dialog
-		}
-	}
-
 	if initiator == nil {
 		return notThreadMemberError
 	}
@@ -210,10 +210,41 @@ func (t *ThreadManagementService) RemoveMember(ctx context.Context, req *dto.Rem
 		return err
 	}
 
-	return t.uow.ThreadDialogStore().Delete(ctx, req.ThreadID, req.TargetMemberID)
+	err = t.uow.WithinTransaction(ctx, func(ctx context.Context, uow store.UnitOfWork) error {
+		err = uow.ThreadDialogStore().Delete(ctx, req.ThreadID, req.TargetMemberID)
+		if err != nil {
+			return err
+		}
+		eventReceivers, err := uow.ThreadDialogStore().GetQuickView(ctx, &model.ThreadDialogStoreFilter{
+			ThreadIDs: []uuid.UUID{req.ThreadID},
+		})
+		if err != nil {
+			return err
+		}
+		for _, receiver := range eventReceivers {
+			event := &event.MemberRemovedV1{
+				ThreadID:              req.ThreadID,
+				RemovedMemberID:       req.TargetMemberID,
+				RemovedThreadDialogID: target.ID,
+				InitiatorMemberID:     req.InitiatorMemberID,
+				Recipient:             receiver.ID,
+			}
+
+			err = uow.Outbox().Publish(ctx, event.Topic(), event)
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
-func (t *ThreadManagementService) verifyRemoveMemberInitiatorPermissions(initiatorRole model.MemberRole, targetRole model.MemberRole, initiatorPermissions *model.ThreadPermissions) error {
+func (t *ThreadManagementService) verifyRemoveMemberInitiatorPermissions(initiatorRole model.ThreadRole, targetRole model.ThreadRole, initiatorPermissions *model.ThreadPermissions) error {
 	if initiatorPermissions == nil {
 		return errors.New("permissions cannot be nil")
 	}
@@ -339,13 +370,20 @@ func (t *ThreadManagementService) createDirectThread(ctx context.Context, uow st
 	return createdThread, nil
 }
 
-func (t *ThreadManagementService) initializeDirectThreadDialogs(ctx context.Context, uow store.UnitOfWork, threadID uuid.UUID, domainID int, from, to *shared.Peer) ([]*model.ThreadDialog, error) {
+func (t *ThreadManagementService) initializeDirectThreadDialogs(ctx context.Context, uow store.UnitOfWork, threadID uuid.UUID, domainID int, from, to *shared.Peer) ([]*model.ThreadDialogExtended, error) {
 	if from == nil || to == nil {
 		return nil, errors.New("from and to peers cannot be nil")
 	}
 	if uow == nil {
 		return nil, errors.New("unit of work cannot be nil")
 	}
+	if to.Identity == nil || from.Identity == nil {
+		return nil, errors.New("from and to peers must have identity")
+	}
+	if to.Identity.Name == "" || from.Identity.Name == "" {
+		return nil, errors.New("from and to peers must have identity with non empty name")
+	}
+
 	initiatorRole := model.RoleOwner
 	peerRole := model.RoleOwner
 	initiatorPermissions, err := getDefaultPermissionsByRole(initiatorRole)
@@ -362,7 +400,7 @@ func (t *ThreadManagementService) initializeDirectThreadDialogs(ctx context.Cont
 			DomainID: domainID,
 		}
 
-		initiatorThreadDialog = &model.ThreadDialog{
+		initiatorThreadDialog = &model.ThreadDialogExtended{
 			BaseModel:   baseModel,
 			ThreadID:    threadID,
 			MemberID:    from.ID,
@@ -373,7 +411,7 @@ func (t *ThreadManagementService) initializeDirectThreadDialogs(ctx context.Cont
 				Title: to.Identity.Name,
 			},
 		}
-		targerPermissions = &model.ThreadDialog{
+		targerPermissions = &model.ThreadDialogExtended{
 			BaseModel:   baseModel,
 			ThreadID:    threadID,
 			MemberID:    to.ID,
@@ -395,32 +433,9 @@ func (t *ThreadManagementService) initializeDirectThreadDialogs(ctx context.Cont
 		return nil, err
 	}
 
-	return []*model.ThreadDialog{initiatorCreatedThreadDialog, targetCreatedThreadDialog}, nil
+	return []*model.ThreadDialogExtended{initiatorCreatedThreadDialog, targetCreatedThreadDialog}, nil
 }
 
-func (t *ThreadManagementService) initializeDirectMemberPermission(ctx context.Context, uow store.UnitOfWork, member *model.DirectThreadDialog) (*model.ThreadPermission, error) {
-	if member == nil {
-		return nil, errors.New("member cannot be nil")
-	}
-	var (
-		role = member.ThreadRole
-	)
-	defaultRolePermissions, err := getDefaultPermissionsByRole(role)
-	if err != nil {
-		return nil, err
-	}
-	permission := &model.ThreadPermission{
-		ThreadPermissions: *defaultRolePermissions,
-		ThreadID:          member.ThreadID,
-		ThreadDialogID:    member.ID,
-	}
-	permissions, err := uow.ThreadPermissionStore().Create(ctx, permission)
-	if err != nil {
-		return nil, err
-	}
-
-	return permissions, nil
-}
 func (t *ThreadManagementService) buildDirectThreadCreatedEvents(thread *model.Thread, from, to *shared.Peer) ([]ThreadEvent, error) {
 	if thread == nil || from == nil || to == nil {
 		return nil, errors.New("thread, from and to cannot be nil")
@@ -457,12 +472,6 @@ func (t *ThreadManagementService) buildDirectThreadCreatedEvents(thread *model.T
 	)
 
 	return events, nil
-}
-
-type ThreadEvent interface {
-	Topic() string
-	MustBeThreadEvent()
-	event.Outboxer
 }
 
 func (t *ThreadManagementService) publishThreadCreatedEvents(ctx context.Context, uow store.UnitOfWork, events ...ThreadEvent) error {

@@ -26,6 +26,10 @@ func (e *MemberAddedV1) Topic() string {
 
 func (e *MemberAddedV1) MustBeThreadEvent() {}
 
+func (e *MemberAddedV1) SetRecipientID(id uuid.UUID) {
+	e.Recipient = id
+}
+
 func (e *MemberAddedV1) EventType() string { return "member_added" }
 
 func (e *MemberAddedV1) Version() string { return MemberAddedVersionV1 }

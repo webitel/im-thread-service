@@ -6,11 +6,12 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/webitel/im-thread-service/internal/domain/model"
+	"github.com/webitel/im-thread-service/internal/store"
 	"github.com/webitel/webitel-go-kit/pkg/errors"
 )
 
 var (
-	allowedPermissionsByRole = map[model.MemberRole]*model.ThreadPermissionsAllowance{
+	allowedPermissionsByRole = map[model.ThreadRole]*model.ThreadPermissionsAllowance{
 		model.RoleOwner: {
 			CanSendMessages:             true,
 			CanAddMembers:               true,
@@ -40,7 +41,7 @@ var (
 			CanChangeThreadInfo:         false,
 		},
 	}
-	defaultPermissionsByRole = map[model.MemberRole]*model.ThreadPermissions{
+	defaultPermissionsByRole = map[model.ThreadRole]*model.ThreadPermissions{
 		model.RoleOwner: {
 			CanSendMessages:             true,
 			CanAddMembers:               true,
@@ -75,16 +76,16 @@ var (
 //mockery:generate: true
 type ThreadPermissionStore interface {
 	Create(ctx context.Context, req *model.ThreadPermission) (*model.ThreadPermission, error)
-	Get(ctx context.Context, req *model.GetThreadPermissionRequest) ([]*model.ThreadPermission, error)
+	Get(ctx context.Context, req *model.ThreadPermissionStoreFilters) ([]*model.ThreadPermission, error)
 	Update(ctx context.Context, req *model.UpdateThreadPermissionRequest) (*model.ThreadPermission, error)
 }
 
 type ThreadPermissionService struct {
-	store  ThreadPermissionStore
+	store  store.UnitOfWork
 	logger *slog.Logger
 }
 
-func NewThreadPermissionService(store ThreadPermissionStore, logger *slog.Logger) (*ThreadPermissionService, error) {
+func NewThreadPermissionService(store store.UnitOfWork, logger *slog.Logger) (*ThreadPermissionService, error) {
 	return &ThreadPermissionService{
 		store:  store,
 		logger: logger,
@@ -95,23 +96,88 @@ func (s *ThreadPermissionService) Get(ctx context.Context, req *model.GetThreadP
 	if req == nil {
 		return nil, errors.InvalidArgument("invalid permission get request")
 	}
-	if req.ThreadDialogID == uuid.Nil {
-		return nil, errors.InvalidArgument("thread dialog ID cannot be empty")
+	initiator, target, err := s.findActionActorsPersistence(ctx, req.ThreadID, req.RequestInitiatorID, req.MemberID)
+	if err != nil {
+		return nil, errors.New("failed to find permission change action actors", errors.WithCause(err))
+	}
+	if initiator == nil {
+		return nil, errors.New("request initiator is not a member of the thread")
+	}
+	if target == nil {
+		return nil, errors.New("target member is not a member of the thread")
+	}
+	if initiator.ThreadRole < target.ThreadRole {
+		return nil, errors.New("request initiator does not have enough role permissions to get target permissions")
 	}
 
-	return s.store.Get(ctx, req)
+	return s.store.ThreadPermissionStore().Get(ctx, &model.ThreadPermissionStoreFilters{
+		ThreadID:  req.ThreadID,
+		MemberIDs: []uuid.UUID{req.MemberID},
+	})
+}
+
+func (s *ThreadPermissionService) findActionActorsPersistence(ctx context.Context, threadID uuid.UUID, initiatorID uuid.UUID, targetID uuid.UUID) (initiator *model.ThreadDialogExtended, target *model.ThreadDialogExtended, err error) {
+	threadDialogs, err := s.store.ThreadDialogStore().GetFullView(ctx, &model.ThreadDialogStoreFilter{
+		ThreadIDs: []uuid.UUID{threadID},
+		MemberIDs: []uuid.UUID{initiatorID, targetID},
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+	if len(threadDialogs) == 0 {
+		return nil, nil, nil
+	}
+	for _, dialog := range threadDialogs {
+		if dialog.MemberID == initiatorID {
+			initiator = dialog
+		}
+		if dialog.MemberID == targetID {
+			target = dialog
+		}
+	}
+	return initiator, target, nil
 }
 
 func (s *ThreadPermissionService) Update(ctx context.Context, req *model.UpdateThreadPermissionRequest) (*model.ThreadPermission, error) {
-	if err := s.validatePermissionChangeRequest(req); err != nil {
+	if req == nil {
+		return nil, errors.InvalidArgument("invalid permission change request")
+	}
+	initiator, target, err := s.findActionActorsPersistence(ctx, req.ThreadID, req.InitiatorMemberID, req.TargetMemberID)
+	if err != nil {
+		return nil, errors.New("failed to find permission change action actors", errors.WithCause(err))
+	}
+	if initiator == nil {
+		return nil, errors.New("initiator is not a member of the thread")
+	}
+	if target == nil {
+		return nil, errors.New("target is not a member of the thread")
+	}
+
+	validationStruct := &permissionChangeValidationStruct{
+		Initiator: initiator,
+		Target:    target,
+		Changes:   req,
+	}
+
+	if err := s.validatePermissionChangeRequest(validationStruct); err != nil {
 		return nil, err
 	}
-	return s.store.Update(ctx, req)
+	return s.store.ThreadPermissionStore().Update(ctx, req)
 }
 
-func (s *ThreadPermissionService) validatePermissionChangeRequest(req *model.UpdateThreadPermissionRequest) error {
+type permissionChangeValidationStruct struct {
+	Initiator *model.ThreadDialogExtended
+	Target    *model.ThreadDialogExtended
+
+	Changes *model.UpdateThreadPermissionRequest
+}
+
+func (s *ThreadPermissionService) validatePermissionChangeRequest(req *permissionChangeValidationStruct) error {
+	if req == nil {
+		return errors.InvalidArgument("invalid permission change request")
+	}
 	var (
-		checks = []func(*model.UpdateThreadPermissionRequest) error{
+		checks = []func(*permissionChangeValidationStruct) error{
 			checkForSelfPermissionChange,
 			checkForDownRoleHierarchy,
 			checkForPermissionToChangeMembersPermissions,
@@ -122,57 +188,61 @@ func (s *ThreadPermissionService) validatePermissionChangeRequest(req *model.Upd
 
 	for _, check := range checks {
 		if err := check(req); err != nil {
-			return errors.New("permission change request failed validation", errors.WithCause(err))
+			return err
 		}
 	}
 	return nil
 }
 
-func checkForSelfPermissionChange(req *model.UpdateThreadPermissionRequest) error {
+func checkForSelfPermissionChange(req *permissionChangeValidationStruct) error {
 	if req == nil || req.Initiator == nil || req.Target == nil {
 		return errors.InvalidArgument("invalid permission change request")
 	}
 	initiator, target := req.Initiator, req.Target
-	if initiator.ThreadDialogID == target.ThreadDialogID {
-		return errors.New("initiator can only change own permissions in self change scenario")
+	if initiator.ID == target.ID {
+		return errors.New("can't change self permissions")
 	}
 	return nil
 }
 
-func checkForDownRoleHierarchy(req *model.UpdateThreadPermissionRequest) error {
+func checkForDownRoleHierarchy(req *permissionChangeValidationStruct) error {
 	if req == nil || req.Initiator == nil || req.Target == nil {
 		return errors.InvalidArgument("invalid permission change request")
 	}
 	initiator, target := req.Initiator, req.Target
-	if initiator.Role <= target.Role {
+	if initiator.ThreadRole <= target.ThreadRole {
 		return errors.New("initiator does not have enough role permissions to change target")
 	}
 	return nil
 }
 
-func checkForPermissionToChangeMembersPermissions(req *model.UpdateThreadPermissionRequest) error {
+func checkForPermissionToChangeMembersPermissions(req *permissionChangeValidationStruct) error {
 	if req == nil || req.Initiator == nil {
 		return errors.InvalidArgument("invalid permission change request")
 	}
 	initiator := req.Initiator
-	if !initiator.CanChangeMembersPermissions {
+	if !initiator.Permissions.CanChangeMembersPermissions {
 		return errors.New("initiator does not have permission to change members permissions")
 	}
 	return nil
 }
 
-func checkPermissionChangeAllowedByTargetRole(changes *model.UpdateThreadPermissionRequest) error {
-	if changes == nil {
+func checkPermissionChangeAllowedByTargetRole(req *permissionChangeValidationStruct) error {
+	if req == nil {
 		return errors.InvalidArgument("invalid permission change request")
 	}
-	if changes.Target == nil {
+	if req.Changes == nil {
+		return errors.InvalidArgument("invalid permission change request")
+	}
+	if req.Target == nil {
 		return errors.InvalidArgument("permission change target cannot be nil")
 	}
 
-	allowed, err := getAllowedPermissionsByRole(changes.Target.Role)
+	allowed, err := getAllowedPermissionsByRole(req.Target.ThreadRole)
 	if err != nil {
 		return errors.New("failed to get allowed permissions by target role", errors.WithCause(err))
 	}
+	changes := req.Changes
 	rules := []struct {
 		requested *bool
 		allowed   bool
@@ -195,7 +265,7 @@ func checkPermissionChangeAllowedByTargetRole(changes *model.UpdateThreadPermiss
 
 }
 
-func getAllowedPermissionsByRole(role model.MemberRole) (*model.ThreadPermissionsAllowance, error) {
+func getAllowedPermissionsByRole(role model.ThreadRole) (*model.ThreadPermissionsAllowance, error) {
 	allowed, ok := allowedPermissionsByRole[role]
 	if !ok {
 		return nil, errors.New("unknown member role")
@@ -203,19 +273,23 @@ func getAllowedPermissionsByRole(role model.MemberRole) (*model.ThreadPermission
 	return allowed, nil
 }
 
-func getDefaultPermissionsByRole(role model.MemberRole) (*model.ThreadPermissions, error) {
+func getDefaultPermissionsByRole(role model.ThreadRole) (*model.ThreadPermissions, error) {
 	defaultPermissions, ok := defaultPermissionsByRole[role]
 	if !ok {
 		return nil, errors.New("unknown member role")
 	}
 	return defaultPermissions, nil
 }
-func checkInitiatorHasSamePermissionThatChanged(changes *model.UpdateThreadPermissionRequest) error {
-	if changes == nil || changes.Initiator == nil {
+func checkInitiatorHasSamePermissionThatChanged(req *permissionChangeValidationStruct) error {
+	if req == nil || req.Initiator == nil {
+		return errors.InvalidArgument("invalid permission change request")
+	}
+	if req.Changes == nil {
 		return errors.InvalidArgument("invalid permission change request")
 	}
 
-	initiator := changes.Initiator
+	initiator := req.Initiator.Permissions
+	changes := req.Changes
 
 	rules := []struct {
 		requested *bool

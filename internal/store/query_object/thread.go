@@ -30,7 +30,6 @@ type threadQueryObject struct {
 	mustIncludeComputedSubject bool
 }
 
-
 func NewThreadQueryObject() *threadQueryObject {
 	from := fmt.Sprintf("%s %s", ThreadTable, threadAlias)
 
@@ -180,7 +179,7 @@ func (q *threadQueryObject) WithIDFilter(ids ...uuid.UUID) *threadQueryObject {
 }
 
 func (q *threadQueryObject) WithSubject() *threadQueryObject {
-	q.mustIncludeComputedSubject=true
+	q.mustIncludeComputedSubject = true
 	return q
 }
 
@@ -283,19 +282,11 @@ func (q *threadQueryObject) linkFullMembersLateral() {
 		lateral (
 			select jsonb_agg(
 				jsonb_build_object(
-					'id', %[1]s.member_id,
-					'direct_settings', (
-						select jsonb_build_object(
-							'id', %[2]s.id,
-							'domain_id', %[2]s.domain_id,
-							'created_at', %[2]s.created_at,
-							'updated_at', %[2]s.updated_at,
-							'title', %[2]s.title
-						)
-						from %[3]s %[2]s
-						where %[2]s.thread_dialog_id = %[1]s.id
-						limit 1
-					)
+					'id', %[1]s.id,
+					'member_id', %[1]s.member_id,
+					'created_at', %[1]s.created_at,
+					'updated_at', %[1]s.updated_at,
+					'role', %[1]s.thread_role
 				)
 			) as members_data
 			from %[4]s %[1]s

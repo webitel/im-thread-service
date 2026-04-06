@@ -81,7 +81,7 @@ func (s *ThreadDialogStoreTestSuite) TestCreateDirectPair_Success() {
 	member2 := uuid.New()
 	now := time.Now().UTC().Truncate(time.Microsecond)
 
-	dialog := &model.ThreadDialog{
+	dialog := &model.ThreadDialogExtended{
 		BaseModel: shared.BaseModel{
 			DomainID:  1,
 			CreatedAt: now,
@@ -111,7 +111,7 @@ func (s *ThreadDialogStoreTestSuite) TestResolve_Success() {
 	memberA := uuid.New()
 	memberB := uuid.New()
 
-	_, err := s.repo.CreateDirectPair(ctx, &model.ThreadDialog{
+	_, err := s.repo.CreateDirectPair(ctx, &model.ThreadDialogExtended{
 		BaseModel: shared.BaseModel{DomainID: domainID},
 		MemberID:  memberA,
 		ThreadID:  threadID,
@@ -138,7 +138,7 @@ func (s *ThreadDialogStoreTestSuite) TestCreateDirectPair_UniqueViolation() {
 	memberA := uuid.New()
 	memberB := uuid.New()
 
-	dialog := &model.ThreadDialog{
+	dialog := &model.ThreadDialogExtended{
 		BaseModel: shared.BaseModel{DomainID: 1},
 		MemberID:  memberA,
 		ThreadID:  threadID,

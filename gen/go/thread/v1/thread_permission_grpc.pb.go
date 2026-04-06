@@ -27,7 +27,7 @@ const (
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type ThreadPermissionManagementClient interface {
-	GetThreadPermissions(ctx context.Context, in *GetThreadPermissionsRequest, opts ...grpc.CallOption) (*ThreadPermissions, error)
+	GetThreadPermissions(ctx context.Context, in *GetThreadPermissionsRequest, opts ...grpc.CallOption) (*GetThreadPermissionsResponse, error)
 	UpdateThreadPermissions(ctx context.Context, in *UpdateThreadPermissionsRequest, opts ...grpc.CallOption) (*ThreadPermissions, error)
 }
 
@@ -39,9 +39,9 @@ func NewThreadPermissionManagementClient(cc grpc.ClientConnInterface) ThreadPerm
 	return &threadPermissionManagementClient{cc}
 }
 
-func (c *threadPermissionManagementClient) GetThreadPermissions(ctx context.Context, in *GetThreadPermissionsRequest, opts ...grpc.CallOption) (*ThreadPermissions, error) {
+func (c *threadPermissionManagementClient) GetThreadPermissions(ctx context.Context, in *GetThreadPermissionsRequest, opts ...grpc.CallOption) (*GetThreadPermissionsResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(ThreadPermissions)
+	out := new(GetThreadPermissionsResponse)
 	err := c.cc.Invoke(ctx, ThreadPermissionManagement_GetThreadPermissions_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
@@ -63,7 +63,7 @@ func (c *threadPermissionManagementClient) UpdateThreadPermissions(ctx context.C
 // All implementations must embed UnimplementedThreadPermissionManagementServer
 // for forward compatibility.
 type ThreadPermissionManagementServer interface {
-	GetThreadPermissions(context.Context, *GetThreadPermissionsRequest) (*ThreadPermissions, error)
+	GetThreadPermissions(context.Context, *GetThreadPermissionsRequest) (*GetThreadPermissionsResponse, error)
 	UpdateThreadPermissions(context.Context, *UpdateThreadPermissionsRequest) (*ThreadPermissions, error)
 	mustEmbedUnimplementedThreadPermissionManagementServer()
 }
@@ -75,7 +75,7 @@ type ThreadPermissionManagementServer interface {
 // pointer dereference when methods are called.
 type UnimplementedThreadPermissionManagementServer struct{}
 
-func (UnimplementedThreadPermissionManagementServer) GetThreadPermissions(context.Context, *GetThreadPermissionsRequest) (*ThreadPermissions, error) {
+func (UnimplementedThreadPermissionManagementServer) GetThreadPermissions(context.Context, *GetThreadPermissionsRequest) (*GetThreadPermissionsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetThreadPermissions not implemented")
 }
 func (UnimplementedThreadPermissionManagementServer) UpdateThreadPermissions(context.Context, *UpdateThreadPermissionsRequest) (*ThreadPermissions, error) {

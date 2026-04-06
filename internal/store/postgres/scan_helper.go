@@ -2,13 +2,13 @@ package postgres
 
 import "github.com/jackc/pgx/v5"
 
-func collectRows[T any, K any](rows pgx.Rows, flatToResultTypeMapper func(*K) (*T, error)) ([]*T, error) {
-	scannedFlatTypes, err := pgx.CollectRows(rows, pgx.RowToAddrOfStructByNameLax[K])
+func collectRows[ResultType any, FlatType any](rows pgx.Rows, flatToResultTypeMapper func(*FlatType) (*ResultType, error)) ([]*ResultType, error) {
+	scannedFlatTypes, err := pgx.CollectRows(rows, pgx.RowToAddrOfStructByNameLax[FlatType])
 	if err != nil {
 		return nil, err
 	}
 
-	res := make([]*T, 0, len(scannedFlatTypes))
+	res := make([]*ResultType, 0, len(scannedFlatTypes))
 
 	for _, member := range scannedFlatTypes {
 		domainModel, err := flatToResultTypeMapper(member)

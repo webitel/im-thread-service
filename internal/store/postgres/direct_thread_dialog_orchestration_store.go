@@ -127,7 +127,7 @@ func (d *directThreadDialogOrchestration) InitializeFullDirectThread(ctx context
 }
 
 func mapThreadDialogRecordToModel(record *threadDialogRecord) *model.DirectThreadDialog {
-	threadDialog := &model.ThreadDialog{
+	threadDialog := &model.ThreadDialogExtended{
 		BaseModel: shared.BaseModel{
 			ID:        record.ID,
 			DomainID:  record.DomainID,
@@ -140,8 +140,8 @@ func mapThreadDialogRecordToModel(record *threadDialogRecord) *model.DirectThrea
 	}
 
 	directThreadDialog := &model.DirectThreadDialog{
-		ThreadDialog: *threadDialog,
-		Settings:     mapDirectSettingsRecordToModel(record.Settings),
+		ThreadDialogExtended: *threadDialog,
+		Settings:             mapDirectSettingsRecordToModel(record.Settings),
 	}
 
 	return directThreadDialog

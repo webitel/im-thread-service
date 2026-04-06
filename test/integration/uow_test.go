@@ -98,7 +98,7 @@ func (s *UoWTestSuite) TestUnitOfWork_WithinTransaction_Commit() {
 
 		directTo := uuid.New()
 
-		_, err := txUow.ThreadDialogStore().CreateDirectPair(ctx, &model.ThreadDialog{
+		_, err := txUow.ThreadDialogStore().CreateDirectPair(ctx, &model.ThreadDialogExtended{
 			BaseModel: shared.BaseModel{DomainID: domainID},
 			ThreadID:  thread.ID,
 			MemberID:  uuid.New(),

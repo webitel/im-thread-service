@@ -13,23 +13,29 @@ var Module = fx.Module("message_grpc",
 		NewMessageService,
 		NewMessageHistoryServer,
 		NewThreadService,
+		NewThreadPermissionServer,
 	),
-	fx.Invoke(RegisterMessageService),
-	fx.Invoke(RegisterMessageHistoryService),
-	fx.Invoke(RegisterThreadService),
+	fx.Invoke(RegisterMessageServer),
+	fx.Invoke(RegisterMessageHistoryServer),
+	fx.Invoke(RegisterThreadServer),
+	fx.Invoke(RegisterThreadPermissionServer),
 )
 
-func RegisterMessageService(
+func RegisterMessageServer(
 	server *grpcsrv.Server,
 	service *MessageServer,
 ) {
 	impb.RegisterMessageServer(server.Server, service)
 }
 
-func RegisterMessageHistoryService(srv *grpcsrv.Server, svc *MessageHistoryServer) {
+func RegisterMessageHistoryServer(srv *grpcsrv.Server, svc *MessageHistoryServer) {
 	impb.RegisterMessageHistoryServer(srv.Server, svc)
 }
 
-func RegisterThreadService(srv *grpcsrv.Server, svc *ThreadManagementServer) {
+func RegisterThreadServer(srv *grpcsrv.Server, svc *ThreadManagementServer) {
 	impb.RegisterThreadManagementServer(srv.Server, svc)
+}
+
+func RegisterThreadPermissionServer(srv *grpcsrv.Server, svc *ThreadPermissionManagementServer) {
+	impb.RegisterThreadPermissionManagementServer(srv.Server, svc)
 }

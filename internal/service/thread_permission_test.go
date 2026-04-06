@@ -5,10 +5,19 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/webitel/im-thread-service/internal/domain/model"
+	"github.com/webitel/im-thread-service/internal/domain/shared"
 )
 
 func ptr[T any](v T) *T {
 	return &v
+}
+
+func testDialog(id uuid.UUID, role model.ThreadRole, permissions model.ThreadPermissions) *model.ThreadDialogExtended {
+	return &model.ThreadDialogExtended{
+		BaseModel:   shared.BaseModel{ID: id},
+		ThreadRole:  role,
+		Permissions: permissions,
+	}
 }
 
 func Test_checkForSelfPermissionChange(t *testing.T) {
@@ -16,51 +25,30 @@ func Test_checkForSelfPermissionChange(t *testing.T) {
 	tests := []struct {
 		name string // description of this test case
 		// Named input parameters for target function.
-		req     *model.UpdateThreadPermissionRequest
+		req     *permissionChangeValidationStruct
 		wantErr bool
 	}{
 		{
 			name: "initiator tries to change own permissions ",
-			req: &model.UpdateThreadPermissionRequest{
-				Initiator: &model.PermissionChangeInitiator{
-					ThreadDialogID: initiatorUUID,
-					Role:           model.RoleMember,
-				},
-				Target: &model.PermissionChangeTarget{
-					ThreadDialogID: initiatorUUID,
-					Role:           model.RoleMember,
-				},
+			req: &permissionChangeValidationStruct{
+				Initiator: testDialog(initiatorUUID, model.RoleMember, model.ThreadPermissions{}),
+				Target:    testDialog(initiatorUUID, model.RoleMember, model.ThreadPermissions{}),
 			},
 			wantErr: true,
 		},
 		{
 			name: "initiator tries to change self permissions ",
-			req: &model.UpdateThreadPermissionRequest{
-				Initiator: &model.PermissionChangeInitiator{
-					ThreadDialogID: initiatorUUID,
-					Role:           model.RoleMember,
-					ThreadPermissions: model.ThreadPermissions{
-						CanChangeMembersPermissions: true,
-					},
-				},
-				Target: &model.PermissionChangeTarget{
-					Role:           model.RoleMember,
-					ThreadDialogID: initiatorUUID,
-				},
+			req: &permissionChangeValidationStruct{
+				Initiator: testDialog(initiatorUUID, model.RoleMember, model.ThreadPermissions{CanChangeMembersPermissions: true}),
+				Target:    testDialog(initiatorUUID, model.RoleMember, model.ThreadPermissions{}),
 			},
 			wantErr: true,
 		},
 		{
 			name: "initiator tries to change permissions of another member ",
-			req: &model.UpdateThreadPermissionRequest{
-				Initiator: &model.PermissionChangeInitiator{
-					ThreadDialogID: initiatorUUID,
-					Role:           model.RoleMember,
-				},
-				Target: &model.PermissionChangeTarget{
-					ThreadDialogID: uuid.New(),
-					Role:           model.RoleMember,
-				},
+			req: &permissionChangeValidationStruct{
+				Initiator: testDialog(initiatorUUID, model.RoleMember, model.ThreadPermissions{}),
+				Target:    testDialog(uuid.New(), model.RoleMember, model.ThreadPermissions{}),
 			},
 			wantErr: false,
 		},
@@ -87,54 +75,30 @@ func Test_checkForDownRoleHierarchy(t *testing.T) {
 	tests := []struct {
 		name string // description of this test case
 		// Named input parameters for target function.
-		req     *model.UpdateThreadPermissionRequest
+		req     *permissionChangeValidationStruct
 		wantErr bool
 	}{
 		{
 			name: "initiator tries to change target with equal role ",
-			req: &model.UpdateThreadPermissionRequest{
-				Initiator: &model.PermissionChangeInitiator{
-					ThreadDialogID: initiatorUUID,
-					Role:           model.RoleAdmin,
-					ThreadPermissions: model.ThreadPermissions{
-						CanChangeMembersPermissions: true,
-					},
-				},
-				Target: &model.PermissionChangeTarget{
-					ThreadDialogID: targetUUID,
-					Role:           model.RoleAdmin,
-				},
+			req: &permissionChangeValidationStruct{
+				Initiator: testDialog(targetUUID, model.RoleAdmin, model.ThreadPermissions{CanChangeMembersPermissions: true}),
+				Target:    testDialog(targetUUID, model.RoleAdmin, model.ThreadPermissions{}),
 			},
 			wantErr: true,
 		},
 		{
 			name: "initiator tries to change permissions for target with higher role ",
-			req: &model.UpdateThreadPermissionRequest{
-				Initiator: &model.PermissionChangeInitiator{
-					ThreadDialogID: initiatorUUID,
-					Role:           model.RoleAdmin,
-					ThreadPermissions: model.ThreadPermissions{
-						CanChangeMembersPermissions: true,
-					},
-				},
-				Target: &model.PermissionChangeTarget{
-					ThreadDialogID: targetUUID,
-					Role:           model.RoleOwner,
-				},
+			req: &permissionChangeValidationStruct{
+				Initiator: testDialog(initiatorUUID, model.RoleAdmin, model.ThreadPermissions{CanChangeMembersPermissions: true}),
+				Target:    testDialog(targetUUID, model.RoleOwner, model.ThreadPermissions{}),
 			},
 			wantErr: true,
 		},
 		{
 			name: "initiator tries to change permissions for target with lower role ",
-			req: &model.UpdateThreadPermissionRequest{
-				Initiator: &model.PermissionChangeInitiator{
-					ThreadDialogID: initiatorUUID,
-					Role:           model.RoleAdmin,
-				},
-				Target: &model.PermissionChangeTarget{
-					ThreadDialogID: targetUUID,
-					Role:           model.RoleMember,
-				},
+			req: &permissionChangeValidationStruct{
+				Initiator: testDialog(initiatorUUID, model.RoleAdmin, model.ThreadPermissions{}),
+				Target:    testDialog(targetUUID, model.RoleMember, model.ThreadPermissions{}),
 			},
 			wantErr: false,
 		},
@@ -161,40 +125,22 @@ func Test_checkForPermissionToChangeMembersPermissions(t *testing.T) {
 	tests := []struct {
 		name string // description of this test case
 		// Named input parameters for target function.
-		req     *model.UpdateThreadPermissionRequest
+		req     *permissionChangeValidationStruct
 		wantErr bool
 	}{
 		{
 			name: "initiator does not have permission to change members permissions",
-			req: &model.UpdateThreadPermissionRequest{
-				Initiator: &model.PermissionChangeInitiator{
-					ThreadDialogID: initiatorUUID,
-					Role:           model.RoleAdmin,
-					ThreadPermissions: model.ThreadPermissions{
-						CanChangeMembersPermissions: false,
-					},
-				},
-				Target: &model.PermissionChangeTarget{
-					ThreadDialogID: targetUUID,
-					Role:           model.RoleMember,
-				},
+			req: &permissionChangeValidationStruct{
+				Initiator: testDialog(initiatorUUID, model.RoleAdmin, model.ThreadPermissions{CanChangeMembersPermissions: false}),
+				Target:    testDialog(targetUUID, model.RoleMember, model.ThreadPermissions{}),
 			},
 			wantErr: true,
 		},
 		{
 			name: "initiator has permission to change members permissions",
-			req: &model.UpdateThreadPermissionRequest{
-				Initiator: &model.PermissionChangeInitiator{
-					ThreadDialogID: initiatorUUID,
-					Role:           model.RoleAdmin,
-					ThreadPermissions: model.ThreadPermissions{
-						CanChangeMembersPermissions: true,
-					},
-				},
-				Target: &model.PermissionChangeTarget{
-					ThreadDialogID: targetUUID,
-					Role:           model.RoleMember,
-				},
+			req: &permissionChangeValidationStruct{
+				Initiator: testDialog(initiatorUUID, model.RoleAdmin, model.ThreadPermissions{CanChangeMembersPermissions: true}),
+				Target:    testDialog(targetUUID, model.RoleMember, model.ThreadPermissions{}),
 			},
 			wantErr: false,
 		},
@@ -219,45 +165,45 @@ func Test_checkPermissionChangeAllowedByTargetRole(t *testing.T) {
 	tests := []struct {
 		name string // description of this test case
 		// Named input parameters for target function.
-		changes *model.UpdateThreadPermissionRequest
+		req     *permissionChangeValidationStruct
 		wantErr bool
 	}{
 		{
 			name:    "nil changes",
-			changes: nil,
+			req:     &permissionChangeValidationStruct{},
 			wantErr: true,
 		},
 		{
 			name: "nil target",
-			changes: &model.UpdateThreadPermissionRequest{
-				Target: nil,
+			req: &permissionChangeValidationStruct{
+				Changes: &model.UpdateThreadPermissionRequest{},
 			},
 			wantErr: true,
 		},
 		{
 			name: "target role does not allow changing this permission",
-			changes: &model.UpdateThreadPermissionRequest{
-				Target: &model.PermissionChangeTarget{
-					Role: model.RoleMember,
+			req: &permissionChangeValidationStruct{
+				Target: testDialog(uuid.New(), model.RoleMember, model.ThreadPermissions{}),
+				Changes: &model.UpdateThreadPermissionRequest{
+					CanChangeMembersPermissions: ptr(true),
 				},
-				CanRemoveMembers: ptr(true),
 			},
 			wantErr: true,
 		},
 		{
 			name: "target role allows changing this permission",
-			changes: &model.UpdateThreadPermissionRequest{
-				Target: &model.PermissionChangeTarget{
-					Role: model.RoleOwner,
+			req: &permissionChangeValidationStruct{
+				Target: testDialog(uuid.New(), model.RoleOwner, model.ThreadPermissions{}),
+				Changes: &model.UpdateThreadPermissionRequest{
+					CanRemoveMembers: ptr(true),
 				},
-				CanRemoveMembers: ptr(true),
 			},
 			wantErr: false,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			gotErr := checkPermissionChangeAllowedByTargetRole(tt.changes)
+			gotErr := checkPermissionChangeAllowedByTargetRole(tt.req)
 			if gotErr != nil {
 				if !tt.wantErr {
 					t.Errorf("checkPermissionChangeAllowedByTargetRole() failed: %v", gotErr)
@@ -275,49 +221,45 @@ func Test_checkInitiatorHasSamePermissionThatChanged(t *testing.T) {
 	tests := []struct {
 		name string // description of this test case
 		// Named input parameters for target function.
-		changes *model.UpdateThreadPermissionRequest
+		req     *permissionChangeValidationStruct
 		wantErr bool
 	}{
 		{
 			name:    "nil changes",
-			changes: nil,
+			req:     nil,
 			wantErr: true,
 		},
 		{
 			name: "nil initiator",
-			changes: &model.UpdateThreadPermissionRequest{
-				Initiator: nil,
+			req: &permissionChangeValidationStruct{
+				Changes: &model.UpdateThreadPermissionRequest{},
 			},
 			wantErr: true,
 		},
 		{
 			name: "initiator does not have the same permission that is requested to change",
-			changes: &model.UpdateThreadPermissionRequest{
-				Initiator: &model.PermissionChangeInitiator{
-					ThreadPermissions: model.ThreadPermissions{
-						CanRemoveMembers: false,
-					},
+			req: &permissionChangeValidationStruct{
+				Initiator: testDialog(uuid.New(), model.RoleAdmin, model.ThreadPermissions{CanRemoveMembers: false}),
+				Changes: &model.UpdateThreadPermissionRequest{
+					CanRemoveMembers: ptr(true),
 				},
-				CanRemoveMembers: ptr(true),
 			},
 			wantErr: true,
 		},
 		{
 			name: "initiator has the same permission that is requested to change",
-			changes: &model.UpdateThreadPermissionRequest{
-				Initiator: &model.PermissionChangeInitiator{
-					ThreadPermissions: model.ThreadPermissions{
-						CanRemoveMembers: true,
-					},
+			req: &permissionChangeValidationStruct{
+				Initiator: testDialog(uuid.New(), model.RoleAdmin, model.ThreadPermissions{CanRemoveMembers: true}),
+				Changes: &model.UpdateThreadPermissionRequest{
+					CanRemoveMembers: ptr(false),
 				},
-				CanRemoveMembers: ptr(false),
 			},
 			wantErr: false,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			gotErr := checkInitiatorHasSamePermissionThatChanged(tt.changes)
+			gotErr := checkInitiatorHasSamePermissionThatChanged(tt.req)
 			if gotErr != nil {
 				if !tt.wantErr {
 					t.Errorf("checkInitiatorHasSamePermissionThatChanged() failed: %v", gotErr)

@@ -36,8 +36,7 @@ type Thread struct {
 	Description string     `json:"description" db:"description"`
 	Owner       uuid.UUID  `json:"owner"`
 
-	MembersIDs []uuid.UUID     `json:"members_ids" db:"member_ids"`
-	Members    []*ThreadMember `json:"members,omitempty" db:"members"`
+	Members []*ThreadDialog `json:"members,omitempty" db:"members"`
 
 	LastMessageID uuid.UUID `json:"last_message_id" db:"last_message_id"`
 	LastMessage   *Message  `json:"last_msg,omitempty" db:"last_msg"`

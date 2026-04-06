@@ -40,7 +40,7 @@ type (
 		Owners    uuid.UUIDs
 		Q         string
 		MemberIds uuid.UUIDs
-		Limit     int
+		Size      int
 		Sort      string
 		Page      int
 	}
@@ -54,7 +54,7 @@ type AddMemberRequest struct {
 	ThreadID          uuid.UUID
 	NewMemberID       uuid.UUID
 	InitiatorMemberID uuid.UUID
-	NewMemberRole     model.MemberRole
+	NewMemberRole     model.ThreadRole
 }
 type RemoveMemberRequest struct {
 	ThreadID          uuid.UUID

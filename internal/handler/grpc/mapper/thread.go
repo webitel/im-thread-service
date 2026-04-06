@@ -1,101 +1,160 @@
 package mapper
 
 import (
-	"time"
-
 	"github.com/google/uuid"
 	impb "github.com/webitel/im-thread-service/gen/go/thread/v1"
 	"github.com/webitel/im-thread-service/internal/domain/model"
 	"github.com/webitel/im-thread-service/internal/service/dto"
 )
 
-//go:generate goverter gen .
-
-// goverter:converter
-// goverter:output:file ./generated/thread_to_dto.go
-// goverter:matchIgnoreCase
-// goverter:extend github.com/google/uuid:Parse
-// goverter:extend ConvertInt32ToInt
-// goverter:extend ConvertThreadKindToInternal
-type ThreadInConverter interface {
-	ConvertCreateGroup(*impb.CreateGroupRequest) *dto.CreateGroupRequest
-	// goverter:map Size Limit
-	ConvertSearch(*impb.ThreadSearchRequest) (*dto.ThreadSearchRequest, error)
+type ThreadInConverter struct {
 }
 
-// goverter:converter
-// goverter:matchIgnoreCase
-// goverter:output:file ./generated/thread_to_pb.go
-// goverter:ignoreUnexported
-// goverter:extend ConvertUUIDToString
-// goverter:extend ConvertIntToInt32
-// goverter:extend ConvertTimeToInt64
-// goverter:extend ConvertThreadKindToExternal
-// goverter:extend ConvertThreadMemberToProto
-// goverter:extend ConvertMessageType
-type ThreadOutConverter interface {
-	ConvertCreateGroup(*dto.CreateGroupRequest) *impb.CreateGroupRequest
-	// goverter:ignore Admins
-	// goverter:ignore MemberIds
-	// goverter:map LastMessage LastMsg
-	ConvertToThread(*model.Thread) *impb.Thread
-}
-
-func ConvertInt32ToInt(num int32) int {
-	return int(num)
-}
-
-func ConvertIntToInt32(num int) int32 {
-	return int32(num)
-}
-
-func ConvertUUIDToString(id uuid.UUID) string {
-	return id.String()
-}
-
-func ConvertTimeToInt64(in time.Time) int64 {
-	return in.UnixMilli()
-}
-
-func ConvertThreadKindToInternal(in impb.ThreadKind) model.ThreadKind {
-	return model.ThreadKind(in)
-}
-
-func ConvertThreadKindToExternal(in model.ThreadKind) impb.ThreadKind {
-	return impb.ThreadKind(in)
-}
-
-func ConvertMessageType(in model.MessageType) int32 {
-	return int32(in)
-}
-
-func ConvertMemberToID(in *model.ThreadMember) string {
-	if in == nil {
-		return ""
+func (s *ThreadInConverter) ConvertSearch(in *impb.ThreadSearchRequest) (*dto.ThreadSearchRequest, error) {
+	ids, err := convertToUUIDs(in.GetIds())
+	if err != nil {
+		return nil, err
 	}
-	return in.Id.String()
+	owners, err := convertToUUIDs(in.GetOwners())
+	if err != nil {
+		return nil, err
+	}
+	var domains []int
+	for _, domain := range in.GetDomainIds() {
+		domains = append(domains, int(domain))
+	}
+
+	members, err := convertToUUIDs(in.GetMemberIds())
+	if err != nil {
+		return nil, err
+	}
+
+	return &dto.ThreadSearchRequest{
+		Fields:    in.GetFields(),
+		Q:         in.GetQ(),
+		Sort:      in.GetSort(),
+		Page:      int(in.GetPage()),
+		Size:      int(in.GetSize()),
+		Ids:       ids,
+		DomainIds: domains,
+		Kinds:     s.convertThreadKinds(in.GetKinds()),
+		Owners:    owners,
+		MemberIds: members,
+	}, nil
 }
 
-func ConvertThreadMemberToProto(member *model.ThreadMember) *impb.ThreadMember {
-	if member == nil {
+func (s *ThreadInConverter) convertThreadKinds(kinds []impb.ThreadKind) []model.ThreadKind {
+	if kinds == nil {
 		return nil
 	}
+	out := make([]model.ThreadKind, len(kinds))
+	for i, kind := range kinds {
+		out[i] = model.ThreadKind(kind)
+	}
+	return out
+}
 
-	var (
-		directSettings *impb.ThreadDirectSettings
-	)
+func (s *ThreadInConverter) ConvertAddMemberRequest(in *impb.AddMemberRequest) (*dto.AddMemberRequest, error) {
+	threadID, err := uuid.Parse(in.GetThreadId())
+	if err != nil {
+		return nil, err
+	}
+	newMemberID, err := uuid.Parse(in.GetNewMemberId())
+	if err != nil {
+		return nil, err
+	}
+	initiatorMemberID, err := uuid.Parse(in.GetInitiatorId())
+	if err != nil {
+		return nil, err
+	}
+	return &dto.AddMemberRequest{
+		ThreadID:          threadID,
+		NewMemberID:       newMemberID,
+		InitiatorMemberID: initiatorMemberID,
+		NewMemberRole:     s.convertMemberRole(in.GetRole()),
+	}, nil
+}
 
-	if member.DirectSettings != nil {
-		directSettings = &impb.ThreadDirectSettings{
-			Id:        member.DirectSettings.ID.String(),
-			DomainId:  int32(member.DirectSettings.DomainID),
-			UpdatedAt: member.DirectSettings.UpdatedAt.UTC().UnixMilli(),
-			Title:     member.DirectSettings.Title,
+func (s *ThreadInConverter) ConvertRemoveMemberRequest(in *impb.RemoveMemberRequest) (*dto.RemoveMemberRequest, error) {
+	threadID, err := uuid.Parse(in.GetThreadId())
+	if err != nil {
+		return nil, err
+	}
+	targetMemberID, err := uuid.Parse(in.GetTargetMemberId())
+	if err != nil {
+		return nil, err
+	}
+	initiatorMemberID, err := uuid.Parse(in.GetInitiatorMemberId())
+	if err != nil {
+		return nil, err
+	}
+	return &dto.RemoveMemberRequest{
+		ThreadID:          threadID,
+		InitiatorMemberID: initiatorMemberID,
+		TargetMemberID:    targetMemberID,
+	}, nil
+}
+
+func (s *ThreadInConverter) convertMemberRole(in impb.ThreadRole) model.ThreadRole {
+	switch in {
+	case impb.ThreadRole_ROLE_OWNER:
+		return model.RoleOwner
+	case impb.ThreadRole_ROLE_ADMIN:
+		return model.RoleAdmin
+	case impb.ThreadRole_ROLE_MEMBER:
+		return model.RoleMember
+	case impb.ThreadRole_ROLE_SUPERVISOR:
+		return model.RoleSupervisor
+	default:
+		return model.UnspecifiedRole
+	}
+}
+
+type ThreadOutConverter struct {
+}
+
+func (s *ThreadOutConverter) ConvertToThread(source *model.Thread) *impb.Thread {
+	if source == nil {
+		return nil
+	}
+	return &impb.Thread{
+		Id:          source.ID.String(),
+		DomainId:    int32(source.DomainID),
+		CreatedAt:   source.CreatedAt.UnixMilli(),
+		UpdatedAt:   source.UpdatedAt.UnixMilli(),
+		Kind:        impb.ThreadKind(source.Kind),
+		Subject:     source.Subject,
+		Description: source.Description,
+		Members:     s.convertThreadMembers(source.Members),
+	}
+}
+
+func (s *ThreadOutConverter) convertThreadMembers(members []*model.ThreadDialog) []*impb.ThreadMember {
+	if members == nil {
+		return nil
+	}
+	out := make([]*impb.ThreadMember, len(members))
+	for i, member := range members {
+		out[i] = &impb.ThreadMember{
+			Id:       member.ID.String(),
+			MemberId: member.MemberID.String(),
+			Role:     s.ConvertThreadRole(member.ThreadRole),
 		}
 	}
+	return out
+}
 
-	return &impb.ThreadMember{
-		Id:             member.Id.String(),
-		DirectSettings: directSettings,
+func (s *ThreadOutConverter) ConvertThreadRole(in model.ThreadRole) impb.ThreadRole {
+	switch in {
+	case model.RoleOwner:
+		return impb.ThreadRole_ROLE_OWNER
+	case model.RoleAdmin:
+		return impb.ThreadRole_ROLE_ADMIN
+	case model.RoleMember:
+		return impb.ThreadRole_ROLE_MEMBER
+	case model.RoleSupervisor:
+		return impb.ThreadRole_ROLE_SUPERVISOR
+	default:
+		return impb.ThreadRole_ROLE_UNSPECIFIED
 	}
 }

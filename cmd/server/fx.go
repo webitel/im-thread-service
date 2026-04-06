@@ -75,11 +75,15 @@ var grpcClientsBridgeModule = fx.Module(
 var serviceToHandlerBridgeModule = fx.Module(
 	"serviceToHandlerBridge",
 	fx.Provide(
+		func(s *service.ThreadManagementService) service.ThreadManager {
+			return s
+		},
 
 		func(s *service.ThreadManagementService) grpchandler.ThreadManagementService {
 			return s
 		},
-		func(s *service.ThreadManagementService) service.ThreadManager {
+
+		func(s *service.ThreadPermissionService) grpchandler.ThreadPermissionManagementService {
 			return s
 		},
 		func(s *service.MessageService) grpchandler.MessageService {

@@ -13,11 +13,11 @@ const (
 )
 
 type MemberRemovedV1 struct {
-	Recipient         uuid.UUID
-	ThreadID          uuid.UUID `json:"thread_id"`
-	MemberID          uuid.UUID `json:"member_id"`
-	NewThreadDialogID uuid.UUID `json:"thread_dialog_id"`
-	InitiatorMemberID uuid.UUID `json:"initiator_id"`
+	Recipient             uuid.UUID
+	ThreadID              uuid.UUID `json:"thread_id"`
+	RemovedMemberID       uuid.UUID `json:"member_id"`
+	RemovedThreadDialogID uuid.UUID `json:"thread_dialog_id"`
+	InitiatorMemberID     uuid.UUID `json:"initiator_id"`
 }
 
 func (e *MemberRemovedV1) Topic() string {
@@ -35,6 +35,12 @@ func (e *MemberRemovedV1) RecipientID() uuid.UUID { return e.Recipient }
 func (e *MemberRemovedV1) ToOutbox() (OutboxEvent, error) {
 	return e.serialize(e, e.Version())
 }
+
+func (e *MemberRemovedV1) SetRecipientID(id uuid.UUID) Outboxer {
+	e.Recipient = id
+	return e
+}
+
 func (e *MemberRemovedV1) serialize(data any, version string) (OutboxEvent, error) {
 	payload, err := json.Marshal(data)
 	if err != nil {

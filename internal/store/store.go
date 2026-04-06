@@ -36,10 +36,10 @@ type (
 	}
 
 	ThreadDialogStore interface {
-		Create(ctx context.Context, threadDialog *model.ThreadDialog) (*model.ThreadDialog, error)
+		Create(ctx context.Context, threadDialog *model.ThreadDialogExtended) (*model.ThreadDialogExtended, error)
 		Delete(ctx context.Context, threadID, memberID uuid.UUID) error
 		GetQuickView(ctx context.Context, filter *model.ThreadDialogStoreFilter) ([]*model.ThreadDialog, error)
-		GetFullView(ctx context.Context, filter *model.ThreadDialogStoreFilter) ([]*model.ThreadDialog, error)
+		GetFullView(ctx context.Context, filter *model.ThreadDialogStoreFilter) ([]*model.ThreadDialogExtended, error)
 	}
 
 	ThreadStore interface {
@@ -50,7 +50,7 @@ type (
 
 	ThreadPermissionStore interface {
 		Create(ctx context.Context, in *model.ThreadPermission) (*model.ThreadPermission, error)
-		Get(ctx context.Context, in *model.GetThreadPermissionRequest) ([]*model.ThreadPermission, error)
+		Get(ctx context.Context, in *model.ThreadPermissionStoreFilters) ([]*model.ThreadPermission, error)
 		Update(ctx context.Context, in *model.UpdateThreadPermissionRequest) (*model.ThreadPermission, error)
 	}
 

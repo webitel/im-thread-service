@@ -7,13 +7,14 @@ import (
 )
 
 type OffsetPagination struct {
-	Size int64
-	Page int64
+	Size   int64
+	Offset int64
 }
 
 type GetThreadPermissionRequest struct {
-	OffsetPagination
-	ThreadDialogID uuid.UUID
+	RequestInitiatorID uuid.UUID
+	ThreadID           uuid.UUID
+	MemberID           uuid.UUID
 }
 
 type ThreadPermissions struct {
@@ -22,6 +23,13 @@ type ThreadPermissions struct {
 	CanRemoveMembers            bool `db:"can_remove_members"`
 	CanChangeMembersPermissions bool `db:"can_change_members_permissions"`
 	CanChangeThreadInfo         bool `db:"can_change_thread_info"`
+}
+
+type ThreadPermissionStoreFilters struct {
+	OffsetPagination
+
+	ThreadID  uuid.UUID
+	MemberIDs []uuid.UUID
 }
 
 type ThreadPermissionsAllowance struct {
@@ -35,17 +43,18 @@ type ThreadPermissionsAllowance struct {
 type PermissionChangeInitiator struct {
 	ThreadPermissions
 	ThreadDialogID uuid.UUID
-	Role           MemberRole
+	Role           ThreadRole
 }
 
 type PermissionChangeTarget struct {
 	ThreadDialogID uuid.UUID
-	Role           MemberRole
+	Role           ThreadRole
 }
 
 type UpdateThreadPermissionRequest struct {
-	Initiator *PermissionChangeInitiator
-	Target    *PermissionChangeTarget
+	InitiatorMemberID uuid.UUID
+	TargetMemberID    uuid.UUID
+	ThreadID          uuid.UUID
 
 	CanSendMessages             *bool
 	CanAddMembers               *bool
@@ -60,6 +69,7 @@ type ThreadPermission struct {
 	ID             uuid.UUID `db:"id"`
 	ThreadID       uuid.UUID `db:"thread_id"`
 	ThreadDialogID uuid.UUID `db:"thread_dialog_id"`
+	MemberID       uuid.UUID `db:"member_id"`
 	CreatedAt      time.Time `db:"created_at"`
 	UpdatedAt      time.Time `db:"updated_at"`
 }
