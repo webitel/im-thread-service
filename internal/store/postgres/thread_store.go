@@ -17,7 +17,7 @@ import (
 
 var (
 	threadFields = []string{
-		"id", "domain_id", "created_by", "created_at", "updated_by", "updated_at",
+		"id", "domain_id", "created_at", "updated_at",
 		"kind", "owner", "subject", "description",
 	}
 )
