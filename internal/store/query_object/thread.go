@@ -109,7 +109,7 @@ func (q *threadQueryObject) FieldsMetadata() map[string]fieldMetadata {
 		},
 		"owner": {
 			sqlExpr:      "t.owner",
-			aliasedExpr:  "t.owner as owner_id",
+			aliasedExpr:  "t.owner as owner",
 			requiresJoin: 0,
 			sortable:     true,
 			filterExpr:   "t.owner",
@@ -320,12 +320,12 @@ func (q *threadQueryObject) linkLastMessageLateral() {
 							'mime', md.mime, 'size', md.size, 'created_at', md.created_at
 						))
 						from im_message.message_documents md
-						where md.message_id = md.id and m.type = 2 
+						where md.message_id = md.id and m.type = 2
 					),
 					'images', (
 						select jsonb_agg(jsonb_build_object(
 							'id', mi.id, 'file_id', mi.file_id, 'mime', mi.mime,
-							'thumbnails', mi.thumbnails, 'width', mi.width, 
+							'thumbnails', mi.thumbnails, 'width', mi.width,
                         	'height', mi.height, 'created_at', mi.created_at
 						))
 						from im_message.message_images mi
