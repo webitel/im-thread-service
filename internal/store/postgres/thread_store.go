@@ -28,12 +28,13 @@ type (
 		ID          uuid.UUID             `json:"id,omitempty" db:"id"`
 		DomainID    int                   `json:"domain_id,omitempty" db:"domain_id"`
 		Subject     string                `json:"subject,omitempty" db:"subject"`
-		CreatedAt   time.Time             `json:"created_at,omitempty" db:"created_at"`
-		UpdatedAt   time.Time             `json:"updated_at,omitempty" db:"updated_at"`
+		CreatedAt   time.Time             `json:"created_at" db:"created_at"`
+		UpdatedAt   time.Time             `json:"updated_at" db:"updated_at"`
 		Kind        model.ThreadKind      `json:"kind,omitempty" db:"kind"`
 		Owner       uuid.UUID             `json:"owner,omitempty" db:"owner_id"`
 		Description string                `json:"description,omitempty" db:"description"`
 		Members     []*threadMemberRecord `json:"members,omitempty" db:"members"`
+		LastMessage *model.Message        `json:"last_msg,omitempty" db:"last_msg"`
 	}
 	threadMemberRecord struct {
 		ID       uuid.UUID `json:"id,omitempty" db:"id"`
@@ -56,10 +57,10 @@ func (s *threadStore) Create(ctx context.Context, req *model.Thread) (*model.Thr
 	var (
 		query = `
 			insert into im_thread.thread (
-				domain_id, created_at, updated_at, 
+				domain_id, created_at, updated_at,
 				kind, owner, subject, description
 			)
-			values (@DomainId, @CreatedAt, 
+			values (@DomainId, @CreatedAt,
 				@UpdatedAt, @Kind, @Owner, @Subject,
 				@Description
 			)
@@ -121,6 +122,7 @@ func mapThreadRecordToModel(record *threadRecord) (*model.Thread, error) {
 		Subject:     record.Subject,
 		Description: record.Description,
 		Members:     members,
+		LastMessage: record.LastMessage,
 	}
 
 	return thread, nil
@@ -135,7 +137,7 @@ func (t *threadStore) ResolveDirect(ctx context.Context, from, to uuid.UUID) (*m
 				AND id IN (
 	           		select thread_id
 	            	from im_thread.thread_dialog
-	            	where 
+	            	where
 					(
 						(member_id = @FromId and direct_to = @DirectTo)
 						 or
