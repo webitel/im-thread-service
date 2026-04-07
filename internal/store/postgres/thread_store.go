@@ -31,7 +31,7 @@ type (
 		CreatedAt   time.Time             `json:"created_at" db:"created_at"`
 		UpdatedAt   time.Time             `json:"updated_at" db:"updated_at"`
 		Kind        model.ThreadKind      `json:"kind,omitempty" db:"kind"`
-		Owner       uuid.UUID             `json:"owner,omitempty" db:"owner_id"`
+		Owner       uuid.UUID             `json:"owner,omitempty" db:"owner"`
 		Description string                `json:"description,omitempty" db:"description"`
 		Members     []*threadMemberRecord `json:"members,omitempty" db:"members"`
 		LastMessage *model.Message        `json:"last_msg,omitempty" db:"last_msg"`
