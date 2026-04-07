@@ -5,6 +5,7 @@ import (
 	impb "github.com/webitel/im-thread-service/gen/go/thread/v1"
 	"github.com/webitel/im-thread-service/internal/domain/model"
 	"github.com/webitel/im-thread-service/internal/service/dto"
+	"google.golang.org/protobuf/types/known/structpb"
 )
 
 type ThreadInConverter struct {
@@ -117,6 +118,28 @@ func (s *ThreadOutConverter) ConvertToThread(source *model.Thread) *impb.Thread 
 	if source == nil {
 		return nil
 	}
+
+	var lastMsg *impb.HistoryMessage
+	if message := source.LastMessage; message != nil {
+		msgMd, err := structpb.NewStruct(message.Metadata)
+		if err != nil {
+			return nil
+		}
+
+		lastMsg = &impb.HistoryMessage{
+			Id:        message.ID.String(),
+			ThreadId:  source.ID.String(),
+			SenderId:  message.SenderID.String(),
+			Type:      int32(message.Type),
+			Body:      message.Body,
+			Metadata:  msgMd,
+			CreatedAt: message.CreatedAt.UnixMilli(),
+			UpdatedAt: message.UpdatedAt.UnixMilli(),
+			Documents: mapDocs(message.Documents),
+			Images:    mapImages(message.Images),
+		}
+	}
+
 	return &impb.Thread{
 		Id:          source.ID.String(),
 		DomainId:    int32(source.DomainID),
@@ -126,6 +149,7 @@ func (s *ThreadOutConverter) ConvertToThread(source *model.Thread) *impb.Thread 
 		Subject:     source.Subject,
 		Description: source.Description,
 		Members:     s.convertThreadMembers(source.Members),
+		LastMsg:     lastMsg,
 	}
 }
 
