@@ -108,7 +108,7 @@ func mapThreadRecordToModel(record *threadRecord) (*model.Thread, error) {
 			BaseModel: shared.BaseModel{
 				ID: tmr.ID,
 			},
-			MemberID:   tmr.ID,
+			MemberID:   tmr.MemberID,
 			ThreadRole: model.ThreadRole(tmr.Role),
 		}
 	})
