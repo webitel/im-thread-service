@@ -2,7 +2,7 @@
 create table if not exists "im_message"."message_contacts" (
   "message_id" uuid primary key references "im_message"."messages"("id") on delete cascade,
   "name" text,
-  "phone" text,
+  "phone_number" text,
   "email" text
 );
 
@@ -10,7 +10,7 @@ alter table if exists "im_message"."messages"
 drop constraint if exists "check_message_type";
 
 alter table if exists "im_message"."messages"
-add constraint if not exists "check_message_type" check ("type" between 0 and 7) not valid;
+add constraint "check_message_type" check ("type" between 0 and 7) not valid;
 alter table if exists "im_message"."messages" validate constraint "check_message_type";
 
 -- +goose Down
