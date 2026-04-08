@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	contactv1 "github.com/webitel/im-thread-service/gen/go/contact/v1"
+	infratls "github.com/webitel/im-thread-service/infra/tls"
 	"github.com/webitel/im-thread-service/infra/webitel"
 	"github.com/webitel/webitel-go-kit/infra/discovery"
 	rpc "github.com/webitel/webitel-go-kit/infra/transport/gRPC"
@@ -17,36 +18,35 @@ import (
 const ServiceName string = "im-contact-service"
 
 type Client struct {
-	logger *slog.Logger
+	logger         *slog.Logger
 	privacyService *rpc.Client[contactv1.ContactPrivacyClient]
 	contactService *rpc.Client[contactv1.ContactsClient]
-
 }
 
-func New(logger *slog.Logger, discovery discovery.DiscoveryProvider) (*Client, error) {
-	privacyClient, err := webitel.New(logger, discovery, ServiceName, func(cc *grpc.ClientConn) contactv1.ContactPrivacyClient {return contactv1.NewContactPrivacyClient(cc)})
+func New(logger *slog.Logger, discovery discovery.DiscoveryProvider, tlsConf *infratls.Config) (*Client, error) {
+	privacyClient, err := webitel.New(logger, discovery, ServiceName, tlsConf, func(cc *grpc.ClientConn) contactv1.ContactPrivacyClient { return contactv1.NewContactPrivacyClient(cc) })
 	if err != nil {
 		return nil, fmt.Errorf("[im-contact-client] initialization failed: %w", err)
 	}
-	contactClient, err := webitel.New(logger, discovery, ServiceName, func(cc *grpc.ClientConn) contactv1.ContactsClient {return contactv1.NewContactsClient(cc)})
+	contactClient, err := webitel.New(logger, discovery, ServiceName, tlsConf, func(cc *grpc.ClientConn) contactv1.ContactsClient { return contactv1.NewContactsClient(cc) })
 	if err != nil {
 		return nil, fmt.Errorf("[im-contact-client] initialization failed: %w", err)
 	}
 	return &Client{
-		logger: logger,
-		privacyService:    privacyClient,
-		contactService: contactClient ,
+		logger:         logger,
+		privacyService: privacyClient,
+		contactService: contactClient,
 	}, nil
 }
 
-func (c *Client) CanSend(ctx context.Context, fromID, toID uuid.UUID) (error) {
-	return  c.privacyService.Execute(ctx, func(api contactv1.ContactPrivacyClient) error {
+func (c *Client) CanSend(ctx context.Context, fromID, toID uuid.UUID) error {
+	return c.privacyService.Execute(ctx, func(api contactv1.ContactPrivacyClient) error {
 		pb := &contactv1.CanSendRequest{
-			From:     fromID.String(),
-			To:       toID.String(),
+			From: fromID.String(),
+			To:   toID.String(),
 		}
 
-		c.logger.Debug("check permission to send messages", slog.Any("from",fromID), slog.Any("to", toID))
+		c.logger.Debug("check permission to send messages", slog.Any("from", fromID), slog.Any("to", toID))
 
 		var err error
 		_, err = api.CanSend(ctx, pb)
@@ -55,12 +55,11 @@ func (c *Client) CanSend(ctx context.Context, fromID, toID uuid.UUID) (error) {
 
 }
 
-func (c *Client) CanInvite(ctx context.Context, fromID, toID uuid.UUID) (error) {
-	return  c.privacyService.Execute(ctx, func(api contactv1.ContactPrivacyClient) error {
+func (c *Client) CanInvite(ctx context.Context, fromID, toID uuid.UUID) error {
+	return c.privacyService.Execute(ctx, func(api contactv1.ContactPrivacyClient) error {
 		pb := &contactv1.CanInviteRequest{
-			From:     fromID.String(),
-			To:       toID.String(),
-			
+			From: fromID.String(),
+			To:   toID.String(),
 		}
 
 		c.logger.Debug("check permission to invite contact", slog.Any("from", fromID), slog.Any("to", toID))
@@ -99,5 +98,5 @@ func (c *Client) Close() error {
 			errs = append(errs, fmt.Errorf("closing privacy service client: %w", err))
 		}
 	}
-	return  errors.Join(errs...)
+	return errors.Join(errs...)
 }

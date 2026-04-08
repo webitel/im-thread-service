@@ -28,7 +28,7 @@ func New(logger *slog.Logger, discovery discovery.DiscoveryProvider) (*Client, e
 		return storagev1.NewFileServiceClient(conn)
 	}
 
-	c, err := webitel.New(logger, discovery, ServiceName, factory)
+	c, err := webitel.New(logger, discovery, ServiceName, nil, factory)
 	if err != nil {
 		return nil, fmt.Errorf("[storage-client] initialization failed: %w", err)
 	}

@@ -29,6 +29,7 @@ type (
 
 	ThreadPrivacyChecker interface {
 		CanInvite(ctx context.Context, initiatorID, targetID uuid.UUID) error
+		CanSend(ctx context.Context, senderID, recipientID uuid.UUID) error
 	}
 
 	ThreadEvent interface {
@@ -84,10 +85,10 @@ func (t *ThreadManagementService) AddMember(ctx context.Context, req *dto.AddMem
 		return err
 	}
 	if initiator == nil {
-		return notThreadMemberError
+		return errors.NotFound("thread not found or initiator does not have permission", errors.WithCause(notThreadMemberError))
 	}
 	if target != nil {
-		return errors.New("target member is already part of the thread")
+		return errors.NotFound("target member is already part of the thread")
 	}
 
 	err = t.verifyAddMemberInitiatorPermissions(initiator.ThreadRole, req.NewMemberRole, &initiator.Permissions)
@@ -150,13 +151,13 @@ func (t *ThreadManagementService) AddMember(ctx context.Context, req *dto.AddMem
 
 func (t *ThreadManagementService) verifyAddMemberInitiatorPermissions(initiatorRole model.ThreadRole, targetRole model.ThreadRole, initiatorPermissions *model.ThreadPermissions) error {
 	if initiatorPermissions == nil {
-		return errors.New("permissions cannot be nil")
+		return errors.Internal("permissions cannot be nil")
 	}
 	if !initiatorPermissions.CanAddMembers {
-		return errors.New("initiator does not have permission to invite members")
+		return errors.Forbidden("initiator does not have permission to invite members")
 	}
 	if initiatorRole <= targetRole {
-		return errors.New("initiator does not have permission to invite a member with same or higher role")
+		return errors.Forbidden("initiator does not have permission to invite a member with same or higher role")
 	}
 
 	return nil
@@ -330,8 +331,13 @@ func (t *ThreadManagementService) orchestrateDirectThreadCreation(ctx context.Co
 		return nil, errors.New("request cannot be nil")
 	}
 
+	err := t.privacyChecker.CanSend(ctx, req.From.ID, req.To.ID)
+	if err != nil {
+		return nil, err
+	}
+
 	var createdThread *model.Thread
-	err := t.uow.WithinTransaction(ctx, func(ctx context.Context, uow store.UnitOfWork) error {
+	err = t.uow.WithinTransaction(ctx, func(ctx context.Context, uow store.UnitOfWork) error {
 		savedThread, err := t.createDirectThread(ctx, uow, req.DomainID, req.From, req.To)
 		if err != nil {
 			return err
