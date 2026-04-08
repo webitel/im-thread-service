@@ -2,7 +2,7 @@ package postgres
 
 import (
 	"context"
-	"errors"
+
 	"fmt"
 
 	"github.com/google/uuid"
@@ -10,27 +10,18 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/webitel/im-thread-service/internal/domain/model"
 	"github.com/webitel/im-thread-service/internal/store"
+	queryobject "github.com/webitel/im-thread-service/internal/store/query_object"
+	"github.com/webitel/webitel-go-kit/pkg/errors"
 )
 
 type messageStore struct {
-	// [QUERIER]
-	// Supports both standalone connection pool and active transaction (Unit of Work)
-	q Querier
+	db Querier
 }
 
 func NewMessageStore(q Querier) store.MessageStore {
-	return &messageStore{q: q}
+	return &messageStore{db: q}
 }
 
-// SaveMessage saves a message to the database.
-//
-//	Args:
-//	- ctx: Context for operation cancellation.
-//	- msg: Message to be saved.
-//
-//	Returns:
-//	- *model.Message: Saved message.
-//	- error: Error if any occurs.
 func (m *messageStore) SaveMessage(ctx context.Context, msg *model.Message) (*model.Message, error) {
 	const query = `
 		insert into im_message.messages (
@@ -53,7 +44,7 @@ func (m *messageStore) SaveMessage(ctx context.Context, msg *model.Message) (*mo
 		"Metadata": msg.Metadata,
 	}
 
-	rows, err := m.q.Query(ctx, query, args)
+	rows, err := m.db.Query(ctx, query, args)
 	if err != nil {
 		return nil, fmt.Errorf("postgres.save_message: %w", err)
 	}
@@ -66,18 +57,6 @@ func (m *messageStore) SaveMessage(ctx context.Context, msg *model.Message) (*mo
 	return savedMessage, nil
 }
 
-// SaveImages saves message images to the database.
-//
-// Args:
-//
-//	ctx: The context of the request.
-//	messageID: The ID of the message that the images belong to.
-//	images: The images to be saved.
-//
-// Returns:
-//
-//	A slice of saved images with their IDs populated.
-//	An error if the save operation fails.
 func (m *messageStore) SaveImages(ctx context.Context, messageID uuid.UUID, images []*model.MessageImage) ([]*model.MessageImage, error) {
 	if len(images) == 0 {
 		return nil, nil
@@ -129,7 +108,7 @@ func (m *messageStore) SaveImages(ctx context.Context, messageID uuid.UUID, imag
 		"Heights":    heights,
 	}
 
-	rows, err := m.q.Query(ctx, query, args)
+	rows, err := m.db.Query(ctx, query, args)
 	if err != nil {
 		return nil, err
 	}
@@ -142,18 +121,6 @@ func (m *messageStore) SaveImages(ctx context.Context, messageID uuid.UUID, imag
 	return savedImages, nil
 }
 
-// SaveDocuments saves message documents to the database.
-//
-// Args:
-//
-//	ctx: The context of the request.
-//	messageID: The ID of the message that the documents belong to.
-//	docs: The documents to be saved.
-//
-// Returns:
-//
-//	A slice of saved documents with their IDs populated.
-//	An error if the save operation fails.
 func (m *messageStore) SaveDocuments(ctx context.Context, messageID uuid.UUID, docs []*model.MessageDocument) ([]*model.MessageDocument, error) {
 	docsLen := len(docs)
 	if docsLen == 0 {
@@ -201,7 +168,7 @@ func (m *messageStore) SaveDocuments(ctx context.Context, messageID uuid.UUID, d
 		"Sizes":     sizes,
 	}
 
-	rows, err := m.q.Query(ctx, query, args)
+	rows, err := m.db.Query(ctx, query, args)
 	if err != nil {
 		return nil, err
 	}
@@ -214,8 +181,6 @@ func (m *messageStore) SaveDocuments(ctx context.Context, messageID uuid.UUID, d
 	return savedDocuments, nil
 }
 
-// ReadMessage marks a message as read.
-// It uses ON CONFLICT DO NOTHING to handle idempotent calls.
 func (m *messageStore) ReadMessage(ctx context.Context, read struct {
 	DomainID  int32
 	ThreadID  uuid.UUID
@@ -236,7 +201,7 @@ func (m *messageStore) ReadMessage(ctx context.Context, read struct {
 		"UserID":    read.UserID,
 	}
 
-	_, err := m.q.Exec(ctx, query, args)
+	_, err := m.db.Exec(ctx, query, args)
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) {
@@ -249,4 +214,268 @@ func (m *messageStore) ReadMessage(ctx context.Context, read struct {
 	}
 
 	return nil
+}
+
+func (m *messageStore) SaveMessageLocation(ctx context.Context, msg *model.Message) (*model.Message, error) {
+	sql, args := prepareSaveMessageLocationQuery(msg)
+
+	rows, err := m.db.Query(ctx, sql, args)
+	if err != nil {
+		return nil, errors.Internal("eror querying insert location", errors.WithCause(err))
+	}
+
+	saved, err := pgx.CollectOneRow(rows, pgx.RowToAddrOfStructByNameLax[model.Message])
+	if err != nil {
+		return nil, errors.Internal("eror collecting saved location", errors.WithCause(err))
+	}
+
+	return saved, nil
+}
+
+func prepareSaveMessageLocationQuery(msg *model.Message) (string, pgx.NamedArgs) {
+	query := `
+		with msg_ins as (
+			insert into im_message.messages
+			(thread_id, domain_id, sender_id, type, body, metadata)
+			values (@ThreadID, @DomainID, @SenderID, @Type, @Body, @Metadata)
+			returning *
+		),
+		location_ins as (
+			insert into im_message.message_locations
+			(message_id, address, latitude, longitude, name)
+			values ((select id from msg_ins), @Address, @Latitude, @Longitude, @Name)
+			returning *
+		)
+		select
+			m.id,
+			m.thread_id,
+			m.domain_id,
+			m.sender_id,
+			m.type,
+			m.body,
+			m.metadata,
+			m.created_at,
+			m.updated_at,
+			l.location as location
+		from msg_ins m
+		left join lateral (
+			select to_jsonb(l) as location from location_ins l
+		) l on true;
+	`
+
+	args := pgx.NamedArgs{
+		"ThreadID":  msg.ThreadID,
+		"DomainID":  msg.DomainID,
+		"SenderID":  msg.From.ID,
+		"Type":      msg.Type,
+		"Body":      msg.Body,
+		"Metadata":  msg.Metadata,
+		"Address":   msg.Location.Address,
+		"Latitude":  msg.Location.Latitude,
+		"Longitude": msg.Location.Longitude,
+		"Name":      msg.Location.Name,
+	}
+
+	return queryobject.CompactSQL(query), args
+}
+
+func (m *messageStore) SaveMessageContact(ctx context.Context, msg *model.Message) (*model.Message, error) {
+	query, args := prepareSaveMessageContactQuery(msg)
+
+	rows, err := m.db.Query(ctx, query, args)
+	if err != nil {
+		return nil, errors.Internal("eror querying insert contact", errors.WithCause(err))
+	}
+
+	saved, err := pgx.CollectOneRow(rows, pgx.RowToAddrOfStructByNameLax[model.Message])
+	if err != nil {
+		return nil, errors.Internal("eror collecting saved contact", errors.WithCause(err))
+	}
+
+	return saved, nil
+}
+
+func prepareSaveMessageContactQuery(msg *model.Message) (string, pgx.NamedArgs) {
+	query := `
+		with msg_ins as (
+			insert into im_message.messages
+			(thread_id, domain_id, sender_id, type, body, metadata)
+			values (@ThreadID, @DomainID, @SenderID, @Type, @Body, @Metadata)
+			returning *
+		),
+		contact_ins as (
+			insert into im_message.message_contacts
+			(message_id, phone_number, name, email)
+			values ((select id from msg_ins), @Phone, @Name, @Email)
+			returning *
+		)
+		select
+			m.id as id,
+			m.thread_id as thread_id,
+			m.domain_id as domain_id,
+			m.sender_id as sender_id,
+			m.type as type,
+			m.body as body,
+			m.metadata as metadata,
+			m.created_at as created_at,
+			m.updated_at as updated_at,
+			c.contact as contact
+		from msg_ins m
+		left join lateral (
+			select to_jsonb(c) as contact from contact_ins c
+		) c on true;
+	`
+	args := pgx.NamedArgs{
+		"ThreadID": msg.ThreadID,
+		"DomainID": msg.DomainID,
+		"SenderID": msg.From.ID,
+		"Type":     msg.Type,
+		"Body":     msg.Body,
+		"Metadata": msg.Metadata,
+		"Phone":    msg.Contact.PhoneNumber,
+		"Name":     msg.Contact.Name,
+		"Email":    msg.Contact.Email,
+	}
+
+	return queryobject.CompactSQL(query), args
+}
+
+func (m *messageStore) SaveInteractiveMessage(ctx context.Context, msg *model.Message) (*model.Message, error) {
+	sql, args := prepareSaveInteractiveMessageQuery(msg)
+
+	rows, err := m.db.Query(ctx, sql, args)
+	if err != nil {
+		return nil, errors.Internal("eror querying insert interactive message", errors.WithCause(err))
+	}
+
+	saved, err := pgx.CollectOneRow(rows, pgx.RowToAddrOfStructByNameLax[model.Message])
+	if err != nil {
+		return nil, errors.Internal("eror collecting saved interactive message", errors.WithCause(err))
+	}
+
+	return saved, nil
+}
+
+func prepareSaveInteractiveMessageQuery(msg *model.Message) (string, pgx.NamedArgs) {
+	query := `
+		with msg_ins as (
+			insert into im_message.messages
+			(thread_id, domain_id, sender_id, type, body, metadata, interactive)
+			values (@ThreadID, @DomainID, @SenderID, @Type, @Body, @Metadata, @Interactive)
+			returning *
+		),
+		documents_ins as (
+			insert into im_message.message_documents
+			(message_id, file_id, mime, name, size)
+			select
+				msg.id,
+				u.file_id,
+				u.mime,
+				u.file_name,
+				u.file_size
+			from  unnest (
+				@DocumentsFileIDs::int[],
+				@DocumentsMimes::text[],
+				@DocumentsFileNames::text[],
+				@DocumentsFileSizes::int[]
+			) as u(file_id, mime, file_name, file_size)
+			cross join msg_ins msg
+			returning *
+		),
+		images_ins as (
+			insert into im_message.message_images
+			(message_id, file_id, mime, thumbnails, width, height)
+			select
+				msg.id,
+				u.file_id,
+				u.mime,
+				u.thumbnails,
+				u.width,
+				u.height
+			from unnest (
+				@ImagesFileIDs::int[],
+				@ImagesMimes::text[],
+				@ImagesThumbnails::jsonb[],
+				@ImagesWidths::int[],
+				@ImagesHeights::int[]
+			) as u(file_id, mime, thumbnails, width, height)
+			cross join msg_ins msg
+			returning *
+		)
+		select
+			m.id as id,
+			m.thread_id as thread_id,
+			m.domain_id as domain_id,
+			m.sender_id as sender_id,
+			m.type as type,
+			m.body as body,
+			m.metadata as metadata,
+			m.interactive as interactive,
+			m.created_at as created_at,
+			m.updated_at as updated_at,
+			doc_ins.documents as documents,
+			img_ins.images as images
+		from msg_ins m
+		left join lateral (
+			select jsonb_agg(to_jsonb(doc)) as documents
+			from documents_ins doc
+			where doc.message_id = m.id
+		) as doc_ins on true
+		left join lateral (
+			select jsonb_agg(to_jsonb(img)) as images
+			from images_ins img
+			where img.message_id = m.id
+		) as img_ins on true;
+	`
+
+	var (
+		documentsFileIDs []int
+		documentsMimes   []string
+		documentsNames   []string
+		documentsSizes   []int
+		imagesFileIDs    []int
+		imagesMimes      []string
+		imagesThumbnails []map[string]any
+		imagesWidths     []int
+		imagesHeights    []int
+	)
+
+	if msg.Documents != nil {
+		for _, doc := range msg.Documents {
+			documentsFileIDs = append(documentsFileIDs, int(doc.FileID))
+			documentsMimes = append(documentsMimes, doc.Mime)
+			documentsNames = append(documentsNames, doc.Name)
+			documentsSizes = append(documentsSizes, int(doc.Size))
+		}
+	}
+	if msg.Images != nil {
+		for _, img := range msg.Images {
+			imagesFileIDs = append(imagesFileIDs, int(img.FileID))
+			imagesMimes = append(imagesMimes, img.Mime)
+			imagesThumbnails = append(imagesThumbnails, img.Thumbnails)
+			imagesWidths = append(imagesWidths, int(img.Width))
+			imagesHeights = append(imagesHeights, int(img.Height))
+		}
+	}
+
+	args := pgx.NamedArgs{
+		"ThreadID":           msg.ThreadID,
+		"DomainID":           msg.DomainID,
+		"SenderID":           msg.From.ID,
+		"Type":               msg.Type,
+		"Body":               msg.Body,
+		"Metadata":           msg.Metadata,
+		"Interactive":        msg.Interactive,
+		"DocumentsFileIDs":   documentsFileIDs,
+		"DocumentsMimes":     documentsMimes,
+		"DocumentsFileNames": documentsNames,
+		"DocumentsFileSizes": documentsSizes,
+		"ImagesFileIDs":      imagesFileIDs,
+		"ImagesMimes":        imagesMimes,
+		"ImagesThumbnails":   imagesThumbnails,
+		"ImagesWidths":       imagesWidths,
+		"ImagesHeights":      imagesHeights,
+	}
+
+	return queryobject.CompactSQL(query), args
 }

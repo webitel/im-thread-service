@@ -19,10 +19,14 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	Message_SendText_FullMethodName     = "/webitel.im.service.thread.v1.Message/SendText"
-	Message_SendDocument_FullMethodName = "/webitel.im.service.thread.v1.Message/SendDocument"
-	Message_SendImage_FullMethodName    = "/webitel.im.service.thread.v1.Message/SendImage"
-	Message_Read_FullMethodName         = "/webitel.im.service.thread.v1.Message/Read"
+	Message_SendText_FullMethodName                = "/webitel.im.service.thread.v1.Message/SendText"
+	Message_SendDocument_FullMethodName            = "/webitel.im.service.thread.v1.Message/SendDocument"
+	Message_SendImage_FullMethodName               = "/webitel.im.service.thread.v1.Message/SendImage"
+	Message_Read_FullMethodName                    = "/webitel.im.service.thread.v1.Message/Read"
+	Message_SendInteractive_FullMethodName         = "/webitel.im.service.thread.v1.Message/SendInteractive"
+	Message_SendInteractiveCallback_FullMethodName = "/webitel.im.service.thread.v1.Message/SendInteractiveCallback"
+	Message_SendLocation_FullMethodName            = "/webitel.im.service.thread.v1.Message/SendLocation"
+	Message_SendContact_FullMethodName             = "/webitel.im.service.thread.v1.Message/SendContact"
 )
 
 // MessageClient is the client API for Message service.
@@ -41,6 +45,16 @@ type MessageClient interface {
 	SendImage(ctx context.Context, in *SendImageRequest, opts ...grpc.CallOption) (*SendImageResponse, error)
 	// Mark message as read by id.
 	Read(ctx context.Context, in *ReadMessageRequest, opts ...grpc.CallOption) (*ReadMessageResponse, error)
+	// Sends an interactive message (buttons, lists, CTA).
+	// Supports idempotency via send_id.
+	SendInteractive(ctx context.Context, in *SendInteractiveMessageRequest, opts ...grpc.CallOption) (*SendMessageResponse, error)
+	// Handles user interaction callbacks.
+	// Should be called by client when user interacts with UI.
+	SendInteractiveCallback(ctx context.Context, in *InteractiveCallbackRequest, opts ...grpc.CallOption) (*InteractiveCallbackResponse, error)
+	// Sends a geographic location message.
+	SendLocation(ctx context.Context, in *SendLocationRequest, opts ...grpc.CallOption) (*SendMessageResponse, error)
+	// Sends a contact card.
+	SendContact(ctx context.Context, in *SendContactRequest, opts ...grpc.CallOption) (*SendMessageResponse, error)
 }
 
 type messageClient struct {
@@ -91,6 +105,46 @@ func (c *messageClient) Read(ctx context.Context, in *ReadMessageRequest, opts .
 	return out, nil
 }
 
+func (c *messageClient) SendInteractive(ctx context.Context, in *SendInteractiveMessageRequest, opts ...grpc.CallOption) (*SendMessageResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SendMessageResponse)
+	err := c.cc.Invoke(ctx, Message_SendInteractive_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *messageClient) SendInteractiveCallback(ctx context.Context, in *InteractiveCallbackRequest, opts ...grpc.CallOption) (*InteractiveCallbackResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(InteractiveCallbackResponse)
+	err := c.cc.Invoke(ctx, Message_SendInteractiveCallback_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *messageClient) SendLocation(ctx context.Context, in *SendLocationRequest, opts ...grpc.CallOption) (*SendMessageResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SendMessageResponse)
+	err := c.cc.Invoke(ctx, Message_SendLocation_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *messageClient) SendContact(ctx context.Context, in *SendContactRequest, opts ...grpc.CallOption) (*SendMessageResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SendMessageResponse)
+	err := c.cc.Invoke(ctx, Message_SendContact_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // MessageServer is the server API for Message service.
 // All implementations must embed UnimplementedMessageServer
 // for forward compatibility.
@@ -107,6 +161,16 @@ type MessageServer interface {
 	SendImage(context.Context, *SendImageRequest) (*SendImageResponse, error)
 	// Mark message as read by id.
 	Read(context.Context, *ReadMessageRequest) (*ReadMessageResponse, error)
+	// Sends an interactive message (buttons, lists, CTA).
+	// Supports idempotency via send_id.
+	SendInteractive(context.Context, *SendInteractiveMessageRequest) (*SendMessageResponse, error)
+	// Handles user interaction callbacks.
+	// Should be called by client when user interacts with UI.
+	SendInteractiveCallback(context.Context, *InteractiveCallbackRequest) (*InteractiveCallbackResponse, error)
+	// Sends a geographic location message.
+	SendLocation(context.Context, *SendLocationRequest) (*SendMessageResponse, error)
+	// Sends a contact card.
+	SendContact(context.Context, *SendContactRequest) (*SendMessageResponse, error)
 	mustEmbedUnimplementedMessageServer()
 }
 
@@ -128,6 +192,18 @@ func (UnimplementedMessageServer) SendImage(context.Context, *SendImageRequest) 
 }
 func (UnimplementedMessageServer) Read(context.Context, *ReadMessageRequest) (*ReadMessageResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Read not implemented")
+}
+func (UnimplementedMessageServer) SendInteractive(context.Context, *SendInteractiveMessageRequest) (*SendMessageResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SendInteractive not implemented")
+}
+func (UnimplementedMessageServer) SendInteractiveCallback(context.Context, *InteractiveCallbackRequest) (*InteractiveCallbackResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SendInteractiveCallback not implemented")
+}
+func (UnimplementedMessageServer) SendLocation(context.Context, *SendLocationRequest) (*SendMessageResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SendLocation not implemented")
+}
+func (UnimplementedMessageServer) SendContact(context.Context, *SendContactRequest) (*SendMessageResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SendContact not implemented")
 }
 func (UnimplementedMessageServer) mustEmbedUnimplementedMessageServer() {}
 func (UnimplementedMessageServer) testEmbeddedByValue()                 {}
@@ -222,6 +298,78 @@ func _Message_Read_Handler(srv interface{}, ctx context.Context, dec func(interf
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Message_SendInteractive_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SendInteractiveMessageRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MessageServer).SendInteractive(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Message_SendInteractive_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MessageServer).SendInteractive(ctx, req.(*SendInteractiveMessageRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Message_SendInteractiveCallback_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(InteractiveCallbackRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MessageServer).SendInteractiveCallback(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Message_SendInteractiveCallback_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MessageServer).SendInteractiveCallback(ctx, req.(*InteractiveCallbackRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Message_SendLocation_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SendLocationRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MessageServer).SendLocation(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Message_SendLocation_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MessageServer).SendLocation(ctx, req.(*SendLocationRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Message_SendContact_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SendContactRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MessageServer).SendContact(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Message_SendContact_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MessageServer).SendContact(ctx, req.(*SendContactRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // Message_ServiceDesc is the grpc.ServiceDesc for Message service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -244,6 +392,22 @@ var Message_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Read",
 			Handler:    _Message_Read_Handler,
+		},
+		{
+			MethodName: "SendInteractive",
+			Handler:    _Message_SendInteractive_Handler,
+		},
+		{
+			MethodName: "SendInteractiveCallback",
+			Handler:    _Message_SendInteractiveCallback_Handler,
+		},
+		{
+			MethodName: "SendLocation",
+			Handler:    _Message_SendLocation_Handler,
+		},
+		{
+			MethodName: "SendContact",
+			Handler:    _Message_SendContact_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

@@ -24,7 +24,10 @@ func Where[T any](s []T, predicate func(T) bool) []T {
 }
 
 func IdsParser(s string) uuid.UUID {
-	id, _ := uuid.Parse(s)
+	id, err := uuid.Parse(s)
+	if err != nil {
+		return uuid.Nil
+	}
 	return id
 }
 

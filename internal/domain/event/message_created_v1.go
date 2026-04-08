@@ -41,17 +41,21 @@ var (
 )
 
 type MessageCreated struct {
-	MessageID  uuid.UUID         `json:"message_id"`
-	ThreadID   uuid.UUID         `json:"thread_id"`
-	DomainID   int32             `json:"domain_id"`
-	From       *shared.Peer      `json:"from"`
-	To         uuid.UUIDs        `json:"to"`
-	SendID     string            `json:"send_id"`
-	Body       string            `json:"body"`
-	Type       int16             `json:"type"`
-	OccurredAt time.Time         `json:"occurred_at"`
-	Images     []ImagePayload    `json:"images,omitempty"`
-	Documents  []DocumentPayload `json:"documents,omitempty"`
+	MessageID   uuid.UUID         `json:"message_id"`
+	ThreadID    uuid.UUID         `json:"thread_id"`
+	DomainID    int32             `json:"domain_id"`
+	From        *shared.Peer      `json:"from"`
+	To          uuid.UUIDs        `json:"to"`
+	SendID      string            `json:"send_id"`
+	Body        string            `json:"body"`
+	Type        int16             `json:"type"` // 1:TEXT, 2:FILE, 3:IMAGE, 4:SYSTEM
+	OccurredAt  time.Time         `json:"occurred_at"`
+	Metadata    map[string]any    `json:"metadata,omitempty"`
+	Images      []ImagePayload    `json:"images,omitempty"`
+	Documents   []DocumentPayload `json:"documents,omitempty"`
+	Location    *LocationPayload  `json:"location,omitempty"`
+	Contact     *ContactPayload   `json:"contact,omitempty"`
+	Interactive json.RawMessage   `json:"interactive,omitempty"` // raw interactive payload due to dynamic schema
 }
 
 func (MessageCreated) EventType() string        { return MessageCreatedEvent }
@@ -100,4 +104,34 @@ type DocumentPayload struct {
 	Mime   string `json:"mime"`
 	Name   string `json:"name"`
 	Size   int64  `json:"size"`
+}
+
+type LocationPayload struct {
+	Latitude  float64 `json:"latitude"`
+	Longitude float64 `json:"longitude"`
+	Address   *string `json:"address,omitempty"`
+	Name      *string `json:"name,omitempty"`
+}
+
+type ContactPayload struct {
+	Name  *string `json:"name,omitempty"`
+	Phone *string `json:"phone,omitempty"`
+	Email *string `json:"email,omitempty"`
+}
+
+func NewContactPayload(name, phone, email *string) *ContactPayload {
+	return &ContactPayload{
+		Name:  name,
+		Phone: phone,
+		Email: email,
+	}
+}
+
+func NewLocationPayload(latitude, longitude float64, address, name *string) *LocationPayload {
+	return &LocationPayload{
+		Latitude:  latitude,
+		Longitude: longitude,
+		Address:   address,
+		Name:      name,
+	}
 }

@@ -4,7 +4,10 @@ import (
 	"context"
 	"log/slog"
 
+	"github.com/google/uuid"
 	impb "github.com/webitel/im-thread-service/gen/go/thread/v1"
+	"github.com/webitel/im-thread-service/internal/domain/model"
+	"github.com/webitel/im-thread-service/internal/domain/shared"
 	"github.com/webitel/im-thread-service/internal/handler/grpc/mapper"
 	"github.com/webitel/im-thread-service/internal/service/dto"
 )
@@ -16,6 +19,10 @@ type MessageService interface {
 	SendImage(ctx context.Context, in *dto.SendImageRequest) (*dto.SendImageResponse, error)
 	SendDocument(ctx context.Context, in *dto.SendDocumentRequest) (*dto.SendDocumentResponse, error)
 	Read(ctx context.Context, in *dto.ReadMessageRequest) error
+	SendLocation(ctx context.Context, msg *model.Message) (*model.Message, error)
+	SendContact(ctx context.Context, msg *model.Message) (*model.Message, error)
+	SendInteractive(ctx context.Context, msg *model.Message) (*model.Message, error)
+	SendInteractiveCallback(ctx context.Context, callback *model.InteractiveCallback) (*model.InteractiveCallback, error)
 }
 
 type MessageServer struct {
@@ -25,7 +32,13 @@ type MessageServer struct {
 	handler MessageService
 }
 
-// SendText implements threadv1.MessageServer.
+func NewMessageService(logger *slog.Logger, handler MessageService) *MessageServer {
+	return &MessageServer{
+		logger:  logger,
+		handler: handler,
+	}
+}
+
 func (m *MessageServer) SendText(ctx context.Context, in *impb.SendTextRequest) (*impb.SendTextResponse, error) {
 	out, err := m.handler.SendText(ctx, mapper.MapToSendTextRequest(in))
 	if err != nil {
@@ -35,7 +48,6 @@ func (m *MessageServer) SendText(ctx context.Context, in *impb.SendTextRequest) 
 	return mapper.MapToSendTextResponse(out), nil
 }
 
-// SendImage implements threadv1.MessageServer.
 func (m *MessageServer) SendImage(ctx context.Context, in *impb.SendImageRequest) (*impb.SendImageResponse, error) {
 	out, err := m.handler.SendImage(ctx, mapper.MapToSendImageRequest(in))
 	if err != nil {
@@ -46,7 +58,6 @@ func (m *MessageServer) SendImage(ctx context.Context, in *impb.SendImageRequest
 	return mapper.MapToSendImageResponse(out), nil
 }
 
-// SendDocument implements threadv1.MessageServer.
 func (m *MessageServer) SendDocument(ctx context.Context, in *impb.SendDocumentRequest) (*impb.SendDocumentResponse, error) {
 	out, err := m.handler.SendDocument(ctx, mapper.MapToSendDocumentRequest(in))
 	if err != nil {
@@ -67,9 +78,116 @@ func (m *MessageServer) Read(ctx context.Context, in *impb.ReadMessageRequest) (
 	return &impb.ReadMessageResponse{}, nil
 }
 
-func NewMessageService(logger *slog.Logger, handler MessageService) *MessageServer {
-	return &MessageServer{
-		logger:  logger,
-		handler: handler,
+func (m *MessageServer) SendLocation(ctx context.Context, in *impb.SendLocationRequest) (*impb.SendMessageResponse, error) {
+	msg := &model.Message{
+		DomainID:       in.GetDomainId(),
+		IdempotencyKey: in.GetSendId(),
+		From:           mapper.MapPeerFromProto(in.From),
+		SendTo:         mapper.MapPeerFromProto(in.To),
+		Type:           model.MessageTypeLocation,
+		Metadata:       in.Metadata.AsMap(),
+		SenderID:       uuid.UUID{},
+		Location: &model.MessageLocation{
+			Address:   in.Address,
+			Latitude:  in.Latitude,
+			Longitude: in.Longitude,
+			Name:      in.Name,
+		},
 	}
+
+	saved, err := m.handler.SendLocation(ctx, msg)
+	if err != nil {
+		return nil, err
+	}
+
+	return &impb.SendMessageResponse{
+		To: []*impb.Peer{
+			in.To,
+		},
+		Id: saved.ID.String(),
+	}, nil
+}
+
+func (m *MessageServer) SendContact(ctx context.Context, in *impb.SendContactRequest) (*impb.SendMessageResponse, error) {
+	msg := &model.Message{
+		IdempotencyKey: in.GetSendId(),
+		DomainID:       in.GetDomainId(),
+		From:           mapper.MapPeerFromProto(in.From),
+		SendTo:         mapper.MapPeerFromProto(in.To),
+		Type:           model.MessageTypeContact,
+		Metadata:       in.Metadata.AsMap(),
+		Contact: &model.MessageContact{
+			Name:        in.Name,
+			PhoneNumber: in.PhoneNumber,
+			Email:       in.Email,
+		},
+	}
+
+	saved, err := m.handler.SendContact(ctx, msg)
+	if err != nil {
+		return nil, err
+	}
+
+	return &impb.SendMessageResponse{
+		To: []*impb.Peer{
+			in.To,
+		},
+		Id: saved.ID.String(),
+	}, nil
+}
+
+func (m *MessageServer) SendInteractive(ctx context.Context, in *impb.SendInteractiveMessageRequest) (*impb.SendMessageResponse, error) {
+	interactive, err := mapper.ConvertInteractivePbToDomain(in.GetInteractive())
+	if err != nil {
+		return nil, err
+	}
+
+	msg := &model.Message{
+		IdempotencyKey: in.GetSendId(),
+		DomainID:       in.GetDomainId(),
+		From:           mapper.MapPeerFromProto(in.GetFrom()),
+		SendTo:         mapper.MapPeerFromProto(in.GetTo()),
+		Body:           in.GetBody(),
+		Type:           model.MessageTypeInteractive,
+		Metadata:       in.Metadata.AsMap(),
+		Interactive:    interactive,
+		Images:         mapper.ConvertPbImagesToDomain(in.GetInteractive().GetImages()),
+		Documents:      mapper.ConvertPbDocumentsToDomain(in.GetInteractive().GetDocuments()),
+	}
+
+	processed, err := m.handler.SendInteractive(ctx, msg)
+	if err != nil {
+		return nil, err
+	}
+
+	return &impb.SendMessageResponse{
+		To: []*impb.Peer{
+			in.To,
+		},
+		Id: processed.ID.String(),
+	}, nil
+}
+
+func (m *MessageServer) SendInteractiveCallback(ctx context.Context, in *impb.InteractiveCallbackRequest) (*impb.InteractiveCallbackResponse, error) {
+	from := mapper.MapPeerFromProto(in.GetReactedBy())
+
+	callback := &model.InteractiveCallback{
+		ReactedBy:    from.ID,
+		InReplyTo:    uuid.MustParse(in.GetInReplyTo()),
+		ButtonCode:   in.GetButtonCode(),
+		CallbackData: in.GetCallbackData(),
+	}
+
+	processed, err := m.handler.SendInteractiveCallback(ctx, callback)
+	if err != nil {
+		return nil, err
+	}
+
+	return &impb.InteractiveCallbackResponse{
+		ReactedBy:    mapper.MapPeerToProto(shared.Peer{ID: processed.ReactedBy, Type: from.Type}),
+		InReplyTo:    processed.InReplyTo.String(),
+		ButtonCode:   processed.ButtonCode,
+		CallbackData: processed.CallbackData,
+		ReactedAt:    processed.ReactedAtUnix(),
+	}, nil
 }
