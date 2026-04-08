@@ -301,7 +301,15 @@ func (t *ThreadManagementService) searchDirectThread(ctx context.Context, from, 
 		}
 	case shared.PeerThread:
 		threadID := to.ID
-		threads, err := t.uow.ThreadStore().Search(ctx, queryobject.NewThreadQueryObject().WithIDFilter(threadID).WithMemberIDFilter(from.ID).WithKindFilter(model.ThreadDirect).WithLimit(1))
+		threads, err := t.uow.ThreadStore().Search(
+			ctx,
+			queryobject.NewThreadQueryObject().
+				WithIDFilter(threadID).
+				WithMemberIDFilter(from.ID).
+				WithKindFilter(model.ThreadDirect).
+				WithFields([]string{"id", "domain_id", "created_at", "updated_at", "kind", "owner", "subject", "description", "members"}).
+				WithLimit(1),
+		)
 		if err != nil {
 			return nil, err
 		}
