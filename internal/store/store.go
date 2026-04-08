@@ -37,30 +37,33 @@ type OutboxStore interface {
 	Cleanup(ctx context.Context, opt *model.OutboxCleanupOptions) (int64, error)
 }
 
-	ThreadDialogStore interface {
-		Create(ctx context.Context, threadDialog *model.ThreadDialogExtended) (*model.ThreadDialogExtended, error)
-		Delete(ctx context.Context, threadID, memberID uuid.UUID) error
-		GetQuickView(ctx context.Context, filter *model.ThreadDialogStoreFilter) ([]*model.ThreadDialog, error)
-		GetFullView(ctx context.Context, filter *model.ThreadDialogStoreFilter) ([]*model.ThreadDialogExtended, error)
-	}
+type ThreadDialogStore interface {
+	Create(ctx context.Context, threadDialog *model.ThreadDialogExtended) (*model.ThreadDialogExtended, error)
+	Delete(ctx context.Context, threadID, memberID uuid.UUID) error
+	GetQuickView(ctx context.Context, filter *model.ThreadDialogStoreFilter) ([]*model.ThreadDialog, error)
+	GetFullView(ctx context.Context, filter *model.ThreadDialogStoreFilter) ([]*model.ThreadDialogExtended, error)
+}
 
-	ThreadStore interface {
-		Create(ctx context.Context, req *model.Thread) (*model.Thread, error)
-		Search(ctx context.Context, query queryobject.QueryObject) ([]*model.Thread, error)
-		ResolveDirect(ctx context.Context, from, to uuid.UUID) (*model.Thread, error)
-	}
+type ThreadStore interface {
+	Create(ctx context.Context, req *model.Thread) (*model.Thread, error)
+	Search(ctx context.Context, query queryobject.QueryObject) ([]*model.Thread, error)
+	ResolveDirect(ctx context.Context, from, to uuid.UUID) (*model.Thread, error)
+}
 
-	ThreadPermissionStore interface {
-		Create(ctx context.Context, in *model.ThreadPermission) (*model.ThreadPermission, error)
-		Get(ctx context.Context, in *model.ThreadPermissionStoreFilters) ([]*model.ThreadPermission, error)
-		Update(ctx context.Context, in *model.UpdateThreadPermissionRequest) (*model.ThreadPermission, error)
-	}
+type ThreadPermissionStore interface {
+	Create(ctx context.Context, in *model.ThreadPermission) (*model.ThreadPermission, error)
+	Get(ctx context.Context, in *model.ThreadPermissionStoreFilters) ([]*model.ThreadPermission, error)
+	Update(ctx context.Context, in *model.UpdateThreadPermissionRequest) (*model.ThreadPermission, error)
+}
 
 type MessageHistory interface {
 	Search(ctx context.Context, query queryobject.QueryObject) ([]*dto.HistoryMessage, error)
 }
 
-	DirectThreadDialogOrchestration interface {
-		InitializeFullDirectThread(ctx context.Context, req *model.CreateDirectThreadDialogRequest) ([]*model.DirectThreadDialog, error)
-	}
-)
+type DirectThreadDialogOrchestration interface {
+	InitializeFullDirectThread(ctx context.Context, req *model.CreateDirectThreadDialogRequest) ([]*model.DirectThreadDialog, error)
+}
+
+type InteractiveCallback interface {
+	Save(ctx context.Context, callback *model.InteractiveCallback) (*model.InteractiveCallback, error)
+}

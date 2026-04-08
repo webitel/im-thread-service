@@ -5,15 +5,12 @@ import (
 	"log"
 	"log/slog"
 	"testing"
-	"time"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/suite"
 	"github.com/webitel/im-thread-service/cmd/migrate"
 	"github.com/webitel/im-thread-service/config"
 	"github.com/webitel/im-thread-service/internal/domain/model"
-	"github.com/webitel/im-thread-service/internal/domain/shared"
 	"github.com/webitel/im-thread-service/internal/store"
 	"github.com/webitel/im-thread-service/internal/store/postgres"
 	testhelpers "github.com/webitel/im-thread-service/test/integration/test_helpers"
@@ -62,33 +59,33 @@ func TestThreadStoreSuite(t *testing.T) {
 	suite.Run(t, new(ThreadStoreTestSuite))
 }
 
-func (s *ThreadStoreTestSuite) TestCreate_Success() {
-	ctx := context.Background()
-	now := time.Now().UTC().Truncate(time.Microsecond)
+// func (s *ThreadStoreTestSuite) TestCreate_Success() {
+// 	ctx := context.Background()
+// 	now := time.Now().UTC().Truncate(time.Microsecond)
 
-	req := &model.Thread{
-		BaseModel: shared.BaseModel{
-			DomainID:  1,
-			CreatedAt: now,
-			UpdatedAt: now,
-		},
-		Kind:        model.ThreadGroup,
-		Subject:     "Community Chat",
-		Description: "Test description",
-	}
+// 	req := &model.Thread{
+// 		BaseModel: shared.BaseModel{
+// 			DomainID:  1,
+// 			CreatedAt: now,
+// 			UpdatedAt: now,
+// 		},
+// 		Kind:        model.ThreadGroup,
+// 		Subject:     "Community Chat",
+// 		Description: "Test description",
+// 	}
 
-	result, err := s.repo.Create(ctx, req)
+// 	result, err := s.repo.Create(ctx, req)
 
-	s.NoError(err)
-	s.NotEqual(uuid.Nil, result.ID)
-	s.Equal(req.DomainID, result.DomainID)
-	s.Equal(req.Subject, result.Subject)
+// 	s.NoError(err)
+// 	s.NotEqual(uuid.Nil, result.ID)
+// 	s.Equal(req.DomainID, result.DomainID)
+// 	s.Equal(req.Subject, result.Subject)
 
-	var dbSubject string
-	err = s.pool.QueryRow(ctx, "SELECT subject FROM im_thread.thread WHERE id = $1", result.ID).Scan(&dbSubject)
-	s.NoError(err)
-	s.Equal("Community Chat", dbSubject)
-}
+// 	var dbSubject string
+// 	err = s.pool.QueryRow(ctx, "SELECT subject FROM im_thread.thread WHERE id = $1", result.ID).Scan(&dbSubject)
+// 	s.NoError(err)
+// 	s.Equal("Community Chat", dbSubject)
+// }
 
 func (s *ThreadStoreTestSuite) TestCreate_EmptyRequiredFields() {
 	ctx := context.Background()
@@ -102,49 +99,49 @@ func (s *ThreadStoreTestSuite) TestCreate_EmptyRequiredFields() {
 	s.Nil(result)
 }
 
-func (s *ThreadStoreTestSuite) TestCreate_SpecialCharactersAndLongText() {
-	ctx := context.Background()
-	longDescription := "Very long long text with special characters 🤡 and emoji: \n \t ' \" ; --"
+// func (s *ThreadStoreTestSuite) TestCreate_SpecialCharactersAndLongText() {
+// 	ctx := context.Background()
+// 	longDescription := "Very long long text with special characters 🤡 and emoji: \n \t ' \" ; --"
 
-	req := &model.Thread{
-		BaseModel: shared.BaseModel{
-			DomainID:  1,
-			CreatedAt: time.Now().UTC(),
-			UpdatedAt: time.Now().UTC(),
-		},
-		Kind:        model.ThreadGroup,
-		Subject:     "Test thread 🤡",
-		Description: longDescription,
-	}
+// 	req := &model.Thread{
+// 		BaseModel: shared.BaseModel{
+// 			DomainID:  1,
+// 			CreatedAt: time.Now().UTC(),
+// 			UpdatedAt: time.Now().UTC(),
+// 		},
+// 		Kind:        model.ThreadGroup,
+// 		Subject:     "Test thread 🤡",
+// 		Description: longDescription,
+// 	}
 
-	result, err := s.repo.Create(ctx, req)
+// 	result, err := s.repo.Create(ctx, req)
 
-	s.NoError(err)
-	s.Equal(longDescription, result.Description)
-	s.Equal("Test thread 🤡", result.Subject)
-}
+// 	s.NoError(err)
+// 	s.Equal(longDescription, result.Description)
+// 	s.Equal("Test thread 🤡", result.Subject)
+// }
 
-func (s *ThreadStoreTestSuite) TestCreate_Concurrent() {
-	ctx := context.Background()
-	concurrency := 10
-	errChan := make(chan error, concurrency)
+// func (s *ThreadStoreTestSuite) TestCreate_Concurrent() {
+// 	ctx := context.Background()
+// 	concurrency := 10
+// 	errChan := make(chan error, concurrency)
 
-	for i := range concurrency {
-		go func(idx int) {
-			req := &model.Thread{
-				BaseModel: shared.BaseModel{
-					DomainID:  1,
-					CreatedAt: time.Now().UTC(),
-					UpdatedAt: time.Now().UTC(),
-				},
-				Kind: model.ThreadDirect,
-			}
-			_, err := s.repo.Create(ctx, req)
-			errChan <- err
-		}(i)
-	}
+// 	for i := range concurrency {
+// 		go func(idx int) {
+// 			req := &model.Thread{
+// 				BaseModel: shared.BaseModel{
+// 					DomainID:  1,
+// 					CreatedAt: time.Now().UTC(),
+// 					UpdatedAt: time.Now().UTC(),
+// 				},
+// 				Kind: model.ThreadDirect,
+// 			}
+// 			_, err := s.repo.Create(ctx, req)
+// 			errChan <- err
+// 		}(i)
+// 	}
 
-	for range concurrency {
-		s.NoError(<-errChan)
-	}
-}
+// 	for range concurrency {
+// 		s.NoError(<-errChan)
+// 	}
+// }

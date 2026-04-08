@@ -22,7 +22,6 @@ type unitOfWork struct {
 	outboxStore                     store.OutboxStore
 	messageHistoryStore             store.MessageHistory
 	directThreadDialogOrchestration store.DirectThreadDialogOrchestration
-	directSettings                  store.DirectSettings
 	interactiveCallbackStore        store.InteractiveCallback
 }
 

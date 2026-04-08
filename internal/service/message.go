@@ -16,15 +16,8 @@ import (
 	"github.com/webitel/webitel-go-kit/pkg/errors"
 )
 
-type Messager interface {
-	SendText(ctx context.Context, in *dto.SendTextRequest) (*dto.SendTextResponse, error)
-	SendImage(ctx context.Context, in *dto.SendImageRequest) (*dto.SendImageResponse, error)
-	SendDocument(ctx context.Context, in *dto.SendDocumentRequest) (*dto.SendDocumentResponse, error)
-	Read(ctx context.Context, in *dto.ReadMessageRequest) error
-	SendLocation(ctx context.Context, msg *model.Message) (*model.Message, error)
-	SendContact(ctx context.Context, msg *model.Message) (*model.Message, error)
-	SendInteractive(ctx context.Context, msg *model.Message) (*model.Message, error)
-	SendInteractiveCallback(ctx context.Context, callback *model.InteractiveCallback) (*model.InteractiveCallback, error)
+type ThreadManager interface {
+	EnsureDirectThread(ctx context.Context, req *dto.EnsureDirectThreadRequest) (*dto.EnsureDirectThreadResponse, error)
 }
 
 type MessageService struct {
@@ -172,7 +165,6 @@ func (s *MessageService) SendImage(ctx context.Context, in *dto.SendImageRequest
 	return &dto.SendImageResponse{ID: msg.ID, To: in.To}, nil
 }
 
-// SendDocument processes document attachments and ensures transactional integrity.
 func (s *MessageService) SendDocument(ctx context.Context, in *dto.SendDocumentRequest) (*dto.SendDocumentResponse, error) {
 	if err := guards.SendDocumentGuard(in); err != nil {
 		return nil, fmt.Errorf("validation: %w", err)
@@ -396,9 +388,8 @@ func (s *MessageService) SendInteractiveCallback(ctx context.Context, callback *
 func (s *MessageService) prepareMessageForSending(ctx context.Context, msg *model.Message) error {
 	t, err := s.threader.EnsureDirectThread(ctx, &dto.EnsureDirectThreadRequest{
 		DomainID: int(msg.DomainID),
-		MemberID: msg.From.ID,
-		PeerFrom: &msg.From,
-		PeerTo:   &msg.SendTo,
+		From:     &msg.From,
+		To:       &msg.SendTo,
 	})
 
 	if err != nil {

@@ -19,6 +19,10 @@ type MessageService interface {
 	SendImage(ctx context.Context, in *dto.SendImageRequest) (*dto.SendImageResponse, error)
 	SendDocument(ctx context.Context, in *dto.SendDocumentRequest) (*dto.SendDocumentResponse, error)
 	Read(ctx context.Context, in *dto.ReadMessageRequest) error
+	SendLocation(ctx context.Context, msg *model.Message) (*model.Message, error)
+	SendContact(ctx context.Context, msg *model.Message) (*model.Message, error)
+	SendInteractive(ctx context.Context, msg *model.Message) (*model.Message, error)
+	SendInteractiveCallback(ctx context.Context, callback *model.InteractiveCallback) (*model.InteractiveCallback, error)
 }
 
 type MessageServer struct {
@@ -28,14 +32,14 @@ type MessageServer struct {
 	handler MessageService
 }
 
-func NewMessageService(logger *slog.Logger, handler service.Messager) *MessageService {
-	return &MessageService{
+func NewMessageService(logger *slog.Logger, handler MessageService) *MessageServer {
+	return &MessageServer{
 		logger:  logger,
 		handler: handler,
 	}
 }
 
-func (m *MessageService) SendText(ctx context.Context, in *impb.SendTextRequest) (*impb.SendTextResponse, error) {
+func (m *MessageServer) SendText(ctx context.Context, in *impb.SendTextRequest) (*impb.SendTextResponse, error) {
 	out, err := m.handler.SendText(ctx, mapper.MapToSendTextRequest(in))
 	if err != nil {
 		return nil, err
@@ -44,7 +48,7 @@ func (m *MessageService) SendText(ctx context.Context, in *impb.SendTextRequest)
 	return mapper.MapToSendTextResponse(out), nil
 }
 
-func (m *MessageService) SendImage(ctx context.Context, in *impb.SendImageRequest) (*impb.SendImageResponse, error) {
+func (m *MessageServer) SendImage(ctx context.Context, in *impb.SendImageRequest) (*impb.SendImageResponse, error) {
 	out, err := m.handler.SendImage(ctx, mapper.MapToSendImageRequest(in))
 	if err != nil {
 		m.logger.Error("failed to send image", "error", err)
@@ -54,7 +58,7 @@ func (m *MessageService) SendImage(ctx context.Context, in *impb.SendImageReques
 	return mapper.MapToSendImageResponse(out), nil
 }
 
-func (m *MessageService) SendDocument(ctx context.Context, in *impb.SendDocumentRequest) (*impb.SendDocumentResponse, error) {
+func (m *MessageServer) SendDocument(ctx context.Context, in *impb.SendDocumentRequest) (*impb.SendDocumentResponse, error) {
 	out, err := m.handler.SendDocument(ctx, mapper.MapToSendDocumentRequest(in))
 	if err != nil {
 		m.logger.Error("failed to send document", "error", err)
@@ -74,7 +78,7 @@ func (m *MessageServer) Read(ctx context.Context, in *impb.ReadMessageRequest) (
 	return &impb.ReadMessageResponse{}, nil
 }
 
-func (m *MessageService) SendLocation(ctx context.Context, in *impb.SendLocationRequest) (*impb.SendMessageResponse, error) {
+func (m *MessageServer) SendLocation(ctx context.Context, in *impb.SendLocationRequest) (*impb.SendMessageResponse, error) {
 	msg := &model.Message{
 		DomainID:       in.GetDomainId(),
 		IdempotencyKey: in.GetSendId(),
@@ -104,7 +108,7 @@ func (m *MessageService) SendLocation(ctx context.Context, in *impb.SendLocation
 	}, nil
 }
 
-func (m *MessageService) SendContact(ctx context.Context, in *impb.SendContactRequest) (*impb.SendMessageResponse, error) {
+func (m *MessageServer) SendContact(ctx context.Context, in *impb.SendContactRequest) (*impb.SendMessageResponse, error) {
 	msg := &model.Message{
 		IdempotencyKey: in.GetSendId(),
 		DomainID:       in.GetDomainId(),
@@ -132,7 +136,7 @@ func (m *MessageService) SendContact(ctx context.Context, in *impb.SendContactRe
 	}, nil
 }
 
-func (m *MessageService) SendInteractive(ctx context.Context, in *impb.SendInteractiveMessageRequest) (*impb.SendMessageResponse, error) {
+func (m *MessageServer) SendInteractive(ctx context.Context, in *impb.SendInteractiveMessageRequest) (*impb.SendMessageResponse, error) {
 	interactive, err := mapper.ConvertInteractivePbToDomain(in.GetInteractive())
 	if err != nil {
 		return nil, err
@@ -164,7 +168,7 @@ func (m *MessageService) SendInteractive(ctx context.Context, in *impb.SendInter
 	}, nil
 }
 
-func (m *MessageService) SendInteractiveCallback(ctx context.Context, in *impb.InteractiveCallbackRequest) (*impb.InteractiveCallbackResponse, error) {
+func (m *MessageServer) SendInteractiveCallback(ctx context.Context, in *impb.InteractiveCallbackRequest) (*impb.InteractiveCallbackResponse, error) {
 	from := mapper.MapPeerFromProto(in.GetReactedBy())
 
 	callback := &model.InteractiveCallback{

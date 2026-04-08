@@ -266,7 +266,7 @@ func prepareSaveMessageLocationQuery(msg *model.Message) (string, pgx.NamedArgs)
 	args := pgx.NamedArgs{
 		"ThreadID":  msg.ThreadID,
 		"DomainID":  msg.DomainID,
-		"SenderID":  msg.SenderID,
+		"SenderID":  msg.From.ID,
 		"Type":      msg.Type,
 		"Body":      msg.Body,
 		"Metadata":  msg.Metadata,
@@ -328,7 +328,7 @@ func prepareSaveMessageContactQuery(msg *model.Message) (string, pgx.NamedArgs) 
 	args := pgx.NamedArgs{
 		"ThreadID": msg.ThreadID,
 		"DomainID": msg.DomainID,
-		"SenderID": msg.SenderID,
+		"SenderID": msg.From.ID,
 		"Type":     msg.Type,
 		"Body":     msg.Body,
 		"Metadata": msg.Metadata,
@@ -461,7 +461,7 @@ func prepareSaveInteractiveMessageQuery(msg *model.Message) (string, pgx.NamedAr
 	args := pgx.NamedArgs{
 		"ThreadID":           msg.ThreadID,
 		"DomainID":           msg.DomainID,
-		"SenderID":           msg.SenderID,
+		"SenderID":           msg.From.ID,
 		"Type":               msg.Type,
 		"Body":               msg.Body,
 		"Metadata":           msg.Metadata,

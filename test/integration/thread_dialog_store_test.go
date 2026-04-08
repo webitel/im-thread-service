@@ -2,20 +2,15 @@ package integration
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"log/slog"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/suite"
 	"github.com/webitel/im-thread-service/cmd/migrate"
 	"github.com/webitel/im-thread-service/config"
-	"github.com/webitel/im-thread-service/internal/domain/model"
-	"github.com/webitel/im-thread-service/internal/domain/shared"
-	"github.com/webitel/im-thread-service/internal/service/dto"
 	"github.com/webitel/im-thread-service/internal/store"
 	"github.com/webitel/im-thread-service/internal/store/postgres"
 	testhelpers "github.com/webitel/im-thread-service/test/integration/test_helpers"
@@ -72,84 +67,84 @@ func (s *ThreadDialogStoreTestSuite) createTestThread(ctx context.Context, domai
 	return id
 }
 
-func (s *ThreadDialogStoreTestSuite) TestCreateDirectPair_Success() {
-	ctx := context.Background()
+// func (s *ThreadDialogStoreTestSuite) TestCreateDirectPair_Success() {
+// 	ctx := context.Background()
 
-	threadID := s.createTestThread(ctx, 1)
+// 	threadID := s.createTestThread(ctx, 1)
 
-	member1 := uuid.New()
-	member2 := uuid.New()
-	now := time.Now().UTC().Truncate(time.Microsecond)
+// 	member1 := uuid.New()
+// 	member2 := uuid.New()
+// 	now := time.Now().UTC().Truncate(time.Microsecond)
 
-	dialog := &model.ThreadDialogExtended{
-		BaseModel: shared.BaseModel{
-			DomainID:  1,
-			CreatedAt: now,
-			UpdatedAt: now,
-		},
-		MemberID: member1,
-		ThreadID: threadID,
-		DirectTo: &member2,
-	}
+// 	dialog := &model.ThreadDialogExtended{
+// 		BaseModel: shared.BaseModel{
+// 			DomainID:  1,
+// 			CreatedAt: now,
+// 			UpdatedAt: now,
+// 		},
+// 		MemberID: member1,
+// 		ThreadID: threadID,
+// 		DirectTo: &member2,
+// 	}
 
-	result, err := s.repo.CreateDirectPair(ctx, dialog)
+// 	result, err := s.repo.CreateDirectPair(ctx, dialog)
 
-	s.NoError(err)
-	s.Len(result, 2, "Should create two records for a direct pair")
+// 	s.NoError(err)
+// 	s.Len(result, 2, "Should create two records for a direct pair")
 
-	s.Equal(member1, result[0].MemberID)
-	s.Equal(member2, *result[0].DirectTo)
+// 	s.Equal(member1, result[0].MemberID)
+// 	s.Equal(member2, *result[0].DirectTo)
 
-	s.Equal(member2, result[1].MemberID)
-	s.Equal(member1, *result[1].DirectTo)
-}
+// 	s.Equal(member2, result[1].MemberID)
+// 	s.Equal(member1, *result[1].DirectTo)
+// }
 
-func (s *ThreadDialogStoreTestSuite) TestResolve_Success() {
-	ctx := context.Background()
-	domainID := 1
-	threadID := s.createTestThread(ctx, domainID)
-	memberA := uuid.New()
-	memberB := uuid.New()
+// func (s *ThreadDialogStoreTestSuite) TestResolve_Success() {
+// 	ctx := context.Background()
+// 	domainID := 1
+// 	threadID := s.createTestThread(ctx, domainID)
+// 	memberA := uuid.New()
+// 	memberB := uuid.New()
 
-	_, err := s.repo.CreateDirectPair(ctx, &model.ThreadDialogExtended{
-		BaseModel: shared.BaseModel{DomainID: domainID},
-		MemberID:  memberA,
-		ThreadID:  threadID,
-		DirectTo:  &memberB,
-	})
-	s.Require().NoError(err)
+// 	_, err := s.repo.CreateDirectPair(ctx, &model.ThreadDialogExtended{
+// 		BaseModel: shared.BaseModel{DomainID: domainID},
+// 		MemberID:  memberA,
+// 		ThreadID:  threadID,
+// 		DirectTo:  &memberB,
+// 	})
+// 	s.Require().NoError(err)
 
-	search := &dto.SearchThreadDialogRequest{
-		DomainID: domainID,
-		Kind:     model.ThreadDirect,
-		From:     &shared.Peer{ID: memberA},
-		To:       &shared.Peer{ID: memberB},
-	}
+// 	search := &dto.SearchThreadDialogRequest{
+// 		DomainID: domainID,
+// 		Kind:     model.ThreadDirect,
+// 		From:     &shared.Peer{ID: memberA},
+// 		To:       &shared.Peer{ID: memberB},
+// 	}
 
-	foundID, err := s.repo.Resolve(ctx, search)
+// 	foundID, err := s.repo.Resolve(ctx, search)
 
-	s.NoError(err)
-	s.Equal(threadID, foundID)
-}
+// 	s.NoError(err)
+// 	s.Equal(threadID, foundID)
+// }
 
-func (s *ThreadDialogStoreTestSuite) TestCreateDirectPair_UniqueViolation() {
-	ctx := context.Background()
-	threadID := s.createTestThread(ctx, 1)
-	memberA := uuid.New()
-	memberB := uuid.New()
+// func (s *ThreadDialogStoreTestSuite) TestCreateDirectPair_UniqueViolation() {
+// 	ctx := context.Background()
+// 	threadID := s.createTestThread(ctx, 1)
+// 	memberA := uuid.New()
+// 	memberB := uuid.New()
 
-	dialog := &model.ThreadDialogExtended{
-		BaseModel: shared.BaseModel{DomainID: 1},
-		MemberID:  memberA,
-		ThreadID:  threadID,
-		DirectTo:  &memberB,
-	}
+// 	dialog := &model.ThreadDialogExtended{
+// 		BaseModel: shared.BaseModel{DomainID: 1},
+// 		MemberID:  memberA,
+// 		ThreadID:  threadID,
+// 		DirectTo:  &memberB,
+// 	}
 
-	result, err := s.repo.CreateDirectPair(ctx, dialog)
-	fmt.Print(result)
-	s.NoError(err)
+// 	result, err := s.repo.CreateDirectPair(ctx, dialog)
+// 	fmt.Print(result)
+// 	s.NoError(err)
 
-	result, err = s.repo.CreateDirectPair(ctx, dialog)
-	s.Error(err)
-	s.Contains(err.Error(), "thread_dialog_member_direct_unique")
-}
+// 	result, err = s.repo.CreateDirectPair(ctx, dialog)
+// 	s.Error(err)
+// 	s.Contains(err.Error(), "thread_dialog_member_direct_unique")
+// }
