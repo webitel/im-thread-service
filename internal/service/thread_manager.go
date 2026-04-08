@@ -12,6 +12,7 @@ import (
 	"github.com/webitel/im-thread-service/internal/service/dto"
 	"github.com/webitel/im-thread-service/internal/store"
 	queryobject "github.com/webitel/im-thread-service/internal/store/query_object"
+	"github.com/webitel/im-thread-service/internal/utils"
 	"github.com/webitel/webitel-go-kit/pkg/errors"
 )
 
@@ -260,21 +261,27 @@ func (t *ThreadManagementService) verifyRemoveMemberInitiatorPermissions(initiat
 
 func (t *ThreadManagementService) EnsureDirectThread(ctx context.Context, req *dto.EnsureDirectThreadRequest) (*dto.EnsureDirectThreadResponse, error) {
 	if req == nil {
-		return nil, errors.New("request cannot be nil")
+		return nil, errors.InvalidArgument("request cannot be nil", errors.WithID("service.thread_manager.ensure_direct_thread"))
 	}
+
 	directThread, err := t.searchDirectThread(ctx, req.From, req.To)
 	if err != nil {
 		return nil, err
 	}
-	if directThread == nil {
-		directThread, err = t.orchestrateDirectThreadCreation(ctx, req)
-		if err != nil {
-			return nil, err
-		}
 
+	if directThread != nil {
+		members := utils.Map(directThread.Members, func(m *model.ThreadDialog) uuid.UUID {
+			return m.MemberID
+		})
+		return dto.NewEnsureDirectThreadResponse(directThread.ID, int32(directThread.DomainID), members), nil
 	}
 
-	return dto.NewEnsureDirectThreadResponse(directThread.ID, int32(directThread.DomainID), []uuid.UUID{req.From.ID, req.To.ID}), nil
+	directThread, err = t.orchestrateDirectThreadCreation(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+
+	return dto.NewEnsureDirectThreadResponse(directThread.ID, int32(directThread.DomainID), uuid.UUIDs{req.From.ID, req.To.ID}), nil
 }
 
 func (t *ThreadManagementService) searchDirectThread(ctx context.Context, from, to *shared.Peer) (*model.Thread, error) {
@@ -294,7 +301,7 @@ func (t *ThreadManagementService) searchDirectThread(ctx context.Context, from, 
 		}
 	case shared.PeerThread:
 		threadID := to.ID
-		threads, err := t.uow.ThreadStore().Search(ctx, queryobject.NewThreadQueryObject().WithIDFilter(threadID).WithMemberIDFilter(from.ID).WithKindFilter(model.ThreadDirect))
+		threads, err := t.uow.ThreadStore().Search(ctx, queryobject.NewThreadQueryObject().WithIDFilter(threadID).WithMemberIDFilter(from.ID).WithKindFilter(model.ThreadDirect).WithLimit(1))
 		if err != nil {
 			return nil, err
 		}
@@ -314,19 +321,16 @@ func (t *ThreadManagementService) orchestrateDirectThreadCreation(ctx context.Co
 	if req == nil {
 		return nil, errors.New("request cannot be nil")
 	}
-	var (
-		err           error
-		createdThread *model.Thread
-	)
-	err = t.uow.WithinTransaction(ctx, func(ctx context.Context, uow store.UnitOfWork) error {
 
-		createdThread, err = t.createDirectThread(ctx, uow, req.DomainID, req.From, req.To)
+	var createdThread *model.Thread
+	err := t.uow.WithinTransaction(ctx, func(ctx context.Context, uow store.UnitOfWork) error {
+		savedThread, err := t.createDirectThread(ctx, uow, req.DomainID, req.From, req.To)
 		if err != nil {
 			return err
 		}
+		createdThread = savedThread
 
-		_, err := t.initializeDirectThreadDialogs(ctx, uow, createdThread.ID, req.DomainID, req.From, req.To)
-		if err != nil {
+		if _, err = t.initializeDirectThreadDialogs(ctx, uow, createdThread.ID, req.DomainID, req.From, req.To); err != nil {
 			return err
 		}
 
@@ -335,12 +339,13 @@ func (t *ThreadManagementService) orchestrateDirectThreadCreation(ctx context.Co
 			return err
 		}
 
-		if err := t.publishThreadCreatedEvents(ctx, uow, events...); err != nil {
+		if err = t.publishThreadCreatedEvents(ctx, uow, events...); err != nil {
 			return err
 		}
 
 		return nil
 	})
+
 	if err != nil {
 		return nil, err
 	}
