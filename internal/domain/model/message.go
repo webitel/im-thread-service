@@ -38,6 +38,14 @@ type Message struct {
 	domainEvents []event.Outboxer
 }
 
+func (m *Message) CreatedAtUnixMillis() int64 {
+	return max(m.CreatedAt.UTC().UnixMilli(), 0)
+}
+
+func (m *Message) UpdatedAtUnixMillis() int64 {
+	return max(m.UpdatedAt.UTC().UnixMilli(), 0)
+}
+
 // AddEvent ensures only valid outboxers are added to the message
 func (m *Message) AddEvent(event event.Outboxer) {
 	m.domainEvents = append(m.domainEvents, event)

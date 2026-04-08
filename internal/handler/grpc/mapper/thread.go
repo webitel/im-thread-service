@@ -133,8 +133,8 @@ func (s *ThreadOutConverter) ConvertToThread(source *model.Thread) *impb.Thread 
 			Type:      int32(message.Type),
 			Body:      message.Body,
 			Metadata:  msgMd,
-			CreatedAt: message.CreatedAt.UnixMilli(),
-			UpdatedAt: message.UpdatedAt.UnixMilli(),
+			CreatedAt: message.CreatedAtUnixMillis(),
+			UpdatedAt: message.UpdatedAtUnixMillis(),
 			Documents: mapDocs(message.Documents),
 			Images:    mapImages(message.Images),
 		}
@@ -143,8 +143,8 @@ func (s *ThreadOutConverter) ConvertToThread(source *model.Thread) *impb.Thread 
 	return &impb.Thread{
 		Id:          source.ID.String(),
 		DomainId:    int32(source.DomainID),
-		CreatedAt:   source.CreatedAt.UnixMilli(),
-		UpdatedAt:   source.UpdatedAt.UnixMilli(),
+		CreatedAt:   source.CreatedAtUnix(),
+		UpdatedAt:   source.UpdatedAtUnix(),
 		Kind:        impb.ThreadKind(source.Kind),
 		Subject:     source.Subject,
 		Description: source.Description,
