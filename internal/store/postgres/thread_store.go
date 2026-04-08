@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -13,13 +12,6 @@ import (
 	"github.com/webitel/im-thread-service/internal/domain/shared"
 	queryobject "github.com/webitel/im-thread-service/internal/store/query_object"
 	"github.com/webitel/im-thread-service/internal/utils"
-)
-
-var (
-	threadFields = []string{
-		"id", "domain_id", "created_at", "updated_at",
-		"kind", "owner", "subject", "description",
-	}
 )
 
 // [D]ata [A]cess [O]bjects
@@ -130,22 +122,30 @@ func mapThreadRecordToModel(record *threadRecord) (*model.Thread, error) {
 
 func (t *threadStore) ResolveDirect(ctx context.Context, from, to uuid.UUID) (*model.Thread, error) {
 	var (
-		query = fmt.Sprintf(`
-		SELECT %s FROM im_thread.thread
-				WHERE kind = @Kind
+		query = `
+		SELECT id, domain_id, kind, subject, description, created_at, updated_at, members.aggregated_members members
+		FROM im_thread.thread t
+		LEFT JOIN LATERAL (
+				SELECT jsonb_agg(
+					json_build_object('id', id, 'member_id', member_id, 'role', thread_role)
+				) AS aggregated_members
+				FROM im_thread.thread_dialog dial
+				WHERE dial.thread_id = t.id
+		) AS members ON true
+		WHERE kind = @Kind
 
 				AND id IN (
-	           		select thread_id
-	            	from im_thread.thread_dialog
-	            	where
+	           		SELECT thread_id
+	            	FROM im_thread.thread_dialog
+	            	WHERE
 					(
 						(member_id = @FromId and direct_to = @DirectTo)
 						 or
 						(member_id = @DirectTo and direct_to = @FromId)
 					)
-		            limit 1
+		            LIMIT 1
 				)
-        `, strings.Join(threadFields, ","))
+        `
 		args = pgx.NamedArgs{
 			"FromId":   from,
 			"DirectTo": to,
