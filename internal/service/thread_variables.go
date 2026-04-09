@@ -8,23 +8,17 @@ import (
 	"github.com/google/uuid"
 	"github.com/webitel/im-thread-service/internal/adapter/pubsub"
 	"github.com/webitel/im-thread-service/internal/domain/model"
+	"github.com/webitel/im-thread-service/internal/store"
 	"github.com/webitel/webitel-go-kit/pkg/errors"
 )
 
-type ThreadVariablesStore interface {
-	Set(ctx context.Context, variables *model.SetThreadVariablesCommand) (*model.ThreadVariables, error)
-	Search(ctx context.Context, query model.GetThreadVariablesQuery) (model.Page[*model.ThreadVariables], error)
-	Locate(ctx context.Context, threadID uuid.UUID) (*model.ThreadVariables, error)
-	Flush(ctx context.Context, flushCmd model.FlushVariablesCommand) (*model.ThreadVariables, error)
-}
-
 type threadVariables struct {
-	store     ThreadVariablesStore
+	store     store.ThreadVariablesStore
 	logger    *slog.Logger
 	publisher pubsub.EventPublisher
 }
 
-func NewThreadVariables(store ThreadVariablesStore, logger *slog.Logger, publisher pubsub.EventPublisher) *threadVariables {
+func NewThreadVariables(store store.ThreadVariablesStore, logger *slog.Logger, publisher pubsub.EventPublisher) *threadVariables {
 	return &threadVariables{store: store, logger: logger, publisher: publisher}
 }
 

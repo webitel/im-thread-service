@@ -67,3 +67,10 @@ type DirectThreadDialogOrchestration interface {
 type InteractiveCallback interface {
 	Save(ctx context.Context, callback *model.InteractiveCallback) (*model.InteractiveCallback, error)
 }
+
+type ThreadVariablesStore interface {
+	Set(ctx context.Context, variables *model.SetThreadVariablesCommand) (*model.ThreadVariables, error)
+	Search(ctx context.Context, query model.GetThreadVariablesQuery) (model.Page[*model.ThreadVariables], error)
+	Locate(ctx context.Context, threadID uuid.UUID) (*model.ThreadVariables, error)
+	Flush(ctx context.Context, flushCmd model.FlushVariablesCommand) (*model.ThreadVariables, error)
+}

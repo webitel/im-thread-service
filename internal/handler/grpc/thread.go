@@ -13,7 +13,7 @@ import (
 )
 
 var (
-	s impb.ThreadManagementServer = &ThreadManagementServer{}
+	_ impb.ThreadManagementServer = (*ThreadManagementServer)(nil)
 )
 
 type ThreadManagementService interface {
@@ -23,21 +23,6 @@ type ThreadManagementService interface {
 	RemoveMember(context.Context, *dto.RemoveMemberRequest) error
 }
 
-type (
-	ThreadManagementServer struct {
-		impb.UnimplementedThreadManagementServer
-
-		inMapper      *mapper.ThreadInConverter
-		outMapper     *mapper.ThreadOutConverter
-		threadManager ThreadManagementService
-	}
-)
-
-func NewThreadService(threadManager ThreadManagementService) *ThreadManagementServer {
-	return &ThreadManagementServer{
-		threadManager: threadManager,
-		inMapper:      &mapper.ThreadInConverter{},
-		outMapper:     &mapper.ThreadOutConverter{},
 type ThreadVariablesOperator interface {
 	Set(ctx context.Context, variables *model.SetThreadVariablesCommand) (*model.ThreadVariables, error)
 	Search(ctx context.Context, query model.GetThreadVariablesQuery) (model.Page[*model.ThreadVariables], error)
@@ -45,6 +30,23 @@ type ThreadVariablesOperator interface {
 	Flush(ctx context.Context, flushCmd model.FlushVariablesCommand) (*model.ThreadVariables, error)
 }
 
+type (
+	ThreadManagementServer struct {
+		impb.UnimplementedThreadManagementServer
+
+		inMapper        *mapper.ThreadInConverter
+		outMapper       *mapper.ThreadOutConverter
+		threadManager   ThreadManagementService
+		threadVariables ThreadVariablesOperator
+	}
+)
+
+func NewThreadService(threadManager ThreadManagementService, threadVariables ThreadVariablesOperator) *ThreadManagementServer {
+	return &ThreadManagementServer{
+		threadManager:   threadManager,
+		inMapper:        &mapper.ThreadInConverter{},
+		outMapper:       &mapper.ThreadOutConverter{},
+		threadVariables: threadVariables,
 	}
 }
 
@@ -108,7 +110,7 @@ func (ts *ThreadManagementServer) CreateGroup(ctx context.Context, request *impb
 	return nil, errors.Internal("method not implemented yet")
 }
 
-func (ts *ThreadService) SetVariables(ctx context.Context, req *impb.SetVariablesRequest) (*impb.ThreadVariables, error) {
+func (ts *ThreadManagementServer) SetVariables(ctx context.Context, req *impb.SetVariablesRequest) (*impb.ThreadVariables, error) {
 	setVarsCmd, err := mapper.MapSetVariablesRequestToCommand(req)
 	if err != nil {
 		return nil, err
@@ -122,7 +124,7 @@ func (ts *ThreadService) SetVariables(ctx context.Context, req *impb.SetVariable
 	return mapper.MapThreadVariablesToProto(settedVars), nil
 }
 
-func (ts *ThreadService) SearchVariables(ctx context.Context, req *impb.SearchVariablesRequest) (*impb.SearchVariablesResponse, error) {
+func (ts *ThreadManagementServer) SearchVariables(ctx context.Context, req *impb.SearchVariablesRequest) (*impb.SearchVariablesResponse, error) {
 	searchQuery, err := mapper.MapSearchVariablesRequestToQuery(req)
 	if err != nil {
 		return nil, err
@@ -136,7 +138,7 @@ func (ts *ThreadService) SearchVariables(ctx context.Context, req *impb.SearchVa
 	return mapper.MapThreadVariablesPageToProto(&page), nil
 }
 
-func (ts *ThreadService) LocateVariables(ctx context.Context, req *impb.LocateVariablesRequest) (*impb.ThreadVariables, error) {
+func (ts *ThreadManagementServer) LocateVariables(ctx context.Context, req *impb.LocateVariablesRequest) (*impb.ThreadVariables, error) {
 	threadId, err := uuid.Parse(req.GetThreadId())
 	if err != nil {
 		return nil, errors.InvalidArgument("invalid thread id format", errors.WithCause(err))
@@ -150,7 +152,7 @@ func (ts *ThreadService) LocateVariables(ctx context.Context, req *impb.LocateVa
 	return mapper.MapThreadVariablesToProto(vars), nil
 }
 
-func (ts *ThreadService) FlushVariables(ctx context.Context, req *impb.FlushVariablesRequest) (*impb.ThreadVariables, error) {
+func (ts *ThreadManagementServer) FlushVariables(ctx context.Context, req *impb.FlushVariablesRequest) (*impb.ThreadVariables, error) {
 	cmd, err := mapper.MapFlushVariablesRequestToCommand(req)
 	if err != nil {
 		return nil, err

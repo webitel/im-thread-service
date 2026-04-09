@@ -5,6 +5,7 @@ import (
 	impb "github.com/webitel/im-thread-service/gen/go/thread/v1"
 	"github.com/webitel/im-thread-service/internal/domain/model"
 	"github.com/webitel/im-thread-service/internal/service/dto"
+	"github.com/webitel/webitel-go-kit/pkg/errors"
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
@@ -141,11 +142,8 @@ func (s *ThreadOutConverter) ConvertToThread(source *model.Thread) *impb.Thread 
 	}
 
 	var vars *impb.ThreadVariables
-	if thread.Variables != nil {
-		variables := MapVariables(thread.Variables.Variables)
-		vars = &impb.ThreadVariables{
-			Variables: variables,
-		}
+	if source.Variables != nil {
+		vars = MapThreadVariablesToProto(source.Variables)
 	}
 
 	return &impb.Thread{
