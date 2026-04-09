@@ -17,16 +17,17 @@ import (
 // [D]ata [A]cess [O]bjects
 type (
 	threadRecord struct {
-		ID          uuid.UUID             `json:"id,omitempty" db:"id"`
-		DomainID    int                   `json:"domain_id,omitempty" db:"domain_id"`
-		Subject     string                `json:"subject,omitempty" db:"subject"`
-		CreatedAt   time.Time             `json:"created_at" db:"created_at"`
-		UpdatedAt   time.Time             `json:"updated_at" db:"updated_at"`
-		Kind        model.ThreadKind      `json:"kind,omitempty" db:"kind"`
-		Owner       uuid.UUID             `json:"owner,omitempty" db:"owner"`
-		Description string                `json:"description,omitempty" db:"description"`
-		Members     []*threadMemberRecord `json:"members,omitempty" db:"members"`
-		LastMessage *model.Message        `json:"last_msg,omitempty" db:"last_msg"`
+		ID          uuid.UUID              `json:"id,omitempty" db:"id"`
+		DomainID    int                    `json:"domain_id,omitempty" db:"domain_id"`
+		Subject     string                 `json:"subject,omitempty" db:"subject"`
+		CreatedAt   time.Time              `json:"created_at" db:"created_at"`
+		UpdatedAt   time.Time              `json:"updated_at" db:"updated_at"`
+		Kind        model.ThreadKind       `json:"kind,omitempty" db:"kind"`
+		Owner       uuid.UUID              `json:"owner,omitempty" db:"owner"`
+		Description string                 `json:"description,omitempty" db:"description"`
+		Members     []*threadMemberRecord  `json:"members,omitempty" db:"members"`
+		LastMessage *model.Message         `json:"last_msg,omitempty" db:"last_msg"`
+		Variables   *model.ThreadVariables `json:"variables,omitempty" db:"variables"`
 	}
 	threadMemberRecord struct {
 		ID       uuid.UUID `json:"id,omitempty" db:"id"`
@@ -115,6 +116,7 @@ func mapThreadRecordToModel(record *threadRecord) (*model.Thread, error) {
 		Description: record.Description,
 		Members:     members,
 		LastMessage: record.LastMessage,
+		Variables:   record.Variables,
 	}
 
 	return thread, nil

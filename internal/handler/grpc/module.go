@@ -6,6 +6,7 @@ import (
 
 	impb "github.com/webitel/im-thread-service/gen/go/thread/v1"
 	grpcsrv "github.com/webitel/im-thread-service/infra/server/grpc"
+	"github.com/webitel/im-thread-service/internal/service"
 )
 
 var Module = fx.Module("message_grpc",
@@ -14,6 +15,11 @@ var Module = fx.Module("message_grpc",
 		NewMessageHistoryServer,
 		NewThreadService,
 		NewThreadPermissionServer,
+
+		fx.Annotate(
+			service.NewThreadVariables,
+			fx.As(new(ThreadVariablesOperator)),
+		),
 	),
 	fx.Invoke(RegisterMessageServer),
 	fx.Invoke(RegisterMessageHistoryServer),
