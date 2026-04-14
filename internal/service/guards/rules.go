@@ -4,14 +4,10 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
-	"regexp"
 	"strings"
 )
 
 var (
-	// [REGEX] Standard pattern for filenames (prevents path traversal and weird chars)
-	reFilename = regexp.MustCompile(`^[\p{L}\p{N}_\- .]+$`)
-	// [MIME] Common safe image types
 	allowedImageMimes = map[string]bool{
 		"image/jpeg": true, "image/png": true, "image/gif": true, "image/webp": true, "image/svg+xml": true,
 	}
@@ -43,9 +39,7 @@ func validateFilename(name string) error {
 	if len(trimmed) < 1 || len(trimmed) > 255 {
 		return errors.New("filename must be between 1 and 255 characters")
 	}
-	if !reFilename.MatchString(trimmed) {
-		return fmt.Errorf("filename '%s' contains forbidden characters", name)
-	}
+
 	return nil
 }
 

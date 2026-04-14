@@ -82,7 +82,6 @@ func NewImageMessage(in MessageCreate) *Message {
 		CreatedAt: time.Now().UTC(),
 	}
 
-	addCreatedEvents(msg, in)
 	return msg
 }
 
@@ -113,7 +112,6 @@ func NewDocumentMessage(in MessageCreate) *Message {
 		CreatedAt: time.Now().UTC(),
 	}
 
-	addCreatedEvents(msg, in)
 	return msg
 }
 

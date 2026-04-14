@@ -35,8 +35,9 @@ type VariableEntry struct {
 }
 
 type ThreadVariables struct {
-	ThreadID  uuid.UUID                `json:"thread_id" db:"thread_id" fieldtag:"default"`
-	Variables map[string]VariableEntry `json:"variables" db:"variables" fieldtag:"default"`
+	ThreadID      uuid.UUID                `json:"thread_id" db:"thread_id" fieldtag:"default"`
+	Variables     map[string]VariableEntry `json:"variables" db:"variables" fieldtag:"default"`
+	ThreadMembers []uuid.UUID              `json:"thread_members" db:"thread_members"`
 
 	lock sync.RWMutex `json:"-" db:"-"`
 }
@@ -116,8 +117,10 @@ func (tv *ThreadVariables) ToPayload() ([]byte, error) {
 
 	payloadStruct := struct {
 		Variables map[string]VariableEntry `json:"variables"`
+		Members   []uuid.UUID              `json:"members"`
 	}{
 		Variables: tv.Variables,
+		Members:   tv.ThreadMembers,
 	}
 
 	payload, err := json.Marshal(payloadStruct)

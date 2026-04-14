@@ -5,7 +5,7 @@ alter table if exists "im_message"."messages"
 drop constraint if exists "check_message_type";
 
 alter table if exists "im_message"."messages"
-add constraint if not exists "check_message_type" check ("type" between 0 and 5) not valid;
+add constraint "check_message_type" check ("type" between 0 and 5) not valid;
 alter table if exists "im_message"."messages" validate constraint "check_message_type";
 
 create index if not exists "idx_im_message_messages_interactive_attachments"
