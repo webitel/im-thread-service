@@ -44,6 +44,7 @@ type ThreadManagementClient interface {
 	CreateGroup(ctx context.Context, in *CreateGroupRequest, opts ...grpc.CallOption) (*Thread, error)
 	// Adds a new member to an existing thread.
 	AddMember(ctx context.Context, in *AddMemberRequest, opts ...grpc.CallOption) (*AddMemberResponse, error)
+	// Removes a member from a thread.
 	RemoveMember(ctx context.Context, in *RemoveMemberRequest, opts ...grpc.CallOption) (*RemoveMemberResponse, error)
 	SetVariables(ctx context.Context, in *SetVariablesRequest, opts ...grpc.CallOption) (*ThreadVariables, error)
 	SearchVariables(ctx context.Context, in *SearchVariablesRequest, opts ...grpc.CallOption) (*SearchVariablesResponse, error)
@@ -154,6 +155,7 @@ type ThreadManagementServer interface {
 	CreateGroup(context.Context, *CreateGroupRequest) (*Thread, error)
 	// Adds a new member to an existing thread.
 	AddMember(context.Context, *AddMemberRequest) (*AddMemberResponse, error)
+	// Removes a member from a thread.
 	RemoveMember(context.Context, *RemoveMemberRequest) (*RemoveMemberResponse, error)
 	SetVariables(context.Context, *SetVariablesRequest) (*ThreadVariables, error)
 	SearchVariables(context.Context, *SearchVariablesRequest) (*SearchVariablesResponse, error)
