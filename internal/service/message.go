@@ -147,18 +147,24 @@ func (s *MessageService) SendImage(ctx context.Context, in *dto.SendImageRequest
 	err = s.uow.WithinTransaction(ctx, func(txCtx context.Context, uow store.UnitOfWork) error {
 		saved, err := uow.Messages().SaveMessage(txCtx, msg)
 		if err != nil {
-			return err
+			return errors.Internal("save message", errors.WithCause(err), errors.WithID("service.message.send_image"))
 		}
 		if _, err := uow.Messages().SaveImages(txCtx, saved.ID, msg.Images); err != nil {
-			return err
+			return errors.Internal("save images", errors.WithCause(err), errors.WithID("service.message.send_image"))
 		}
 
 		msg.ID = saved.ID
+		msg.WithCreatedEvent(in.SendID, &in.From)
 
-		return s.dispatchMessageEvents(txCtx, uow, msg)
+		if err := s.dispatchMessageEvents(txCtx, uow, msg); err != nil {
+			return errors.Internal("dispatch message events", errors.WithCause(err), errors.WithID("service.message.send_image"))
+		}
+
+		return nil
 	})
+
 	if err != nil {
-		s.logger.ErrorContext(ctx, "send_image_failed", "err", err)
+		s.logger.ErrorContext(ctx, "send image failed", "err", err)
 		return nil, err
 	}
 
@@ -200,16 +206,23 @@ func (s *MessageService) SendDocument(ctx context.Context, in *dto.SendDocumentR
 	err = s.uow.WithinTransaction(ctx, func(txCtx context.Context, uow store.UnitOfWork) error {
 		saved, err := uow.Messages().SaveMessage(txCtx, msg)
 		if err != nil {
-			return err
+			return errors.Internal("save message", errors.WithCause(err), errors.WithID("service.message.send_document"))
 		}
+
 		if _, err := uow.Messages().SaveDocuments(txCtx, saved.ID, msg.Documents); err != nil {
-			return err
+			return errors.Internal("save documents", errors.WithCause(err), errors.WithID("service.message.send_document"))
 		}
 
 		msg.ID = saved.ID
+		msg.WithCreatedEvent(in.SendID, &in.From)
 
-		return s.dispatchMessageEvents(txCtx, uow, msg)
+		if err := s.dispatchMessageEvents(txCtx, uow, msg); err != nil {
+			return errors.Internal("dispatch message events", errors.WithCause(err), errors.WithID("service.message.send_document"))
+		}
+
+		return nil
 	})
+
 	if err != nil {
 		s.logger.ErrorContext(ctx, "send_document_failed", "err", err)
 		return nil, err
