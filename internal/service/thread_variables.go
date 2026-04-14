@@ -31,7 +31,13 @@ func (tv *threadVariables) Set(ctx context.Context, variables *model.SetThreadVa
 		return nil, err
 	}
 
-	if err := tv.publisher.Publish(result.PrepareSetTopic(variables.Member), message.NewMessageWithContext(ctx, uuid.Must(uuid.NewV7()).String(), nil)); err != nil {
+	brokerMessage, err := prepareVariablesMessage(ctx, result)
+	if err != nil {
+		log.Error("prepare set variables broker message", "error", err)
+		return nil, err
+	}
+
+	if err := tv.publisher.Publish(result.PrepareSetTopic(variables.Member), brokerMessage); err != nil {
 		log.Error("failed to publish thread variables", "error", err)
 
 		return nil, errors.Internal(
@@ -78,7 +84,13 @@ func (tv *threadVariables) Flush(ctx context.Context, flushCmd model.FlushVariab
 		return nil, err
 	}
 
-	if err := tv.publisher.Publish(result.PrepareFlushTopic(flushCmd.Member), message.NewMessageWithContext(ctx, uuid.Must(uuid.NewV7()).String(), nil)); err != nil {
+	brokerMessage, err := prepareVariablesMessage(ctx, result)
+	if err != nil {
+		log.Error("prepare flush variables broker message", "error", err)
+		return nil, err
+	}
+
+	if err := tv.publisher.Publish(result.PrepareFlushTopic(flushCmd.Member), brokerMessage); err != nil {
 		log.Error("publish thread variables", "error", err)
 
 		return nil, errors.Internal(
@@ -90,4 +102,17 @@ func (tv *threadVariables) Flush(ctx context.Context, flushCmd model.FlushVariab
 	}
 
 	return result, nil
+}
+
+func prepareVariablesMessage(ctx context.Context, result *model.ThreadVariables) (*message.Message, error) {
+	messagePayload, err := result.ToPayload()
+	if err != nil {
+		return nil, err
+	}
+
+	return message.NewMessageWithContext(
+		ctx,
+		uuid.Must(uuid.NewV7()).String(),
+		messagePayload,
+	), nil
 }
