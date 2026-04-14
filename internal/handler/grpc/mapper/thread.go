@@ -5,6 +5,7 @@ import (
 	impb "github.com/webitel/im-thread-service/gen/go/thread/v1"
 	"github.com/webitel/im-thread-service/internal/domain/model"
 	"github.com/webitel/im-thread-service/internal/service/dto"
+	"github.com/webitel/webitel-go-kit/pkg/errors"
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
@@ -140,6 +141,11 @@ func (s *ThreadOutConverter) ConvertToThread(source *model.Thread) *impb.Thread 
 		}
 	}
 
+	var vars *impb.ThreadVariables
+	if source.Variables != nil {
+		vars = MapThreadVariablesToProto(source.Variables)
+	}
+
 	return &impb.Thread{
 		Id:          source.ID.String(),
 		DomainId:    int32(source.DomainID),
@@ -150,6 +156,7 @@ func (s *ThreadOutConverter) ConvertToThread(source *model.Thread) *impb.Thread 
 		Description: source.Description,
 		Members:     s.convertThreadMembers(source.Members),
 		LastMsg:     lastMsg,
+		Variables:   vars,
 	}
 }
 
@@ -181,4 +188,104 @@ func (s *ThreadOutConverter) ConvertThreadRole(in model.ThreadRole) impb.ThreadR
 	default:
 		return impb.ThreadRole_ROLE_UNSPECIFIED
 	}
+}
+
+func MapSetVariablesRequestToCommand(req *impb.SetVariablesRequest) (*model.SetThreadVariablesCommand, error) {
+	errorsIdWrapper := errors.WithID("grpc.thread.SetVariables")
+
+	threadID, err := uuid.Parse(req.ThreadId)
+	if err != nil {
+		return nil, errors.InvalidArgument("invalid originator uuid format", errors.WithCause(err), errorsIdWrapper)
+	}
+
+	originator, err := uuid.Parse(req.GetMemberId())
+	if err != nil {
+		return nil, errors.InvalidArgument("invalid originator uuid format", errors.WithCause(err), errorsIdWrapper)
+	}
+
+	vars := make(map[string]model.VariableEntry)
+	for _, v := range req.GetVariables() {
+		vars[v.GetKey()] = model.VariableEntry{
+			Value: v.Value.AsMap(),
+			SetBy: originator,
+		}
+	}
+
+	return &model.SetThreadVariablesCommand{
+		Member: originator,
+		Variables: &model.ThreadVariables{
+			ThreadID:  threadID,
+			Variables: vars,
+		},
+	}, nil
+}
+
+func MapThreadVariablesToProto(vars *model.ThreadVariables) *impb.ThreadVariables {
+	protoVars := make(map[string]*impb.VariableEntry, len(vars.Variables))
+	for k, v := range vars.Variables {
+		value, err := structpb.NewStruct(v.Value)
+		if err != nil {
+			continue
+		}
+
+		protoVars[k] = &impb.VariableEntry{
+			Value: value,
+			SetBy: v.SetBy.String(),
+			SetAt: v.SetAt.UTC().UnixMilli(),
+		}
+	}
+
+	return &impb.ThreadVariables{
+		ThreadId:  vars.ThreadID.String(),
+		Variables: protoVars,
+	}
+}
+
+func MapSearchVariablesRequestToQuery(req *impb.SearchVariablesRequest) (model.GetThreadVariablesQuery, error) {
+	var threadIds uuid.UUIDs
+	if len(req.GetThreadIds()) > 0 {
+		threadIds = make([]uuid.UUID, len(req.GetThreadIds()))
+		for i, id := range req.GetThreadIds() {
+			var err error
+			threadIds[i], err = uuid.Parse(id)
+			if err != nil {
+				return model.GetThreadVariablesQuery{}, errors.InvalidArgument("invalid thread id format", errors.WithCause(err))
+			}
+		}
+	}
+	return model.GetThreadVariablesQuery{
+		Pagination: model.Pagination{
+			Limit: int(req.GetSize()),
+			Page:  int(req.GetPage()),
+		},
+		Fields:    req.GetFields(),
+		ThreadIDs: threadIds,
+	}, nil
+}
+
+func MapThreadVariablesPageToProto(page *model.Page[*model.ThreadVariables]) *impb.SearchVariablesResponse {
+	items := make([]*impb.ThreadVariables, len(page.Items))
+	for i, v := range page.Items {
+		items[i] = MapThreadVariablesToProto(v)
+	}
+	return &impb.SearchVariablesResponse{
+		Items: items,
+		Next:  page.HasNext,
+	}
+}
+
+func MapFlushVariablesRequestToCommand(req *impb.FlushVariablesRequest) (*model.FlushVariablesCommand, error) {
+	threadId, err := uuid.Parse(req.GetThreadId())
+	if err != nil {
+		return nil, errors.InvalidArgument("invalid thread id format", errors.WithCause(err))
+	}
+	originator, err := uuid.Parse(req.GetMemberId())
+	if err != nil {
+		return nil, errors.InvalidArgument("invalid originator id format", errors.WithCause(err))
+	}
+	return &model.FlushVariablesCommand{
+		ThreadID: threadId,
+		Member:   originator,
+		Keys:     req.GetKeys(),
+	}, nil
 }

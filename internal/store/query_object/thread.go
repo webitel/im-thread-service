@@ -23,7 +23,16 @@ const (
 	threadLinkMembersLateral
 	threadLinkFullMembersLateral
 	threadLinkLastMessageLateral
+	threadLinkVariables
 )
+
+const variablesBuild = `
+	case when v.thread_id is null
+		then null
+	else jsonb_build_object(
+		'variables', v.variables
+	) end as variables
+`
 
 type threadQueryObject struct {
 	*baseQueryObject[*threadQueryObject]
@@ -149,6 +158,13 @@ func (q *threadQueryObject) FieldsMetadata() map[string]fieldMetadata {
 			sortable:     true,
 			filterExpr:   "",
 		},
+		"variables": {
+			sqlExpr:      "v.variables",
+			aliasedExpr:  variablesBuild,
+			requiresJoin: threadLinkVariables,
+			sortable:     false,
+			filterExpr:   "v.variables",
+		},
 	}
 }
 
@@ -167,6 +183,10 @@ func (q *threadQueryObject) EnsureJoins(requiredJoin int) {
 
 	if requiredJoin&threadLinkLastMessageLateral != 0 {
 		q.linkLastMessageLateral()
+	}
+
+	if requiredJoin&threadLinkVariables != 0 {
+		q.linkVariables()
 	}
 }
 
@@ -337,5 +357,18 @@ func (q *threadQueryObject) linkLastMessageLateral() {
 			order by m.id desc
 			limit 1
 		) as msg
+	`)
+}
+
+func (q *threadQueryObject) linkVariables() {
+	if q.join&threadLinkVariables != 0 {
+		return
+	}
+
+	q.join |= threadLinkVariables
+
+	q.builder = q.builder.LeftJoin(`
+		im_thread.thread_variables v
+		on v.thread_id = t.id
 	`)
 }

@@ -57,6 +57,11 @@ var Module = fx.Module("store",
 			NewPgxUnitOfWork,
 			fx.As(new(store.UnitOfWork)),
 		),
+
+		fx.Annotate(
+			NewThreadVariablesStore,
+			fx.As(new(store.ThreadVariablesStore)),
+		),
 	),
 )
 
