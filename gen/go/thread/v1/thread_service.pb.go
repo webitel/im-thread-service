@@ -159,7 +159,8 @@ type Thread struct {
 	// Detailed member information.
 	Members []*ThreadMember `protobuf:"bytes,11,rep,name=members,proto3" json:"members,omitempty"`
 	// Last message of the linked thread.
-	LastMsg   *HistoryMessage  `protobuf:"bytes,12,opt,name=last_msg,json=lastMsg,proto3" json:"last_msg,omitempty"`
+	LastMsg *HistoryMessage `protobuf:"bytes,12,opt,name=last_msg,json=lastMsg,proto3" json:"last_msg,omitempty"`
+	// Optional variables associated with the thread.
 	Variables *ThreadVariables `protobuf:"bytes,13,opt,name=variables,proto3" json:"variables,omitempty"`
 }
 
