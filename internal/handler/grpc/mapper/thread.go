@@ -32,16 +32,16 @@ func (s *ThreadInConverter) ConvertSearch(in *impb.ThreadSearchRequest) (*dto.Th
 	}
 
 	return &dto.ThreadSearchRequest{
-		Fields:    in.GetFields(),
-		Q:         in.GetQ(),
-		Sort:      in.GetSort(),
-		Page:      int(in.GetPage()),
-		Size:      int(in.GetSize()),
-		Ids:       ids,
-		DomainIds: domains,
-		Kinds:     s.convertThreadKinds(in.GetKinds()),
-		Owners:    owners,
-		MemberIds: members,
+		Fields:     in.GetFields(),
+		Q:          in.GetQ(),
+		Sort:       in.GetSort(),
+		Page:       int(in.GetPage()),
+		Size:       int(in.GetSize()),
+		Ids:        ids,
+		DomainIDs:  domains,
+		Kinds:      s.convertThreadKinds(in.GetKinds()),
+		Owners:     owners,
+		ContactIDs: members,
 	}, nil
 }
 
@@ -61,39 +61,40 @@ func (s *ThreadInConverter) ConvertAddMemberRequest(in *impb.AddMemberRequest) (
 	if err != nil {
 		return nil, err
 	}
-	newMemberID, err := uuid.Parse(in.GetNewMemberId())
+	newContactID, err := uuid.Parse(in.GetNewMemberContactId())
 	if err != nil {
 		return nil, err
 	}
-	initiatorMemberID, err := uuid.Parse(in.GetInitiatorId())
-	if err != nil {
-		return nil, err
+
+	converted := &dto.AddMemberRequest{
+		ThreadID:           threadID,
+		NewMemberContactID: newContactID,
+		NewMemberRole:      s.convertMemberRole(in.GetRole()),
 	}
-	return &dto.AddMemberRequest{
-		ThreadID:          threadID,
-		NewMemberID:       newMemberID,
-		InitiatorMemberID: initiatorMemberID,
-		NewMemberRole:     s.convertMemberRole(in.GetRole()),
-	}, nil
+	if in.InitiatorContactId != nil {
+		initiatorContactID, err := uuid.Parse(in.GetInitiatorContactId())
+		if err != nil {
+			return nil, err
+		}
+		converted.InitiatorContactID = &initiatorContactID
+	}
+
+	return converted, nil
+
 }
 
 func (s *ThreadInConverter) ConvertRemoveMemberRequest(in *impb.RemoveMemberRequest) (*dto.RemoveMemberRequest, error) {
-	threadID, err := uuid.Parse(in.GetThreadId())
-	if err != nil {
-		return nil, err
-	}
 	targetMemberID, err := uuid.Parse(in.GetTargetMemberId())
 	if err != nil {
 		return nil, err
 	}
-	initiatorMemberID, err := uuid.Parse(in.GetInitiatorMemberId())
+	initiatorContactID, err := uuid.Parse(in.GetInitiatorContactId())
 	if err != nil {
 		return nil, err
 	}
 	return &dto.RemoveMemberRequest{
-		ThreadID:          threadID,
-		InitiatorMemberID: initiatorMemberID,
-		TargetMemberID:    targetMemberID,
+		InitiatorContactID: initiatorContactID,
+		TargetMemberID:     targetMemberID,
 	}, nil
 }
 
@@ -167,9 +168,9 @@ func (s *ThreadOutConverter) convertThreadMembers(members []*model.ThreadDialog)
 	out := make([]*impb.ThreadMember, len(members))
 	for i, member := range members {
 		out[i] = &impb.ThreadMember{
-			Id:       member.ID.String(),
-			MemberId: member.MemberID.String(),
-			Role:     s.ConvertThreadRole(member.ThreadRole),
+			Id:        member.ID.String(),
+			ContactId: member.ContactID.String(),
+			Role:      s.ConvertThreadRole(member.ThreadRole),
 		}
 	}
 	return out

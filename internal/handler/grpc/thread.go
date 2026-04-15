@@ -19,7 +19,7 @@ var (
 type ThreadManagementService interface {
 	Search(ctx context.Context, searchRequest *dto.ThreadSearchRequest) ([]*model.Thread, error)
 	EnsureDirectThread(ctx context.Context, req *dto.EnsureDirectThreadRequest) (*dto.EnsureDirectThreadResponse, error)
-	AddMember(context.Context, *dto.AddMemberRequest) error
+	AddMember(context.Context, *dto.AddMemberRequest) (uuid.UUID, error)
 	RemoveMember(context.Context, *dto.RemoveMemberRequest) error
 }
 
@@ -81,12 +81,14 @@ func (ts *ThreadManagementServer) AddMember(ctx context.Context, request *impb.A
 		return nil, err
 	}
 
-	err = ts.threadManager.AddMember(ctx, internalRequest)
+	newMember, err := ts.threadManager.AddMember(ctx, internalRequest)
 	if err != nil {
 		return nil, err
 	}
 
-	return &impb.AddMemberResponse{}, nil
+	return &impb.AddMemberResponse{Member: &impb.ThreadMember{
+		Id: newMember.String(),
+	}}, nil
 }
 
 func (ts *ThreadManagementServer) RemoveMember(ctx context.Context, request *impb.RemoveMemberRequest) (*impb.RemoveMemberResponse, error) {

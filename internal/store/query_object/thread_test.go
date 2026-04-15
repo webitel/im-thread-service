@@ -369,7 +369,7 @@ func TestThreadQueryObject_WithMemberIDFilter(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			qo := NewThreadQueryObject()
-			qo.WithMemberIDFilter(tt.memberIDs...)
+			qo.WithContactIDFilter(tt.memberIDs...)
 
 			sql, _, err := qo.ToSql()
 			require.NoError(t, err)
@@ -711,7 +711,7 @@ func TestThreadQueryObject_ComplexQuery(t *testing.T) {
 			WithKindFilter(model.ThreadDirect).
 			WithOwnerFilter(ownerID).
 			WithSubjectFilter("test").
-			WithMemberIDFilter(memberID).
+			WithContactIDFilter(memberID).
 			WithSort("+created_at", "-updated_at").
 			WithLimit(20).
 			WithOffset(2)
@@ -746,7 +746,7 @@ func TestThreadQueryObject_SubjectWithMembersFilter(t *testing.T) {
 		memberID := uuid.New()
 
 		qo.WithFields([]string{"subject"}).
-			WithMemberIDFilter(memberID)
+			WithContactIDFilter(memberID)
 
 		sql, _, err := qo.ToSql()
 		require.NoError(t, err)

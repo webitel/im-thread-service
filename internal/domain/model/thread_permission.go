@@ -12,7 +12,7 @@ type OffsetPagination struct {
 }
 
 type GetThreadPermissionRequest struct {
-	RequestInitiatorID uuid.UUID
+	RequestInitiatorID *uuid.UUID
 	ThreadID           uuid.UUID
 	MemberID           uuid.UUID
 }
@@ -28,7 +28,7 @@ type ThreadPermissions struct {
 type ThreadPermissionStoreFilters struct {
 	OffsetPagination
 
-	ThreadID  uuid.UUID
+	ThreadID  *uuid.UUID
 	MemberIDs []uuid.UUID
 }
 
@@ -52,9 +52,9 @@ type PermissionChangeTarget struct {
 }
 
 type UpdateThreadPermissionRequest struct {
-	InitiatorMemberID uuid.UUID
-	TargetMemberID    uuid.UUID
-	ThreadID          uuid.UUID
+	InitiatorContactID *uuid.UUID
+	TargetMemberID     uuid.UUID
+	ThreadID           uuid.UUID
 
 	CanSendMessages             *bool
 	CanAddMembers               *bool

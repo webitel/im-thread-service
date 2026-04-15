@@ -33,16 +33,16 @@ type (
 	}
 
 	ThreadSearchRequest struct {
-		Fields    []string
-		Ids       uuid.UUIDs
-		DomainIds []int
-		Kinds     []model.ThreadKind
-		Owners    uuid.UUIDs
-		Q         string
-		MemberIds uuid.UUIDs
-		Size      int
-		Sort      string
-		Page      int
+		Fields     []string
+		Ids        uuid.UUIDs
+		DomainIDs  []int
+		Kinds      []model.ThreadKind
+		Owners     uuid.UUIDs
+		Q          string
+		ContactIDs uuid.UUIDs
+		Size       int
+		Sort       string
+		Page       int
 	}
 
 	ThreadMembersResponse struct {
@@ -51,15 +51,14 @@ type (
 )
 
 type AddMemberRequest struct {
-	ThreadID          uuid.UUID
-	NewMemberID       uuid.UUID
-	InitiatorMemberID uuid.UUID
-	NewMemberRole     model.ThreadRole
+	ThreadID           uuid.UUID
+	NewMemberContactID uuid.UUID
+	InitiatorContactID *uuid.UUID
+	NewMemberRole      model.ThreadRole
 }
 type RemoveMemberRequest struct {
-	ThreadID          uuid.UUID
-	TargetMemberID    uuid.UUID
-	InitiatorMemberID uuid.UUID
+	TargetMemberID     uuid.UUID
+	InitiatorContactID uuid.UUID
 }
 
 func NewEnsureDirectThreadResponse(id uuid.UUID, domainID int32, members uuid.UUIDs) *EnsureDirectThreadResponse {

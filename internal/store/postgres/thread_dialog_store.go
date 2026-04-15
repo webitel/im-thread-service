@@ -158,7 +158,7 @@ func mapToThreadDialogModel(dialog *threadDialog) (*model.ThreadDialog, error) {
 			CreatedAt: dialog.CreatedAt,
 			UpdatedAt: dialog.UpdatedAt,
 		},
-		MemberID:   dialog.MemberID,
+		ContactID:  dialog.MemberID,
 		ThreadID:   dialog.ThreadID,
 		ThreadRole: dialog.Role,
 
@@ -203,13 +203,13 @@ func (t *threadDialogStore) GetQuickView(ctx context.Context, filter *model.Thre
 
 	FROM im_thread.thread_dialog dial
 	WHERE (@ThreadIDs::uuid[] IS NULL OR dial.thread_id = ANY(@ThreadIDs))
-	AND (@MemberIDs::uuid[] IS NULL OR dial.member_id = ANY(@MemberIDs))
+	AND (@ContactIDs::uuid[] IS NULL OR dial.member_id = ANY(@ContactIDs))
 	
 	OFFSET @Offset`
 		args = pgx.NamedArgs{
-			"ThreadIDs": filter.ThreadIDs,
-			"MemberIDs": filter.MemberIDs,
-			"Offset":    filter.Offset,
+			"ThreadIDs":  filter.ContactIDs,
+			"ContactIDs": filter.ContactIDs,
+			"Offset":     filter.Offset,
 		}
 	)
 	if filter.Limit > 0 {
@@ -241,17 +241,17 @@ func (t *threadDialogStore) GetFullView(ctx context.Context, filter *model.Threa
 	LEFT JOIN im_thread.direct_settings sett ON sett.thread_dialog_id = dial.id
 
 	WHERE (@ThreadIDs::uuid[] IS NULL OR dial.thread_id = ANY(@ThreadIDs))
-	AND (@MemberIDs::uuid[] IS NULL OR dial.member_id = ANY(@MemberIDs))
+	AND (@ContactIDs::uuid[] IS NULL OR dial.member_id = ANY(@ContactIDs))
 	AND (@IDS::uuid[] IS NULL OR dial.id = ANY(@IDS))
 
 	OFFSET @Offset 
 	`
 
 	args := pgx.NamedArgs{
-		"ThreadIDs": filter.ThreadIDs,
-		"MemberIDs": filter.MemberIDs,
-		"Offset":    filter.Offset,
-		"IDS":       filter.IDs,
+		"ThreadIDs":  filter.ThreadIDs,
+		"ContactIDs": filter.ContactIDs,
+		"Offset":     filter.Offset,
+		"IDS":        filter.IDs,
 	}
 
 	if filter.Limit > 0 {
@@ -266,6 +266,63 @@ func (t *threadDialogStore) GetFullView(ctx context.Context, filter *model.Threa
 	}
 
 	return collectRows(rows, mapToThreadDialogExtendedModel)
+
+}
+
+func (t *threadDialogStore) FindActorsPair(ctx context.Context, initiatorContactID, targetMemberID uuid.UUID) (*model.ThreadDialogExtended, *model.ThreadDialogExtended, error) {
+	query := `
+	SELECT
+	-- basic thread dialog fields
+	 dial.id, dial.domain_id, dial.created_at, dial.updated_at, dial.member_id, dial.thread_id, dial.direct_to, dial.member_of, dial.thread_role,
+
+	-- permissions fields
+	perm.can_send_messages, perm.can_add_members, perm.can_change_members_permissions, perm.can_remove_members, perm.can_change_thread_info,
+
+	-- settings fields
+	sett.title
+
+	FROM im_thread.thread_dialog dial
+	LEFT JOIN im_thread.thread_permission perm ON perm.thread_dialog_id = dial.id
+	LEFT JOIN im_thread.direct_settings sett ON sett.thread_dialog_id = dial.id
+
+	WHERE dial.thread_id IN (
+		SELECT thread_id
+		FROM im_thread.thread_dialog
+		WHERE id = @TargetMemberID
+		LIMIT 1
+	)
+	 AND (member_id = @InitiatorContactID OR id = @TargetMemberID)
+	`
+
+	args := pgx.NamedArgs{
+		"InitiatorContactID": initiatorContactID,
+		"TargetMemberID":     targetMemberID,
+	}
+
+	rows, err := t.db.Query(ctx, query, args)
+	if err != nil {
+		// return nil, errors.Internal("failed to get full view", errors.WithCause(err))
+		return nil, nil, err
+	}
+
+	threadDialogs, err := collectRows(rows, mapToThreadDialogExtendedModel)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	var initiatorDialog, targetDialog *model.ThreadDialogExtended
+	for _, dialog := range threadDialogs {
+		if initiatorDialog != nil && targetDialog != nil {
+			break
+		}
+		if dialog.MemberID == initiatorContactID {
+			initiatorDialog = dialog
+		} else if dialog.ID == targetMemberID {
+			targetDialog = dialog
+		}
+	}
+
+	return initiatorDialog, targetDialog, nil
 
 }
 

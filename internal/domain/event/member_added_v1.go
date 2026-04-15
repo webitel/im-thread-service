@@ -13,11 +13,12 @@ const (
 )
 
 type MemberAddedV1 struct {
-	Recipient         uuid.UUID
-	ThreadID          uuid.UUID `json:"thread_id"`
-	MemberID          uuid.UUID `json:"member_id"`
-	NewThreadDialogID uuid.UUID `json:"thread_dialog_id"`
-	InitiatorMemberID uuid.UUID `json:"initiator_id"`
+	Recipient          uuid.UUID
+	ThreadID           uuid.UUID `json:"thread_id"`
+	MemberContactID    uuid.UUID `json:"member_contact_id"`
+	NewMemberID        uuid.UUID `json:"member_id"`
+	InitiatorContactID uuid.UUID `json:"initiator_contact_id"`
+	InitiatorMemberID  uuid.UUID `json:"initiator_member_id"`
 }
 
 func (e *MemberAddedV1) Topic() string {

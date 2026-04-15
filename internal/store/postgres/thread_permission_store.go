@@ -41,13 +41,15 @@ func (t *threadDialogPermissionStore) Get(ctx context.Context, in *model.ThreadP
 	if in == nil {
 		return nil, errors.InvalidArgument("request must not be nil")
 	}
+	if in.ThreadID == nil && len(in.MemberIDs) == 0 {
+		return nil, errors.InvalidArgument("thread id or member id required")
+	}
 	var (
 		query = `
 		SELECT 
 			perm.id,
 			perm.thread_id,
 			perm.thread_dialog_id,
-			dial.member_id,
 			perm.can_send_messages,
 			perm.can_add_members,
 			perm.can_remove_members,
@@ -56,9 +58,8 @@ func (t *threadDialogPermissionStore) Get(ctx context.Context, in *model.ThreadP
 			perm.created_at,
 			perm.updated_at
 		FROM im_thread.thread_permission perm
-		LEFT JOIN im_thread.thread_dialog dial ON dial.id = perm.thread_dialog_id
-		WHERE perm.thread_id = @ThreadID
-		AND (@MemberIDs::uuid[] IS NULL OR dial.member_id = ANY(@MemberIDs))
+		WHERE (@ThreadID::uuid IS NULL OR perm.thread_id = @ThreadID)
+		AND (@MemberIDs::uuid[] IS NULL OR perm.thread_dialog_id= ANY(@MemberIDs))
 		OFFSET @Offset
 	`
 		args = pgx.NamedArgs{
@@ -152,7 +153,7 @@ func (t *threadDialogPermissionStore) Update(ctx context.Context, in *model.Upda
 	if in == nil {
 		return nil, errors.InvalidArgument("permissions must not be nil")
 	}
-	if in.InitiatorMemberID == uuid.Nil || in.TargetMemberID == uuid.Nil {
+	if in.TargetMemberID == uuid.Nil {
 		return nil, errors.InvalidArgument("initiator and target must be provided")
 	}
 	var (

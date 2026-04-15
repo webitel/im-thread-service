@@ -42,6 +42,7 @@ type ThreadDialogStore interface {
 	Delete(ctx context.Context, threadID, memberID uuid.UUID) error
 	GetQuickView(ctx context.Context, filter *model.ThreadDialogStoreFilter) ([]*model.ThreadDialog, error)
 	GetFullView(ctx context.Context, filter *model.ThreadDialogStoreFilter) ([]*model.ThreadDialogExtended, error)
+	FindActorsPair(ctx context.Context, initiatorsContact, targetMember uuid.UUID) (*model.ThreadDialogExtended, *model.ThreadDialogExtended, error)
 }
 
 type ThreadStore interface {

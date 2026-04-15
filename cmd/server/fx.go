@@ -54,9 +54,6 @@ func MainModule(cfg *config.Config) fx.Option {
 var storeBridgeModule = fx.Module(
 	"storeToServiceBridge",
 	fx.Provide(
-		func(s store.ThreadPermissionStore) service.ThreadPermissionStore {
-			return s
-		},
 		func(s store.MessageHistory) service.MessageHistoryStore {
 			return s
 		},

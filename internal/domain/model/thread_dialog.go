@@ -31,7 +31,7 @@ type (
 	ThreadDialog struct {
 		shared.BaseModel
 
-		MemberID   uuid.UUID  `json:"member_id" db:"member_id"`
+		ContactID  uuid.UUID  `json:"member_id" db:"member_id"`
 		ThreadID   uuid.UUID  `json:"thread_id" db:"thread_id"`
 		MemberOf   *uuid.UUID `json:"member_of" db:"member_of"`
 		DirectTo   *uuid.UUID `json:"direct_to" db:"direct_to"`
@@ -60,9 +60,9 @@ type CreateDirectPeer struct {
 }
 
 type ThreadDialogStoreFilter struct {
-	Limit     int
-	Offset    int
-	ThreadIDs []uuid.UUID
-	MemberIDs []uuid.UUID
-	IDs       []uuid.UUID
+	Limit      int
+	Offset     int
+	ThreadIDs  []uuid.UUID
+	ContactIDs []uuid.UUID
+	IDs        []uuid.UUID
 }

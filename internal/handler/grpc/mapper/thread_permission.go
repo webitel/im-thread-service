@@ -13,23 +13,22 @@ func (s *ThreadPermissionInConverter) ConvertGetThreadPermissionRequest(in *impb
 	if in == nil {
 		return nil, nil
 	}
-	threadID, err := uuid.Parse(in.GetThreadId())
-	if err != nil {
-		return nil, err
-	}
-	initiatorID, err := uuid.Parse(in.GetRequestInitiatorId())
-	if err != nil {
-		return nil, err
-	}
+
 	newMemberID, err := uuid.Parse(in.GetMemberId())
 	if err != nil {
 		return nil, err
 	}
 	converted := &model.GetThreadPermissionRequest{
-		ThreadID:           threadID,
-		RequestInitiatorID: initiatorID,
-		MemberID:           newMemberID,
+		MemberID: newMemberID,
 	}
+	if in.InitiatorContactId != nil {
+		initiatorID, err := uuid.Parse(*in.InitiatorContactId)
+		if err != nil {
+			return nil, err
+		}
+		converted.RequestInitiatorID = &initiatorID
+	}
+
 	return converted, nil
 }
 
@@ -37,28 +36,26 @@ func (s *ThreadPermissionInConverter) ConvertUpdateThreadPermissionRequest(in *i
 	if in == nil {
 		return nil, nil
 	}
-	initiatorID, err := uuid.Parse(in.GetRequestInitiatorId())
-	if err != nil {
-		return nil, err
-	}
+
 	targetMemberID, err := uuid.Parse(in.GetMemberId())
 	if err != nil {
 		return nil, err
 	}
-	threadID, err := uuid.Parse(in.GetThreadId())
-	if err != nil {
-		return nil, err
-	}
 	converted := &model.UpdateThreadPermissionRequest{
-		InitiatorMemberID: initiatorID,
-		TargetMemberID:    targetMemberID,
-		ThreadID:          threadID,
+		TargetMemberID: targetMemberID,
 
 		CanAddMembers:               in.CanAddMembers,
 		CanChangeMembersPermissions: in.CanChangeMembersPermissions,
 		CanChangeThreadInfo:         in.CanUpdateThreadInfo,
 		CanRemoveMembers:            in.CanRemoveMembers,
 		CanSendMessages:             in.CanSendMessages,
+	}
+	if in.InitiatorContactId != nil {
+		initiatorID, err := uuid.Parse(*in.InitiatorContactId)
+		if err != nil {
+			return nil, err
+		}
+		converted.InitiatorContactID = &initiatorID
 	}
 	return converted, nil
 }
@@ -77,9 +74,8 @@ func (s *ThreadPermissionOutConverter) ConvertThreadPermission(in *model.ThreadP
 		CanChangeMembersPermissions: in.CanChangeMembersPermissions,
 		CanChangeThreadInfo:         in.CanChangeThreadInfo,
 		Id:                          in.ID.String(),
-		ThreadDialogId:              in.ThreadDialogID.String(),
+		MemberId:                    in.ThreadDialogID.String(),
 		ThreadId:                    in.ThreadID.String(),
-		MemberId:                    in.MemberID.String(),
 		CreatedAt:                   in.CreatedAt.UnixMilli(),
 		UpdatedAt:                   in.UpdatedAt.UnixMilli(),
 	}

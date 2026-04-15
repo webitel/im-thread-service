@@ -73,13 +73,6 @@ var (
 	}
 )
 
-//mockery:generate: true
-type ThreadPermissionStore interface {
-	Create(ctx context.Context, req *model.ThreadPermission) (*model.ThreadPermission, error)
-	Get(ctx context.Context, req *model.ThreadPermissionStoreFilters) ([]*model.ThreadPermission, error)
-	Update(ctx context.Context, req *model.UpdateThreadPermissionRequest) (*model.ThreadPermission, error)
-}
-
 type ThreadPermissionService struct {
 	store  store.UnitOfWork
 	logger *slog.Logger
@@ -96,71 +89,51 @@ func (s *ThreadPermissionService) Get(ctx context.Context, req *model.GetThreadP
 	if req == nil {
 		return nil, errors.InvalidArgument("invalid permission get request")
 	}
-	initiator, target, err := s.findActionActorsPersistence(ctx, req.ThreadID, req.RequestInitiatorID, req.MemberID)
-	if err != nil {
-		return nil, errors.New("failed to find permission change action actors", errors.WithCause(err))
-	}
-	if initiator == nil {
-		return nil, errors.New("request initiator is not a member of the thread")
-	}
-	if target == nil {
-		return nil, errors.New("target member is not a member of the thread")
-	}
-	if initiator.ThreadRole < target.ThreadRole {
-		return nil, errors.New("request initiator does not have enough role permissions to get target permissions")
+	if req.RequestInitiatorID != nil {
+		initiator, target, err := s.store.ThreadDialogStore().FindActorsPair(ctx, *req.RequestInitiatorID, req.MemberID)
+		if err != nil {
+			return nil, err
+		}
+		if initiator == nil {
+			return nil, errors.New("request initiator is not a member of the thread")
+		}
+		if target == nil {
+			return nil, errors.New("target member is not a member of the thread")
+		}
+		if initiator.ThreadRole < target.ThreadRole {
+			return nil, errors.New("request initiator does not have enough role permissions to get target permissions")
+		}
 	}
 
 	return s.store.ThreadPermissionStore().Get(ctx, &model.ThreadPermissionStoreFilters{
-		ThreadID:  req.ThreadID,
 		MemberIDs: []uuid.UUID{req.MemberID},
 	})
-}
-
-func (s *ThreadPermissionService) findActionActorsPersistence(ctx context.Context, threadID uuid.UUID, initiatorID uuid.UUID, targetID uuid.UUID) (initiator *model.ThreadDialogExtended, target *model.ThreadDialogExtended, err error) {
-	threadDialogs, err := s.store.ThreadDialogStore().GetFullView(ctx, &model.ThreadDialogStoreFilter{
-		ThreadIDs: []uuid.UUID{threadID},
-		MemberIDs: []uuid.UUID{initiatorID, targetID},
-	})
-	if err != nil {
-		return nil, nil, err
-	}
-	if len(threadDialogs) == 0 {
-		return nil, nil, nil
-	}
-	for _, dialog := range threadDialogs {
-		if dialog.MemberID == initiatorID {
-			initiator = dialog
-		}
-		if dialog.MemberID == targetID {
-			target = dialog
-		}
-	}
-	return initiator, target, nil
 }
 
 func (s *ThreadPermissionService) Update(ctx context.Context, req *model.UpdateThreadPermissionRequest) (*model.ThreadPermission, error) {
 	if req == nil {
 		return nil, errors.InvalidArgument("invalid permission change request")
 	}
-	initiator, target, err := s.findActionActorsPersistence(ctx, req.ThreadID, req.InitiatorMemberID, req.TargetMemberID)
-	if err != nil {
-		return nil, errors.New("failed to find permission change action actors", errors.WithCause(err))
-	}
-	if initiator == nil {
-		return nil, errors.New("initiator is not a member of the thread")
-	}
-	if target == nil {
-		return nil, errors.New("target is not a member of the thread")
-	}
+	if req.InitiatorContactID != nil {
+		initiator, target, err := s.store.ThreadDialogStore().FindActorsPair(ctx, *req.InitiatorContactID, req.TargetMemberID)
+		if err != nil {
+			return nil, err
+		}
+		if initiator == nil {
+			return nil, errors.New("request initiator is not a member of the thread")
+		}
+		if target == nil {
+			return nil, errors.New("target member is not a member of the thread")
+		}
+		validationStruct := &permissionChangeValidationStruct{
+			Initiator: initiator,
+			Target:    target,
+			Changes:   req,
+		}
 
-	validationStruct := &permissionChangeValidationStruct{
-		Initiator: initiator,
-		Target:    target,
-		Changes:   req,
-	}
-
-	if err := s.validatePermissionChangeRequest(validationStruct); err != nil {
-		return nil, err
+		if err := s.validatePermissionChangeRequest(validationStruct); err != nil {
+			return nil, err
+		}
 	}
 	return s.store.ThreadPermissionStore().Update(ctx, req)
 }

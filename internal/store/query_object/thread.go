@@ -53,7 +53,7 @@ func NewThreadQueryObject() *threadQueryObject {
 func (q *threadQueryObject) DefaultFields() []string {
 	return []string{
 		"id", "domain_id", "created_at", "updated_at",
-		"kind", "owner", "subject", "description", "member_ids",
+		"kind", "owner", "subject", "description", "members",
 	}
 }
 
@@ -246,7 +246,7 @@ func (q *threadQueryObject) WithDescriptionFilter(description string) *threadQue
 	return q
 }
 
-func (q *threadQueryObject) WithMemberIDFilter(memberIDs ...uuid.UUID) *threadQueryObject {
+func (q *threadQueryObject) WithContactIDFilter(memberIDs ...uuid.UUID) *threadQueryObject {
 	if len(memberIDs) != 0 {
 		q.EnsureJoins(threadLinkThreadDialog)
 		q.builder = q.builder.Where(squirrel.Eq{threadThreadDialogAlias + ".member_id": memberIDs})

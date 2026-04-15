@@ -13,11 +13,12 @@ const (
 )
 
 type MemberRemovedV1 struct {
-	Recipient             uuid.UUID
-	ThreadID              uuid.UUID `json:"thread_id"`
-	RemovedMemberID       uuid.UUID `json:"member_id"`
-	RemovedThreadDialogID uuid.UUID `json:"thread_dialog_id"`
-	InitiatorMemberID     uuid.UUID `json:"initiator_id"`
+	Recipient          uuid.UUID
+	ThreadID           uuid.UUID `json:"thread_id"`
+	RemovedMemberID    uuid.UUID `json:"removed_member_id"`
+	RemovedContactID   uuid.UUID `json:"removed_contact_id"`
+	InitiatorContactID uuid.UUID `json:"initiator_contact_id"`
+	InitiatorMemberID  uuid.UUID `json:"initiator_member_id"`
 }
 
 func (e *MemberRemovedV1) Topic() string {
