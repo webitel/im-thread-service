@@ -104,6 +104,7 @@ type DocumentPayload struct {
 	Mime   string `json:"mime"`
 	Name   string `json:"name"`
 	Size   int64  `json:"size"`
+	URL    string `json:"url"`
 }
 
 type LocationPayload struct {

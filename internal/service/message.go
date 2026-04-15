@@ -134,6 +134,11 @@ func (s *MessageService) SendImage(ctx context.Context, in *dto.SendImageRequest
 		return nil, err
 	}
 
+	fileLinksChan := s.mediaProcessor.FetchFileLinks(ctx, in.DomainID, attachments)
+	if err := enrichAttachmentsLinks(ctx, attachments, fileLinksChan); err != nil {
+		s.logger.ErrorContext(ctx, "enriching attachments links", "err", err)
+	}
+
 	msg := model.NewImageMessage(model.MessageCreate{
 		ThreadID:   t.ID,
 		DomainID:   int32(in.DomainID),
@@ -173,7 +178,7 @@ func (s *MessageService) SendImage(ctx context.Context, in *dto.SendImageRequest
 
 func (s *MessageService) SendDocument(ctx context.Context, in *dto.SendDocumentRequest) (*dto.SendDocumentResponse, error) {
 	if err := guards.SendDocumentGuard(in); err != nil {
-		return nil, fmt.Errorf("validation: %w", err)
+		return nil, errors.InvalidArgument("send document request validation", errors.WithCause(err), errors.WithID("service.message.send_document"))
 	}
 
 	t, err := s.threader.EnsureDirectThread(ctx, &dto.EnsureDirectThreadRequest{
@@ -191,6 +196,11 @@ func (s *MessageService) SendDocument(ctx context.Context, in *dto.SendDocumentR
 	}
 	if err := s.mediaProcessor.Process(ctx, in.DomainID, attachments); err != nil {
 		return nil, err
+	}
+
+	fileLinksChan := s.mediaProcessor.FetchFileLinks(ctx, in.DomainID, attachments)
+	if err := enrichAttachmentsLinks(ctx, attachments, fileLinksChan); err != nil {
+		s.logger.ErrorContext(ctx, "enriching attachments links", "err", err)
 	}
 
 	msg := model.NewDocumentMessage(model.MessageCreate{
@@ -224,7 +234,7 @@ func (s *MessageService) SendDocument(ctx context.Context, in *dto.SendDocumentR
 	})
 
 	if err != nil {
-		s.logger.ErrorContext(ctx, "send_document_failed", "err", err)
+		s.logger.ErrorContext(ctx, "send document failed", "err", err)
 		return nil, err
 	}
 
@@ -479,7 +489,38 @@ func (s *MessageService) mapDocumentInputs(dtoDocs []*dto.Document) []model.Docu
 			Name:     doc.Name,
 			MimeType: doc.MimeType,
 			Size:     doc.Size,
+			URL:      doc.URL,
 		})
 	}
 	return inputs
+}
+
+func enrichAttachmentsLinks(ctx context.Context, attachments []AttachmentProcessor, fileLinksChan <-chan fetchLinksResult) error {
+	if len(attachments) == 0 {
+		return nil
+	}
+
+	select {
+	case result, ok := <-fileLinksChan:
+		if !ok {
+			return errors.Aborted("accessing closed links chan", errors.WithID("service.message.enrich_attachments_links"))
+		}
+
+		if result.Err != nil {
+			return result.Err
+		}
+
+		for id, url := range result.FileLinks {
+			for i := range attachments {
+				if attachments[i].GetID() == id {
+					attachments[i].SetURL(url)
+					break
+				}
+			}
+		}
+	case <-ctx.Done():
+		return errors.Aborted("context cancelled", errors.WithID("service.message.enrich_attachments_links"), errors.WithCause(ctx.Err()))
+	}
+
+	return nil
 }

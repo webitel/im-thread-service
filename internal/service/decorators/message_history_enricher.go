@@ -3,7 +3,6 @@ package decorators
 import (
 	"context"
 	"fmt"
-	"net/url"
 	"slices"
 
 	"github.com/webitel/im-thread-service/gen/go/storage"
@@ -11,6 +10,7 @@ import (
 	"github.com/webitel/im-thread-service/internal/domain/model"
 	"github.com/webitel/im-thread-service/internal/service/dto"
 	queryobject "github.com/webitel/im-thread-service/internal/store/query_object"
+	"github.com/webitel/im-thread-service/internal/utils"
 )
 
 const (
@@ -264,7 +264,7 @@ func processAttachments[T model.MessageAttachment](
 //
 //	An error if occurred during the enrichment process.
 func enrichDocument(doc *model.MessageDocument, link *storage.GenerateFileLinkResponse, useMetadata bool) error {
-	fullURL, err := resolveFullURL(link.GetBaseUrl(), link.GetUrl())
+	fullURL, err := utils.ResolveFullURL(link.GetBaseUrl(), link.GetUrl())
 	if err != nil {
 		return fmt.Errorf("failed to resolve URL: %w", err)
 	}
@@ -293,7 +293,7 @@ func enrichDocument(doc *model.MessageDocument, link *storage.GenerateFileLinkRe
 //
 //	An error if occurred during the enrichment process.
 func enrichImage(img *model.MessageImage, link *storage.GenerateFileLinkResponse, useMetadata bool) error {
-	fullURL, err := resolveFullURL(link.GetBaseUrl(), link.GetUrl())
+	fullURL, err := utils.ResolveFullURL(link.GetBaseUrl(), link.GetUrl())
 	if err != nil {
 		return fmt.Errorf("failed to resolve URL: %w", err)
 	}
@@ -307,32 +307,4 @@ func enrichImage(img *model.MessageImage, link *storage.GenerateFileLinkResponse
 	}
 
 	return nil
-}
-
-// resolveFullURL resolves a full URL given a base URL and a relative URL.
-//
-// Args:
-//
-//	baseStr: The base URL to resolve the relative URL against.
-//	relativeStr: The relative URL to resolve.
-//
-// Returns:
-//
-//	A fully resolved URL string, and an error if the base or relative URLs are invalid.
-func resolveFullURL(baseStr, relativeStr string) (string, error) {
-	if baseStr == "" || relativeStr == "" {
-		return "", fmt.Errorf("base or relative URL is empty")
-	}
-
-	base, err := url.Parse(baseStr)
-	if err != nil {
-		return "", fmt.Errorf("invalid base URL: %w", err)
-	}
-
-	rel, err := url.Parse(relativeStr)
-	if err != nil {
-		return "", fmt.Errorf("invalid relative URL: %w", err)
-	}
-
-	return base.ResolveReference(rel).String(), nil
 }
