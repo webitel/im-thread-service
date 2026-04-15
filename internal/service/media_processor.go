@@ -3,10 +3,12 @@ package service
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/webitel/im-thread-service/gen/go/storage"
 	storageclient "github.com/webitel/im-thread-service/infra/webitel/storage"
 	"github.com/webitel/im-thread-service/internal/utils"
+	"github.com/webitel/webitel-go-kit/pkg/errors"
 )
 
 type AttachmentProcessor interface {
@@ -22,6 +24,7 @@ type AttachmentProcessor interface {
 
 type MediaProcessor interface {
 	Process(ctx context.Context, domainID int64, items []AttachmentProcessor) error
+	FetchFileLinks(ctx context.Context, domainID int64, itemsWithID []AttachmentProcessor) <-chan fetchLinksResult
 }
 
 type storageProcessor struct {
@@ -67,6 +70,62 @@ func (p *storageProcessor) Process(ctx context.Context, domainID int64, items []
 	}
 
 	return nil
+}
+
+type fetchLinksResult struct {
+	Err       error
+	FileLinks map[int64]string
+}
+
+func (p *storageProcessor) FetchFileLinks(ctx context.Context, domainID int64, itemsWithID []AttachmentProcessor) <-chan fetchLinksResult {
+	resultChan := make(chan fetchLinksResult, 1)
+
+	go func() {
+		defer close(resultChan)
+		if len(itemsWithID) == 0 {
+			return
+		}
+
+		requests := make([]*storage.GenerateFileLinkRequest, 0, len(itemsWithID))
+		for _, item := range itemsWithID {
+			requests = append(requests, &storage.GenerateFileLinkRequest{
+				DomainId: domainID,
+				FileId:   item.GetID(),
+				Action:   "download",
+			})
+		}
+
+		ctx, cancel := context.WithTimeout(ctx, time.Second*3)
+		defer cancel()
+
+		response, err := p.client.BulkGenerateFileLink(ctx, &storage.BulkGenerateFileLinkRequest{
+			Files: requests,
+		})
+
+		if err != nil {
+			resultChan <- fetchLinksResult{
+				Err: errors.Internal("fetch storage file links", errors.WithCause(err), errors.WithID("service.media_processor.fetch_file_links")),
+			}
+
+			return
+		}
+
+		linkedItems := make(map[int64]string, len(response.GetLinks()))
+		for i, file := range response.GetLinks() {
+			url, err := utils.ResolveFullURL(file.BaseUrl, file.Url)
+			if err != nil {
+				resultChan <- fetchLinksResult{Err: err}
+				return
+			}
+
+			linkedItems[itemsWithID[i].GetID()] = url
+		}
+		resultChan <- fetchLinksResult{
+			FileLinks: linkedItems,
+		}
+	}()
+
+	return resultChan
 }
 
 func (p *storageProcessor) uploadFile(ctx context.Context, domainID int64, itemsWithURL []AttachmentProcessor) <-chan error {
