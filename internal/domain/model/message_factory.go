@@ -17,6 +17,7 @@ type ImageInput struct {
 }
 
 type DocumentInput struct {
+	URL      string
 	FileID   string
 	Name     string
 	MimeType string
@@ -96,6 +97,7 @@ func NewDocumentMessage(in MessageCreate) *Message {
 			Name:   d.Name,
 			Mime:   d.MimeType,
 			Size:   d.Size,
+			URL:    d.URL,
 		})
 	}
 
@@ -152,7 +154,7 @@ func mapImagesToPayload(imgs []*MessageImage) []event.ImagePayload {
 func mapDocumentsToPayload(docs []*MessageDocument) []event.DocumentPayload {
 	res := make([]event.DocumentPayload, 0, len(docs))
 	for _, d := range docs {
-		res = append(res, event.DocumentPayload{FileID: d.FileID, Mime: d.Mime, Name: d.Name, Size: d.Size})
+		res = append(res, event.DocumentPayload{FileID: d.FileID, Mime: d.Mime, Name: d.Name, Size: d.Size, URL: d.URL})
 	}
 	return res
 }
