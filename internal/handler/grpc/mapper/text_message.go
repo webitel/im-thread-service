@@ -76,11 +76,5 @@ func MapPeerToProto(p shared.Peer) *impb.Peer {
 	case shared.PeerThread:
 		res.Kind = &impb.Peer_ThreadId{ThreadId: idStr}
 	}
-	if p.Identity != nil {
-		res.Identity = &impb.Identity{
-			Issuer: p.Identity.Issuer,
-			Name:   p.Identity.Name,
-		}
-	}
 	return res
 }

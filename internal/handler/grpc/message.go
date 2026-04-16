@@ -201,7 +201,7 @@ func (m *MessageServer) SendSystemMessage(ctx context.Context, in *impb.SendSyst
 
 	return &impb.SendMessageResponse{
 		To: []*impb.Peer{
-			mapper.MapPeerToProto(saved.To),
+			in.To,
 		},
 		Id: saved.ID.String(),
 	}, nil
