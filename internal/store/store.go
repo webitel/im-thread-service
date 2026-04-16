@@ -49,7 +49,7 @@ type ThreadDialogStore interface {
 type ThreadStore interface {
 	Create(ctx context.Context, req *model.Thread) (*model.Thread, error)
 	Search(ctx context.Context, query queryobject.QueryObject) ([]*model.Thread, error)
-	ResolveDirect(ctx context.Context, from, to uuid.UUID) (*model.Thread, error)
+	ResolveThread(ctx context.Context, q model.ResolveThreadQuery) (*model.Thread, error)
 }
 
 type ThreadPermissionStore interface {

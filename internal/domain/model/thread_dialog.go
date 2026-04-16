@@ -21,8 +21,6 @@ type (
 
 		MemberID   uuid.UUID  `json:"member_id" db:"member_id"`
 		ThreadID   uuid.UUID  `json:"thread_id" db:"thread_id"`
-		MemberOf   *uuid.UUID `json:"member_of" db:"member_of"`
-		DirectTo   *uuid.UUID `json:"direct_to" db:"direct_to"`
 		ThreadRole ThreadRole `json:"member_role" db:"thread_role"`
 
 		Permissions ThreadPermissions `json:"permissions" db:"permissions"`
@@ -33,8 +31,6 @@ type (
 
 		ContactID  uuid.UUID  `json:"member_id" db:"member_id"`
 		ThreadID   uuid.UUID  `json:"thread_id" db:"thread_id"`
-		MemberOf   *uuid.UUID `json:"member_of" db:"member_of"`
-		DirectTo   *uuid.UUID `json:"direct_to" db:"direct_to"`
 		ThreadRole ThreadRole `json:"member_role" db:"thread_role"`
 	}
 

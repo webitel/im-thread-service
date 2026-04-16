@@ -30,6 +30,20 @@ type Peer struct {
 	Identity *Identity `json:"identity"`
 }
 
+func (p Peer) ResolveContactID() *uuid.UUID {
+	if p.Type != PeerContact {
+		return nil
+	}
+	return &p.ID
+}
+
+func (p Peer) ResolveThreadID() *uuid.UUID {
+	if p.Type != PeerThread {
+		return nil
+	}
+	return &p.ID
+}
+
 type BaseModel struct {
 	ID        uuid.UUID `json:"id"`
 	DomainID  int       `json:"domain_id"`
