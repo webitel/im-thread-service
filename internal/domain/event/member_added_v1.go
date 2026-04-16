@@ -17,8 +17,8 @@ type MemberAddedV1 struct {
 	ThreadID           uuid.UUID `json:"thread_id"`
 	MemberContactID    uuid.UUID `json:"member_contact_id"`
 	NewMemberID        uuid.UUID `json:"member_id"`
-	InitiatorContactID uuid.UUID `json:"initiator_contact_id"`
-	InitiatorMemberID  uuid.UUID `json:"initiator_member_id"`
+	InitiatorContactID uuid.UUID `json:"initiator_contact_id,omitempty"`
+	InitiatorMemberID  uuid.UUID `json:"initiator_member_id,omitempty"`
 }
 
 func (e *MemberAddedV1) Topic() string {

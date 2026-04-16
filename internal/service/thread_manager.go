@@ -75,19 +75,10 @@ func (t *ThreadManagementService) Search(ctx context.Context, searchRequest *dto
 	return threads, nil
 }
 
-func (t *ThreadManagementService) findAddMemberActors(ctx context.Context, threadID uuid.UUID, initiatorContactID *uuid.UUID, targetContactID uuid.UUID) (*model.ThreadDialogExtended, *model.ThreadDialogExtended, error) {
-	var (
-		contactFilter                  = []uuid.UUID{targetContactID}
-		initiatorContactIDDereferenced uuid.UUID
-	)
-	if initiatorContactID != nil {
-		initiatorContactIDDereferenced = *initiatorContactID
-	}
-	contactFilter = append(contactFilter, initiatorContactIDDereferenced)
-
+func (t *ThreadManagementService) findAddMemberActors(ctx context.Context, threadID uuid.UUID, initiatorContactID, targetContactID uuid.UUID) (*model.ThreadDialogExtended, *model.ThreadDialogExtended, error) {
 	actionActors, err := t.uow.ThreadDialogStore().GetFullView(ctx, &model.ThreadDialogStoreFilter{
 		ThreadIDs:  []uuid.UUID{threadID},
-		ContactIDs: contactFilter,
+		ContactIDs: []uuid.UUID{initiatorContactID, targetContactID},
 	})
 	if err != nil {
 		return nil, nil, err
@@ -98,7 +89,7 @@ func (t *ThreadManagementService) findAddMemberActors(ctx context.Context, threa
 		if initiatorActor != nil && targetActor != nil {
 			break
 		}
-		if actor.MemberID == initiatorContactIDDereferenced {
+		if actor.MemberID == initiatorContactID {
 			initiatorActor = actor
 		}
 		if actor.MemberID == targetContactID {
@@ -113,9 +104,6 @@ func (t *ThreadManagementService) AddMember(ctx context.Context, req *dto.AddMem
 	if req == nil {
 		return uuid.Nil, errors.New("add member request cannot be nil")
 	}
-	var (
-		title = "Conversation" // TODO: business logic for title
-	)
 	initiator, target, err := t.findAddMemberActors(ctx, req.ThreadID, req.InitiatorContactID, req.NewMemberContactID)
 	if err != nil {
 		return uuid.Nil, err
@@ -124,19 +112,15 @@ func (t *ThreadManagementService) AddMember(ctx context.Context, req *dto.AddMem
 		return uuid.Nil, errors.NotFound("target member is already part of the thread")
 	}
 
-	if req.InitiatorContactID != nil {
-		if initiator == nil {
-			return uuid.Nil, errors.NotFound("thread not found or initiator does not have permission", errors.WithCause(notThreadMemberError))
-		}
-		err = t.verifyAddMemberInitiatorPermissions(initiator.ThreadRole, req.NewMemberRole, &initiator.Permissions)
+	var (
+		titleForTarget = "New thread"
+	)
+	if req.InitiatorContactID != uuid.Nil {
+		err = t.verifyAddMember(ctx, initiator, req.NewMemberContactID, req.NewMemberRole)
 		if err != nil {
 			return uuid.Nil, err
 		}
-		err = t.verifyAddMemberTargetPrivacy(ctx, *req.InitiatorContactID, req.NewMemberContactID)
-		if err != nil {
-			return uuid.Nil, err
-		}
-		title = initiator.Settings.Title
+		titleForTarget = initiator.Settings.Title
 	}
 
 	rolePermissions, err := getDefaultPermissionsByRole(req.NewMemberRole)
@@ -155,7 +139,7 @@ func (t *ThreadManagementService) AddMember(ctx context.Context, req *dto.AddMem
 			ThreadRole:  req.NewMemberRole,
 			Permissions: *rolePermissions,
 			Settings: model.BaseThreadSetting{
-				Title: title,
+				Title: titleForTarget,
 			},
 		})
 		if err != nil {
@@ -169,17 +153,19 @@ func (t *ThreadManagementService) AddMember(ctx context.Context, req *dto.AddMem
 		if err != nil {
 			return err
 		}
+		eventTemplate := &event.MemberAddedV1{
+			ThreadID:        req.ThreadID,
+			MemberContactID: createdThreadDialog.MemberID,
+			NewMemberID:     createdThreadDialog.ID,
+		}
+		if initiator != nil {
+			eventTemplate.InitiatorMemberID = initiator.ID
+			eventTemplate.InitiatorContactID = initiator.MemberID
+		}
 
 		for _, receiver := range eventReceivers {
-			event := &event.MemberAddedV1{
-				ThreadID:           req.ThreadID,
-				MemberContactID:    createdThreadDialog.MemberID,
-				NewMemberID:        createdThreadDialog.ID,
-				InitiatorContactID: initiator.MemberID,
-				InitiatorMemberID:  initiator.ID,
-				Recipient:          receiver.ContactID,
-			}
-			err = uow.Outbox().Publish(ctx, event.Topic(), event)
+			eventTemplate.Recipient = receiver.ContactID
+			err = uow.Outbox().Publish(ctx, eventTemplate.Topic(), eventTemplate)
 			if err != nil {
 				return err
 			}
@@ -191,6 +177,24 @@ func (t *ThreadManagementService) AddMember(ctx context.Context, req *dto.AddMem
 		return uuid.Nil, err
 	}
 	return createdThreadDialog.ID, nil
+}
+func (t *ThreadManagementService) verifyAddMember(ctx context.Context, initiator *model.ThreadDialogExtended, targetContactID uuid.UUID, role model.ThreadRole) error {
+	if initiator == nil {
+		return errors.NotFound("thread not found or initiator does not have permission", errors.WithCause(notThreadMemberError))
+	}
+	if initiator.MemberID == targetContactID {
+		return errors.InvalidArgument("cannot add self as member")
+	}
+	err := t.verifyAddMemberInitiatorPermissions(initiator.ThreadRole, role, &initiator.Permissions)
+	if err != nil {
+		return err
+	}
+	err = t.verifyAddMemberTargetPrivacy(ctx, initiator.MemberID, targetContactID)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (t *ThreadManagementService) verifyAddMemberInitiatorPermissions(initiatorRole model.ThreadRole, targetRole model.ThreadRole, initiatorPermissions *model.ThreadPermissions) error {
@@ -206,8 +210,8 @@ func (t *ThreadManagementService) verifyAddMemberInitiatorPermissions(initiatorR
 
 	return nil
 }
-func (t *ThreadManagementService) verifyAddMemberTargetPrivacy(ctx context.Context, initiatorID, targetID uuid.UUID) error {
-	err := t.privacyChecker.CanInvite(ctx, initiatorID, targetID)
+func (t *ThreadManagementService) verifyAddMemberTargetPrivacy(ctx context.Context, initiatorContactID, targetContactID uuid.UUID) error {
+	err := t.privacyChecker.CanInvite(ctx, initiatorContactID, targetContactID)
 	if err != nil {
 		return err
 	}
@@ -222,40 +226,38 @@ func (t *ThreadManagementService) RemoveMember(ctx context.Context, req *dto.Rem
 	if err != nil {
 		return err
 	}
-	if initiator == nil {
-		return notThreadMemberError
-	}
 	if target == nil {
-		return errors.New("target member is not part of the thread")
+		return errors.NotFound("target not found")
 	}
-
-	threadID := initiator.ThreadID
-	err = t.verifyRemoveMemberInitiatorPermissions(initiator.ThreadRole, target.ThreadRole, &initiator.Permissions)
-	if err != nil {
-		return err
+	if req.InitiatorContactID != uuid.Nil {
+		err = t.verifyRemoveMember(initiator, target)
+		if err != nil {
+			return err
+		}
 	}
 
 	err = t.uow.WithinTransaction(ctx, func(ctx context.Context, uow store.UnitOfWork) error {
-		err = uow.ThreadDialogStore().Delete(ctx, threadID, req.TargetMemberID)
+		err = uow.ThreadDialogStore().Delete(ctx, target.ID)
 		if err != nil {
 			return err
 		}
 		eventReceivers, err := uow.ThreadDialogStore().GetQuickView(ctx, &model.ThreadDialogStoreFilter{
-			ContactIDs: []uuid.UUID{initiator.ThreadID},
+			ContactIDs: []uuid.UUID{target.ThreadID},
 		})
 		if err != nil {
 			return err
 		}
+		eventTemplate := &event.MemberRemovedV1{
+			ThreadID:        target.ThreadID,
+			RemovedMemberID: target.ID,
+		}
+		if initiator != nil {
+			eventTemplate.InitiatorMemberID = initiator.ID
+			eventTemplate.InitiatorContactID = initiator.MemberID
+		}
 		for _, receiver := range eventReceivers {
-			event := &event.MemberRemovedV1{
-				ThreadID:           threadID,
-				RemovedMemberID:    req.TargetMemberID,
-				InitiatorMemberID:  initiator.ID,
-				InitiatorContactID: req.InitiatorContactID,
-				Recipient:          receiver.ID,
-			}
-
-			err = uow.Outbox().Publish(ctx, event.Topic(), event)
+			eventTemplate.Recipient = receiver.ContactID
+			err = uow.Outbox().Publish(ctx, eventTemplate.Topic(), eventTemplate)
 			if err != nil {
 				return err
 			}
@@ -266,6 +268,23 @@ func (t *ThreadManagementService) RemoveMember(ctx context.Context, req *dto.Rem
 		return err
 	}
 
+	return nil
+}
+
+func (t *ThreadManagementService) verifyRemoveMember(initiator *model.ThreadDialogExtended, target *model.ThreadDialogExtended) error {
+	if initiator == nil {
+		return errors.NotFound("thread not found or initiator does not have permission", errors.WithCause(notThreadMemberError))
+	}
+	if target == nil {
+		return errors.NotFound("target not found")
+	}
+	if initiator.ID == target.ID {
+		return nil
+	}
+	err := t.verifyRemoveMemberInitiatorPermissions(initiator.ThreadRole, target.ThreadRole, &initiator.Permissions)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 

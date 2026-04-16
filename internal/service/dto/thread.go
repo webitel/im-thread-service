@@ -53,7 +53,7 @@ type (
 type AddMemberRequest struct {
 	ThreadID           uuid.UUID
 	NewMemberContactID uuid.UUID
-	InitiatorContactID *uuid.UUID
+	InitiatorContactID uuid.UUID
 	NewMemberRole      model.ThreadRole
 }
 type RemoveMemberRequest struct {

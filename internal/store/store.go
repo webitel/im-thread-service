@@ -39,7 +39,7 @@ type OutboxStore interface {
 
 type ThreadDialogStore interface {
 	Create(ctx context.Context, threadDialog *model.ThreadDialogExtended) (*model.ThreadDialogExtended, error)
-	Delete(ctx context.Context, threadID, memberID uuid.UUID) error
+	Delete(ctx context.Context, memberID uuid.UUID) error
 	GetQuickView(ctx context.Context, filter *model.ThreadDialogStoreFilter) ([]*model.ThreadDialog, error)
 	GetFullView(ctx context.Context, filter *model.ThreadDialogStoreFilter) ([]*model.ThreadDialogExtended, error)
 	FindActorsPair(ctx context.Context, initiatorsContact, targetMember uuid.UUID) (*model.ThreadDialogExtended, *model.ThreadDialogExtended, error)

@@ -22,7 +22,7 @@ func New[T any](log *slog.Logger, dp ds.DiscoveryProvider, target string, tlsCon
 	cb := interceptors.NewBreakerInterceptor()
 
 	tlsOpt := grpc.WithTransportCredentials(insecure.NewCredentials())
-	if tlsConf != nil {
+	if tlsConf != nil && tlsConf.Client != nil {
 		tlsOpt = grpc.WithTransportCredentials(credentials.NewTLS(tlsConf.Client))
 	}
 

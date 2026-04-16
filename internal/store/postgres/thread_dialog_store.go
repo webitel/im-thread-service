@@ -167,11 +167,7 @@ func mapToThreadDialogModel(dialog *threadDialog) (*model.ThreadDialog, error) {
 	}, nil
 }
 
-func (t *threadDialogStore) Delete(ctx context.Context, threadID, memberID uuid.UUID) error {
-
-	if threadID == uuid.Nil {
-		return errors.New("threadID cannot be nil")
-	}
+func (t *threadDialogStore) Delete(ctx context.Context, memberID uuid.UUID) error {
 
 	if memberID == uuid.Nil {
 		return errors.New("newMemberID cannot be nil")
@@ -179,12 +175,15 @@ func (t *threadDialogStore) Delete(ctx context.Context, threadID, memberID uuid.
 
 	var (
 		query = `DELETE FROM im_thread.thread_dialog
-		WHERE thread_id = $1 AND member_id = $2`
+		WHERE id = $1`
 	)
 
-	_, err := t.db.Exec(ctx, query, threadID, memberID)
+	res, err := t.db.Exec(ctx, query, memberID)
 	if err != nil {
 		return err
+	}
+	if res.RowsAffected() == 0 {
+		return errors.New("no thread member found to delete")
 	}
 
 	return nil
@@ -269,7 +268,7 @@ func (t *threadDialogStore) GetFullView(ctx context.Context, filter *model.Threa
 
 }
 
-func (t *threadDialogStore) FindActorsPair(ctx context.Context, initiatorContactID, targetMemberID uuid.UUID) (*model.ThreadDialogExtended, *model.ThreadDialogExtended, error) {
+func (t *threadDialogStore) FindActorsPair(ctx context.Context, initiatorContactID uuid.UUID, targetMemberID uuid.UUID) (*model.ThreadDialogExtended, *model.ThreadDialogExtended, error) {
 	query := `
 	SELECT
 	-- basic thread dialog fields
@@ -291,7 +290,7 @@ func (t *threadDialogStore) FindActorsPair(ctx context.Context, initiatorContact
 		WHERE dial_filter.id = @TargetMemberID
 		LIMIT 1
 	)
-	 AND (member_id = @InitiatorContactID OR id = @TargetMemberID)
+	 AND (dial.member_id = @InitiatorContactID OR dial.id = @TargetMemberID)
 	`
 
 	args := pgx.NamedArgs{
@@ -301,7 +300,6 @@ func (t *threadDialogStore) FindActorsPair(ctx context.Context, initiatorContact
 
 	rows, err := t.db.Query(ctx, query, args)
 	if err != nil {
-		// return nil, errors.Internal("failed to get full view", errors.WithCause(err))
 		return nil, nil, err
 	}
 
@@ -317,7 +315,8 @@ func (t *threadDialogStore) FindActorsPair(ctx context.Context, initiatorContact
 		}
 		if dialog.MemberID == initiatorContactID {
 			initiatorDialog = dialog
-		} else if dialog.ID == targetMemberID {
+		}
+		if dialog.ID == targetMemberID {
 			targetDialog = dialog
 		}
 	}

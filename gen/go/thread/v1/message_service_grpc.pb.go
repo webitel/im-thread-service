@@ -27,6 +27,7 @@ const (
 	Message_SendInteractiveCallback_FullMethodName = "/webitel.im.service.thread.v1.Message/SendInteractiveCallback"
 	Message_SendLocation_FullMethodName            = "/webitel.im.service.thread.v1.Message/SendLocation"
 	Message_SendContact_FullMethodName             = "/webitel.im.service.thread.v1.Message/SendContact"
+	Message_SendSystemMessage_FullMethodName       = "/webitel.im.service.thread.v1.Message/SendSystemMessage"
 )
 
 // MessageClient is the client API for Message service.
@@ -55,6 +56,8 @@ type MessageClient interface {
 	SendLocation(ctx context.Context, in *SendLocationRequest, opts ...grpc.CallOption) (*SendMessageResponse, error)
 	// Sends a contact card.
 	SendContact(ctx context.Context, in *SendContactRequest, opts ...grpc.CallOption) (*SendMessageResponse, error)
+	// Sends a system message (e.g., "User X joined the chat").
+	SendSystemMessage(ctx context.Context, in *SendSystemMessageRequest, opts ...grpc.CallOption) (*SendMessageResponse, error)
 }
 
 type messageClient struct {
@@ -145,6 +148,16 @@ func (c *messageClient) SendContact(ctx context.Context, in *SendContactRequest,
 	return out, nil
 }
 
+func (c *messageClient) SendSystemMessage(ctx context.Context, in *SendSystemMessageRequest, opts ...grpc.CallOption) (*SendMessageResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SendMessageResponse)
+	err := c.cc.Invoke(ctx, Message_SendSystemMessage_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // MessageServer is the server API for Message service.
 // All implementations must embed UnimplementedMessageServer
 // for forward compatibility.
@@ -171,6 +184,8 @@ type MessageServer interface {
 	SendLocation(context.Context, *SendLocationRequest) (*SendMessageResponse, error)
 	// Sends a contact card.
 	SendContact(context.Context, *SendContactRequest) (*SendMessageResponse, error)
+	// Sends a system message (e.g., "User X joined the chat").
+	SendSystemMessage(context.Context, *SendSystemMessageRequest) (*SendMessageResponse, error)
 	mustEmbedUnimplementedMessageServer()
 }
 
@@ -204,6 +219,9 @@ func (UnimplementedMessageServer) SendLocation(context.Context, *SendLocationReq
 }
 func (UnimplementedMessageServer) SendContact(context.Context, *SendContactRequest) (*SendMessageResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SendContact not implemented")
+}
+func (UnimplementedMessageServer) SendSystemMessage(context.Context, *SendSystemMessageRequest) (*SendMessageResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SendSystemMessage not implemented")
 }
 func (UnimplementedMessageServer) mustEmbedUnimplementedMessageServer() {}
 func (UnimplementedMessageServer) testEmbeddedByValue()                 {}
@@ -370,6 +388,24 @@ func _Message_SendContact_Handler(srv interface{}, ctx context.Context, dec func
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Message_SendSystemMessage_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SendSystemMessageRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MessageServer).SendSystemMessage(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Message_SendSystemMessage_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MessageServer).SendSystemMessage(ctx, req.(*SendSystemMessageRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // Message_ServiceDesc is the grpc.ServiceDesc for Message service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -408,6 +444,10 @@ var Message_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "SendContact",
 			Handler:    _Message_SendContact_Handler,
+		},
+		{
+			MethodName: "SendSystemMessage",
+			Handler:    _Message_SendSystemMessage_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

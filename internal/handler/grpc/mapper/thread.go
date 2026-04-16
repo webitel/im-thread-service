@@ -76,7 +76,7 @@ func (s *ThreadInConverter) ConvertAddMemberRequest(in *impb.AddMemberRequest) (
 		if err != nil {
 			return nil, err
 		}
-		converted.InitiatorContactID = &initiatorContactID
+		converted.InitiatorContactID = initiatorContactID
 	}
 
 	return converted, nil
@@ -88,14 +88,18 @@ func (s *ThreadInConverter) ConvertRemoveMemberRequest(in *impb.RemoveMemberRequ
 	if err != nil {
 		return nil, err
 	}
-	initiatorContactID, err := uuid.Parse(in.GetInitiatorContactId())
-	if err != nil {
-		return nil, err
+	converted := &dto.RemoveMemberRequest{
+		TargetMemberID: targetMemberID,
 	}
-	return &dto.RemoveMemberRequest{
-		InitiatorContactID: initiatorContactID,
-		TargetMemberID:     targetMemberID,
-	}, nil
+	if in.InitiatorContactId != nil {
+		initiatorContactID, err := uuid.Parse(in.GetInitiatorContactId())
+		if err != nil {
+			return nil, err
+		}
+		converted.InitiatorContactID = initiatorContactID
+	}
+
+	return converted, nil
 }
 
 func (s *ThreadInConverter) convertMemberRole(in impb.ThreadRole) model.ThreadRole {
