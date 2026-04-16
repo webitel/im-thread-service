@@ -10,7 +10,6 @@ import (
 	imcontact "github.com/webitel/im-thread-service/infra/webitel/im-contact"
 	"github.com/webitel/im-thread-service/internal/domain/event"
 	"github.com/webitel/im-thread-service/internal/domain/model"
-	"github.com/webitel/im-thread-service/internal/domain/shared"
 	"github.com/webitel/im-thread-service/internal/service/dto"
 	guards "github.com/webitel/im-thread-service/internal/service/guards"
 	"github.com/webitel/im-thread-service/internal/store"
@@ -412,24 +411,18 @@ func (s *MessageService) SendInteractiveCallback(ctx context.Context, callback *
 func (s *MessageService) SendSystemMessage(ctx context.Context, msg *model.SystemMessage) (*model.SystemMessage, error) {
 	log := s.logger.With("operation", "send_system_message")
 
-	if msg.To.Type != shared.PeerThread {
-		return nil, errors.InvalidArgument("send_system_message: to must be a thread peer")
-	}
-
-	thread, err := s.uow.ThreadStore().GetByID(ctx, msg.To.ID)
+	t, err := s.threader.EnsureDirectThread(ctx, &dto.EnsureDirectThreadRequest{
+		DomainID: int(msg.DomainID),
+		From:     &msg.From,
+		To:       &msg.To,
+	})
 	if err != nil {
-		return nil, fmt.Errorf("send_system_message: resolve thread: %w", err)
-	}
-	if thread == nil {
-		return nil, errors.NotFound("send_system_message: thread not found")
+		log.ErrorContext(ctx, "ensure_direct_thread_failed", "err", err)
+		return nil, err
 	}
 
-	msg.ThreadID = thread.ID
-	msg.DomainID = int32(thread.DomainID)
-	msg.Members = make(uuid.UUIDs, 0, len(thread.Members))
-	for _, m := range thread.Members {
-		msg.Members = append(msg.Members, m.ContactID)
-	}
+	msg.ThreadID = t.ID
+	msg.Members = t.Members
 
 	err = s.uow.WithinTransaction(ctx, func(txCtx context.Context, uow store.UnitOfWork) error {
 		saved, err := uow.SystemMessages().Save(txCtx, msg)

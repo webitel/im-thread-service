@@ -10,6 +10,8 @@ func ConvertPbSystemMessageToDomain(in *impb.SendSystemMessageRequest) *model.Sy
 		return nil
 	}
 	return &model.SystemMessage{
+		DomainID:       in.GetDomainId(),
+		From:           MapPeerFromProto(in.GetFrom()),
 		To:             MapPeerFromProto(in.GetTo()),
 		Type:           in.GetType(),
 		Body:           in.GetBody(),

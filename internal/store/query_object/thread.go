@@ -73,10 +73,10 @@ func (q *threadQueryObject) FieldsMetadata() map[string]fieldMetadata {
 			}
 
 			return fmt.Sprintf(`
-				case
+				coalesce(case
 					when %s.kind = %d then %s.title
 					else %s.subject
-				end as subject
+				end, '') as subject
 			`, threadAlias, model.ThreadDirect, threadDirectSettingsAlias, threadAlias)
 		}
 	)
