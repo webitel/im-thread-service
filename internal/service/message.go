@@ -428,7 +428,7 @@ func (s *MessageService) SendSystemMessage(ctx context.Context, msg *model.Syste
 	msg.DomainID = int32(thread.DomainID)
 	msg.Members = make(uuid.UUIDs, 0, len(thread.Members))
 	for _, m := range thread.Members {
-		msg.Members = append(msg.Members, m.MemberID)
+		msg.Members = append(msg.Members, m.ContactID)
 	}
 
 	err = s.uow.WithinTransaction(ctx, func(txCtx context.Context, uow store.UnitOfWork) error {
@@ -441,12 +441,7 @@ func (s *MessageService) SendSystemMessage(ctx context.Context, msg *model.Syste
 		msg.CreatedAt = saved.CreatedAt
 		msg.WithCreatedEvent(msg.IdempotencyKey)
 
-		evs := msg.Events()
-		if len(evs) == 0 {
-			return fmt.Errorf("domain events queue is empty: transaction aborted")
-		}
-
-		return s.dispatchSystemMessageEvents(ctx, uow, saved)
+		return s.dispatchSystemMessageEvents(ctx, uow, msg)
 	})
 
 	if err != nil {
