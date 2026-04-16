@@ -98,7 +98,7 @@ func (t *ThreadManagementService) findAddMemberActors(ctx context.Context, threa
 		if initiatorActor != nil && targetActor != nil {
 			break
 		}
-		if actor.ID == initiatorContactIDDereferenced {
+		if actor.MemberID == initiatorContactIDDereferenced {
 			initiatorActor = actor
 		}
 		if actor.MemberID == targetContactID {

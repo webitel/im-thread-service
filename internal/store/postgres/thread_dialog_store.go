@@ -286,9 +286,9 @@ func (t *threadDialogStore) FindActorsPair(ctx context.Context, initiatorContact
 	LEFT JOIN im_thread.direct_settings sett ON sett.thread_dialog_id = dial.id
 
 	WHERE dial.thread_id IN (
-		SELECT thread_id
-		FROM im_thread.thread_dialog
-		WHERE id = @TargetMemberID
+		SELECT dial_filter.thread_id
+		FROM im_thread.thread_dialog dial_filter
+		WHERE dial_filter.id = @TargetMemberID
 		LIMIT 1
 	)
 	 AND (member_id = @InitiatorContactID OR id = @TargetMemberID)
