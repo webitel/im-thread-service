@@ -49,6 +49,7 @@ type ThreadStore interface {
 	Create(ctx context.Context, req *model.Thread) (*model.Thread, error)
 	Search(ctx context.Context, query queryobject.QueryObject) ([]*model.Thread, error)
 	ResolveDirect(ctx context.Context, from, to uuid.UUID) (*model.Thread, error)
+	GetByID(ctx context.Context, id uuid.UUID) (*model.Thread, error)
 }
 
 type ThreadPermissionStore interface {
@@ -67,6 +68,10 @@ type DirectThreadDialogOrchestration interface {
 
 type InteractiveCallback interface {
 	Save(ctx context.Context, callback *model.InteractiveCallback) (*model.InteractiveCallback, error)
+}
+
+type SystemMessageStore interface {
+	Save(ctx context.Context, msg *model.SystemMessage) (*model.SystemMessage, error)
 }
 
 type ThreadVariablesStore interface {

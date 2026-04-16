@@ -11,4 +11,5 @@ type UnitOfWork interface {
 	Messages() MessageStore
 	Outbox() OutboxStore
 	InteractiveCallback() InteractiveCallback
+	SystemMessages() SystemMessageStore
 }

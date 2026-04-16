@@ -170,6 +170,29 @@ func (t *threadStore) ResolveDirect(ctx context.Context, from, to uuid.UUID) (*m
 	return res, nil
 }
 
+func (t *threadStore) GetByID(ctx context.Context, id uuid.UUID) (*model.Thread, error) {
+	const query = `
+		SELECT t.id, t.domain_id, t.kind, t.subject, t.description, t.created_at, t.updated_at,
+		       members.aggregated_members AS members
+		FROM im_thread.thread t
+		LEFT JOIN LATERAL (
+			SELECT jsonb_agg(
+				json_build_object('id', id, 'member_id', member_id, 'role', thread_role)
+			) AS aggregated_members
+			FROM im_thread.thread_dialog dial
+			WHERE dial.thread_id = t.id
+		) AS members ON true
+		WHERE t.id = @ID
+	`
+
+	rows, err := t.db.Query(ctx, query, pgx.NamedArgs{"ID": id})
+	if err != nil {
+		return nil, err
+	}
+
+	return collectRow(rows, mapThreadRecordToModel)
+}
+
 func (t *threadStore) Delete(ctx context.Context, threadID uuid.UUID) error {
 	if threadID == uuid.Nil {
 		return errors.New("threadID cannot be nil")

@@ -23,6 +23,7 @@ type unitOfWork struct {
 	messageHistoryStore             store.MessageHistory
 	directThreadDialogOrchestration store.DirectThreadDialogOrchestration
 	interactiveCallbackStore        store.InteractiveCallback
+	systemMessageStore              store.SystemMessageStore
 }
 
 // NewPgxUnitOfWork returns a new unit of work, given a pgx pool.
@@ -54,6 +55,14 @@ func (u *unitOfWork) InteractiveCallback() store.InteractiveCallback {
 	}
 
 	return u.interactiveCallbackStore
+}
+
+func (u *unitOfWork) SystemMessages() store.SystemMessageStore {
+	if u.systemMessageStore == nil {
+		u.systemMessageStore = NewSystemMessageStore(u.querier)
+	}
+
+	return u.systemMessageStore
 }
 
 // ThreadDialogStore returns the thread dialog store for the given unit of work.

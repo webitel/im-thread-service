@@ -10,6 +10,7 @@ import (
 	imcontact "github.com/webitel/im-thread-service/infra/webitel/im-contact"
 	"github.com/webitel/im-thread-service/internal/domain/event"
 	"github.com/webitel/im-thread-service/internal/domain/model"
+	"github.com/webitel/im-thread-service/internal/domain/shared"
 	"github.com/webitel/im-thread-service/internal/service/dto"
 	guards "github.com/webitel/im-thread-service/internal/service/guards"
 	"github.com/webitel/im-thread-service/internal/store"
@@ -408,6 +409,54 @@ func (s *MessageService) SendInteractiveCallback(ctx context.Context, callback *
 	return savedCallback, nil
 }
 
+func (s *MessageService) SendSystemMessage(ctx context.Context, msg *model.SystemMessage) (*model.SystemMessage, error) {
+	log := s.logger.With("operation", "send_system_message")
+
+	if msg.To.Type != shared.PeerThread {
+		return nil, errors.InvalidArgument("send_system_message: to must be a thread peer")
+	}
+
+	thread, err := s.uow.ThreadStore().GetByID(ctx, msg.To.ID)
+	if err != nil {
+		return nil, fmt.Errorf("send_system_message: resolve thread: %w", err)
+	}
+	if thread == nil {
+		return nil, errors.NotFound("send_system_message: thread not found")
+	}
+
+	msg.ThreadID = thread.ID
+	msg.DomainID = int32(thread.DomainID)
+	msg.Members = make(uuid.UUIDs, 0, len(thread.Members))
+	for _, m := range thread.Members {
+		msg.Members = append(msg.Members, m.MemberID)
+	}
+
+	err = s.uow.WithinTransaction(ctx, func(txCtx context.Context, uow store.UnitOfWork) error {
+		saved, err := uow.SystemMessages().Save(txCtx, msg)
+		if err != nil {
+			return fmt.Errorf("save_system_message: %w", err)
+		}
+
+		msg.ID = saved.ID
+		msg.CreatedAt = saved.CreatedAt
+		msg.WithCreatedEvent(msg.IdempotencyKey)
+
+		evs := msg.Events()
+		if len(evs) == 0 {
+			return fmt.Errorf("domain events queue is empty: transaction aborted")
+		}
+
+		return s.dispatchSystemMessageEvents(ctx, uow, saved)
+	})
+
+	if err != nil {
+		log.ErrorContext(ctx, "transaction_failed", "err", err)
+		return nil, err
+	}
+
+	return msg, nil
+}
+
 func (s *MessageService) prepareMessageForSending(ctx context.Context, msg *model.Message) error {
 	t, err := s.threader.EnsureDirectThread(ctx, &dto.EnsureDirectThreadRequest{
 		DomainID: int(msg.DomainID),
@@ -450,6 +499,21 @@ func (s *MessageService) dispatchMessageEvents(ctx context.Context, uow store.Un
 
 	return s.dispatchEvents(ctx, uow, evs, func(e event.Outboxer) string {
 		return fmt.Sprintf("im_message.%s.message.%s.%s",
+			e.RecipientID(),
+			"created",
+			e.Version(),
+		)
+	})
+}
+
+func (s *MessageService) dispatchSystemMessageEvents(ctx context.Context, uow store.UnitOfWork, msg *model.SystemMessage) error {
+	evs := msg.Events()
+	if len(evs) == 0 {
+		return fmt.Errorf("domain events queue is empty: transaction aborted")
+	}
+
+	return s.dispatchEvents(ctx, uow, evs, func(e event.Outboxer) string {
+		return fmt.Sprintf("im_message.%s.system_message.%s.%s",
 			e.RecipientID(),
 			"created",
 			e.Version(),

@@ -23,6 +23,7 @@ type MessageService interface {
 	SendContact(ctx context.Context, msg *model.Message) (*model.Message, error)
 	SendInteractive(ctx context.Context, msg *model.Message) (*model.Message, error)
 	SendInteractiveCallback(ctx context.Context, callback *model.InteractiveCallback) (*model.InteractiveCallback, error)
+	SendSystemMessage(ctx context.Context, msg *model.SystemMessage) (*model.SystemMessage, error)
 }
 
 type MessageServer struct {
@@ -189,5 +190,19 @@ func (m *MessageServer) SendInteractiveCallback(ctx context.Context, in *impb.In
 		ButtonCode:   processed.ButtonCode,
 		CallbackData: processed.CallbackData,
 		ReactedAt:    processed.ReactedAtUnix(),
+	}, nil
+}
+
+func (m *MessageServer) SendSystemMessage(ctx context.Context, in *impb.SendSystemMessageRequest) (*impb.SendMessageResponse, error) {
+	saved, err := m.handler.SendSystemMessage(ctx, mapper.ConvertPbSystemMessageToDomain(in))
+	if err != nil {
+		return nil, err
+	}
+
+	return &impb.SendMessageResponse{
+		To: []*impb.Peer{
+			mapper.MapPeerToProto(saved.To),
+		},
+		Id: saved.ID.String(),
 	}, nil
 }

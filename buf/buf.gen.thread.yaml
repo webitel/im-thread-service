@@ -25,6 +25,8 @@ plugins:
       - module=github.com/webitel/protos/gen/go/im
 
 inputs:
-  # The relative path to the source proto files
-  - directory: "../../protos/im"
- 
+  - git_repo: https://github.com/webitel/protos.git
+    branch: main
+    subdir: im
+    depth: 1
+
