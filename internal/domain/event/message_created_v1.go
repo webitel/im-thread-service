@@ -45,7 +45,7 @@ type MessageCreated struct {
 	ThreadID    uuid.UUID         `json:"thread_id"`
 	DomainID    int32             `json:"domain_id"`
 	From        *shared.Peer      `json:"from"`
-	To          uuid.UUIDs        `json:"to"`
+	To          []*ThreadMember   `json:"to"`
 	SendID      string            `json:"send_id"`
 	Body        string            `json:"body"`
 	Type        int16             `json:"type"` // 1:TEXT, 2:FILE, 3:IMAGE, 4:SYSTEM
@@ -56,6 +56,12 @@ type MessageCreated struct {
 	Location    *LocationPayload  `json:"location,omitempty"`
 	Contact     *ContactPayload   `json:"contact,omitempty"`
 	Interactive json.RawMessage   `json:"interactive,omitempty"` // raw interactive payload due to dynamic schema
+}
+
+type ThreadMember struct {
+	ID        *uuid.UUID `json:"member_id,omitempty"`
+	ContactID uuid.UUID  `json:"contact_id"`
+	Role      int        `json:"role"`
 }
 
 func (MessageCreated) EventType() string        { return MessageCreatedEvent }

@@ -13,12 +13,6 @@ type (
 		To       *shared.Peer
 	}
 
-	EnsureDirectThreadResponse struct {
-		ID       uuid.UUID
-		DomainID int32
-		Members  uuid.UUIDs
-	}
-
 	SearchThreadDialogRequest struct {
 		DomainID int
 		Kind     model.ThreadKind
@@ -59,14 +53,6 @@ type AddMemberRequest struct {
 type RemoveMemberRequest struct {
 	TargetMemberID     uuid.UUID
 	InitiatorContactID uuid.UUID
-}
-
-func NewEnsureDirectThreadResponse(id uuid.UUID, domainID int32, members uuid.UUIDs) *EnsureDirectThreadResponse {
-	return &EnsureDirectThreadResponse{
-		ID:       id,
-		DomainID: domainID,
-		Members:  members,
-	}
 }
 
 func NewSearchThreadRequest(domainID int, kind model.ThreadKind, from, to *shared.Peer) *SearchThreadDialogRequest {
