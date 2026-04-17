@@ -28,6 +28,11 @@ type (
 		CreatedAt time.Time `json:"created_at" db:"created_at"`
 	}
 
+	HistoryMessageMember struct {
+		ID   uuid.UUID `json:"id" db:"id"`
+		Role int       `json:"role" db:"role"`
+	}
+
 	HistoryMessage struct {
 		ID        uuid.UUID      `json:"id" db:"id"`
 		DomainID  int            `json:"domain_id" db:"domain_id"`
@@ -39,8 +44,9 @@ type (
 		CreatedAt time.Time      `json:"created_at" db:"created_at"`
 		UpdatedAt time.Time      `json:"updated_at" db:"updated_at"`
 
-		Documents []*HistoryDocument `json:"documents" db:"documents"`
-		Images    []*HistoryImage    `json:"images" db:"images"`
+		Documents []*HistoryDocument    `json:"documents" db:"documents"`
+		Images    []*HistoryImage       `json:"images" db:"images"`
+		Member    *HistoryMessageMember `json:"member,omitempty" db:"member"`
 	}
 
 	HistoryMessageInputDTO struct {

@@ -44,6 +44,7 @@ type Message struct {
 	Location    *MessageLocation    `json:"location,omitempty" db:"location"`
 	Contact     *MessageContact     `json:"contact,omitempty" db:"contact"`
 	Interactive *MessageInteractive `json:"interactive,omitempty" db:"interactive"`
+	Member      *ThreadDialog       `json:"member,omitempty" db:"member"`
 
 	domainEvents []event.Outboxer
 }

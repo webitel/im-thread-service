@@ -62,9 +62,14 @@ func (s *MessageHistoryService) Search(ctx context.Context, hmiDTO *dto.HistoryM
 
 func mapHistoryMessagesToMessage(history []*dto.HistoryMessage) []*model.Message {
 	return utils.Map(history, func(histMsg *dto.HistoryMessage) *model.Message {
-		//? add identity scoped mapping [id]*object to reduce memory allocations?
 		docs := mapDocuments(histMsg.Documents)
 		images := mapImages(histMsg.Images)
+
+		member := &model.ThreadDialog{ContactID: histMsg.SenderID}
+		if histMsg.Member != nil {
+			member.ID = histMsg.Member.ID
+			member.ThreadRole = model.ThreadRole(histMsg.Member.Role)
+		}
 
 		return &model.Message{
 			ID:        histMsg.ID,
@@ -77,6 +82,7 @@ func mapHistoryMessagesToMessage(history []*dto.HistoryMessage) []*model.Message
 			Images:    images,
 			Documents: docs,
 			Metadata:  histMsg.Metadata,
+			Member:    member,
 		}
 	})
 }
