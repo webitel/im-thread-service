@@ -20,11 +20,13 @@ var (
 		"updated_at": true,
 		"documents":  true,
 		"images":     true,
+		"member":     true,
 	}
 	defaultFields = []string{
 		"id", "thread_id", "sender_id",
 		"type", "body", "metadata",
 		"created_at", "updated_at", "images", "documents",
+		"member",
 	}
 )
 
