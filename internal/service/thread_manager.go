@@ -12,7 +12,6 @@ import (
 	"github.com/webitel/im-thread-service/internal/service/dto"
 	"github.com/webitel/im-thread-service/internal/store"
 	queryobject "github.com/webitel/im-thread-service/internal/store/query_object"
-	"github.com/webitel/im-thread-service/internal/utils"
 	"github.com/webitel/webitel-go-kit/pkg/errors"
 )
 
@@ -302,7 +301,7 @@ func (t *ThreadManagementService) verifyRemoveMemberInitiatorPermissions(initiat
 	return nil
 }
 
-func (t *ThreadManagementService) EnsureDirectThread(ctx context.Context, req *dto.EnsureDirectThreadRequest) (*dto.EnsureDirectThreadResponse, error) {
+func (t *ThreadManagementService) EnsureDirectThread(ctx context.Context, req *dto.EnsureDirectThreadRequest) (*model.Thread, error) {
 	if req == nil {
 		return nil, errors.InvalidArgument("request cannot be nil", errors.WithID("service.thread_manager.ensure_direct_thread"))
 	}
@@ -313,10 +312,7 @@ func (t *ThreadManagementService) EnsureDirectThread(ctx context.Context, req *d
 	}
 
 	if directThread != nil {
-		members := utils.Map(directThread.Members, func(m *model.ThreadDialog) uuid.UUID {
-			return m.ContactID
-		})
-		return dto.NewEnsureDirectThreadResponse(directThread.ID, int32(directThread.DomainID), members), nil
+		return directThread, nil
 	}
 
 	directThread, err = t.orchestrateDirectThreadCreation(ctx, req)
@@ -324,30 +320,30 @@ func (t *ThreadManagementService) EnsureDirectThread(ctx context.Context, req *d
 		return nil, err
 	}
 
-	return dto.NewEnsureDirectThreadResponse(directThread.ID, int32(directThread.DomainID), uuid.UUIDs{req.From.ID, req.To.ID}), nil
+	return directThread, nil
 }
 
 func (t *ThreadManagementService) searchDirectThread(ctx context.Context, from, to *shared.Peer) (*model.Thread, error) {
-	if from == nil || to == nil {
-		return nil, errors.New("from and to peers cannot be nil")
+	if from == nil {
+		return nil, errors.InvalidArgument("from cant be null", errors.WithID("service.thread_manager.search_direct_thread"))
 	}
-	var (
-		thread *model.Thread
-		err    error
-	)
+
+	if to == nil {
+		return nil, errors.InvalidArgument("to cant be null", errors.WithID("service.thread_manager.search_direct_thread"))
+	}
 
 	switch to.Type {
 	case shared.PeerContact:
-		thread, err = t.uow.ThreadStore().ResolveDirect(ctx, from.ID, to.ID)
+		thread, err := t.uow.ThreadStore().ResolveDirect(ctx, from.ID, to.ID)
 		if err != nil {
 			return nil, err
 		}
+		return thread, nil
 	case shared.PeerThread:
-		threadID := to.ID
 		threads, err := t.uow.ThreadStore().Search(
 			ctx,
 			queryobject.NewThreadQueryObject().
-				WithIDFilter(threadID).
+				WithIDFilter(to.ID).
 				WithContactIDFilter(from.ID).
 				WithKindFilter(model.ThreadDirect).
 				WithFields([]string{"id", "domain_id", "created_at", "updated_at", "kind", "owner", "subject", "description", "members"}).
@@ -357,15 +353,12 @@ func (t *ThreadManagementService) searchDirectThread(ctx context.Context, from, 
 			return nil, err
 		}
 		if len(threads) == 0 {
-			return nil, nil
+			return nil, errors.Forbidden("can`t send message to thread not beeing part of", errors.WithID("service.thread_manager.search_direct_thread"))
 		}
-		thread = threads[0]
+		return threads[0], nil
 	default:
 		return nil, errors.New("invalid peer type for direct")
 	}
-
-	return thread, nil
-
 }
 
 func (t *ThreadManagementService) orchestrateDirectThreadCreation(ctx context.Context, req *dto.EnsureDirectThreadRequest) (*model.Thread, error) {
@@ -386,8 +379,13 @@ func (t *ThreadManagementService) orchestrateDirectThreadCreation(ctx context.Co
 		}
 		createdThread = savedThread
 
-		if _, err = t.initializeDirectThreadDialogs(ctx, uow, createdThread.ID, req.DomainID, req.From, req.To); err != nil {
+		members, err := t.initializeDirectThreadDialogs(ctx, uow, createdThread.ID, req.DomainID, req.From, req.To)
+		if err != nil {
 			return err
+		}
+
+		for _, member := range members {
+			createdThread.Members = append(createdThread.Members, extendedThreadDialogToSimpleMapper(member))
 		}
 
 		events, err := t.buildDirectThreadCreatedEvents(createdThread, req.From, req.To)
@@ -429,6 +427,15 @@ func (t *ThreadManagementService) createDirectThread(ctx context.Context, uow st
 		return nil, err
 	}
 	return createdThread, nil
+}
+
+func extendedThreadDialogToSimpleMapper(tde *model.ThreadDialogExtended) *model.ThreadDialog {
+	return &model.ThreadDialog{
+		BaseModel:  shared.BaseModel{ID: tde.ID},
+		ContactID:  tde.MemberID,
+		ThreadID:   tde.ThreadID,
+		ThreadRole: tde.ThreadRole,
+	}
 }
 
 func (t *ThreadManagementService) initializeDirectThreadDialogs(ctx context.Context, uow store.UnitOfWork, threadID uuid.UUID, domainID int, from, to *shared.Peer) ([]*model.ThreadDialogExtended, error) {
@@ -499,18 +506,24 @@ func (t *ThreadManagementService) initializeDirectThreadDialogs(ctx context.Cont
 
 func (t *ThreadManagementService) buildDirectThreadCreatedEvents(thread *model.Thread, from, to *shared.Peer) ([]ThreadEvent, error) {
 	if thread == nil || from == nil || to == nil {
-		return nil, errors.New("thread, from and to cannot be nil")
+		return nil, errors.InvalidArgument("thread, from and to cannot be nil")
 	}
-	var (
-		events     []ThreadEvent
-		membersIDs = []uuid.UUID{from.ID, to.ID}
-	)
-	events = append(events,
+
+	members := make([]*event.ThreadMember, 0, len(thread.Members))
+	for _, member := range thread.Members {
+		var memberID *uuid.UUID
+		if member.ID != uuid.Nil {
+			memberID = &member.ID
+		}
+		members = append(members, &event.ThreadMember{ID: memberID, ContactID: member.ContactID, Role: int(member.ThreadRole)})
+	}
+
+	events := []ThreadEvent{
 		event.NewThreadCreatedBuilder().
 			WithDomainID(int32(thread.DomainID)).
 			WithCreatedAt(thread.CreatedAt).
 			WithID(thread.ID).
-			WithMembers(membersIDs).
+			WithMembers(members).
 			WithSubject(to.Identity.Name).
 			WithKind(thread.Kind.String()).
 			WithRecipient(&event.Recipient{
@@ -522,7 +535,7 @@ func (t *ThreadManagementService) buildDirectThreadCreatedEvents(thread *model.T
 			WithDomainID(int32(thread.DomainID)).
 			WithCreatedAt(thread.CreatedAt).
 			WithID(thread.ID).
-			WithMembers(membersIDs).
+			WithMembers(members).
 			WithSubject(from.Identity.Name).
 			WithKind(thread.Kind.String()).
 			WithRecipient(&event.Recipient{
@@ -530,7 +543,7 @@ func (t *ThreadManagementService) buildDirectThreadCreatedEvents(thread *model.T
 				Name: to.Identity.Name,
 			}).
 			Build(),
-	)
+	}
 
 	return events, nil
 }

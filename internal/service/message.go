@@ -17,7 +17,7 @@ import (
 )
 
 type ThreadManager interface {
-	EnsureDirectThread(ctx context.Context, req *dto.EnsureDirectThreadRequest) (*dto.EnsureDirectThreadResponse, error)
+	EnsureDirectThread(ctx context.Context, req *dto.EnsureDirectThreadRequest) (*model.Thread, error)
 }
 
 type MessageService struct {

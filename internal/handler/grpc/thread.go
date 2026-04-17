@@ -18,7 +18,6 @@ var (
 
 type ThreadManagementService interface {
 	Search(ctx context.Context, searchRequest *dto.ThreadSearchRequest) ([]*model.Thread, error)
-	EnsureDirectThread(ctx context.Context, req *dto.EnsureDirectThreadRequest) (*dto.EnsureDirectThreadResponse, error)
 	AddMember(context.Context, *dto.AddMemberRequest) (uuid.UUID, error)
 	RemoveMember(context.Context, *dto.RemoveMemberRequest) error
 }
