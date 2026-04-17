@@ -23,7 +23,7 @@ type MessageService interface {
 	SendContact(ctx context.Context, msg *model.Message) (*model.Message, error)
 	SendInteractive(ctx context.Context, msg *model.Message) (*model.Message, error)
 	SendInteractiveCallback(ctx context.Context, callback *model.InteractiveCallback) (*model.InteractiveCallback, error)
-	SendSystemMessage(ctx context.Context, msg *model.SystemMessage) (*model.SystemMessage, error)
+	SendSystemMessage(ctx context.Context, msg *model.Message) (*model.Message, error)
 }
 
 type MessageServer struct {

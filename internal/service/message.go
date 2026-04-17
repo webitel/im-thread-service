@@ -408,33 +408,26 @@ func (s *MessageService) SendInteractiveCallback(ctx context.Context, callback *
 	return savedCallback, nil
 }
 
-func (s *MessageService) SendSystemMessage(ctx context.Context, msg *model.SystemMessage) (*model.SystemMessage, error) {
+func (s *MessageService) SendSystemMessage(ctx context.Context, msg *model.Message) (*model.Message, error) {
 	log := s.logger.With("operation", "send_system_message")
 
-	t, err := s.threader.EnsureDirectThread(ctx, &dto.EnsureDirectThreadRequest{
-		DomainID: int(msg.DomainID),
-		From:     &msg.From,
-		To:       &msg.To,
-	})
-	if err != nil {
-		log.ErrorContext(ctx, "ensure_direct_thread_failed", "err", err)
+	if err := s.prepareMessageForSending(ctx, msg); err != nil {
+		log.ErrorContext(ctx, "prepare_message_failed", "err", err)
 		return nil, err
 	}
 
-	msg.ThreadID = t.ID
-	msg.Members = t.Members
-
-	err = s.uow.WithinTransaction(ctx, func(txCtx context.Context, uow store.UnitOfWork) error {
-		saved, err := uow.SystemMessages().Save(txCtx, msg)
-		if err != nil {
-			return fmt.Errorf("save_system_message: %w", err)
+	var savedMsg *model.Message
+	err := s.uow.WithinTransaction(ctx, func(txCtx context.Context, uow store.UnitOfWork) error {
+		var err error
+		if savedMsg, err = uow.Messages().SaveSystemMessage(txCtx, msg); err != nil {
+			return err
 		}
+		savedMsg.To = msg.To
+		savedMsg.IdempotencyKey = msg.IdempotencyKey
 
-		msg.ID = saved.ID
-		msg.CreatedAt = saved.CreatedAt
-		msg.WithCreatedEvent(msg.IdempotencyKey)
+		savedMsg.WithCreatedEvent(msg.IdempotencyKey, &msg.From)
 
-		return s.dispatchSystemMessageEvents(ctx, uow, msg)
+		return s.dispatchMessageEvents(txCtx, uow, savedMsg)
 	})
 
 	if err != nil {
@@ -442,7 +435,7 @@ func (s *MessageService) SendSystemMessage(ctx context.Context, msg *model.Syste
 		return nil, err
 	}
 
-	return msg, nil
+	return savedMsg, nil
 }
 
 func (s *MessageService) prepareMessageForSending(ctx context.Context, msg *model.Message) error {
@@ -487,21 +480,6 @@ func (s *MessageService) dispatchMessageEvents(ctx context.Context, uow store.Un
 
 	return s.dispatchEvents(ctx, uow, evs, func(e event.Outboxer) string {
 		return fmt.Sprintf("im_message.%s.message.%s.%s",
-			e.RecipientID(),
-			"created",
-			e.Version(),
-		)
-	})
-}
-
-func (s *MessageService) dispatchSystemMessageEvents(ctx context.Context, uow store.UnitOfWork, msg *model.SystemMessage) error {
-	evs := msg.Events()
-	if len(evs) == 0 {
-		return fmt.Errorf("domain events queue is empty: transaction aborted")
-	}
-
-	return s.dispatchEvents(ctx, uow, evs, func(e event.Outboxer) string {
-		return fmt.Sprintf("im_message.%s.system_message.%s.%s",
 			e.RecipientID(),
 			"created",
 			e.Version(),

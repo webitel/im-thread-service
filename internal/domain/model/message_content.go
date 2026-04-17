@@ -12,6 +12,12 @@ import (
 	"github.com/webitel/webitel-go-kit/pkg/errors"
 )
 
+type MessageSystem struct {
+	MessageID string         `json:"message_id" db:"message_id"`
+	Type      string         `json:"type" db:"type"`
+	Metadata  map[string]any `json:"metadata" db:"metadata"`
+}
+
 type MessageLocation struct {
 	MessageID string  `json:"message_id" db:"message_id"`
 	Address   *string `json:"address" db:"address"`

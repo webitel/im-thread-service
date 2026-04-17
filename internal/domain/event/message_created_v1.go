@@ -56,6 +56,7 @@ type MessageCreated struct {
 	Location    *LocationPayload  `json:"location,omitempty"`
 	Contact     *ContactPayload   `json:"contact,omitempty"`
 	Interactive json.RawMessage   `json:"interactive,omitempty"` // raw interactive payload due to dynamic schema
+	System      *SystemPayload    `json:"system,omitempty"`
 }
 
 func (MessageCreated) EventType() string        { return MessageCreatedEvent }
@@ -125,6 +126,18 @@ func NewContactPayload(name, phone, email *string) *ContactPayload {
 		Name:  name,
 		Phone: phone,
 		Email: email,
+	}
+}
+
+type SystemPayload struct {
+	Type     string         `json:"type"`
+	Metadata map[string]any `json:"metadata,omitempty"`
+}
+
+func NewSystemPayload(systemType string, metadata map[string]any) *SystemPayload {
+	return &SystemPayload{
+		Type:     systemType,
+		Metadata: metadata,
 	}
 }
 

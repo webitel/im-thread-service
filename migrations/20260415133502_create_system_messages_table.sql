@@ -1,17 +1,19 @@
 -- +goose Up
 -- +goose StatementBegin
 
+DROP TABLE IF EXISTS im_message.system_messages;
+
 CREATE TABLE IF NOT EXISTS im_message.system_messages (
-    id UUID PRIMARY KEY DEFAULT uuidv7(),
-    domain_id int not null check(domain_id > 0),
-    thread_id UUID NOT NULL references im_thread.thread(id) on delete no action,
-    type VARCHAR(64) NOT NULL,
-    body TEXT,
-    metadata JSONB DEFAULT '{}'::jsonb,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
+  message_id UUID PRIMARY KEY REFERENCES im_message.messages(id) ON DELETE CASCADE,
+  type       VARCHAR(64) NOT NULL,
+  metadata   JSONB NOT NULL DEFAULT '{}'::jsonb
+  );
 
 -- +goose StatementEnd
 
 -- +goose Down
+-- +goose StatementBegin
+
 DROP TABLE IF EXISTS im_message.system_messages;
+
+-- +goose StatementEnd
