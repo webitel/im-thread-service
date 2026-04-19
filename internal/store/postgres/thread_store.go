@@ -2,7 +2,6 @@ package postgres
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"time"
 
@@ -12,6 +11,7 @@ import (
 	"github.com/webitel/im-thread-service/internal/domain/shared"
 	queryobject "github.com/webitel/im-thread-service/internal/store/query_object"
 	"github.com/webitel/im-thread-service/internal/utils"
+	"github.com/webitel/webitel-go-kit/pkg/errors"
 )
 
 // [D]ata [A]cess [O]bjects
@@ -135,7 +135,6 @@ func (t *threadStore) ResolveDirect(ctx context.Context, from, to uuid.UUID) (*m
 				WHERE dial.thread_id = t.id
 		) AS members ON true
 		WHERE kind = @Kind
-
 				AND id IN (
 	           		SELECT thread_id
 	            	FROM im_thread.thread_dialog
@@ -157,14 +156,14 @@ func (t *threadStore) ResolveDirect(ctx context.Context, from, to uuid.UUID) (*m
 
 	row, err := t.db.Query(ctx, query, args)
 	if err != nil {
-		return nil, err
+		return nil, errors.Internal("executing direct thread query", errors.WithCause(err), errors.WithID("postgres.thread_store.resolve_direct"), errors.WithValue("query", query))
 	}
 	res, err := collectRow(row, mapThreadRecordToModel)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
 		}
-		return nil, err
+		return nil, errors.Internal("collecting direct thread result", errors.WithCause(err), errors.WithID("postgres.thread_store.resolve_direct"))
 	}
 
 	return res, nil

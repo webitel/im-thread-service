@@ -29,13 +29,13 @@ func NewRecipient(id uuid.UUID, name string) *Recipient {
 }
 
 type ThreadCreated struct {
-	ID        uuid.UUID   `json:"id"`
-	DomainID  int32       `json:"domain_id"`
-	CreatedAt time.Time   `json:"created_at"`
-	Subject   string      `json:"subject"`
-	Recipient *Recipient  `json:"recipient"`
-	Kind      string      `json:"kind"`
-	Members   []uuid.UUID `json:"members"`
+	ID        uuid.UUID       `json:"id"`
+	DomainID  int32           `json:"domain_id"`
+	CreatedAt time.Time       `json:"created_at"`
+	Subject   string          `json:"subject"`
+	Recipient *Recipient      `json:"recipient"`
+	Kind      string          `json:"kind"`
+	Members   []*ThreadMember `json:"members"`
 }
 
 func (e *ThreadCreated) serialize(data any, version string) (OutboxEvent, error) {
@@ -115,7 +115,7 @@ func (b *ThreadCreatedBuilder) WithKind(kind string) *ThreadCreatedBuilder {
 	return b
 }
 
-func (b *ThreadCreatedBuilder) WithMembers(members []uuid.UUID) *ThreadCreatedBuilder {
+func (b *ThreadCreatedBuilder) WithMembers(members []*ThreadMember) *ThreadCreatedBuilder {
 	b.event.Members = members
 	return b
 }

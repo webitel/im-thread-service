@@ -26,8 +26,12 @@ const (
 // ThreadPermissionManagementClient is the client API for ThreadPermissionManagement service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+//
+// ThreadPermissionManagement service provides operations for managing thread permissions for thread members.
 type ThreadPermissionManagementClient interface {
+	// Retrieves the permissions of thread member.
 	GetThreadPermissions(ctx context.Context, in *GetThreadPermissionsRequest, opts ...grpc.CallOption) (*GetThreadPermissionsResponse, error)
+	// Updates the permissions of thread member.
 	UpdateThreadPermissions(ctx context.Context, in *UpdateThreadPermissionsRequest, opts ...grpc.CallOption) (*ThreadPermissions, error)
 }
 
@@ -62,8 +66,12 @@ func (c *threadPermissionManagementClient) UpdateThreadPermissions(ctx context.C
 // ThreadPermissionManagementServer is the server API for ThreadPermissionManagement service.
 // All implementations must embed UnimplementedThreadPermissionManagementServer
 // for forward compatibility.
+//
+// ThreadPermissionManagement service provides operations for managing thread permissions for thread members.
 type ThreadPermissionManagementServer interface {
+	// Retrieves the permissions of thread member.
 	GetThreadPermissions(context.Context, *GetThreadPermissionsRequest) (*GetThreadPermissionsResponse, error)
+	// Updates the permissions of thread member.
 	UpdateThreadPermissions(context.Context, *UpdateThreadPermissionsRequest) (*ThreadPermissions, error)
 	mustEmbedUnimplementedThreadPermissionManagementServer()
 }

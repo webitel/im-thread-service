@@ -30,30 +30,11 @@ type MessageCreate struct {
 	ThreadID   uuid.UUID
 	DomainID   int32
 	From       shared.Peer
-	Recipients uuid.UUIDs
+	Recipients []*ThreadDialog
 	Body       string
 	SendID     string          // Used for client-side correlation in RabbitMQ events.
 	Images     []ImageInput    // Data for image attachments.
 	Documents  []DocumentInput // Data for file attachments.
-}
-
-// NewTextMessage initializes a standard text message and stages events for all recipients.
-func NewTextMessage(in MessageCreate) *Message {
-	cleanText := prepareText(in.Body)
-	msg := &Message{
-		ID:        uuid.New(),
-		ThreadID:  in.ThreadID,
-		DomainID:  in.DomainID,
-		From:      in.From,
-		To:        in.Recipients,
-		Body:      cleanText,
-		Type:      MessageTypeText,
-		Metadata:  BuildMetadata(cleanText),
-		CreatedAt: time.Now().UTC(),
-	}
-
-	addCreatedEvents(msg, in)
-	return msg
 }
 
 // NewImageMessage initializes a message with image attachments and stages events.
@@ -118,30 +99,6 @@ func NewDocumentMessage(in MessageCreate) *Message {
 }
 
 // --- Internal Helpers ---
-
-// addCreatedEvents is a private helper to avoid code duplication across factories.
-// It maps the domain message state to a set of transport-ready events.
-func addCreatedEvents(msg *Message, in MessageCreate) {
-	ev := event.MessageCreated{
-		MessageID:  msg.ID,
-		ThreadID:   msg.ThreadID,
-		DomainID:   msg.DomainID,
-		SendID:     in.SendID, // Passed through only to the event
-		From:       &shared.Peer{ID: msg.From.ID, Type: msg.From.Type},
-		To:         in.Recipients,
-		Body:       msg.Body,
-		Type:       int16(msg.Type),
-		OccurredAt: msg.CreatedAt,
-	}
-	// Attach media payloads if present
-	if len(msg.Images) > 0 {
-		ev.Images = mapImagesToPayload(msg.Images)
-	}
-	if len(msg.Documents) > 0 {
-		ev.Documents = mapDocumentsToPayload(msg.Documents)
-	}
-	msg.AddEvent(ev)
-}
 
 func mapImagesToPayload(imgs []*MessageImage) []event.ImagePayload {
 	res := make([]event.ImagePayload, 0, len(imgs))

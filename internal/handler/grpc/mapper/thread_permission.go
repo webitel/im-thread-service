@@ -46,7 +46,7 @@ func (s *ThreadPermissionInConverter) ConvertUpdateThreadPermissionRequest(in *i
 
 		CanAddMembers:               in.CanAddMembers,
 		CanChangeMembersPermissions: in.CanChangeMembersPermissions,
-		CanChangeThreadInfo:         in.CanUpdateThreadInfo,
+		CanChangeThreadInfo:         in.CanChangeThreadInfo,
 		CanRemoveMembers:            in.CanRemoveMembers,
 		CanSendMessages:             in.CanSendMessages,
 	}

@@ -25,19 +25,19 @@ const (
 )
 
 type Message struct {
-	ID             uuid.UUID      `json:"id" db:"id"`
-	IdempotencyKey string         `json:"idempotency_key" db:"-"`
-	ThreadID       uuid.UUID      `json:"thread_id" db:"thread_id"`
-	DomainID       int32          `json:"domain_id" db:"domain_id"`
-	From           shared.Peer    `json:"from" db:"from"`
-	SendTo         shared.Peer    `json:"send_to" db:"send_to"`
-	To             uuid.UUIDs     `json:"to" db:"to"`
-	Body           string         `json:"body" db:"body"`
-	Type           MessageType    `json:"type" db:"type"`
-	Metadata       map[string]any `json:"metadata,omitempty" db:"metadata"`
-	CreatedAt      time.Time      `json:"created_at" db:"created_at"`
-	UpdatedAt      time.Time      `json:"updated_at" db:"updated_at"`
-	SenderID       uuid.UUID      `json:"sender_id" db:"sender_id"`
+	ID             uuid.UUID       `json:"id" db:"id"`
+	IdempotencyKey string          `json:"idempotency_key" db:"-"`
+	ThreadID       uuid.UUID       `json:"thread_id" db:"thread_id"`
+	DomainID       int32           `json:"domain_id" db:"domain_id"`
+	From           shared.Peer     `json:"from" db:"from"`
+	SendTo         shared.Peer     `json:"send_to" db:"send_to"`
+	To             []*ThreadDialog `json:"to" db:"to"`
+	Body           string          `json:"body" db:"body"`
+	Type           MessageType     `json:"type" db:"type"`
+	Metadata       map[string]any  `json:"metadata,omitempty" db:"metadata"`
+	CreatedAt      time.Time       `json:"created_at" db:"created_at"`
+	UpdatedAt      time.Time       `json:"updated_at" db:"updated_at"`
+	SenderID       uuid.UUID       `json:"sender_id" db:"sender_id"`
 
 	Images      []*MessageImage     `json:"images,omitempty" db:"images"`
 	Documents   []*MessageDocument  `json:"documents,omitempty" db:"documents"`
@@ -45,6 +45,7 @@ type Message struct {
 	Contact     *MessageContact     `json:"contact,omitempty" db:"contact"`
 	Interactive *MessageInteractive `json:"interactive,omitempty" db:"interactive"`
 	System      *MessageSystem      `json:"system,omitempty" db:"system"`
+	Member      *ThreadDialog       `json:"member,omitempty" db:"member"`
 
 	domainEvents []event.Outboxer
 }
@@ -74,12 +75,30 @@ func (m *Message) WithCreatedEvent(sendID string, from *shared.Peer) *Message {
 		return m
 	}
 
+	to := make([]*event.ThreadMember, 0, len(m.To))
+	memberMapper := func(member *ThreadDialog) *event.ThreadMember {
+		var memberID *uuid.UUID
+		if member.ID != uuid.Nil {
+			memberID = &member.ID
+		}
+
+		return &event.ThreadMember{
+			ID:        memberID,
+			ContactID: member.ContactID,
+			Role:      int(member.ThreadRole),
+		}
+	}
+
+	for _, member := range m.To {
+		to = append(to, memberMapper(member))
+	}
+
 	e := event.MessageCreated{
 		MessageID:  m.ID,
 		ThreadID:   m.ThreadID,
 		DomainID:   m.DomainID,
 		From:       from,
-		To:         m.To,
+		To:         to,
 		SendID:     sendID,
 		Body:       m.Body,
 		Type:       int16(m.Type),

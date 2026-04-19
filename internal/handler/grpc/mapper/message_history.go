@@ -71,16 +71,24 @@ func MapMessage2SearchMessageHistoryResponse(messages []*model.Message) *impb.Se
 	}
 }
 
-func GetUniqueFrom(messages []*model.Message) []string {
+func GetUniqueFrom(messages []*model.Message) []*impb.ThreadMember {
 	var (
-		set = set.New[uuid.UUID](0)
+		set = set.New[*model.ThreadDialog](0)
 	)
 
 	for _, message := range messages {
-		set.Insert(message.From.ID)
+		if mem := message.Member; mem != nil {
+			set.Insert(mem)
+		}
 	}
 
-	return utils.Map(set.Slice(), func(p uuid.UUID) string { return p.String() })
+	return utils.Map(set.Slice(), func(p *model.ThreadDialog) *impb.ThreadMember {
+		return &impb.ThreadMember{
+			Id:        p.ID.String(),
+			ContactId: p.ContactID.String(),
+			Role:      impb.ThreadRole(p.ThreadRole),
+		}
+	})
 }
 
 func mapDocs(docs []*model.MessageDocument) []*impb.Document {
