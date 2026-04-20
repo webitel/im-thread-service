@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/webitel/im-thread-service/internal/domain/shared"
 )
 
 const (
@@ -44,7 +43,7 @@ type MessageCreated struct {
 	MessageID   uuid.UUID         `json:"message_id"`
 	ThreadID    uuid.UUID         `json:"thread_id"`
 	DomainID    int32             `json:"domain_id"`
-	From        *shared.Peer      `json:"from"`
+	From        *ThreadMember     `json:"from"`
 	To          []*ThreadMember   `json:"to"`
 	SendID      string            `json:"send_id"`
 	Body        string            `json:"body"`

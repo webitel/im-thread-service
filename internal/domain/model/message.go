@@ -92,11 +92,22 @@ func (m *Message) WithCreatedEvent(sendID string, from *shared.Peer) *Message {
 		to = append(to, memberMapper(member))
 	}
 
+	var messageFrom *event.ThreadMember
+	for _, member := range m.To {
+		if member.ContactID == m.From.ID {
+			messageFrom = &event.ThreadMember{
+				ID:        &member.ID,
+				ContactID: member.ContactID,
+				Role:      int(member.ThreadRole),
+			}
+		}
+	}
+
 	e := event.MessageCreated{
 		MessageID:  m.ID,
 		ThreadID:   m.ThreadID,
 		DomainID:   m.DomainID,
-		From:       from,
+		From:       messageFrom,
 		To:         to,
 		SendID:     sendID,
 		Body:       m.Body,
