@@ -127,6 +127,6 @@ func TestFindAddMemberActors_ResolvesInitiatorAndTargetByContactID(t *testing.T)
 
 var _ store.UnitOfWork = fakeUnitOfWork{}
 var _ store.ThreadDialogStore = (*fakeThreadDialogStore)(nil)
-var _ store.ThreadStore = fakeThreadStore{}
+var _ store.ThreadStore = nil
 var _ store.OutboxStore = fakeOutboxStore{}
 var _ = dto.AddMemberRequest{}

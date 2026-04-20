@@ -22,21 +22,18 @@ func NewThreadDialogStore(db Querier) *threadDialogStore {
 }
 
 type threadDialog struct {
-	ID        uuid.UUID `db:"id"`
-	DomainID  int
-	CreatedAt time.Time
-	UpdatedAt time.Time
-	MemberID  uuid.UUID        `db:"member_id"`
-	ThreadID  uuid.UUID        `db:"thread_id"`
-	Role      model.ThreadRole `db:"thread_role"`
-
-	DirectTo                    *uuid.UUID `db:"direct_to,omitempty"`
-	MemberOf                    *uuid.UUID `db:"member_of,omitempty"`
-	CanSendMessages             bool       `db:"can_send_messages"`
-	CanAddMembers               bool       `db:"can_add_members"`
-	CanChangeMembersPermissions bool       `db:"can_change_members_permissions"`
-	CanRemoveMembers            bool       `db:"can_remove_members"`
-	CanChangeThreadInfo         bool       `db:"can_change_thread_info"`
+	ID                          uuid.UUID `db:"id"`
+	DomainID                    int
+	CreatedAt                   time.Time
+	UpdatedAt                   time.Time
+	MemberID                    uuid.UUID        `db:"member_id"`
+	ThreadID                    uuid.UUID        `db:"thread_id"`
+	Role                        model.ThreadRole `db:"thread_role"`
+	CanSendMessages             bool             `db:"can_send_messages"`
+	CanAddMembers               bool             `db:"can_add_members"`
+	CanChangeMembersPermissions bool             `db:"can_change_members_permissions"`
+	CanRemoveMembers            bool             `db:"can_remove_members"`
+	CanChangeThreadInfo         bool             `db:"can_change_thread_info"`
 
 	Title string `db:"title"`
 }
@@ -59,14 +56,14 @@ func (t *threadDialogStore) Create(ctx context.Context, member *model.ThreadDial
 		query = `
 		WITH inserted_dialog AS
 		(
-			 INSERT INTO im_thread.thread_dialog(domain_id, member_id, thread_id, thread_role, direct_to, member_of)
-			(SELECT domain_id, @MemberID, id, @ThreadRole, @DirectTo, @MemberOf FROM im_thread.thread WHERE id = @ThreadID LIMIT 1)
+			 INSERT INTO im_thread.thread_dialog(domain_id, member_id, thread_id, thread_role)
+			(SELECT domain_id, @MemberID, id, @ThreadRole FROM im_thread.thread WHERE id = @ThreadID LIMIT 1)
 			RETURNING *
 		),
-		inserted_permissions AS 
+		inserted_permissions AS
 		(
 			INSERT INTO im_thread.thread_permission(thread_id, thread_dialog_id, can_send_messages, can_add_members, can_change_members_permissions, can_remove_members, can_change_thread_info)
-			(SELECT thread_id, id, 
+			(SELECT thread_id, id,
 			@CanSendMessages,
 			@CanAddMembers,
 			@CanChangeMembersPermissions,
@@ -78,7 +75,7 @@ func (t *threadDialogStore) Create(ctx context.Context, member *model.ThreadDial
 		inserted_thread_direct_settings AS (
 			INSERT INTO im_thread.direct_settings (thread_dialog_id, domain_id, title)
 			(SELECT id, domain_id, @ThreadTitle FROM inserted_dialog)
-			RETURNING * 
+			RETURNING *
 		)
 
 		SELECT dial.id, dial.domain_id, dial.created_at, dial.updated_at, dial.member_id, dial.thread_id,
@@ -94,8 +91,6 @@ func (t *threadDialogStore) Create(ctx context.Context, member *model.ThreadDial
 		"MemberID":                    member.MemberID,
 		"ThreadID":                    member.ThreadID,
 		"ThreadRole":                  member.ThreadRole,
-		"DirectTo":                    member.DirectTo,
-		"MemberOf":                    member.MemberOf,
 		"CanSendMessages":             member.Permissions.CanSendMessages,
 		"CanAddMembers":               member.Permissions.CanAddMembers,
 		"CanChangeMembersPermissions": member.Permissions.CanChangeMembersPermissions,
@@ -130,9 +125,6 @@ func mapToThreadDialogExtendedModel(dialog *threadDialog) (*model.ThreadDialogEx
 		MemberID:   dialog.MemberID,
 		ThreadID:   dialog.ThreadID,
 		ThreadRole: dialog.Role,
-
-		DirectTo: dialog.DirectTo,
-		MemberOf: dialog.MemberOf,
 		Permissions: model.ThreadPermissions{
 			CanSendMessages:             dialog.CanSendMessages,
 			CanAddMembers:               dialog.CanAddMembers,
@@ -161,9 +153,6 @@ func mapToThreadDialogModel(dialog *threadDialog) (*model.ThreadDialog, error) {
 		ContactID:  dialog.MemberID,
 		ThreadID:   dialog.ThreadID,
 		ThreadRole: dialog.Role,
-
-		DirectTo: dialog.DirectTo,
-		MemberOf: dialog.MemberOf,
 	}, nil
 }
 
@@ -197,13 +186,13 @@ func (t *threadDialogStore) GetQuickView(ctx context.Context, filter *model.Thre
 	var (
 		query = `SELECT
 	-- basic thread dialog fields
-	 dial.id, dial.domain_id, dial.created_at, dial.updated_at, dial.member_id, dial.thread_id, dial.direct_to, dial.member_of, dial.thread_role
+	 dial.id, dial.domain_id, dial.created_at, dial.updated_at, dial.member_id, dial.thread_id, dial.thread_role
 
 
 	FROM im_thread.thread_dialog dial
 	WHERE (@ThreadIDs::uuid[] IS NULL OR dial.thread_id = ANY(@ThreadIDs))
 	AND (@ContactIDs::uuid[] IS NULL OR dial.member_id = ANY(@ContactIDs))
-	
+
 	OFFSET @Offset`
 		args = pgx.NamedArgs{
 			"ThreadIDs":  filter.ContactIDs,
@@ -227,7 +216,7 @@ func (t *threadDialogStore) GetFullView(ctx context.Context, filter *model.Threa
 	query := `
 	SELECT
 	-- basic thread dialog fields
-	 dial.id, dial.domain_id, dial.created_at, dial.updated_at, dial.member_id, dial.thread_id, dial.direct_to, dial.member_of, dial.thread_role,
+	 dial.id, dial.domain_id, dial.created_at, dial.updated_at, dial.member_id, dial.thread_id, dial.thread_role,
 
 	-- permissions fields
 	perm.can_send_messages, perm.can_add_members, perm.can_change_members_permissions, perm.can_remove_members, perm.can_change_thread_info,
@@ -243,7 +232,7 @@ func (t *threadDialogStore) GetFullView(ctx context.Context, filter *model.Threa
 	AND (@ContactIDs::uuid[] IS NULL OR dial.member_id = ANY(@ContactIDs))
 	AND (@IDS::uuid[] IS NULL OR dial.id = ANY(@IDS))
 
-	OFFSET @Offset 
+	OFFSET @Offset
 	`
 
 	args := pgx.NamedArgs{
@@ -272,7 +261,7 @@ func (t *threadDialogStore) FindActorsPair(ctx context.Context, initiatorContact
 	query := `
 	SELECT
 	-- basic thread dialog fields
-	 dial.id, dial.domain_id, dial.created_at, dial.updated_at, dial.member_id, dial.thread_id, dial.direct_to, dial.member_of, dial.thread_role,
+	 dial.id, dial.domain_id, dial.created_at, dial.updated_at, dial.member_id, dial.thread_id, dial.thread_role,
 
 	-- permissions fields
 	perm.can_send_messages, perm.can_add_members, perm.can_change_members_permissions, perm.can_remove_members, perm.can_change_thread_info,
@@ -323,74 +312,4 @@ func (t *threadDialogStore) FindActorsPair(ctx context.Context, initiatorContact
 
 	return initiatorDialog, targetDialog, nil
 
-}
-
-// CreateDirectPair creates two new thread dialogs for peers within one transaction.
-// It returns two newly created thread dialogs or an error if the operation fails.
-// If the operation succeeds, it returns two newly created thread dialogs with the id set.
-// If the operation fails, it returns nil and the error.
-func (t *threadDialogStore) CreateDirectPair(ctx context.Context, dialog *model.ThreadDialogExtended) ([]*model.ThreadDialogExtended, error) {
-	var (
-		query = `
-			insert into im_thread.thread_dialog (
-				domain_id, created_at, updated_at,
-				member_id, thread_id, direct_to
-			)
-			values (
-				@DomainId, @CreatedAt, @UpdatedAt,
-				@From, @ThreadId, @To 
-			), (
-				@DomainId, @CreatedAt, @UpdatedAt,
-				@To, @ThreadId, @From
-			)
-			returning
-				id,
-				domain_id,
-				created_at,
-				updated_at,
-				member_id,
-				thread_id,
-				direct_to
-		`
-		args = pgx.NamedArgs{
-			"DomainId":  dialog.DomainID,
-			"CreatedAt": dialog.CreatedAt,
-			"UpdatedAt": dialog.UpdatedAt,
-			"From":      dialog.MemberID,
-			"ThreadId":  dialog.ThreadID,
-			"To":        dialog.DirectTo,
-		}
-		result = make([]*model.ThreadDialogExtended, 0, 2)
-	)
-
-	rows, err := t.db.Query(ctx, query, args)
-	if err != nil {
-		return nil, err
-	}
-
-	defer rows.Close()
-
-	for rows.Next() {
-		createdDialog := &model.ThreadDialogExtended{}
-		err = rows.Scan(
-			&createdDialog.ID,
-			&createdDialog.DomainID,
-			&createdDialog.CreatedAt,
-			&createdDialog.UpdatedAt,
-			&createdDialog.MemberID,
-			&createdDialog.ThreadID,
-			&createdDialog.DirectTo,
-		)
-		if err != nil {
-			return nil, err
-		}
-
-		result = append(result, createdDialog)
-	}
-
-	if err = rows.Err(); err != nil {
-		return nil, err
-	}
-
-	return result, nil
 }

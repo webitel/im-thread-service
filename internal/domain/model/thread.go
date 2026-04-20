@@ -5,13 +5,13 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/webitel/im-thread-service/internal/domain/event"
+	"github.com/webitel/im-thread-service/internal/domain/shared"
 )
 
-// #region Queries
-type SearchThreadQuery struct {
-	Fields  []string
-	OrderBy []string
-	Size    int32
+// #region Queries and Commands
+type ResolveThreadQuery struct {
+	From shared.Peer
+	To   shared.Peer
 }
 
 // #endregion

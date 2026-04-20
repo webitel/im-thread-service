@@ -2,7 +2,6 @@ package postgres
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -71,7 +70,7 @@ func (s *threadStore) Create(ctx context.Context, req *model.Thread) (*model.Thr
 	)
 
 	if err := s.db.QueryRow(ctx, query, args).Scan(&req.ID); err != nil {
-		return nil, err
+		return nil, errors.Internal("creating thread", errors.WithCause(err), errors.WithID("postgres.thread_store.create"), errors.WithValue("query", queryobject.CompactSQL(query)))
 	}
 
 	return req, nil
@@ -80,21 +79,26 @@ func (s *threadStore) Create(ctx context.Context, req *model.Thread) (*model.Thr
 func (s *threadStore) Search(ctx context.Context, query queryobject.QueryObject) ([]*model.Thread, error) {
 	sql, args, err := query.ToSql()
 	if err != nil {
-		return nil, err
+		return nil, errors.Internal("preparing search thread query", errors.WithCause(err), errors.WithID("postgres.thread_store.search"))
 	}
 
 	rows, err := s.db.Query(ctx, sql, args...)
 	if err != nil {
-		return nil, err
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, errors.NotFound("zero records found for given filters", errors.WithCause(err), errors.WithID("postgres.thread_store.search"))
+		}
+
+		return nil, errors.Internal("executing search thread query", errors.WithCause(err), errors.WithID("postgres.thread_store.search"))
 	}
 
-	return collectRows(rows, mapThreadRecordToModel)
+	records, err := collectRows(rows, mapThreadRecordToModel)
+	if err != nil {
+		return nil, errors.Internal("collecting thread records", errors.WithCause(err), errors.WithID("postgres.thread_store.search"))
+	}
+
+	return records, nil
 }
 
-// mapThreadRecordToModel maps a *threadRecord to a *model.Thread.
-// It iterates over the thread members and maps each *threadMemberRecord to a *model.ThreadMember.
-// If the thread member record has a direct settings record, it is mapped to a *model.DirectThreadSetting.
-// The function then returns the mapped *model.Thread record.
 func mapThreadRecordToModel(record *threadRecord) (*model.Thread, error) {
 	members := utils.Map(record.Members, func(tmr *threadMemberRecord) *model.ThreadDialog {
 		return &model.ThreadDialog{
@@ -122,67 +126,109 @@ func mapThreadRecordToModel(record *threadRecord) (*model.Thread, error) {
 	return thread, nil
 }
 
-func (t *threadStore) ResolveDirect(ctx context.Context, from, to uuid.UUID) (*model.Thread, error) {
-	var (
-		query = `
-		SELECT id, domain_id, kind, subject, description, created_at, updated_at, members.aggregated_members members
-		FROM im_thread.thread t
-		LEFT JOIN LATERAL (
-				SELECT jsonb_agg(
-					json_build_object('id', id, 'member_id', member_id, 'role', thread_role)
-				) AS aggregated_members
-				FROM im_thread.thread_dialog dial
-				WHERE dial.thread_id = t.id
-		) AS members ON true
-		WHERE kind = @Kind
-				AND id IN (
-	           		SELECT thread_id
-	            	FROM im_thread.thread_dialog
-	            	WHERE
-					(
-						(member_id = @FromId and direct_to = @DirectTo)
-						 or
-						(member_id = @DirectTo and direct_to = @FromId)
-					)
-		            LIMIT 1
-				)
-        `
-		args = pgx.NamedArgs{
-			"FromId":   from,
-			"DirectTo": to,
-			"Kind":     model.ThreadDirect,
-		}
-	)
+func (s *threadStore) ResolveThread(ctx context.Context, q model.ResolveThreadQuery) (*model.Thread, error) {
+	query, args := prepareResolveThreadQuery(q)
 
-	row, err := t.db.Query(ctx, query, args)
+	rows, err := s.db.Query(ctx, query, args)
 	if err != nil {
-		return nil, errors.Internal("executing direct thread query", errors.WithCause(err), errors.WithID("postgres.thread_store.resolve_direct"), errors.WithValue("query", query))
+		return nil, errors.Internal(
+			"query resolve thread",
+			errors.WithCause(err),
+			errors.WithID("postgres.thread_store.resolve_thread"),
+			errors.WithValue("query", queryobject.CompactSQL(query)),
+		)
 	}
-	res, err := collectRow(row, mapThreadRecordToModel)
+
+	thread, err := pgx.CollectOneRow(rows, pgx.RowToAddrOfStructByNameLax[model.Thread])
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, nil
+			if q.To.Type == shared.PeerContact { // in case of contact thread no rows means that it`s first message for contact
+				return nil, nil
+			}
+
+			return nil, errors.Forbidden(
+				"member isn`t part of the thread",
+				errors.WithCause(err),
+				errors.WithID("postgres.thread_store.resolve_thread"),
+				errors.WithValue("thread_id", q.To.ResolveThreadID()),
+				errors.WithValue("member_id", q.From.ResolveContactID()),
+			)
 		}
-		return nil, errors.Internal("collecting direct thread result", errors.WithCause(err), errors.WithID("postgres.thread_store.resolve_direct"))
+
+		return nil, errors.Internal("collect thread", errors.WithCause(err), errors.WithID("postgres.thread_store.resolve_thread"))
 	}
 
-	return res, nil
+	return thread, nil
 }
 
+func prepareResolveThreadQuery(q model.ResolveThreadQuery) (string, pgx.NamedArgs) {
+	query := `
+		   	select
+				t.id as id,
+				t.domain_id as domain_id,
+				t.kind as kind,
+				t.subject as subject,
+				t.description as description,
+				t.created_at as created_at,
+				t.updated_at as updated_at,
+				t.owner as owner,
+				m.members as members
+			from im_thread.thread t
+			inner join im_thread.thread_dialog td_main on td_main.thread_id = t.id
+			cross join lateral (
+				select jsonb_agg(
+					jsonb_build_object(
+						'id', td3.id,
+						'role', td3.thread_role,
+						'member_id', td3.member_id
+					)
+				) as members
+				from im_thread.thread_dialog td3
+				where td3.thread_id = t.id and td3.deleted_at is null
+			) m
+			where
+				(@ToThreadID::uuid is null or (t.id = @ToThreadID::uuid and td_main.deleted_at is null))
+				and (
+					@ToPeerID::uuid is null
+					or (
+						t.kind = 1
+						and td_main.member_id = @ToPeerID::uuid
+						and td_main.deleted_at is null
+					)
+				)
+				and exists (
+					select 1 from im_thread.thread_dialog td_check
+					where td_check.thread_id = t.id
+					  and td_check.member_id = @FromID::uuid
+					  and td_check.deleted_at is null
+				)
+			limit 1;
+	`
+
+	args := pgx.NamedArgs{
+		"FromID":     q.From.ResolveContactID(),
+		"ToPeerID":   q.To.ResolveContactID(),
+		"ToThreadID": q.To.ResolveThreadID(),
+	}
+
+	return query, args
+}
+
+// TODO: rewrite to soft delete logic!
 func (t *threadStore) Delete(ctx context.Context, threadID uuid.UUID) error {
 	if threadID == uuid.Nil {
-		return errors.New("threadID cannot be nil")
+		return errors.InvalidArgument("thread id is required", errors.WithID("postgres.thread_store.delete"))
 	}
 
 	query := `DELETE FROM im_thread.thread WHERE id = $1`
 
 	cmdTag, err := t.db.Exec(ctx, query, threadID)
 	if err != nil {
-		return err
+		return errors.Internal("executing delete thread query", errors.WithCause(err), errors.WithID("postgres.thread_store.delete"), errors.WithValue("thread_id", threadID.String()))
 	}
 
 	if cmdTag.RowsAffected() == 0 {
-		return fmt.Errorf("no thread found with id %s", threadID)
+		return errors.NotFound("zero rows affected", errors.WithID("postgres.thread_store.delete"))
 	}
 
 	return nil

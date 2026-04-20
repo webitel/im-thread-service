@@ -31,7 +31,6 @@ type (
 		UpdatedAt time.Time             `json:"updated_at" db:"updated_at"`
 		MemberID  uuid.UUID             `json:"member_id,omitempty" db:"member_id"`
 		ThreadID  uuid.UUID             `json:"thread_id,omitempty" db:"thread_id"`
-		DirectTo  uuid.UUID             `json:"direct_to,omitempty" db:"direct_to"`
 		Settings  *directSettingsRecord `json:"settings" db:"settings"`
 	}
 )
@@ -55,14 +54,14 @@ func (d *directThreadDialogOrchestration) InitializeFullDirectThread(ctx context
 		with inserted_dialogs as (
 			insert into im_thread.thread_dialog (
 				domain_id, created_at, updated_at,
-				member_id, thread_id, direct_to
+				member_id, thread_id
 			)
 			values
 				(@DomainID, now(), now(), @From, @ThreadID, @To),
 				(@DomainID, now(), now(), @To, @ThreadID, @From)
 			returning
 				id, domain_id, created_at, updated_at,
-				member_id, thread_id, direct_to
+				member_id, thread_id
 		),
 		inserted_settings as (
 			insert into im_thread.direct_settings (
@@ -87,7 +86,6 @@ func (d *directThreadDialogOrchestration) InitializeFullDirectThread(ctx context
 			d.updated_at,
 			d.member_id,
 			d.thread_id,
-			d.direct_to,
 			jsonb_build_object(
 				'id', s.id,
 				'domain_id', s.domain_id,
@@ -136,7 +134,6 @@ func mapThreadDialogRecordToModel(record *threadDialogRecord) *model.DirectThrea
 		},
 		MemberID: record.MemberID,
 		ThreadID: record.ThreadID,
-		DirectTo: &record.DirectTo,
 	}
 
 	directThreadDialog := &model.DirectThreadDialog{
@@ -171,7 +168,7 @@ func (d *directThreadDialogOrchestration) InitializePermissions(ctx context.Cont
 			can_add_members,
 			can_change_members_permissions,
 			can_remove_members,
-			can_change_thread_info 
+			can_change_thread_info
 		)
 		VALUES (
 			@ThreadID,
@@ -182,7 +179,7 @@ func (d *directThreadDialogOrchestration) InitializePermissions(ctx context.Cont
 			@CanRemoveMembers,
 			@CanChangeThreadInfo
 		)
-		RETURNING 
+		RETURNING
 		id,
 		thread_id,
 		thread_dialog_id,

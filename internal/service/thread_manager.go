@@ -13,6 +13,7 @@ import (
 	"github.com/webitel/im-thread-service/internal/store"
 	queryobject "github.com/webitel/im-thread-service/internal/store/query_object"
 	"github.com/webitel/webitel-go-kit/pkg/errors"
+	"google.golang.org/grpc/codes"
 )
 
 var (
@@ -108,7 +109,7 @@ func (t *ThreadManagementService) AddMember(ctx context.Context, req *dto.AddMem
 		return uuid.Nil, err
 	}
 	if target != nil {
-		return uuid.Nil, errors.NotFound("target member is already part of the thread")
+		return uuid.Nil, errors.New("target member is already part of the thread", errors.WithCode(codes.AlreadyExists), errors.WithID("service.thread_manager.thread_manager"))
 	}
 
 	var (
@@ -198,7 +199,7 @@ func (t *ThreadManagementService) verifyAddMember(ctx context.Context, initiator
 
 func (t *ThreadManagementService) verifyAddMemberInitiatorPermissions(initiatorRole model.ThreadRole, targetRole model.ThreadRole, initiatorPermissions *model.ThreadPermissions) error {
 	if initiatorPermissions == nil {
-		return errors.Internal("permissions cannot be nil")
+		return errors.InvalidArgument("permissions cannot be nil")
 	}
 	if !initiatorPermissions.CanAddMembers {
 		return errors.Forbidden("initiator does not have permission to invite members")
@@ -289,13 +290,13 @@ func (t *ThreadManagementService) verifyRemoveMember(initiator *model.ThreadDial
 
 func (t *ThreadManagementService) verifyRemoveMemberInitiatorPermissions(initiatorRole model.ThreadRole, targetRole model.ThreadRole, initiatorPermissions *model.ThreadPermissions) error {
 	if initiatorPermissions == nil {
-		return errors.New("permissions cannot be nil")
+		return errors.InvalidArgument("permissions cannot be nil", errors.WithID("service.thread_manager.verify_remove_member_initiator_permissions"))
 	}
 	if !initiatorPermissions.CanRemoveMembers {
-		return errors.New("initiator does not have permission to remove members")
+		return errors.Forbidden("initiator does not have permission to remove members", errors.WithID("service.thread_manager.verify_remove_member_initiator_permissions"))
 	}
 	if initiatorRole <= targetRole {
-		return errors.New("initiator does not have permission to remove a member with same or higher role")
+		return errors.Forbidden("initiator does not have permission to remove members", errors.WithID("service.thread_manager.verify_remove_member_initiator_permissions"))
 	}
 
 	return nil
@@ -306,59 +307,41 @@ func (t *ThreadManagementService) EnsureDirectThread(ctx context.Context, req *d
 		return nil, errors.InvalidArgument("request cannot be nil", errors.WithID("service.thread_manager.ensure_direct_thread"))
 	}
 
-	directThread, err := t.searchDirectThread(ctx, req.From, req.To)
+	log := t.logger.With("operation", "ensure_direct_thread")
+
+	thread, err := t.searchThread(ctx, req.From, req.To)
 	if err != nil {
+		log.ErrorContext(ctx, "searching thread", "err", err)
 		return nil, err
 	}
 
-	if directThread != nil {
-		return directThread, nil
+	if thread == nil {
+		if thread, err = t.orchestrateDirectThreadCreation(ctx, req); err != nil {
+			log.ErrorContext(ctx, "creating thread", "err", err)
+			return nil, err
+		}
 	}
 
-	directThread, err = t.orchestrateDirectThreadCreation(ctx, req)
-	if err != nil {
-		return nil, err
-	}
-
-	return directThread, nil
+	return thread, nil
 }
 
-func (t *ThreadManagementService) searchDirectThread(ctx context.Context, from, to *shared.Peer) (*model.Thread, error) {
+func (t *ThreadManagementService) searchThread(ctx context.Context, from, to *shared.Peer) (*model.Thread, error) {
 	if from == nil {
-		return nil, errors.InvalidArgument("from cant be null", errors.WithID("service.thread_manager.search_direct_thread"))
+		return nil, errors.InvalidArgument("from peer cannot be nil", errors.WithID("service.thread_manager.search_direct_thread"))
 	}
 
 	if to == nil {
-		return nil, errors.InvalidArgument("to cant be null", errors.WithID("service.thread_manager.search_direct_thread"))
+		return nil, errors.InvalidArgument("recipient peer cannot be nil", errors.WithID("service.thread_manager.search_direct_thread"))
 	}
 
-	switch to.Type {
-	case shared.PeerContact:
-		thread, err := t.uow.ThreadStore().ResolveDirect(ctx, from.ID, to.ID)
-		if err != nil {
-			return nil, err
-		}
-		return thread, nil
-	case shared.PeerThread:
-		threads, err := t.uow.ThreadStore().Search(
-			ctx,
-			queryobject.NewThreadQueryObject().
-				WithIDFilter(to.ID).
-				WithContactIDFilter(from.ID).
-				WithKindFilter(model.ThreadDirect).
-				WithFields([]string{"id", "domain_id", "created_at", "updated_at", "kind", "owner", "subject", "description", "members"}).
-				WithLimit(1),
-		)
-		if err != nil {
-			return nil, err
-		}
-		if len(threads) == 0 {
-			return nil, errors.Forbidden("can`t send message to thread not beeing part of", errors.WithID("service.thread_manager.search_direct_thread"))
-		}
-		return threads[0], nil
-	default:
-		return nil, errors.New("invalid peer type for direct")
+	resolveThreadQuery := model.ResolveThreadQuery{From: *from, To: *to}
+
+	thread, err := t.uow.ThreadStore().ResolveThread(ctx, resolveThreadQuery)
+	if err != nil {
+		return nil, err
 	}
+
+	return thread, nil
 }
 
 func (t *ThreadManagementService) orchestrateDirectThreadCreation(ctx context.Context, req *dto.EnsureDirectThreadRequest) (*model.Thread, error) {
@@ -473,7 +456,6 @@ func (t *ThreadManagementService) initializeDirectThreadDialogs(ctx context.Cont
 			ThreadID:    threadID,
 			MemberID:    from.ID,
 			ThreadRole:  initiatorRole,
-			DirectTo:    &to.ID,
 			Permissions: *initiatorPermissions,
 			Settings: model.BaseThreadSetting{
 				Title: to.Identity.Name,
@@ -484,7 +466,6 @@ func (t *ThreadManagementService) initializeDirectThreadDialogs(ctx context.Cont
 			ThreadID:    threadID,
 			MemberID:    to.ID,
 			ThreadRole:  peerRole,
-			DirectTo:    &from.ID,
 			Permissions: *targetPermissions,
 			Settings: model.BaseThreadSetting{
 				Title: from.Identity.Name,
