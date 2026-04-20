@@ -82,11 +82,14 @@ func GetUniqueFrom(messages []*model.Message) []*impb.ThreadMember {
 		}
 	}
 
+	threadConverter := new(ThreadOutConverter)
 	return utils.Map(set.Slice(), func(p *model.ThreadDialog) *impb.ThreadMember {
+		role := threadConverter.ConvertThreadRole(p.ThreadRole)
+
 		return &impb.ThreadMember{
 			Id:        p.ID.String(),
 			ContactId: p.ContactID.String(),
-			Role:      impb.ThreadRole(p.ThreadRole),
+			Role:      role,
 		}
 	})
 }
