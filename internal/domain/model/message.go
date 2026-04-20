@@ -44,6 +44,7 @@ type Message struct {
 	Location    *MessageLocation    `json:"location,omitempty" db:"location"`
 	Contact     *MessageContact     `json:"contact,omitempty" db:"contact"`
 	Interactive *MessageInteractive `json:"interactive,omitempty" db:"interactive"`
+	System      *MessageSystem      `json:"system,omitempty" db:"system"`
 	Member      *ThreadDialog       `json:"member,omitempty" db:"member"`
 
 	domainEvents []event.Outboxer
@@ -130,6 +131,10 @@ func (m *Message) WithCreatedEvent(sendID string, from *shared.Peer) *Message {
 
 	if m.Contact != nil {
 		e.Contact = event.NewContactPayload(m.Contact.Name, m.Contact.PhoneNumber, m.Contact.Email)
+	}
+
+	if m.System != nil {
+		e.System = event.NewSystemPayload(m.System.Type, m.System.Metadata)
 	}
 
 	if m.Interactive != nil {

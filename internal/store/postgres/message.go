@@ -340,6 +340,66 @@ func prepareSaveMessageContactQuery(msg *model.Message) (string, pgx.NamedArgs) 
 	return queryobject.CompactSQL(query), args
 }
 
+func (m *messageStore) SaveSystemMessage(ctx context.Context, msg *model.Message) (*model.Message, error) {
+	sql, args := prepareSaveSystemMessageQuery(msg)
+
+	rows, err := m.db.Query(ctx, sql, args)
+	if err != nil {
+		return nil, errors.Internal("error querying insert system message", errors.WithCause(err))
+	}
+
+	saved, err := pgx.CollectOneRow(rows, pgx.RowToAddrOfStructByNameLax[model.Message])
+	if err != nil {
+		return nil, errors.Internal("error collecting saved system message", errors.WithCause(err))
+	}
+
+	return saved, nil
+}
+
+func prepareSaveSystemMessageQuery(msg *model.Message) (string, pgx.NamedArgs) {
+	query := `
+		with msg_ins as (
+			insert into im_message.messages
+			(thread_id, domain_id, sender_id, type, body, metadata)
+			values (@ThreadID, @DomainID, @SenderID, @Type, @Body, @Metadata)
+			returning *
+		),
+		sys_ins as (
+			insert into im_message.system_messages (message_id, type, metadata)
+			values ((select id from msg_ins), @SystemType, @SystemMetadata)
+			returning *
+		)
+		select
+			m.id,
+			m.thread_id,
+			m.domain_id,
+			m.sender_id,
+			m.type,
+			m.body,
+			m.metadata,
+			m.created_at,
+			m.updated_at,
+			sys.system as system
+		from msg_ins m
+		left join lateral (
+			select to_jsonb(s) as system from sys_ins s
+		) sys on true
+	`
+
+	args := pgx.NamedArgs{
+		"ThreadID":       msg.ThreadID,
+		"DomainID":       msg.DomainID,
+		"SenderID":       msg.From.ID,
+		"Type":           msg.Type,
+		"Body":           msg.Body,
+		"Metadata":       msg.Metadata,
+		"SystemType":     msg.System.Type,
+		"SystemMetadata": msg.System.Metadata,
+	}
+
+	return queryobject.CompactSQL(query), args
+}
+
 func (m *messageStore) SaveInteractiveMessage(ctx context.Context, msg *model.Message) (*model.Message, error) {
 	sql, args := prepareSaveInteractiveMessageQuery(msg)
 

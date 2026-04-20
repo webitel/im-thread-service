@@ -30,6 +30,7 @@ type MessageStore interface {
 	SaveMessageContact(ctx context.Context, msg *model.Message) (*model.Message, error)
 	SaveMessageLocation(ctx context.Context, msg *model.Message) (*model.Message, error)
 	SaveInteractiveMessage(ctx context.Context, msg *model.Message) (*model.Message, error)
+	SaveSystemMessage(ctx context.Context, msg *model.Message) (*model.Message, error)
 }
 
 type OutboxStore interface {
@@ -68,6 +69,7 @@ type DirectThreadDialogOrchestration interface {
 type InteractiveCallback interface {
 	Save(ctx context.Context, callback *model.InteractiveCallback) (*model.InteractiveCallback, error)
 }
+
 
 type ThreadVariablesStore interface {
 	Set(ctx context.Context, variables *model.SetThreadVariablesCommand) (*model.ThreadVariables, error)

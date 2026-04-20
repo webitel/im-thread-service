@@ -408,6 +408,36 @@ func (s *MessageService) SendInteractiveCallback(ctx context.Context, callback *
 	return savedCallback, nil
 }
 
+func (s *MessageService) SendSystemMessage(ctx context.Context, msg *model.Message) (*model.Message, error) {
+	log := s.logger.With("operation", "send_system_message")
+
+	if err := s.prepareMessageForSending(ctx, msg); err != nil {
+		log.ErrorContext(ctx, "prepare_message_failed", "err", err)
+		return nil, err
+	}
+
+	var savedMsg *model.Message
+	err := s.uow.WithinTransaction(ctx, func(txCtx context.Context, uow store.UnitOfWork) error {
+		var err error
+		if savedMsg, err = uow.Messages().SaveSystemMessage(txCtx, msg); err != nil {
+			return err
+		}
+		savedMsg.To = msg.To
+		savedMsg.IdempotencyKey = msg.IdempotencyKey
+
+		savedMsg.WithCreatedEvent(msg.IdempotencyKey, &msg.From)
+
+		return s.dispatchMessageEvents(txCtx, uow, savedMsg)
+	})
+
+	if err != nil {
+		log.ErrorContext(ctx, "transaction_failed", "err", err)
+		return nil, err
+	}
+
+	return savedMsg, nil
+}
+
 func (s *MessageService) prepareMessageForSending(ctx context.Context, msg *model.Message) error {
 	t, err := s.threader.EnsureDirectThread(ctx, &dto.EnsureDirectThreadRequest{
 		DomainID: int(msg.DomainID),
