@@ -8,6 +8,7 @@ updates:
 
     ignore:
       - dependency-name: "webitel/reusable-workflows"
+      - dependency-name: "webitel/reusable-workflows/*"
 
   - package-ecosystem: "gomod"
     directory: "/"
