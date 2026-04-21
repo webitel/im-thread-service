@@ -13,19 +13,18 @@ func MapToSendImageRequest(in *impb.SendImageRequest) *dto.SendImageRequest {
 	}
 
 	var imgReq dto.ImageRequest
-	if pbImg := in.GetImage(); pbImg != nil {
-		imgReq.Body = pbImg.GetBody()
-		imgReq.Images = make([]*dto.Image, 0, len(pbImg.GetImages()))
 
-		for _, img := range pbImg.GetImages() {
-			id, _ := strconv.ParseInt(img.GetId(), 10, 64)
-			imgReq.Images = append(imgReq.Images, &dto.Image{
-				ID:       id,
-				URL:      img.GetLink(),
-				MimeType: img.GetMimeType(),
-				Name:     img.GetName(),
-			})
-		}
+	imgReq.Body = in.GetBody()
+	imgReq.Images = make([]*dto.Image, 0, len(in.GetImages()))
+
+	for _, img := range in.GetImages() {
+		id, _ := strconv.ParseInt(img.GetId(), 10, 64)
+		imgReq.Images = append(imgReq.Images, &dto.Image{
+			ID:       id,
+			URL:      img.GetLink(),
+			MimeType: img.GetMimeType(),
+			Name:     img.GetName(),
+		})
 	}
 
 	return &dto.SendImageRequest{
