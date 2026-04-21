@@ -179,7 +179,7 @@ func prepareResolveThreadQuery(q model.ResolveThreadQuery) (string, pgx.NamedArg
 				select jsonb_agg(
 					jsonb_build_object(
 						'id', td3.id,
-						'thread_role', td3.thread_role,
+						'member_role', td3.thread_role,
 						'member_id', td3.member_id
 					)
 				) as members
