@@ -345,12 +345,20 @@ func (m *messageStore) SaveSystemMessage(ctx context.Context, msg *model.Message
 
 	rows, err := m.db.Query(ctx, sql, args)
 	if err != nil {
-		return nil, errors.Internal("error querying insert system message", errors.WithCause(err))
+		return nil, errors.Internal(
+			"querying insert system message",
+			errors.WithCause(err),
+			errors.WithID("postgres.message.save_system_message"),
+		)
 	}
 
 	saved, err := pgx.CollectOneRow(rows, pgx.RowToAddrOfStructByNameLax[model.Message])
 	if err != nil {
-		return nil, errors.Internal("error collecting saved system message", errors.WithCause(err))
+		return nil, errors.Internal(
+			"collecting saved system message",
+			errors.WithCause(err),
+			errors.WithID("postgres.message.save_system_message"),
+		)
 	}
 
 	return saved, nil
