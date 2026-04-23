@@ -114,6 +114,7 @@ func (t *ThreadManagementService) AddMember(ctx context.Context, req *dto.AddMem
 
 	var (
 		titleForTarget = "New thread"
+		invitedBy      *uuid.UUID
 	)
 	if req.InitiatorContactID != uuid.Nil {
 		err = t.verifyAddMember(ctx, initiator, req.NewMemberContactID, req.NewMemberRole)
@@ -121,6 +122,7 @@ func (t *ThreadManagementService) AddMember(ctx context.Context, req *dto.AddMem
 			return uuid.Nil, err
 		}
 		titleForTarget = initiator.Settings.Title
+		invitedBy = &initiator.ID
 	}
 
 	rolePermissions, err := getDefaultPermissionsByRole(req.NewMemberRole)
@@ -137,6 +139,7 @@ func (t *ThreadManagementService) AddMember(ctx context.Context, req *dto.AddMem
 			ThreadID:    req.ThreadID,
 			ContactID:   req.NewMemberContactID,
 			ThreadRole:  req.NewMemberRole,
+			InvitedBy:   invitedBy,
 			Permissions: *rolePermissions,
 			Settings: model.BaseThreadSetting{
 				Title: titleForTarget,
@@ -237,7 +240,7 @@ func (t *ThreadManagementService) RemoveMember(ctx context.Context, req *dto.Rem
 	}
 
 	err = t.uow.WithinTransaction(ctx, func(ctx context.Context, uow store.UnitOfWork) error {
-		err = uow.ThreadDialogStore().Delete(ctx, target.ID)
+		err = uow.ThreadDialogStore().Delete(ctx, target.ID, req.Reason)
 		if err != nil {
 			return err
 		}

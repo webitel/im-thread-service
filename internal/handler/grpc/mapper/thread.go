@@ -91,6 +91,10 @@ func (s *ThreadInConverter) ConvertRemoveMemberRequest(in *impb.RemoveMemberRequ
 	converted := &dto.RemoveMemberRequest{
 		TargetMemberID: targetMemberID,
 	}
+	if in.Reason != nil {
+		reason := in.GetReason()
+		converted.Reason = &reason
+	}
 	if in.InitiatorContactId != nil {
 		initiatorContactID, err := uuid.Parse(in.GetInitiatorContactId())
 		if err != nil {

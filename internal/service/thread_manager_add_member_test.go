@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/webitel/im-thread-service/internal/domain/event"
 	"github.com/webitel/im-thread-service/internal/domain/model"
+	"github.com/webitel/im-thread-service/internal/domain/shared"
 	"github.com/webitel/im-thread-service/internal/service/dto"
 	"github.com/webitel/im-thread-service/internal/store"
 	queryobject "github.com/webitel/im-thread-service/internal/store/query_object"
@@ -52,13 +53,27 @@ func (f fakeUnitOfWork) InteractiveCallback() store.InteractiveCallback {
 type fakeThreadDialogStore struct {
 	fullViewResult []*model.ThreadDialogExtended
 	lastFilter     *model.ThreadDialogStoreFilter
+	initiatorPair  *model.ThreadDialogExtended
+	targetPair     *model.ThreadDialogExtended
+	lastDeleteID   uuid.UUID
+	lastReason     *string
+	lastCreate     *model.ThreadDialogExtended
 }
 
 func (f *fakeThreadDialogStore) Create(ctx context.Context, threadDialog *model.ThreadDialogExtended) (*model.ThreadDialogExtended, error) {
-	return nil, nil
+	f.lastCreate = threadDialog
+	if threadDialog == nil {
+		return nil, nil
+	}
+	if threadDialog.ID == uuid.Nil {
+		threadDialog.BaseModel.ID = uuid.New()
+	}
+	return threadDialog, nil
 }
 
-func (f *fakeThreadDialogStore) Delete(ctx context.Context, memberID uuid.UUID) error {
+func (f *fakeThreadDialogStore) Delete(ctx context.Context, memberID uuid.UUID, leaveReason *string) error {
+	f.lastDeleteID = memberID
+	f.lastReason = leaveReason
 	return nil
 }
 
@@ -72,7 +87,7 @@ func (f *fakeThreadDialogStore) GetFullView(ctx context.Context, filter *model.T
 }
 
 func (f *fakeThreadDialogStore) FindActorsPair(ctx context.Context, initiatorsContact, targetMember uuid.UUID) (*model.ThreadDialogExtended, *model.ThreadDialogExtended, error) {
-	return nil, nil, nil
+	return f.initiatorPair, f.targetPair, nil
 }
 
 type fakeThreadStore struct{}
@@ -99,6 +114,16 @@ func (f fakeOutboxStore) Cleanup(ctx context.Context, opt *model.OutboxCleanupOp
 	return 0, nil
 }
 
+type fakePrivacyChecker struct{}
+
+func (f fakePrivacyChecker) CanInvite(ctx context.Context, initiatorID, targetID uuid.UUID) error {
+	return nil
+}
+
+func (f fakePrivacyChecker) CanSend(ctx context.Context, senderID, recipientID uuid.UUID) error {
+	return nil
+}
+
 func TestFindAddMemberActors_ResolvesInitiatorAndTargetByContactID(t *testing.T) {
 	threadID := uuid.New()
 	initiatorContactID := uuid.New()
@@ -123,6 +148,73 @@ func TestFindAddMemberActors_ResolvesInitiatorAndTargetByContactID(t *testing.T)
 	require.NotNil(t, threadDialogStore.lastFilter)
 	require.Equal(t, []uuid.UUID{threadID}, threadDialogStore.lastFilter.ThreadIDs)
 	require.Equal(t, []uuid.UUID{initiatorContactID, targetContactID}, threadDialogStore.lastFilter.ContactIDs)
+}
+
+func TestRemoveMember_ForwardsLeaveReasonToStoreDelete(t *testing.T) {
+	targetID := uuid.New()
+	threadID := uuid.New()
+	reason := "left by own decision"
+
+	threadDialogStore := &fakeThreadDialogStore{
+		targetPair: &model.ThreadDialogExtended{
+			BaseModel: shared.BaseModel{ID: targetID},
+			ThreadID:  threadID,
+		},
+	}
+
+	svc := &ThreadManagementService{
+		uow: fakeUnitOfWork{threadDialogStore: threadDialogStore},
+	}
+
+	err := svc.RemoveMember(context.Background(), &dto.RemoveMemberRequest{
+		TargetMemberID:     targetID,
+		InitiatorContactID: uuid.Nil,
+		Reason:             &reason,
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, targetID, threadDialogStore.lastDeleteID)
+	require.NotNil(t, threadDialogStore.lastReason)
+	require.Equal(t, reason, *threadDialogStore.lastReason)
+}
+
+func TestAddMember_SetsInvitedByFromInitiatorDialogID(t *testing.T) {
+	threadID := uuid.New()
+	initiatorContactID := uuid.New()
+	newMemberContactID := uuid.New()
+	initiatorMemberID := uuid.New()
+
+	threadDialogStore := &fakeThreadDialogStore{
+		fullViewResult: []*model.ThreadDialogExtended{
+			{
+				BaseModel:  shared.BaseModel{ID: initiatorMemberID},
+				ContactID:  initiatorContactID,
+				ThreadID:   threadID,
+				ThreadRole: model.RoleOwner,
+				Permissions: model.ThreadPermissions{
+					CanAddMembers: true,
+				},
+				Settings: model.BaseThreadSetting{Title: "Initiator title"},
+			},
+		},
+	}
+
+	svc := &ThreadManagementService{
+		uow:            fakeUnitOfWork{threadDialogStore: threadDialogStore},
+		privacyChecker: fakePrivacyChecker{},
+	}
+
+	_, err := svc.AddMember(context.Background(), &dto.AddMemberRequest{
+		ThreadID:           threadID,
+		NewMemberContactID: newMemberContactID,
+		InitiatorContactID: initiatorContactID,
+		NewMemberRole:      model.RoleMember,
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, threadDialogStore.lastCreate)
+	require.NotNil(t, threadDialogStore.lastCreate.InvitedBy)
+	require.Equal(t, initiatorMemberID, *threadDialogStore.lastCreate.InvitedBy)
 }
 
 var _ store.UnitOfWork = fakeUnitOfWork{}

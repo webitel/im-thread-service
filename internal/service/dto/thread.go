@@ -53,6 +53,7 @@ type AddMemberRequest struct {
 type RemoveMemberRequest struct {
 	TargetMemberID     uuid.UUID
 	InitiatorContactID uuid.UUID
+	Reason             *string
 }
 
 func NewSearchThreadRequest(domainID int, kind model.ThreadKind, from, to *shared.Peer) *SearchThreadDialogRequest {
