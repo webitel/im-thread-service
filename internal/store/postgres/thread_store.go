@@ -88,7 +88,7 @@ func (s *threadStore) Search(ctx context.Context, query queryobject.QueryObject)
 			return nil, errors.NotFound("zero records found for given filters", errors.WithCause(err), errors.WithID("postgres.thread_store.search"))
 		}
 
-		return nil, errors.Internal("executing search thread query", errors.WithCause(err), errors.WithID("postgres.thread_store.search"))
+		return nil, errors.Internal("executing search thread query", errors.WithCause(err), errors.WithID("postgres.thread_store.search"), errors.WithValue("query", sql))
 	}
 
 	records, err := collectRows(rows, mapThreadRecordToModel)
