@@ -30,6 +30,7 @@ type MessageCreate struct {
 	ThreadID   uuid.UUID
 	DomainID   int32
 	From       shared.Peer
+	MemberID   uuid.UUID       
 	Recipients []*ThreadDialog
 	Body       string
 	SendID     string          // Used for client-side correlation in RabbitMQ events.
@@ -56,6 +57,7 @@ func NewImageMessage(in MessageCreate) *Message {
 		ThreadID:  in.ThreadID,
 		DomainID:  in.DomainID,
 		From:      in.From,
+		MemberID:  in.MemberID,
 		To:        in.Recipients,
 		Body:      cleanText,
 		Type:      MessageTypeImage,
@@ -87,6 +89,7 @@ func NewDocumentMessage(in MessageCreate) *Message {
 		ThreadID:  in.ThreadID,
 		DomainID:  in.DomainID,
 		From:      in.From,
+		MemberID:  in.MemberID,
 		To:        in.Recipients,
 		Body:      cleanText,
 		Type:      MessageTypeFile,

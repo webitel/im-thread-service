@@ -132,8 +132,8 @@ func mapThreadDialogRecordToModel(record *threadDialogRecord) *model.DirectThrea
 			CreatedAt: record.CreatedAt,
 			UpdatedAt: record.UpdatedAt,
 		},
-		MemberID: record.MemberID,
-		ThreadID: record.ThreadID,
+		ContactID: record.MemberID,
+		ThreadID:  record.ThreadID,
 	}
 
 	directThreadDialog := &model.DirectThreadDialog{

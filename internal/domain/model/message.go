@@ -39,6 +39,8 @@ type Message struct {
 	UpdatedAt      time.Time       `json:"updated_at" db:"updated_at"`
 	SenderID       uuid.UUID       `json:"sender_id" db:"sender_id"`
 
+	MemberID    uuid.UUID           `json:"member_id" db:"member_id"`
+
 	Images      []*MessageImage     `json:"images,omitempty" db:"images"`
 	Documents   []*MessageDocument  `json:"documents,omitempty" db:"documents"`
 	Location    *MessageLocation    `json:"location,omitempty" db:"location"`

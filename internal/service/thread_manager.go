@@ -89,10 +89,10 @@ func (t *ThreadManagementService) findAddMemberActors(ctx context.Context, threa
 		if initiatorActor != nil && targetActor != nil {
 			break
 		}
-		if actor.MemberID == initiatorContactID {
+		if actor.ContactID == initiatorContactID {
 			initiatorActor = actor
 		}
-		if actor.MemberID == targetContactID {
+		if actor.ContactID == targetContactID {
 			targetActor = actor
 		}
 	}
@@ -135,7 +135,7 @@ func (t *ThreadManagementService) AddMember(ctx context.Context, req *dto.AddMem
 				UpdatedAt: time.Now().UTC(),
 			},
 			ThreadID:    req.ThreadID,
-			MemberID:    req.NewMemberContactID,
+			ContactID:   req.NewMemberContactID,
 			ThreadRole:  req.NewMemberRole,
 			Permissions: *rolePermissions,
 			Settings: model.BaseThreadSetting{
@@ -155,12 +155,12 @@ func (t *ThreadManagementService) AddMember(ctx context.Context, req *dto.AddMem
 		}
 		eventTemplate := &event.MemberAddedV1{
 			ThreadID:        req.ThreadID,
-			MemberContactID: createdThreadDialog.MemberID,
+			MemberContactID: createdThreadDialog.ContactID,
 			NewMemberID:     createdThreadDialog.ID,
 		}
 		if initiator != nil {
 			eventTemplate.InitiatorMemberID = initiator.ID
-			eventTemplate.InitiatorContactID = initiator.MemberID
+			eventTemplate.InitiatorContactID = initiator.ContactID
 		}
 
 		for _, receiver := range eventReceivers {
@@ -182,14 +182,14 @@ func (t *ThreadManagementService) verifyAddMember(ctx context.Context, initiator
 	if initiator == nil {
 		return errors.NotFound("thread not found or initiator does not have permission", errors.WithCause(notThreadMemberError))
 	}
-	if initiator.MemberID == targetContactID {
+	if initiator.ContactID == targetContactID {
 		return errors.InvalidArgument("cannot add self as member")
 	}
 	err := t.verifyAddMemberInitiatorPermissions(initiator.ThreadRole, role, &initiator.Permissions)
 	if err != nil {
 		return err
 	}
-	err = t.verifyAddMemberTargetPrivacy(ctx, initiator.MemberID, targetContactID)
+	err = t.verifyAddMemberTargetPrivacy(ctx, initiator.ContactID, targetContactID)
 	if err != nil {
 		return err
 	}
@@ -253,7 +253,7 @@ func (t *ThreadManagementService) RemoveMember(ctx context.Context, req *dto.Rem
 		}
 		if initiator != nil {
 			eventTemplate.InitiatorMemberID = initiator.ID
-			eventTemplate.InitiatorContactID = initiator.MemberID
+			eventTemplate.InitiatorContactID = initiator.ContactID
 		}
 		for _, receiver := range eventReceivers {
 			eventTemplate.Recipient = receiver.ContactID
@@ -415,7 +415,7 @@ func (t *ThreadManagementService) createDirectThread(ctx context.Context, uow st
 func extendedThreadDialogToSimpleMapper(tde *model.ThreadDialogExtended) *model.ThreadDialog {
 	return &model.ThreadDialog{
 		BaseModel:  shared.BaseModel{ID: tde.ID},
-		ContactID:  tde.MemberID,
+		ContactID:  tde.ContactID,
 		ThreadID:   tde.ThreadID,
 		ThreadRole: tde.ThreadRole,
 	}
@@ -454,7 +454,7 @@ func (t *ThreadManagementService) initializeDirectThreadDialogs(ctx context.Cont
 		initiatorThreadDialog = &model.ThreadDialogExtended{
 			BaseModel:   baseModel,
 			ThreadID:    threadID,
-			MemberID:    from.ID,
+			ContactID:   from.ID,
 			ThreadRole:  initiatorRole,
 			Permissions: *initiatorPermissions,
 			Settings: model.BaseThreadSetting{
@@ -464,7 +464,7 @@ func (t *ThreadManagementService) initializeDirectThreadDialogs(ctx context.Cont
 		targerPermissions = &model.ThreadDialogExtended{
 			BaseModel:   baseModel,
 			ThreadID:    threadID,
-			MemberID:    to.ID,
+			ContactID:   to.ID,
 			ThreadRole:  peerRole,
 			Permissions: *targetPermissions,
 			Settings: model.BaseThreadSetting{

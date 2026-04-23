@@ -76,6 +76,7 @@ func (s *MessageService) SendText(ctx context.Context, in *dto.SendTextRequest) 
 		To:       t.Members,
 		Type:     model.MessageTypeText,
 		SenderID: in.From.ID,
+		MemberID: findSenderMemberID(t.Members, in.From.ID),
 		Metadata: model.BuildMetadata(in.Body),
 	}
 
@@ -143,6 +144,7 @@ func (s *MessageService) SendImage(ctx context.Context, in *dto.SendImageRequest
 		ThreadID:   t.ID,
 		DomainID:   int32(in.DomainID),
 		From:       in.From,
+		MemberID:   findSenderMemberID(t.Members, in.From.ID),
 		Recipients: t.Members,
 		Body:       in.Image.Body,
 		SendID:     in.SendID,
@@ -207,6 +209,7 @@ func (s *MessageService) SendDocument(ctx context.Context, in *dto.SendDocumentR
 		ThreadID:   t.ID,
 		DomainID:   int32(in.DomainID),
 		From:       in.From,
+		MemberID:   findSenderMemberID(t.Members, in.From.ID),
 		Recipients: t.Members,
 		Body:       in.Document.Body,
 		SendID:     in.SendID,
@@ -451,6 +454,7 @@ func (s *MessageService) prepareMessageForSending(ctx context.Context, msg *mode
 
 	msg.ThreadID = t.ID
 	msg.To = t.Members
+	msg.MemberID = findSenderMemberID(t.Members, msg.From.ID)
 
 	return nil
 }
@@ -553,4 +557,16 @@ func enrichAttachmentsLinks(ctx context.Context, attachments []AttachmentProcess
 	}
 
 	return nil
+}
+
+// findSenderMemberID returns the thread_dialog.id for the given contact within
+// the provided member list.  Returns uuid.Nil when the contact is not found
+// (e.g. system-generated messages with no human sender).
+func findSenderMemberID(members []*model.ThreadDialog, contactID uuid.UUID) uuid.UUID {
+	for _, m := range members {
+		if m.ContactID == contactID {
+			return m.ID
+		}
+	}
+	return uuid.Nil
 }

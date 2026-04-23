@@ -105,8 +105,8 @@ func TestFindAddMemberActors_ResolvesInitiatorAndTargetByContactID(t *testing.T)
 	targetContactID := uuid.New()
 	threadDialogStore := &fakeThreadDialogStore{
 		fullViewResult: []*model.ThreadDialogExtended{
-			{MemberID: initiatorContactID, ThreadID: threadID},
-			{MemberID: targetContactID, ThreadID: threadID},
+			{ContactID: initiatorContactID, ThreadID: threadID},
+			{ContactID: targetContactID, ThreadID: threadID},
 		},
 	}
 	svc := &ThreadManagementService{
@@ -118,8 +118,8 @@ func TestFindAddMemberActors_ResolvesInitiatorAndTargetByContactID(t *testing.T)
 	require.NoError(t, err)
 	require.NotNil(t, initiator)
 	require.NotNil(t, target)
-	require.Equal(t, initiatorContactID, initiator.MemberID)
-	require.Equal(t, targetContactID, target.MemberID)
+	require.Equal(t, initiatorContactID, initiator.ContactID)
+	require.Equal(t, targetContactID, target.ContactID)
 	require.NotNil(t, threadDialogStore.lastFilter)
 	require.Equal(t, []uuid.UUID{threadID}, threadDialogStore.lastFilter.ThreadIDs)
 	require.Equal(t, []uuid.UUID{initiatorContactID, targetContactID}, threadDialogStore.lastFilter.ContactIDs)
