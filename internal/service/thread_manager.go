@@ -69,6 +69,7 @@ func (t *ThreadManagementService) Search(ctx context.Context, searchRequest *dto
 
 	threads, err := t.uow.ThreadStore().Search(ctx, query)
 	if err != nil {
+		t.logger.Error("searching threads", "operation", "service.thread_manager.search", "err", err)
 		return nil, err
 	}
 

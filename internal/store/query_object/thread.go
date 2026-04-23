@@ -12,7 +12,6 @@ import (
 const (
 	threadAlias                   string = "t"
 	threadThreadDialogAlias       string = "td"
-	threadMembersLateralAlias     string = "ml" //members lateral
 	threadDirectSettingsAlias     string = "ds"
 	threadMembersFullLateralAlias string = "m"
 )
@@ -229,9 +228,11 @@ func (q *threadQueryObject) WithOwnerFilter(owners ...uuid.UUID) *threadQueryObj
 
 func (q *threadQueryObject) WithSubjectFilter(subject string) *threadQueryObject {
 	if subject != "" && utf8.ValidString(subject) {
-		q.escapeLikePattern(subject)
+		escapedSubject := "%" + q.escapeLikePattern(subject) + "%"
 		q.mustIncludeComputedSubject = true
-		q.builder = q.builder.Where(fmt.Sprintf("(%s.subject ilike ? or %s.title ilike ?)", threadAlias, threadDirectSettingsAlias), subject, subject)
+		q.builder = q.builder.Where(
+			fmt.Sprintf("(%s.subject ilike ? or %s.title ilike ?)", threadAlias, threadDirectSettingsAlias), escapedSubject, escapedSubject,
+		)
 	}
 
 	return q
@@ -239,8 +240,8 @@ func (q *threadQueryObject) WithSubjectFilter(subject string) *threadQueryObject
 
 func (q *threadQueryObject) WithDescriptionFilter(description string) *threadQueryObject {
 	if description != "" && utf8.ValidString(description) {
-		q.escapeLikePattern(description)
-		q.builder = q.builder.Where(fmt.Sprintf("%s.description ilike ?", threadAlias), description)
+		escapedDescription := "%" + q.escapeLikePattern(description) + "%"
+		q.builder = q.builder.Where(fmt.Sprintf("%s.description ilike ?", threadAlias), escapedDescription)
 	}
 
 	return q
