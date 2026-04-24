@@ -108,7 +108,7 @@ func (t *ThreadManagementService) AddMember(ctx context.Context, req *dto.AddMem
 	}
 	initiator, target, err := t.findAddMemberActors(ctx, req.ThreadID, req.InitiatorContactID, req.NewMemberContactID)
 	if err != nil {
-		return uuid.Nil, err
+		return uuid.Nil, errors.New("failed to find actors", errors.WithCause(err))
 	}
 	if target != nil {
 		return uuid.Nil, errors.New("target member is already part of the thread", errors.WithCode(codes.AlreadyExists), errors.WithID("service.thread_manager.thread_manager"))
@@ -159,7 +159,7 @@ func (t *ThreadManagementService) AddMember(ctx context.Context, req *dto.AddMem
 			ThreadIDs: []uuid.UUID{req.ThreadID},
 		})
 		if err != nil {
-			return err
+			return errors.Internal("search of members failed", errors.WithCause(err))
 		}
 		err = t.sendAddMemberSystemMessage(ctx, uow, &addMemberEventArgs{
 			initiator: initiator,
@@ -169,7 +169,7 @@ func (t *ThreadManagementService) AddMember(ctx context.Context, req *dto.AddMem
 			domainID:  newMember.DomainID,
 		})
 		if err != nil {
-			return err
+			return errors.Internal("failed to send system message", errors.WithCause(err))
 		}
 
 		return nil
@@ -268,6 +268,7 @@ func (t *ThreadManagementService) sendAddMemberSystemMessage(ctx context.Context
 			To:             args.receivers,
 			Type:           model.MessageTypeSystem,
 			System:         systemMessage,
+			Metadata:       model.BuildMetadata(""),
 			SendTo: shared.Peer{
 				ID:   newMember.ContactID,
 				Type: shared.PeerContact,
@@ -396,6 +397,7 @@ func (t *ThreadManagementService) sendRemoveMemberSystemMessage(ctx context.Cont
 		DomainID:       int32(args.domainID),
 		To:             args.receivers,
 		Type:           model.MessageTypeSystem,
+		Metadata:       model.BuildMetadata(""),
 		System: &model.MessageSystem{
 			Type:     memberRemovedSystemMessageType,
 			Metadata: metadata,

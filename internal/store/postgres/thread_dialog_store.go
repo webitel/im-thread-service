@@ -203,7 +203,7 @@ func (t *threadDialogStore) GetQuickView(ctx context.Context, filter *model.Thre
 	FROM im_thread.thread_dialog dial
 	WHERE (@ThreadIDs::uuid[] IS NULL OR dial.thread_id = ANY(@ThreadIDs))
 	AND (@ContactIDs::uuid[] IS NULL OR dial.member_id = ANY(@ContactIDs))
-	AND (@IncludeDeleted::bool IS NULL OR (dial.deleted_at IS NULL OR (dial.deleted_at IS NOT NULL = @IncludeDeleted))
+	AND (@IncludeDeleted OR dial.deleted_at IS NULL)
 
 	OFFSET @Offset`
 		args = pgx.NamedArgs{
@@ -226,6 +226,10 @@ func (t *threadDialogStore) GetQuickView(ctx context.Context, filter *model.Thre
 }
 
 func (t *threadDialogStore) GetFullView(ctx context.Context, filter *model.ThreadDialogStoreFilter) ([]*model.ThreadDialogExtended, error) {
+	if filter == nil {
+		return nil, errors.New("filter cannot be nil")
+	}
+
 	query := `
 	SELECT
 	-- basic thread dialog fields
@@ -244,7 +248,7 @@ func (t *threadDialogStore) GetFullView(ctx context.Context, filter *model.Threa
 	WHERE (@ThreadIDs::uuid[] IS NULL OR dial.thread_id = ANY(@ThreadIDs))
 	AND (@ContactIDs::uuid[] IS NULL OR dial.member_id = ANY(@ContactIDs))
 	AND (@IDS::uuid[] IS NULL OR dial.id = ANY(@IDS))
-	AND (@IncludeDeleted::bool IS NULL OR (dial.deleted_at IS NULL OR (dial.deleted_at IS NOT NULL = @IncludeDeleted))
+	AND (@IncludeDeleted OR dial.deleted_at IS NULL)
 
 	OFFSET @Offset
 	`
