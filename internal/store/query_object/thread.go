@@ -258,6 +258,12 @@ func (q *threadQueryObject) WithContactIDFilter(memberIDs ...uuid.UUID) *threadQ
 	return q
 }
 
+func (q *threadQueryObject) WithoutDeletedAtFilter() *threadQueryObject {
+	q.EnsureJoins(threadLinkThreadDialog)
+	q.builder = q.builder.Where(squirrel.Eq{threadThreadDialogAlias + ".deleted_at": nil})
+	return q
+}
+
 func (q *threadQueryObject) linkThreadDialog() {
 	if q.join&threadLinkThreadDialog != 0 {
 		return
