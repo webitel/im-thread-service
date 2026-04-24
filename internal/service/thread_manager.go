@@ -17,7 +17,9 @@ import (
 )
 
 var (
-	notThreadMemberError = errors.New("member is not part of thread")
+	notThreadMemberError           = errors.New("member is not part of thread")
+	memberAddedSystemMessageType   = "member_added"
+	memberRemovedSystemMessageType = "member_removed"
 )
 
 type (
@@ -90,10 +92,10 @@ func (t *ThreadManagementService) findAddMemberActors(ctx context.Context, threa
 		if initiatorActor != nil && targetActor != nil {
 			break
 		}
-		if actor.MemberID == initiatorContactID {
+		if actor.ContactID == initiatorContactID {
 			initiatorActor = actor
 		}
-		if actor.MemberID == targetContactID {
+		if actor.ContactID == targetContactID {
 			targetActor = actor
 		}
 	}
@@ -107,7 +109,7 @@ func (t *ThreadManagementService) AddMember(ctx context.Context, req *dto.AddMem
 	}
 	initiator, target, err := t.findAddMemberActors(ctx, req.ThreadID, req.InitiatorContactID, req.NewMemberContactID)
 	if err != nil {
-		return uuid.Nil, err
+		return uuid.Nil, errors.New("failed to find actors", errors.WithCause(err))
 	}
 	if target != nil {
 		return uuid.Nil, errors.New("target member is already part of the thread", errors.WithCode(codes.AlreadyExists), errors.WithID("service.thread_manager.thread_manager"))
@@ -115,29 +117,37 @@ func (t *ThreadManagementService) AddMember(ctx context.Context, req *dto.AddMem
 
 	var (
 		titleForTarget = "New thread"
+		invitedBy      *uuid.UUID
+		domainID       int
 	)
+	if initiator != nil {
+		domainID = initiator.DomainID
+	}
 	if req.InitiatorContactID != uuid.Nil {
 		err = t.verifyAddMember(ctx, initiator, req.NewMemberContactID, req.NewMemberRole)
 		if err != nil {
 			return uuid.Nil, err
 		}
 		titleForTarget = initiator.Settings.Title
+		invitedBy = &initiator.ID
 	}
 
 	rolePermissions, err := getDefaultPermissionsByRole(req.NewMemberRole)
 	if err != nil {
 		return uuid.Nil, err
 	}
-	var createdThreadDialog *model.ThreadDialogExtended
+	var newMember *model.ThreadDialogExtended
 	err = t.uow.WithinTransaction(ctx, func(ctx context.Context, uow store.UnitOfWork) error {
-		createdThreadDialog, err = t.uow.ThreadDialogStore().Create(ctx, &model.ThreadDialogExtended{
+		newMember, err = uow.ThreadDialogStore().Create(ctx, &model.ThreadDialogExtended{
 			BaseModel: shared.BaseModel{
+				DomainID:  domainID,
 				CreatedAt: time.Now().UTC(),
 				UpdatedAt: time.Now().UTC(),
 			},
 			ThreadID:    req.ThreadID,
-			MemberID:    req.NewMemberContactID,
+			ContactID:   req.NewMemberContactID,
 			ThreadRole:  req.NewMemberRole,
+			InvitedBy:   invitedBy,
 			Permissions: *rolePermissions,
 			Settings: model.BaseThreadSetting{
 				Title: titleForTarget,
@@ -146,51 +156,44 @@ func (t *ThreadManagementService) AddMember(ctx context.Context, req *dto.AddMem
 		if err != nil {
 			return err
 		}
-
-		// TODO: optimize publishing, so we can reduce round trips to the store
 		eventReceivers, err := uow.ThreadDialogStore().GetQuickView(ctx, &model.ThreadDialogStoreFilter{
-			ContactIDs: []uuid.UUID{req.ThreadID},
+			ThreadIDs: []uuid.UUID{req.ThreadID},
 		})
 		if err != nil {
-			return err
+			return errors.Internal("search of members failed", errors.WithCause(err))
 		}
-		eventTemplate := &event.MemberAddedV1{
-			ThreadID:        req.ThreadID,
-			MemberContactID: createdThreadDialog.MemberID,
-			NewMemberID:     createdThreadDialog.ID,
-		}
-		if initiator != nil {
-			eventTemplate.InitiatorMemberID = initiator.ID
-			eventTemplate.InitiatorContactID = initiator.MemberID
+		err = t.sendAddMemberSystemMessage(ctx, uow, &addMemberEventArgs{
+			initiator: initiator,
+			newMember: newMember,
+			receivers: eventReceivers,
+			threadID:  req.ThreadID,
+			domainID:  newMember.DomainID,
+		})
+		if err != nil {
+			return errors.Internal("failed to send system message", errors.WithCause(err))
 		}
 
-		for _, receiver := range eventReceivers {
-			eventTemplate.Recipient = receiver.ContactID
-			err = uow.Outbox().Publish(ctx, eventTemplate.Topic(), eventTemplate)
-			if err != nil {
-				return err
-			}
-		}
 		return nil
 
 	})
 	if err != nil {
 		return uuid.Nil, err
 	}
-	return createdThreadDialog.ID, nil
+	return newMember.ID, nil
 }
+
 func (t *ThreadManagementService) verifyAddMember(ctx context.Context, initiator *model.ThreadDialogExtended, targetContactID uuid.UUID, role model.ThreadRole) error {
 	if initiator == nil {
 		return errors.NotFound("thread not found or initiator does not have permission", errors.WithCause(notThreadMemberError))
 	}
-	if initiator.MemberID == targetContactID {
+	if initiator.ContactID == targetContactID {
 		return errors.InvalidArgument("cannot add self as member")
 	}
 	err := t.verifyAddMemberInitiatorPermissions(initiator.ThreadRole, role, &initiator.Permissions)
 	if err != nil {
 		return err
 	}
-	err = t.verifyAddMemberTargetPrivacy(ctx, initiator.MemberID, targetContactID)
+	err = t.verifyAddMemberTargetPrivacy(ctx, initiator.ContactID, targetContactID)
 	if err != nil {
 		return err
 	}
@@ -219,6 +222,100 @@ func (t *ThreadManagementService) verifyAddMemberTargetPrivacy(ctx context.Conte
 	return nil
 }
 
+type addMemberEventArgs struct {
+	initiator *model.ThreadDialogExtended
+	newMember *model.ThreadDialogExtended
+	receivers []*model.ThreadDialog
+	threadID  uuid.UUID
+	domainID  int
+}
+
+type removeMemberEventArgs struct {
+	initiator *model.ThreadDialogExtended
+	member    *model.ThreadDialogExtended
+	receivers []*model.ThreadDialog
+	reason    *string
+	domainID  int
+}
+
+func (t *ThreadManagementService) sendAddMemberSystemMessage(ctx context.Context, uow store.UnitOfWork, args *addMemberEventArgs) error {
+	if args == nil {
+		return errors.New("add member event args cannot be nil")
+	}
+	if args.newMember == nil {
+		return errors.New("target member cannot be nil")
+	}
+	if args.receivers == nil {
+		return errors.New("message recipients cannot be nil")
+	}
+	if args.domainID <= 0 {
+		return errors.InvalidArgument("domain id must be greater than zero", errors.WithID("service.thread_manager.send_add_member_system_message"))
+	}
+	var (
+		newMember     = args.newMember
+		systemMessage = &model.MessageSystem{
+			Type: memberAddedSystemMessageType,
+			Metadata: map[string]any{
+				"new_member_id":         newMember.ID,
+				"new_member_contact_id": newMember.ContactID,
+				"new_member_role":       newMember.ThreadRole,
+				"thread_id":             args.threadID,
+			},
+		}
+		message = &model.Message{
+			IdempotencyKey: uuid.NewString(),
+			ThreadID:       args.threadID,
+			DomainID:       int32(args.domainID),
+			To:             args.receivers,
+			Type:           model.MessageTypeSystem,
+			System:         systemMessage,
+			Metadata:       model.BuildMetadata(""),
+			SendTo: shared.Peer{
+				ID:   newMember.ContactID,
+				Type: shared.PeerContact,
+			},
+		}
+		initiator = args.initiator
+	)
+	if initiator != nil {
+		message.Member = &model.ThreadDialog{
+			BaseModel: shared.BaseModel{
+				ID: initiator.ID,
+			},
+			ContactID:  initiator.ContactID,
+			ThreadID:   initiator.ThreadID,
+			ThreadRole: initiator.ThreadRole,
+		}
+	}
+
+	return t.sendThreadSystemMessage(ctx, uow, message)
+}
+
+func (s *ThreadManagementService) sendThreadSystemMessage(ctx context.Context, uow store.UnitOfWork, msg *model.Message) error {
+	if msg.ThreadID == uuid.Nil {
+		return errors.New("thread id cannot be nil")
+	}
+	if msg.DomainID <= 0 {
+		return errors.New("domain id must be greater than zero")
+	}
+	if msg.To == nil {
+		return errors.New("message recipients cannot be nil")
+	}
+	savedMsg, err := uow.Messages().SaveSystemMessage(ctx, msg)
+	if err != nil {
+		return err
+	}
+	savedMsg.WithCreatedEvent(uuid.NewString(), &msg.From)
+	events := savedMsg.Events()
+
+	for _, e := range events {
+		if err = uow.Outbox().Publish(ctx, buildMessageCreatedTopic(e.RecipientID(), e.Version()), e); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (t *ThreadManagementService) RemoveMember(ctx context.Context, req *dto.RemoveMemberRequest) error {
 	if req == nil {
 		return errors.New("remove member request cannot be nil")
@@ -238,30 +335,30 @@ func (t *ThreadManagementService) RemoveMember(ctx context.Context, req *dto.Rem
 	}
 
 	err = t.uow.WithinTransaction(ctx, func(ctx context.Context, uow store.UnitOfWork) error {
-		err = uow.ThreadDialogStore().Delete(ctx, target.ID)
-		if err != nil {
-			return err
-		}
 		eventReceivers, err := uow.ThreadDialogStore().GetQuickView(ctx, &model.ThreadDialogStoreFilter{
-			ContactIDs: []uuid.UUID{target.ThreadID},
+			ThreadIDs:      []uuid.UUID{target.ThreadID},
+			IncludeDeleted: false,
 		})
 		if err != nil {
 			return err
 		}
-		eventTemplate := &event.MemberRemovedV1{
-			ThreadID:        target.ThreadID,
-			RemovedMemberID: target.ID,
+		err = uow.ThreadDialogStore().Delete(ctx, target.ID, req.Reason)
+		if err != nil {
+			return err
 		}
-		if initiator != nil {
-			eventTemplate.InitiatorMemberID = initiator.ID
-			eventTemplate.InitiatorContactID = initiator.MemberID
+		domainID := target.DomainID
+		if domainID <= 0 && initiator != nil {
+			domainID = initiator.DomainID
 		}
-		for _, receiver := range eventReceivers {
-			eventTemplate.Recipient = receiver.ContactID
-			err = uow.Outbox().Publish(ctx, eventTemplate.Topic(), eventTemplate)
-			if err != nil {
-				return err
-			}
+		err = t.sendRemoveMemberSystemMessage(ctx, uow, &removeMemberEventArgs{
+			initiator: initiator,
+			member:    target,
+			receivers: eventReceivers,
+			reason:    req.Reason,
+			domainID:  domainID,
+		})
+		if err != nil {
+			return err
 		}
 		return nil
 	})
@@ -272,6 +369,58 @@ func (t *ThreadManagementService) RemoveMember(ctx context.Context, req *dto.Rem
 	return nil
 }
 
+func (t *ThreadManagementService) sendRemoveMemberSystemMessage(ctx context.Context, uow store.UnitOfWork, args *removeMemberEventArgs) error {
+	if args == nil {
+		return errors.New("remove member event args cannot be nil")
+	}
+	if args.member == nil {
+		return errors.New("removed member cannot be nil")
+	}
+	if args.receivers == nil {
+		return errors.New("message recipients cannot be nil")
+	}
+	if args.domainID <= 0 {
+		return errors.InvalidArgument("domain id must be greater than zero", errors.WithID("service.thread_manager.send_remove_member_system_message"))
+	}
+
+	removedMember := args.member
+	metadata := map[string]any{
+		"removed_member_id":         removedMember.ID,
+		"removed_member_contact_id": removedMember.ContactID,
+		"thread_id":                 removedMember.ThreadID,
+	}
+	if args.reason != nil {
+		metadata["reason"] = *args.reason
+	}
+	message := &model.Message{
+		IdempotencyKey: uuid.NewString(),
+		ThreadID:       removedMember.ThreadID,
+		DomainID:       int32(args.domainID),
+		To:             args.receivers,
+		Type:           model.MessageTypeSystem,
+		Metadata:       model.BuildMetadata(""),
+		System: &model.MessageSystem{
+			Type:     memberRemovedSystemMessageType,
+			Metadata: metadata,
+		},
+		SendTo: shared.Peer{
+			ID:   removedMember.ContactID,
+			Type: shared.PeerContact,
+		},
+	}
+	if args.initiator != nil {
+		message.Member = &model.ThreadDialog{
+			BaseModel: shared.BaseModel{
+				ID: args.initiator.ID,
+			},
+			ContactID:  args.initiator.ContactID,
+			ThreadID:   args.initiator.ThreadID,
+			ThreadRole: args.initiator.ThreadRole,
+		}
+	}
+
+	return t.sendThreadSystemMessage(ctx, uow, message)
+}
 func (t *ThreadManagementService) verifyRemoveMember(initiator *model.ThreadDialogExtended, target *model.ThreadDialogExtended) error {
 	if initiator == nil {
 		return errors.NotFound("thread not found or initiator does not have permission", errors.WithCause(notThreadMemberError))
@@ -416,7 +565,7 @@ func (t *ThreadManagementService) createDirectThread(ctx context.Context, uow st
 func extendedThreadDialogToSimpleMapper(tde *model.ThreadDialogExtended) *model.ThreadDialog {
 	return &model.ThreadDialog{
 		BaseModel:  shared.BaseModel{ID: tde.ID},
-		ContactID:  tde.MemberID,
+		ContactID:  tde.ContactID,
 		ThreadID:   tde.ThreadID,
 		ThreadRole: tde.ThreadRole,
 	}
@@ -455,7 +604,7 @@ func (t *ThreadManagementService) initializeDirectThreadDialogs(ctx context.Cont
 		initiatorThreadDialog = &model.ThreadDialogExtended{
 			BaseModel:   baseModel,
 			ThreadID:    threadID,
-			MemberID:    from.ID,
+			ContactID:   from.ID,
 			ThreadRole:  initiatorRole,
 			Permissions: *initiatorPermissions,
 			Settings: model.BaseThreadSetting{
@@ -465,7 +614,7 @@ func (t *ThreadManagementService) initializeDirectThreadDialogs(ctx context.Cont
 		targerPermissions = &model.ThreadDialogExtended{
 			BaseModel:   baseModel,
 			ThreadID:    threadID,
-			MemberID:    to.ID,
+			ContactID:   to.ID,
 			ThreadRole:  peerRole,
 			Permissions: *targetPermissions,
 			Settings: model.BaseThreadSetting{

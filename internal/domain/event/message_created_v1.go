@@ -9,7 +9,6 @@ import (
 
 const (
 	MessageVersionV1 = "v1"
-	MessageVersionV2 = "v2"
 )
 
 const (
@@ -36,7 +35,6 @@ type OutboxEvent struct {
 
 var (
 	_ Outboxer = (*MessageCreated)(nil)
-	_ Outboxer = (*MessageCreatedV2)(nil)
 )
 
 type MessageCreated struct {
@@ -68,17 +66,6 @@ func (MessageCreated) EventType() string        { return MessageCreatedEvent }
 func (m MessageCreated) Version() string        { return MessageVersionV1 }
 func (m MessageCreated) RecipientID() uuid.UUID { return m.ThreadID }
 func (m MessageCreated) ToOutbox() (OutboxEvent, error) {
-	return m.serialize(m, m.Version())
-}
-
-type MessageCreatedV2 struct {
-	MessageCreated
-}
-
-func (MessageCreatedV2) EventType() string        { return MessageCreatedEvent }
-func (m MessageCreatedV2) Version() string        { return MessageVersionV2 }
-func (m MessageCreatedV2) RecipientID() uuid.UUID { return m.ThreadID }
-func (m MessageCreatedV2) ToOutbox() (OutboxEvent, error) {
 	return m.serialize(m, m.Version())
 }
 

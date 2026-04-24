@@ -312,6 +312,7 @@ func (q *threadQueryObject) linkFullMembersLateral() {
 			) as members_data
 			from %[4]s %[1]s
 			where %[1]s.thread_id = %[5]s.id
+			AND %[1]s.deleted_at IS NULL
 		) %[6]s on true
 	`, threadThreadDialogAlias, threadDirectSettingsAlias, DirectSettingsTable, ThreadDialogTable, threadAlias, threadMembersFullLateralAlias))
 }

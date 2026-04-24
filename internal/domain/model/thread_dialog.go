@@ -1,6 +1,8 @@
 package model
 
 import (
+	"time"
+
 	"github.com/google/uuid"
 	"github.com/webitel/im-thread-service/internal/domain/shared"
 )
@@ -19,9 +21,12 @@ type (
 	ThreadDialogExtended struct {
 		shared.BaseModel
 
-		MemberID   uuid.UUID  `json:"member_id" db:"member_id"`
-		ThreadID   uuid.UUID  `json:"thread_id" db:"thread_id"`
-		ThreadRole ThreadRole `json:"member_role" db:"thread_role"`
+		ContactID   uuid.UUID  `json:"member_id" db:"member_id"`
+		ThreadID    uuid.UUID  `json:"thread_id" db:"thread_id"`
+		ThreadRole  ThreadRole `json:"member_role" db:"thread_role"`
+		DeletedAt   *time.Time `json:"deleted_at" db:"deleted_at"`
+		InvitedBy   *uuid.UUID `json:"invited_by" db:"invited_by"`
+		LeaveReason *string    `json:"leave_reason" db:"leave_reason"`
 
 		Permissions ThreadPermissions `json:"permissions" db:"permissions"`
 		Settings    BaseThreadSetting `json:"settings" db:"settings"`
@@ -29,9 +34,12 @@ type (
 	ThreadDialog struct {
 		shared.BaseModel
 
-		ContactID  uuid.UUID  `json:"member_id" db:"member_id"`
-		ThreadID   uuid.UUID  `json:"thread_id" db:"thread_id"`
-		ThreadRole ThreadRole `json:"member_role" db:"thread_role"`
+		ContactID   uuid.UUID  `json:"member_id" db:"member_id"`
+		ThreadID    uuid.UUID  `json:"thread_id" db:"thread_id"`
+		ThreadRole  ThreadRole `json:"member_role" db:"thread_role"`
+		DeletedAt   *time.Time `json:"deleted_at" db:"deleted_at"`
+		InvitedBy   *uuid.UUID `json:"invited_by" db:"invited_by"`
+		LeaveReason *string    `json:"leave_reason" db:"leave_reason"`
 	}
 
 	DirectThreadDialog struct {
@@ -56,9 +64,10 @@ type CreateDirectPeer struct {
 }
 
 type ThreadDialogStoreFilter struct {
-	Limit      int
-	Offset     int
-	ThreadIDs  []uuid.UUID
-	ContactIDs []uuid.UUID
-	IDs        []uuid.UUID
+	Limit          int
+	Offset         int
+	ThreadIDs      []uuid.UUID
+	ContactIDs     []uuid.UUID
+	IDs            []uuid.UUID
+	IncludeDeleted bool
 }

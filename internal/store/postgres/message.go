@@ -22,16 +22,43 @@ func NewMessageStore(q Querier) store.MessageStore {
 	return &messageStore{db: q}
 }
 
+func validateMessageForSave(msg *model.Message, operationID string) error {
+	if msg == nil {
+		return errors.InvalidArgument("message cannot be nil", errors.WithID(operationID))
+	}
+	if msg.ThreadID == uuid.Nil {
+		return errors.InvalidArgument("message thread id cannot be nil", errors.WithID(operationID))
+	}
+	if msg.DomainID <= 0 {
+		return errors.InvalidArgument("message domain id must be greater than zero", errors.WithID(operationID))
+	}
+	if msg.Type == model.MessageTypeSystem {
+		return nil
+	}
+	if msg.Member == nil {
+		return errors.InvalidArgument("message member cannot be nil", errors.WithID(operationID))
+	}
+	if msg.Member.ID == uuid.Nil {
+		return errors.InvalidArgument("message member id cannot be nil", errors.WithID(operationID))
+	}
+
+	return nil
+}
+
 func (m *messageStore) SaveMessage(ctx context.Context, msg *model.Message) (*model.Message, error) {
+	if err := validateMessageForSave(msg, "postgres.message.save_message"); err != nil {
+		return nil, err
+	}
+
 	const query = `
 		insert into im_message.messages (
-			domain_id, thread_id, sender_id, type, body, metadata
+			domain_id, thread_id, sender_id, member_id, type, body, metadata
 		)
 		values (
-			@DomainID, @ThreadID, @SenderID, @Type, @Body, @Metadata
+			@DomainID, @ThreadID, @SenderID, @MemberID, @Type, @Body, @Metadata
 		)
 		returning
-			id, domain_id, thread_id, type, body, metadata, created_at, updated_at,
+			id, domain_id, thread_id, member_id, type, body, metadata, created_at, updated_at,
 			jsonb_build_object('id', sender_id) as "from"
 	`
 
@@ -39,6 +66,7 @@ func (m *messageStore) SaveMessage(ctx context.Context, msg *model.Message) (*mo
 		"DomainID": msg.DomainID,
 		"ThreadID": msg.ThreadID,
 		"SenderID": msg.From.ID,
+		"MemberID": msg.Member.ID,
 		"Type":     msg.Type,
 		"Body":     msg.Body,
 		"Metadata": msg.Metadata,
@@ -217,6 +245,10 @@ func (m *messageStore) ReadMessage(ctx context.Context, read struct {
 }
 
 func (m *messageStore) SaveMessageLocation(ctx context.Context, msg *model.Message) (*model.Message, error) {
+	if err := validateMessageForSave(msg, "postgres.message.save_message_location"); err != nil {
+		return nil, err
+	}
+
 	sql, args := prepareSaveMessageLocationQuery(msg)
 
 	rows, err := m.db.Query(ctx, sql, args)
@@ -236,8 +268,8 @@ func prepareSaveMessageLocationQuery(msg *model.Message) (string, pgx.NamedArgs)
 	query := `
 		with msg_ins as (
 			insert into im_message.messages
-			(thread_id, domain_id, sender_id, type, body, metadata)
-			values (@ThreadID, @DomainID, @SenderID, @Type, @Body, @Metadata)
+			(thread_id, domain_id, sender_id, member_id, type, body, metadata)
+			values (@ThreadID, @DomainID, @SenderID, @MemberID, @Type, @Body, @Metadata)
 			returning *
 		),
 		location_ins as (
@@ -267,6 +299,7 @@ func prepareSaveMessageLocationQuery(msg *model.Message) (string, pgx.NamedArgs)
 		"ThreadID":  msg.ThreadID,
 		"DomainID":  msg.DomainID,
 		"SenderID":  msg.From.ID,
+		"MemberID":  msg.Member.ID,
 		"Type":      msg.Type,
 		"Body":      msg.Body,
 		"Metadata":  msg.Metadata,
@@ -280,6 +313,10 @@ func prepareSaveMessageLocationQuery(msg *model.Message) (string, pgx.NamedArgs)
 }
 
 func (m *messageStore) SaveMessageContact(ctx context.Context, msg *model.Message) (*model.Message, error) {
+	if err := validateMessageForSave(msg, "postgres.message.save_message_contact"); err != nil {
+		return nil, err
+	}
+
 	query, args := prepareSaveMessageContactQuery(msg)
 
 	rows, err := m.db.Query(ctx, query, args)
@@ -299,8 +336,8 @@ func prepareSaveMessageContactQuery(msg *model.Message) (string, pgx.NamedArgs) 
 	query := `
 		with msg_ins as (
 			insert into im_message.messages
-			(thread_id, domain_id, sender_id, type, body, metadata)
-			values (@ThreadID, @DomainID, @SenderID, @Type, @Body, @Metadata)
+			(thread_id, domain_id, sender_id, member_id, type, body, metadata)
+			values (@ThreadID, @DomainID, @SenderID, @MemberID, @Type, @Body, @Metadata)
 			returning *
 		),
 		contact_ins as (
@@ -313,6 +350,7 @@ func prepareSaveMessageContactQuery(msg *model.Message) (string, pgx.NamedArgs) 
 			m.id as id,
 			m.thread_id as thread_id,
 			m.domain_id as domain_id,
+			m.member_id as member_id,
 			m.sender_id as sender_id,
 			m.type as type,
 			m.body as body,
@@ -329,6 +367,7 @@ func prepareSaveMessageContactQuery(msg *model.Message) (string, pgx.NamedArgs) 
 		"ThreadID": msg.ThreadID,
 		"DomainID": msg.DomainID,
 		"SenderID": msg.From.ID,
+		"MemberID": msg.Member.ID,
 		"Type":     msg.Type,
 		"Body":     msg.Body,
 		"Metadata": msg.Metadata,
@@ -341,6 +380,10 @@ func prepareSaveMessageContactQuery(msg *model.Message) (string, pgx.NamedArgs) 
 }
 
 func (m *messageStore) SaveSystemMessage(ctx context.Context, msg *model.Message) (*model.Message, error) {
+	if err := validateMessageForSave(msg, "postgres.message.save_system_message"); err != nil {
+		return nil, err
+	}
+
 	sql, args := prepareSaveSystemMessageQuery(msg)
 
 	rows, err := m.db.Query(ctx, sql, args)
@@ -365,11 +408,16 @@ func (m *messageStore) SaveSystemMessage(ctx context.Context, msg *model.Message
 }
 
 func prepareSaveSystemMessageQuery(msg *model.Message) (string, pgx.NamedArgs) {
+	memberID := uuid.Nil
+	if msg.Member != nil {
+		memberID = msg.Member.ID
+	}
+
 	query := `
 		with msg_ins as (
 			insert into im_message.messages
-			(thread_id, domain_id, sender_id, type, body, metadata)
-			values (@ThreadID, @DomainID, @SenderID, @Type, @Body, @Metadata)
+			(thread_id, domain_id, sender_id, member_id, type, body, metadata)
+			values (@ThreadID, @DomainID, @SenderID, @MemberID, @Type, @Body, @Metadata)
 			returning *
 		),
 		sys_ins as (
@@ -381,6 +429,7 @@ func prepareSaveSystemMessageQuery(msg *model.Message) (string, pgx.NamedArgs) {
 			m.id,
 			m.thread_id,
 			m.domain_id,
+			m.member_id,
 			m.sender_id,
 			m.type,
 			m.body,
@@ -398,6 +447,7 @@ func prepareSaveSystemMessageQuery(msg *model.Message) (string, pgx.NamedArgs) {
 		"ThreadID":       msg.ThreadID,
 		"DomainID":       msg.DomainID,
 		"SenderID":       msg.From.ID,
+		"MemberID":       memberID,
 		"Type":           msg.Type,
 		"Body":           msg.Body,
 		"Metadata":       msg.Metadata,
@@ -409,6 +459,10 @@ func prepareSaveSystemMessageQuery(msg *model.Message) (string, pgx.NamedArgs) {
 }
 
 func (m *messageStore) SaveInteractiveMessage(ctx context.Context, msg *model.Message) (*model.Message, error) {
+	if err := validateMessageForSave(msg, "postgres.message.save_interactive_message"); err != nil {
+		return nil, err
+	}
+
 	sql, args := prepareSaveInteractiveMessageQuery(msg)
 
 	rows, err := m.db.Query(ctx, sql, args)
@@ -428,8 +482,8 @@ func prepareSaveInteractiveMessageQuery(msg *model.Message) (string, pgx.NamedAr
 	query := `
 		with msg_ins as (
 			insert into im_message.messages
-			(thread_id, domain_id, sender_id, type, body, metadata, interactive)
-			values (@ThreadID, @DomainID, @SenderID, @Type, @Body, @Metadata, @Interactive)
+			(thread_id, domain_id, sender_id, member_id, type, body, metadata, interactive)
+			values (@ThreadID, @DomainID, @SenderID, @MemberID, @Type, @Body, @Metadata, @Interactive)
 			returning *
 		),
 		documents_ins as (
@@ -474,6 +528,7 @@ func prepareSaveInteractiveMessageQuery(msg *model.Message) (string, pgx.NamedAr
 			m.id as id,
 			m.thread_id as thread_id,
 			m.domain_id as domain_id,
+			m.member_id as member_id,
 			m.sender_id as sender_id,
 			m.type as type,
 			m.body as body,
@@ -530,6 +585,7 @@ func prepareSaveInteractiveMessageQuery(msg *model.Message) (string, pgx.NamedAr
 		"ThreadID":           msg.ThreadID,
 		"DomainID":           msg.DomainID,
 		"SenderID":           msg.From.ID,
+		"MemberID":           msg.Member.ID,
 		"Type":               msg.Type,
 		"Body":               msg.Body,
 		"Metadata":           msg.Metadata,

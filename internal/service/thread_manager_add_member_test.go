@@ -3,11 +3,13 @@ package service
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/webitel/im-thread-service/internal/domain/event"
 	"github.com/webitel/im-thread-service/internal/domain/model"
+	"github.com/webitel/im-thread-service/internal/domain/shared"
 	"github.com/webitel/im-thread-service/internal/service/dto"
 	"github.com/webitel/im-thread-service/internal/store"
 	queryobject "github.com/webitel/im-thread-service/internal/store/query_object"
@@ -15,6 +17,8 @@ import (
 
 type fakeUnitOfWork struct {
 	threadDialogStore store.ThreadDialogStore
+	messageStore      store.MessageStore
+	outboxStore       store.OutboxStore
 }
 
 func (f fakeUnitOfWork) WithinTransaction(ctx context.Context, fn func(context.Context, store.UnitOfWork) error) error {
@@ -38,11 +42,11 @@ func (f fakeUnitOfWork) MessageHistory() store.MessageHistory {
 }
 
 func (f fakeUnitOfWork) Messages() store.MessageStore {
-	return nil
+	return f.messageStore
 }
 
 func (f fakeUnitOfWork) Outbox() store.OutboxStore {
-	return nil
+	return f.outboxStore
 }
 
 func (f fakeUnitOfWork) InteractiveCallback() store.InteractiveCallback {
@@ -50,20 +54,36 @@ func (f fakeUnitOfWork) InteractiveCallback() store.InteractiveCallback {
 }
 
 type fakeThreadDialogStore struct {
-	fullViewResult []*model.ThreadDialogExtended
-	lastFilter     *model.ThreadDialogStoreFilter
+	fullViewResult  []*model.ThreadDialogExtended
+	lastFilter      *model.ThreadDialogStoreFilter
+	initiatorPair   *model.ThreadDialogExtended
+	targetPair      *model.ThreadDialogExtended
+	lastDeleteID    uuid.UUID
+	lastReason      *string
+	lastCreate      *model.ThreadDialogExtended
+	quickViewResult []*model.ThreadDialog
 }
 
 func (f *fakeThreadDialogStore) Create(ctx context.Context, threadDialog *model.ThreadDialogExtended) (*model.ThreadDialogExtended, error) {
-	return nil, nil
+	f.lastCreate = threadDialog
+	if threadDialog == nil {
+		return nil, nil
+	}
+	if threadDialog.ID == uuid.Nil {
+		threadDialog.BaseModel.ID = uuid.New()
+	}
+	return threadDialog, nil
 }
 
-func (f *fakeThreadDialogStore) Delete(ctx context.Context, memberID uuid.UUID) error {
+func (f *fakeThreadDialogStore) Delete(ctx context.Context, memberID uuid.UUID, leaveReason *string) error {
+	f.lastDeleteID = memberID
+	f.lastReason = leaveReason
 	return nil
 }
 
 func (f *fakeThreadDialogStore) GetQuickView(ctx context.Context, filter *model.ThreadDialogStoreFilter) ([]*model.ThreadDialog, error) {
-	return nil, nil
+	f.lastFilter = filter
+	return f.quickViewResult, nil
 }
 
 func (f *fakeThreadDialogStore) GetFullView(ctx context.Context, filter *model.ThreadDialogStoreFilter) ([]*model.ThreadDialogExtended, error) {
@@ -72,7 +92,7 @@ func (f *fakeThreadDialogStore) GetFullView(ctx context.Context, filter *model.T
 }
 
 func (f *fakeThreadDialogStore) FindActorsPair(ctx context.Context, initiatorsContact, targetMember uuid.UUID) (*model.ThreadDialogExtended, *model.ThreadDialogExtended, error) {
-	return nil, nil, nil
+	return f.initiatorPair, f.targetPair, nil
 }
 
 type fakeThreadStore struct{}
@@ -89,14 +109,84 @@ func (f fakeThreadStore) ResolveDirect(ctx context.Context, from, to uuid.UUID) 
 	return nil, nil
 }
 
-type fakeOutboxStore struct{}
+type publishedOutboxEvent struct {
+	topic string
+	event event.Outboxer
+}
 
-func (f fakeOutboxStore) Publish(ctx context.Context, topic string, event event.Outboxer) error {
+type fakeOutboxStore struct {
+	published []publishedOutboxEvent
+}
+
+func (f *fakeOutboxStore) Publish(ctx context.Context, topic string, event event.Outboxer) error {
+	f.published = append(f.published, publishedOutboxEvent{topic: topic, event: event})
 	return nil
 }
 
-func (f fakeOutboxStore) Cleanup(ctx context.Context, opt *model.OutboxCleanupOptions) (int64, error) {
+func (f *fakeOutboxStore) Cleanup(ctx context.Context, opt *model.OutboxCleanupOptions) (int64, error) {
 	return 0, nil
+}
+
+type fakeMessageStore struct {
+	lastSavedSystemMessage *model.Message
+}
+
+func (f *fakeMessageStore) SaveMessage(ctx context.Context, msg *model.Message) (*model.Message, error) {
+	return msg, nil
+}
+
+func (f *fakeMessageStore) SaveImages(ctx context.Context, messageID uuid.UUID, images []*model.MessageImage) ([]*model.MessageImage, error) {
+	return images, nil
+}
+
+func (f *fakeMessageStore) SaveDocuments(ctx context.Context, messageID uuid.UUID, docs []*model.MessageDocument) ([]*model.MessageDocument, error) {
+	return docs, nil
+}
+
+func (f *fakeMessageStore) ReadMessage(ctx context.Context, read struct {
+	DomainID  int32
+	ThreadID  uuid.UUID
+	MessageID uuid.UUID
+	UserID    uuid.UUID
+}) error {
+	return nil
+}
+
+func (f *fakeMessageStore) SaveMessageContact(ctx context.Context, msg *model.Message) (*model.Message, error) {
+	return msg, nil
+}
+
+func (f *fakeMessageStore) SaveMessageLocation(ctx context.Context, msg *model.Message) (*model.Message, error) {
+	return msg, nil
+}
+
+func (f *fakeMessageStore) SaveInteractiveMessage(ctx context.Context, msg *model.Message) (*model.Message, error) {
+	return msg, nil
+}
+
+func (f *fakeMessageStore) SaveSystemMessage(ctx context.Context, msg *model.Message) (*model.Message, error) {
+	f.lastSavedSystemMessage = msg
+	if msg.ID == uuid.Nil {
+		msg.ID = uuid.New()
+	}
+	now := time.Now().UTC()
+	if msg.CreatedAt.IsZero() {
+		msg.CreatedAt = now
+	}
+	if msg.UpdatedAt.IsZero() {
+		msg.UpdatedAt = now
+	}
+	return msg, nil
+}
+
+type fakePrivacyChecker struct{}
+
+func (f fakePrivacyChecker) CanInvite(ctx context.Context, initiatorID, targetID uuid.UUID) error {
+	return nil
+}
+
+func (f fakePrivacyChecker) CanSend(ctx context.Context, senderID, recipientID uuid.UUID) error {
+	return nil
 }
 
 func TestFindAddMemberActors_ResolvesInitiatorAndTargetByContactID(t *testing.T) {
@@ -105,8 +195,8 @@ func TestFindAddMemberActors_ResolvesInitiatorAndTargetByContactID(t *testing.T)
 	targetContactID := uuid.New()
 	threadDialogStore := &fakeThreadDialogStore{
 		fullViewResult: []*model.ThreadDialogExtended{
-			{MemberID: initiatorContactID, ThreadID: threadID},
-			{MemberID: targetContactID, ThreadID: threadID},
+			{ContactID: initiatorContactID, ThreadID: threadID},
+			{ContactID: targetContactID, ThreadID: threadID},
 		},
 	}
 	svc := &ThreadManagementService{
@@ -118,15 +208,163 @@ func TestFindAddMemberActors_ResolvesInitiatorAndTargetByContactID(t *testing.T)
 	require.NoError(t, err)
 	require.NotNil(t, initiator)
 	require.NotNil(t, target)
-	require.Equal(t, initiatorContactID, initiator.MemberID)
-	require.Equal(t, targetContactID, target.MemberID)
+	require.Equal(t, initiatorContactID, initiator.ContactID)
+	require.Equal(t, targetContactID, target.ContactID)
 	require.NotNil(t, threadDialogStore.lastFilter)
 	require.Equal(t, []uuid.UUID{threadID}, threadDialogStore.lastFilter.ThreadIDs)
 	require.Equal(t, []uuid.UUID{initiatorContactID, targetContactID}, threadDialogStore.lastFilter.ContactIDs)
 }
 
+func TestRemoveMember_ForwardsLeaveReasonToStoreDelete(t *testing.T) {
+	targetID := uuid.New()
+	threadID := uuid.New()
+	reason := "left by own decision"
+
+	threadDialogStore := &fakeThreadDialogStore{
+		targetPair: &model.ThreadDialogExtended{
+			BaseModel: shared.BaseModel{ID: targetID, DomainID: 1},
+			ThreadID:  threadID,
+			ContactID: uuid.New(),
+		},
+		quickViewResult: []*model.ThreadDialog{
+			{BaseModel: shared.BaseModel{ID: targetID}, ContactID: uuid.New(), ThreadID: threadID, ThreadRole: model.RoleMember},
+		},
+	}
+	messageStore := &fakeMessageStore{}
+	outboxStore := &fakeOutboxStore{}
+
+	svc := &ThreadManagementService{
+		uow: fakeUnitOfWork{threadDialogStore: threadDialogStore, messageStore: messageStore, outboxStore: outboxStore},
+	}
+
+	err := svc.RemoveMember(context.Background(), &dto.RemoveMemberRequest{
+		TargetMemberID:     targetID,
+		InitiatorContactID: uuid.Nil,
+		Reason:             &reason,
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, targetID, threadDialogStore.lastDeleteID)
+	require.NotNil(t, threadDialogStore.lastReason)
+	require.Equal(t, reason, *threadDialogStore.lastReason)
+}
+
+func TestRemoveMember_SendsSystemMessageAndRetainsRemovedRecipient(t *testing.T) {
+	initiatorMemberID := uuid.New()
+	initiatorContactID := uuid.New()
+	targetID := uuid.New()
+	targetContactID := uuid.New()
+	otherContactID := uuid.New()
+	threadID := uuid.New()
+	reason := "left by own decision"
+
+	threadDialogStore := &fakeThreadDialogStore{
+		initiatorPair: &model.ThreadDialogExtended{
+			BaseModel:  shared.BaseModel{ID: initiatorMemberID, DomainID: 1},
+			ContactID:  initiatorContactID,
+			ThreadID:   threadID,
+			ThreadRole: model.RoleOwner,
+			Permissions: model.ThreadPermissions{
+				CanAddMembers:    true,
+				CanRemoveMembers: true,
+			},
+		},
+		targetPair: &model.ThreadDialogExtended{
+			BaseModel:  shared.BaseModel{ID: targetID, DomainID: 1},
+			ContactID:  targetContactID,
+			ThreadID:   threadID,
+			ThreadRole: model.RoleMember,
+		},
+		quickViewResult: []*model.ThreadDialog{
+			{BaseModel: shared.BaseModel{ID: initiatorMemberID}, ContactID: initiatorContactID, ThreadID: threadID, ThreadRole: model.RoleOwner},
+			{BaseModel: shared.BaseModel{ID: targetID}, ContactID: targetContactID, ThreadID: threadID, ThreadRole: model.RoleMember},
+			{BaseModel: shared.BaseModel{ID: uuid.New()}, ContactID: otherContactID, ThreadID: threadID, ThreadRole: model.RoleMember},
+		},
+	}
+	messageStore := &fakeMessageStore{}
+	outboxStore := &fakeOutboxStore{}
+
+	svc := &ThreadManagementService{
+		uow: fakeUnitOfWork{
+			threadDialogStore: threadDialogStore,
+			messageStore:      messageStore,
+			outboxStore:       outboxStore,
+		},
+	}
+
+	err := svc.RemoveMember(context.Background(), &dto.RemoveMemberRequest{
+		TargetMemberID:     targetID,
+		InitiatorContactID: initiatorContactID,
+		Reason:             &reason,
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, targetID, threadDialogStore.lastDeleteID)
+	require.NotNil(t, messageStore.lastSavedSystemMessage)
+	require.Equal(t, threadID, messageStore.lastSavedSystemMessage.ThreadID)
+	require.Equal(t, model.MessageTypeSystem, messageStore.lastSavedSystemMessage.Type)
+	require.NotNil(t, messageStore.lastSavedSystemMessage.System)
+	require.Equal(t, memberRemovedSystemMessageType, messageStore.lastSavedSystemMessage.System.Type)
+	require.Equal(t, targetID, messageStore.lastSavedSystemMessage.System.Metadata["removed_member_id"])
+	require.Equal(t, targetContactID, messageStore.lastSavedSystemMessage.System.Metadata["removed_member_contact_id"])
+	require.Equal(t, threadID, messageStore.lastSavedSystemMessage.System.Metadata["thread_id"])
+	require.Equal(t, reason, messageStore.lastSavedSystemMessage.System.Metadata["reason"])
+	require.Len(t, messageStore.lastSavedSystemMessage.To, 3)
+	require.Equal(t, targetContactID, messageStore.lastSavedSystemMessage.To[1].ContactID)
+	require.NotNil(t, messageStore.lastSavedSystemMessage.Member)
+	require.Equal(t, initiatorMemberID, messageStore.lastSavedSystemMessage.Member.ID)
+	require.GreaterOrEqual(t, len(outboxStore.published), 1)
+	require.NotNil(t, threadDialogStore.lastFilter)
+	require.Equal(t, []uuid.UUID{threadID}, threadDialogStore.lastFilter.ThreadIDs)
+}
+
+func TestAddMember_SetsInvitedByFromInitiatorDialogID(t *testing.T) {
+	threadID := uuid.New()
+	initiatorContactID := uuid.New()
+	newMemberContactID := uuid.New()
+	initiatorMemberID := uuid.New()
+
+	threadDialogStore := &fakeThreadDialogStore{
+		fullViewResult: []*model.ThreadDialogExtended{
+			{
+				BaseModel:  shared.BaseModel{ID: initiatorMemberID, DomainID: 1},
+				ContactID:  initiatorContactID,
+				ThreadID:   threadID,
+				ThreadRole: model.RoleOwner,
+				Permissions: model.ThreadPermissions{
+					CanAddMembers: true,
+				},
+				Settings: model.BaseThreadSetting{Title: "Initiator title"},
+			},
+		},
+		quickViewResult: []*model.ThreadDialog{
+			{BaseModel: shared.BaseModel{ID: initiatorMemberID}, ContactID: initiatorContactID, ThreadID: threadID, ThreadRole: model.RoleOwner},
+		},
+	}
+	messageStore := &fakeMessageStore{}
+	outboxStore := &fakeOutboxStore{}
+
+	svc := &ThreadManagementService{
+		uow:            fakeUnitOfWork{threadDialogStore: threadDialogStore, messageStore: messageStore, outboxStore: outboxStore},
+		privacyChecker: fakePrivacyChecker{},
+	}
+
+	_, err := svc.AddMember(context.Background(), &dto.AddMemberRequest{
+		ThreadID:           threadID,
+		NewMemberContactID: newMemberContactID,
+		InitiatorContactID: initiatorContactID,
+		NewMemberRole:      model.RoleMember,
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, threadDialogStore.lastCreate)
+	require.NotNil(t, threadDialogStore.lastCreate.InvitedBy)
+	require.Equal(t, initiatorMemberID, *threadDialogStore.lastCreate.InvitedBy)
+}
+
 var _ store.UnitOfWork = fakeUnitOfWork{}
 var _ store.ThreadDialogStore = (*fakeThreadDialogStore)(nil)
 var _ store.ThreadStore = nil
-var _ store.OutboxStore = fakeOutboxStore{}
+var _ store.OutboxStore = (*fakeOutboxStore)(nil)
+var _ store.MessageStore = (*fakeMessageStore)(nil)
 var _ = dto.AddMemberRequest{}
