@@ -18,6 +18,7 @@ var (
 
 type ThreadManagementService interface {
 	Search(ctx context.Context, searchRequest *dto.ThreadSearchRequest) ([]*model.Thread, error)
+	SearchLeft(ctx context.Context, req *dto.SearchLeftRequest) ([]*model.Thread, error)
 	AddMember(context.Context, *dto.AddMemberRequest) (uuid.UUID, error)
 	RemoveMember(context.Context, *dto.RemoveMemberRequest) error
 }
@@ -62,15 +63,34 @@ func (ts *ThreadManagementServer) Search(ctx context.Context, req *impb.ThreadSe
 
 	next, threads := utils.ProcessPagination(int(req.Size), threads)
 
-	var (
-		res = impb.SearchThreadResponse{Next: next}
-	)
+	var res = impb.SearchThreadResponse{Next: next}
 
 	for _, threadModel := range threads {
 		res.Items = append(res.Items, ts.outMapper.ConvertToThread(threadModel))
 	}
 
 	return &res, nil
+}
+
+func (ts *ThreadManagementServer) SearchLeft(ctx context.Context, req *impb.SearchLeftRequest) (*impb.SearchLeftResponse, error) {
+	search, err := ts.inMapper.ConvertSearchLeft(req)
+	if err != nil {
+		return nil, err
+	}
+
+	threads, err := ts.threadManager.SearchLeft(ctx, search)
+	if err != nil {
+		return nil, err
+	}
+
+	next, threads := utils.ProcessPagination(int(req.Size), threads)
+
+	res := &impb.SearchLeftResponse{Next: next}
+	for _, t := range threads {
+		res.Items = append(res.Items, ts.outMapper.ConvertToThread(t))
+	}
+
+	return res, nil
 }
 
 // AddMember implements [thread.ThreadManagementServer].

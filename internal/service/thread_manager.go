@@ -75,6 +75,25 @@ func (t *ThreadManagementService) Search(ctx context.Context, searchRequest *dto
 	return threads, nil
 }
 
+func (t *ThreadManagementService) SearchLeft(ctx context.Context, req *dto.SearchLeftRequest) ([]*model.Thread, error) {
+	if req == nil {
+		return nil, errors.New("request cannot be nil")
+	}
+	if req.MemberID == uuid.Nil {
+		return nil, errors.InvalidArgument("member_id is required")
+	}
+
+	query := queryobject.NewSearchLeftQueryObject(req.MemberID).
+		WithFields(req.Fields).
+		WithDomainIDFilter(req.DomainID).
+		WithKindFilter(req.Kinds...).
+		WithLimit(req.Size).
+		WithSort(req.Sort).
+		WithOffset(req.Page)
+
+	return t.uow.ThreadStore().SearchLeft(ctx, query)
+}
+
 func (t *ThreadManagementService) findAddMemberActors(ctx context.Context, threadID uuid.UUID, initiatorContactID, targetContactID uuid.UUID) (*model.ThreadDialogExtended, *model.ThreadDialogExtended, error) {
 	actionActors, err := t.uow.ThreadDialogStore().GetFullView(ctx, &model.ThreadDialogStoreFilter{
 		ThreadIDs:  []uuid.UUID{threadID},
