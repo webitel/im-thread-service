@@ -67,6 +67,7 @@ func (t *ThreadManagementService) Search(ctx context.Context, searchRequest *dto
 		WithSubjectFilter(searchRequest.Q).
 		WithLimit(searchRequest.Size).
 		WithSort(searchRequest.Sort).
+		WithoutDeletedAtFilter().
 		WithOffset(searchRequest.Page)
 
 	threads, err := t.uow.ThreadStore().Search(ctx, query)
