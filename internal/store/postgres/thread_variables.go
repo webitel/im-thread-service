@@ -163,11 +163,7 @@ func (s *threadVariablesStore) Locate(ctx context.Context, threadID uuid.UUID) (
 	vars, err := pgx.CollectExactlyOneRow(rows, pgx.RowToAddrOfStructByNameLax[model.ThreadVariables])
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, errors.NotFound(
-				"zero thread variables found for thread",
-				errors.WithCause(err),
-				errors.WithID("postgres.thread_variables.locate"),
-			)
+			return nil, nil
 		}
 
 		return nil, errors.Internal(

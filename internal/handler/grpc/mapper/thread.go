@@ -230,6 +230,10 @@ func MapSetVariablesRequestToCommand(req *impb.SetVariablesRequest) (*model.SetT
 }
 
 func MapThreadVariablesToProto(vars *model.ThreadVariables) *impb.ThreadVariables {
+	if vars == nil {
+		return nil
+	}
+
 	protoVars := make(map[string]*impb.VariableEntry, len(vars.Variables))
 	for k, v := range vars.Variables {
 		value, err := structpb.NewStruct(v.Value)
