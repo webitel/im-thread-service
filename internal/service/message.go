@@ -10,6 +10,7 @@ import (
 	imcontact "github.com/webitel/im-thread-service/infra/webitel/im-contact"
 	"github.com/webitel/im-thread-service/internal/domain/event"
 	"github.com/webitel/im-thread-service/internal/domain/model"
+	"github.com/webitel/im-thread-service/internal/domain/shared"
 	"github.com/webitel/im-thread-service/internal/service/dto"
 	guards "github.com/webitel/im-thread-service/internal/service/guards"
 	"github.com/webitel/im-thread-service/internal/store"
@@ -75,8 +76,9 @@ func (s *MessageService) SendText(ctx context.Context, in *dto.SendTextRequest) 
 		Body:     in.Body,
 		To:       t.Members,
 		Type:     model.MessageTypeText,
-		SenderID: in.From.ID,
-		MemberID: findSenderMemberID(t.Members, in.From.ID),
+		Member: &model.ThreadDialog{
+			BaseModel: shared.BaseModel{ID: findSenderMemberID(t.Members, in.From.ID)},
+		},
 		Metadata: model.BuildMetadata(in.Body),
 	}
 
@@ -447,14 +449,15 @@ func (s *MessageService) prepareMessageForSending(ctx context.Context, msg *mode
 		From:     &msg.From,
 		To:       &msg.SendTo,
 	})
-
 	if err != nil {
 		return err
 	}
 
 	msg.ThreadID = t.ID
 	msg.To = t.Members
-	msg.MemberID = findSenderMemberID(t.Members, msg.From.ID)
+	msg.Member = &model.ThreadDialog{
+		BaseModel: shared.BaseModel{ID: findSenderMemberID(t.Members, msg.From.ID)},
+	}
 
 	return nil
 }
@@ -489,6 +492,10 @@ func (s *MessageService) dispatchMessageEvents(ctx context.Context, uow store.Un
 			e.Version(),
 		)
 	})
+}
+
+func buildMessageCreatedTopic(recipientID uuid.UUID, version string) string {
+	return fmt.Sprintf("im_message.%s.message.created.%s", recipientID, version)
 }
 
 func (s *MessageService) dispatchEvents(ctx context.Context, uow store.UnitOfWork, eventss []event.Outboxer, topicCallback func(event.Outboxer) string) error {

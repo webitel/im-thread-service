@@ -20,16 +20,6 @@ FROM (
 ) sub
 WHERE m.id = sub.msg_id;
 
--- make the new column not null and add foreign key constraint
-ALTER TABLE im_message.messages
-    ALTER COLUMN member_id SET NOT NULL;
-
-ALTER TABLE im_message.messages
-    ADD CONSTRAINT fk_messages_member_id
-        FOREIGN KEY (member_id)
-        REFERENCES im_thread.thread_dialog(id)
-        ON DELETE NO ACTION;
-
 CREATE INDEX IF NOT EXISTS idx_messages_thread_member_id
     ON im_message.messages (thread_id, member_id, id DESC);
 
@@ -40,9 +30,6 @@ CREATE INDEX IF NOT EXISTS idx_messages_thread_member_id
 -- +goose StatementBegin
 
 DROP INDEX IF EXISTS im_message.idx_messages_thread_member_id;
-
-ALTER TABLE im_message.messages
-    DROP CONSTRAINT IF EXISTS fk_messages_member_id;
 
 ALTER TABLE im_message.messages
     DROP COLUMN IF EXISTS member_id;
