@@ -183,7 +183,7 @@ func (s *threadVariablesStore) Locate(ctx context.Context, threadID uuid.UUID) (
 func prepareThreadVariablesLocateQuery(threadID uuid.UUID) (string, []any) {
 	sb := threadVarsEntity.
 		SelectFrom("im_thread.thread_variables").
-		Select(threadVarsEntity.Columns()...)
+		Select(threadVarsEntity.WithoutTag("select-ignore").Columns()...)
 
 	sb.Where(sb.Equal("thread_id", threadID))
 	sb.Limit(1)

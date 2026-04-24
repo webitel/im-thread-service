@@ -37,7 +37,7 @@ type VariableEntry struct {
 type ThreadVariables struct {
 	ThreadID      uuid.UUID                `json:"thread_id" db:"thread_id" fieldtag:"default"`
 	Variables     map[string]VariableEntry `json:"variables" db:"variables" fieldtag:"default"`
-	ThreadMembers []uuid.UUID              `json:"thread_members" db:"thread_members"`
+	ThreadMembers []uuid.UUID              `json:"thread_members" db:"thread_members" fieldtag:"select-ignore"`
 
 	lock sync.RWMutex `json:"-" db:"-"`
 }
