@@ -16,6 +16,7 @@ import (
 	uuid "github.com/google/uuid"
 	model "github.com/webitel/im-thread-service/internal/domain/model"
 	dto "github.com/webitel/im-thread-service/internal/service/dto"
+	queryobject "github.com/webitel/im-thread-service/internal/store/query_object"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -158,4 +159,19 @@ func (m *MockThreadStore) Create(ctx context.Context, req *model.Thread) (*model
 func (mr *MockThreadStoreMockRecorder) Create(ctx, req any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Create", reflect.TypeOf((*MockThreadStore)(nil).Create), ctx, req)
+}
+
+// SearchLeft mocks base method.
+func (m *MockThreadStore) SearchLeft(ctx context.Context, query queryobject.QueryObject) ([]*model.Thread, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SearchLeft", ctx, query)
+	ret0, _ := ret[0].([]*model.Thread)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// SearchLeft indicates an expected call of SearchLeft.
+func (mr *MockThreadStoreMockRecorder) SearchLeft(ctx, query any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SearchLeft", reflect.TypeOf((*MockThreadStore)(nil).SearchLeft), ctx, query)
 }
