@@ -26,12 +26,6 @@ type (
 		MemberIDs   []string
 	}
 
-	ThreadGetRequest struct {
-		ID       uuid.UUID
-		DomainID int
-		Fields   []string
-	}
-
 	ThreadSearchRequest struct {
 		Fields     []string
 		Ids        uuid.UUIDs

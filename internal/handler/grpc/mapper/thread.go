@@ -12,19 +12,6 @@ import (
 type ThreadInConverter struct {
 }
 
-func (s *ThreadInConverter) ConvertGet(in *impb.GetThreadRequest) (*dto.ThreadGetRequest, error) {
-	id, err := uuid.Parse(in.GetId())
-	if err != nil {
-		return nil, errors.InvalidArgument("invalid thread id format", errors.WithCause(err))
-	}
-
-	return &dto.ThreadGetRequest{
-		ID:       id,
-		DomainID: int(in.GetDomainId()),
-		Fields:   in.GetFields(),
-	}, nil
-}
-
 func (s *ThreadInConverter) ConvertSearch(in *impb.ThreadSearchRequest) (*dto.ThreadSearchRequest, error) {
 	ids, err := convertToUUIDs(in.GetIds())
 	if err != nil {

@@ -18,7 +18,6 @@ var (
 
 type ThreadManagementService interface {
 	Search(ctx context.Context, searchRequest *dto.ThreadSearchRequest) ([]*model.Thread, error)
-	Get(ctx context.Context, req *dto.ThreadGetRequest) (*model.Thread, error)
 	AddMember(context.Context, *dto.AddMemberRequest) (uuid.UUID, error)
 	RemoveMember(context.Context, *dto.RemoveMemberRequest) error
 }
@@ -72,20 +71,6 @@ func (ts *ThreadManagementServer) Search(ctx context.Context, req *impb.ThreadSe
 	}
 
 	return &res, nil
-}
-
-func (ts *ThreadManagementServer) Get(ctx context.Context, req *impb.GetThreadRequest) (*impb.Thread, error) {
-	internalReq, err := ts.inMapper.ConvertGet(req)
-	if err != nil {
-		return nil, err
-	}
-
-	thread, err := ts.threadManager.Get(ctx, internalReq)
-	if err != nil {
-		return nil, err
-	}
-
-	return ts.outMapper.ConvertToThread(thread), nil
 }
 
 // AddMember implements [thread.ThreadManagementServer].

@@ -52,21 +52,6 @@ func NewThreadService(logger *slog.Logger, uow store.UnitOfWork, privacyChecker 
 	}
 }
 
-func (t *ThreadManagementService) Get(ctx context.Context, req *dto.ThreadGetRequest) (*model.Thread, error) {
-	query := queryobject.NewThreadQueryObject().
-		WithIDFilter(req.ID).
-		WithDomainIDFilter(req.DomainID).
-		WithFields(req.Fields)
-
-	thread, err := t.uow.ThreadStore().Get(ctx, query)
-	if err != nil {
-		t.logger.Error("getting thread", "operation", "service.thread_manager.get", "id", req.ID, "err", err)
-		return nil, err
-	}
-
-	return thread, nil
-}
-
 func (t *ThreadManagementService) Search(ctx context.Context, searchRequest *dto.ThreadSearchRequest) ([]*model.Thread, error) {
 	if searchRequest == nil {
 		return nil, errors.New("search request cannot be nil")
