@@ -48,6 +48,7 @@ type ThreadDialogStore interface {
 
 type ThreadStore interface {
 	Create(ctx context.Context, req *model.Thread) (*model.Thread, error)
+	Get(ctx context.Context, query queryobject.QueryObject) (*model.Thread, error)
 	Search(ctx context.Context, query queryobject.QueryObject) ([]*model.Thread, error)
 	ResolveThread(ctx context.Context, q model.ResolveThreadQuery) (*model.Thread, error)
 }
@@ -69,7 +70,6 @@ type DirectThreadDialogOrchestration interface {
 type InteractiveCallback interface {
 	Save(ctx context.Context, callback *model.InteractiveCallback) (*model.InteractiveCallback, error)
 }
-
 
 type ThreadVariablesStore interface {
 	Set(ctx context.Context, variables *model.SetThreadVariablesCommand) (*model.ThreadVariables, error)

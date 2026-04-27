@@ -20,6 +20,7 @@ const _ = grpc.SupportPackageIsVersion9
 
 const (
 	ThreadManagement_Search_FullMethodName          = "/webitel.im.service.thread.v1.ThreadManagement/Search"
+	ThreadManagement_Get_FullMethodName             = "/webitel.im.service.thread.v1.ThreadManagement/Get"
 	ThreadManagement_CreateGroup_FullMethodName     = "/webitel.im.service.thread.v1.ThreadManagement/CreateGroup"
 	ThreadManagement_AddMember_FullMethodName       = "/webitel.im.service.thread.v1.ThreadManagement/AddMember"
 	ThreadManagement_RemoveMember_FullMethodName    = "/webitel.im.service.thread.v1.ThreadManagement/RemoveMember"
@@ -39,6 +40,8 @@ type ThreadManagementClient interface {
 	// Searches threads using filtering, sorting,
 	// and pagination parameters.
 	Search(ctx context.Context, in *ThreadSearchRequest, opts ...grpc.CallOption) (*SearchThreadResponse, error)
+	// Returns a single thread by its identifier.
+	Get(ctx context.Context, in *GetThreadRequest, opts ...grpc.CallOption) (*Thread, error)
 	// Creates a new group thread.
 	// The creator becomes the owner of the thread.
 	CreateGroup(ctx context.Context, in *CreateGroupRequest, opts ...grpc.CallOption) (*Thread, error)
@@ -64,6 +67,16 @@ func (c *threadManagementClient) Search(ctx context.Context, in *ThreadSearchReq
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(SearchThreadResponse)
 	err := c.cc.Invoke(ctx, ThreadManagement_Search_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *threadManagementClient) Get(ctx context.Context, in *GetThreadRequest, opts ...grpc.CallOption) (*Thread, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(Thread)
+	err := c.cc.Invoke(ctx, ThreadManagement_Get_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -150,6 +163,8 @@ type ThreadManagementServer interface {
 	// Searches threads using filtering, sorting,
 	// and pagination parameters.
 	Search(context.Context, *ThreadSearchRequest) (*SearchThreadResponse, error)
+	// Returns a single thread by its identifier.
+	Get(context.Context, *GetThreadRequest) (*Thread, error)
 	// Creates a new group thread.
 	// The creator becomes the owner of the thread.
 	CreateGroup(context.Context, *CreateGroupRequest) (*Thread, error)
@@ -173,6 +188,9 @@ type UnimplementedThreadManagementServer struct{}
 
 func (UnimplementedThreadManagementServer) Search(context.Context, *ThreadSearchRequest) (*SearchThreadResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Search not implemented")
+}
+func (UnimplementedThreadManagementServer) Get(context.Context, *GetThreadRequest) (*Thread, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Get not implemented")
 }
 func (UnimplementedThreadManagementServer) CreateGroup(context.Context, *CreateGroupRequest) (*Thread, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CreateGroup not implemented")
@@ -230,6 +248,24 @@ func _ThreadManagement_Search_Handler(srv interface{}, ctx context.Context, dec 
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(ThreadManagementServer).Search(ctx, req.(*ThreadSearchRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ThreadManagement_Get_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetThreadRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ThreadManagementServer).Get(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ThreadManagement_Get_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ThreadManagementServer).Get(ctx, req.(*GetThreadRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -370,6 +406,10 @@ var ThreadManagement_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Search",
 			Handler:    _ThreadManagement_Search_Handler,
+		},
+		{
+			MethodName: "Get",
+			Handler:    _ThreadManagement_Get_Handler,
 		},
 		{
 			MethodName: "CreateGroup",

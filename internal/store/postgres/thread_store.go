@@ -99,6 +99,28 @@ func (s *threadStore) Search(ctx context.Context, query queryobject.QueryObject)
 	return records, nil
 }
 
+func (s *threadStore) Get(ctx context.Context, query queryobject.QueryObject) (*model.Thread, error) {
+	sql, args, err := query.ToSql()
+	if err != nil {
+		return nil, errors.Internal("preparing get thread query", errors.WithCause(err), errors.WithID("postgres.thread_store.get"))
+	}
+
+	rows, err := s.db.Query(ctx, sql, args...)
+	if err != nil {
+		return nil, errors.Internal("executing get thread query", errors.WithCause(err), errors.WithID("postgres.thread_store.get"), errors.WithValue("query", sql))
+	}
+
+	record, err := pgx.CollectExactlyOneRow(rows, pgx.RowToAddrOfStructByNameLax[threadRecord])
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, errors.NotFound("thread not found", errors.WithID("postgres.thread_store.get"))
+		}
+		return nil, errors.Internal("collecting get thread record", errors.WithCause(err), errors.WithID("postgres.thread_store.get"))
+	}
+
+	return mapThreadRecordToModel(record)
+}
+
 func mapThreadRecordToModel(record *threadRecord) (*model.Thread, error) {
 	members := utils.Map(record.Members, func(tmr *threadMemberRecord) *model.ThreadDialog {
 		return &model.ThreadDialog{
