@@ -22,6 +22,11 @@ var (
 	memberRemovedSystemMessageType = "member_removed"
 )
 
+const (
+	memberTransferedSystemMessageType = "transfered"
+	memberTransferedLeaveReason       = "transfered"
+)
+
 type (
 	ThreadManagementService struct {
 		uow            store.UnitOfWork
@@ -183,6 +188,96 @@ func (t *ThreadManagementService) AddMember(ctx context.Context, req *dto.AddMem
 	return newMember.ID, nil
 }
 
+func (t *ThreadManagementService) Transfer(ctx context.Context, req *dto.TransferThreadRequest) (uuid.UUID, error) {
+	if req == nil {
+		return uuid.Nil, errors.New("transfer request cannot be nil")
+	}
+	if req.InitiatorContactID == uuid.Nil {
+		return uuid.Nil, errors.InvalidArgument("initiator contact id cannot be nil")
+	}
+
+	initiator, target, err := t.findAddMemberActors(ctx, req.ThreadID, req.InitiatorContactID, req.NewMemberContactID)
+	if err != nil {
+		return uuid.Nil, errors.New("failed to find actors", errors.WithCause(err))
+	}
+	if initiator == nil {
+		return uuid.Nil, errors.NotFound("thread not found or initiator does not have permission", errors.WithCause(notThreadMemberError))
+	}
+	if target != nil {
+		return uuid.Nil, errors.New("target member is already part of the thread", errors.WithCode(codes.AlreadyExists), errors.WithID("service.thread_manager.transfer"))
+	}
+
+	rolePermissions, err := getDefaultPermissionsByRole(req.NewMemberRole)
+	if err != nil {
+		return uuid.Nil, err
+	}
+
+	if initiator.ThreadRole == req.NewMemberRole { // inherit permissions if roles are the same
+		rolePermissions = &initiator.Permissions
+	}
+
+	err = t.verifyAddMember(ctx, initiator, req.NewMemberContactID, req.NewMemberRole)
+	if err != nil {
+		return uuid.Nil, err
+	}
+
+	var newMemberID uuid.UUID
+	err = t.uow.WithinTransaction(ctx, func(ctx context.Context, uow store.UnitOfWork) error {
+		now := time.Now().UTC()
+		newMember, err := uow.ThreadDialogStore().Create(ctx, &model.ThreadDialogExtended{
+			BaseModel: shared.BaseModel{
+				DomainID:  initiator.DomainID,
+				CreatedAt: now,
+				UpdatedAt: now,
+			},
+			ThreadID:    req.ThreadID,
+			ContactID:   req.NewMemberContactID,
+			ThreadRole:  req.NewMemberRole,
+			InvitedBy:   &initiator.ID,
+			Permissions: *rolePermissions,
+			Settings: model.BaseThreadSetting{
+				Title: initiator.Settings.Title,
+			},
+		})
+		if err != nil {
+			return err
+		}
+
+		reason := memberTransferedLeaveReason
+		if err = uow.ThreadDialogStore().Delete(ctx, initiator.ID, &reason); err != nil {
+			return err
+		}
+
+		eventReceivers, err := uow.ThreadDialogStore().GetQuickView(ctx, &model.ThreadDialogStoreFilter{
+			ThreadIDs:      []uuid.UUID{req.ThreadID},
+			IncludeDeleted: false,
+		})
+		if err != nil {
+			return errors.Internal("search of members failed", errors.WithCause(err))
+		}
+
+		err = t.sendTransferSystemMessage(ctx, uow, &transferMemberEventArgs{
+			initiator: initiator,
+			newMember: newMember,
+			receivers: eventReceivers,
+			threadID:  req.ThreadID,
+			domainID:  newMember.DomainID,
+		})
+		if err != nil {
+			return errors.Internal("failed to send system message", errors.WithCause(err))
+		}
+
+		newMemberID = newMember.ID
+
+		return nil
+	})
+	if err != nil {
+		return uuid.Nil, err
+	}
+
+	return newMemberID, nil
+}
+
 func (t *ThreadManagementService) verifyAddMember(ctx context.Context, initiator *model.ThreadDialogExtended, targetContactID uuid.UUID, role model.ThreadRole) error {
 	if initiator == nil {
 		return errors.NotFound("thread not found or initiator does not have permission", errors.WithCause(notThreadMemberError))
@@ -209,8 +304,8 @@ func (t *ThreadManagementService) verifyAddMemberInitiatorPermissions(initiatorR
 	if !initiatorPermissions.CanAddMembers {
 		return errors.Forbidden("initiator does not have permission to invite members")
 	}
-	if initiatorRole <= targetRole {
-		return errors.Forbidden("initiator does not have permission to invite a member with same or higher role")
+	if initiatorRole < targetRole {
+		return errors.Forbidden("initiator does not have permission to invite a member with higher role")
 	}
 
 	return nil
@@ -236,6 +331,14 @@ type removeMemberEventArgs struct {
 	member    *model.ThreadDialogExtended
 	receivers []*model.ThreadDialog
 	reason    *string
+	domainID  int
+}
+
+type transferMemberEventArgs struct {
+	initiator *model.ThreadDialogExtended
+	newMember *model.ThreadDialogExtended
+	receivers []*model.ThreadDialog
+	threadID  uuid.UUID
 	domainID  int
 }
 
@@ -422,6 +525,59 @@ func (t *ThreadManagementService) sendRemoveMemberSystemMessage(ctx context.Cont
 
 	return t.sendThreadSystemMessage(ctx, uow, message)
 }
+
+func (t *ThreadManagementService) sendTransferSystemMessage(ctx context.Context, uow store.UnitOfWork, args *transferMemberEventArgs) error {
+	if args == nil {
+		return errors.New("transfer member event args cannot be nil")
+	}
+	if args.initiator == nil {
+		return errors.New("initiator member cannot be nil")
+	}
+	if args.newMember == nil {
+		return errors.New("new member cannot be nil")
+	}
+	if args.receivers == nil {
+		return errors.New("message recipients cannot be nil")
+	}
+	if args.domainID <= 0 {
+		return errors.InvalidArgument("domain id must be greater than zero", errors.WithID("service.thread_manager.send_transfer_system_message"))
+	}
+
+	metadata := map[string]any{
+		"new_member_id":                args.newMember.ID,
+		"new_member_contact_id":        args.newMember.ContactID,
+		"new_member_role":              args.newMember.ThreadRole,
+		"transfered_member_id":         args.initiator.ID,
+		"transfered_member_contact_id": args.initiator.ContactID,
+		"thread_id":                    args.threadID,
+	}
+
+	message := &model.Message{
+		IdempotencyKey: uuid.NewString(),
+		ThreadID:       args.threadID,
+		DomainID:       int32(args.domainID),
+		To:             args.receivers,
+		Type:           model.MessageTypeSystem,
+		System: &model.MessageSystem{
+			Type:     memberTransferedSystemMessageType,
+			Metadata: metadata,
+		},
+		Metadata: model.BuildMetadata(""),
+		SendTo: shared.Peer{
+			ID:   args.newMember.ContactID,
+			Type: shared.PeerContact,
+		},
+		Member: &model.ThreadDialog{
+			BaseModel:  shared.BaseModel{ID: args.initiator.ID},
+			ContactID:  args.initiator.ContactID,
+			ThreadID:   args.initiator.ThreadID,
+			ThreadRole: args.initiator.ThreadRole,
+		},
+	}
+
+	return t.sendThreadSystemMessage(ctx, uow, message)
+}
+
 func (t *ThreadManagementService) verifyRemoveMember(initiator *model.ThreadDialogExtended, target *model.ThreadDialogExtended) error {
 	if initiator == nil {
 		return errors.NotFound("thread not found or initiator does not have permission", errors.WithCause(notThreadMemberError))

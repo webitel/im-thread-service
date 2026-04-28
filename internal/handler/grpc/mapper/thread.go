@@ -83,6 +83,31 @@ func (s *ThreadInConverter) ConvertAddMemberRequest(in *impb.AddMemberRequest) (
 
 }
 
+func (s *ThreadInConverter) ConvertTransferThreadRequest(in *impb.TransferRequest) (*dto.TransferThreadRequest, error) {
+	threadID, err := uuid.Parse(in.GetThreadId())
+	if err != nil {
+		return nil, err
+	}
+	newContactID, err := uuid.Parse(in.GetNewMemberContactId())
+	if err != nil {
+		return nil, err
+	}
+	initiatorContactID, err := uuid.Parse(in.GetInitiatorContactId())
+	if err != nil {
+		return nil, err
+	}
+
+	converted := &dto.TransferThreadRequest{
+		ThreadID:           threadID,
+		NewMemberContactID: newContactID,
+		NewMemberRole:      s.convertMemberRole(in.GetRole()),
+		InitiatorContactID: initiatorContactID,
+	}
+
+	return converted, nil
+
+}
+
 func (s *ThreadInConverter) ConvertRemoveMemberRequest(in *impb.RemoveMemberRequest) (*dto.RemoveMemberRequest, error) {
 	targetMemberID, err := uuid.Parse(in.GetTargetMemberId())
 	if err != nil {
