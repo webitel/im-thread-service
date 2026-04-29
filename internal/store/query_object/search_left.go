@@ -23,28 +23,22 @@ func NewSearchLeftQueryObject(memberID uuid.UUID) *searchLeftQueryObject {
 	obj := new(searchLeftQueryObject)
 	obj.baseQueryObject = newBaseQueryObject(from, obj)
 
-	obj.builder = obj.builder.Prefix(`
+	obj.builder = obj.builder.Prefix(fmt.Sprintf(`
 		WITH latest_membership AS (
-			SELECT DISTINCT ON (thread_id)
+			SELECT
 				thread_id,
+				member_id,
 				created_at AS member_since,
 				deleted_at AS left_at
-			FROM im_thread.thread_dialog
+			FROM %s
 			WHERE member_id = ?
 			  AND deleted_at IS NOT NULL
-			ORDER BY thread_id, deleted_at DESC
+			ORDER BY deleted_at DESC
 		)
-	`, memberID)
+	`, ThreadDialogTable), memberID)
 
 	obj.builder = obj.builder.
-		InnerJoin("latest_membership lm ON lm.thread_id = t.id").
-		Where(`NOT EXISTS (
-			SELECT 1
-			FROM im_thread.thread_dialog active_td
-			WHERE active_td.thread_id = t.id
-			  AND active_td.member_id = ?
-			  AND active_td.deleted_at IS NULL
-		)`, memberID)
+		InnerJoin("latest_membership lm ON lm.thread_id = t.id")
 
 	return obj
 }
@@ -110,9 +104,9 @@ func (q *searchLeftQueryObject) FieldsMetadata() map[string]fieldMetadata {
 			requiresJoin: searchLeftLinkLastMessageLateral,
 			sortable:     false,
 		},
-		"left_at": {
+		"deleted_at": {
 			sqlExpr:     "lm.left_at",
-			aliasedExpr: "lm.left_at as left_at",
+			aliasedExpr: "lm.left_at as deleted_at",
 			sortable:    true,
 		},
 	}
@@ -127,7 +121,6 @@ func (q *searchLeftQueryObject) EnsureJoins(requiredJoin int) {
 	}
 }
 
-// ToSql overrides baseQueryObject to apply a default ORDER BY when none is set.
 func (q *searchLeftQueryObject) ToSql() (string, []any, error) {
 	if len(q.sortFields) == 0 {
 		q.builder = q.builder.OrderBy("lm.left_at DESC")
@@ -190,6 +183,7 @@ func (q *searchLeftQueryObject) linkLastMessageLateral() {
 			) as last_msg
 			from im_message.messages msg_i
 			where msg_i.thread_id = t.id
+			  and msg_i.sender_id = lm.member_id
 			  and msg_i.created_at between lm.member_since and lm.left_at
 			order by msg_i.created_at desc
 			limit 1
