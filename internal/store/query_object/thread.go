@@ -249,8 +249,20 @@ func (q *threadQueryObject) WithDescriptionFilter(description string) *threadQue
 
 func (q *threadQueryObject) WithContactIDFilter(memberIDs ...uuid.UUID) *threadQueryObject {
 	if len(memberIDs) != 0 {
-		q.EnsureJoins(threadLinkThreadDialog)
-		q.builder = q.builder.Where(squirrel.Eq{threadThreadDialogAlias + ".member_id": memberIDs})
+		sub, args, _ := squirrel.
+			Select("thread_id").
+			From(ThreadDialogTable).
+			Where(squirrel.Eq{"member_id": memberIDs}).
+			Where(squirrel.Eq{"deleted_at": nil}).
+			GroupBy("thread_id").
+			Having(fmt.Sprintf("COUNT(DISTINCT member_id) = %d", len(memberIDs))).
+			PlaceholderFormat(squirrel.Question).
+			ToSql()
+
+		q.builder = q.builder.Where(
+			fmt.Sprintf("%s.id IN (%s)", threadAlias, sub),
+			args...,
+		)
 
 		q.mustIncludeComputedSubject = true
 	}

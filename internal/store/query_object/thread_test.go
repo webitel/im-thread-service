@@ -375,9 +375,9 @@ func TestThreadQueryObject_WithMemberIDFilter(t *testing.T) {
 			require.NoError(t, err)
 
 			if tt.wantJoin {
-				assert.Contains(t, sql, "INNER JOIN")
 				assert.Contains(t, sql, ThreadDialogTable)
-				assert.Contains(t, sql, "td.member_id")
+				assert.Contains(t, sql, "member_id")
+				assert.Contains(t, sql, "HAVING COUNT(DISTINCT member_id)")
 				assert.True(t, qo.mustIncludeComputedSubject)
 			} else {
 				assert.False(t, qo.mustIncludeComputedSubject)
