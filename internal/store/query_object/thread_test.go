@@ -25,7 +25,7 @@ func TestThreadQueryObject_DefaultFields(t *testing.T) {
 
 	expectedFields := []string{
 		"id", "domain_id", "created_at", "updated_at",
-		"kind", "owner", "subject", "description", "member_ids",
+		"kind", "owner", "subject", "description", "members",
 	}
 
 	assert.Equal(t, expectedFields, fields)
@@ -69,12 +69,6 @@ func TestThreadQueryObject_FieldsMetadata(t *testing.T) {
 			field:            "description",
 			wantSortable:     true,
 			wantRequiresJoin: 0,
-		},
-		{
-			name:             "member_ids field",
-			field:            "member_ids",
-			wantSortable:     false,
-			wantRequiresJoin: threadLinkMembersLateral,
 		},
 		{
 			name:             "members field",
@@ -378,9 +372,6 @@ func TestThreadQueryObject_WithMemberIDFilter(t *testing.T) {
 				assert.Contains(t, sql, ThreadDialogTable)
 				assert.Contains(t, sql, "member_id")
 				assert.Contains(t, sql, "HAVING COUNT(DISTINCT member_id)")
-				assert.True(t, qo.mustIncludeComputedSubject)
-			} else {
-				assert.False(t, qo.mustIncludeComputedSubject)
 			}
 		})
 	}
@@ -396,7 +387,8 @@ func TestThreadQueryObject_linkThreadDialog(t *testing.T) {
 
 		assert.Contains(t, sql, "INNER JOIN")
 		assert.Contains(t, sql, ThreadDialogTable)
-		assert.Contains(t, sql, "td.thread_id = t.id")
+		assert.Contains(t, sql, "LIMIT 1")
+		assert.Contains(t, sql, "ORDER BY id")
 		assert.Equal(t, threadLinkThreadDialog, qo.join&threadLinkThreadDialog)
 	})
 
@@ -408,8 +400,9 @@ func TestThreadQueryObject_linkThreadDialog(t *testing.T) {
 		sql, _, err := qo.ToSql()
 		require.NoError(t, err)
 
-		joinCount := strings.Count(sql, "INNER JOIN "+ThreadDialogTable)
-		assert.Equal(t, 1, joinCount, "should only have one INNER JOIN")
+		assert.Equal(t, threadLinkThreadDialog, qo.join&threadLinkThreadDialog, "bitflag should be set exactly once")
+		// LIMIT 1 is unique to linkThreadDialog's LATERAL — verify it appears exactly once
+		assert.Equal(t, 1, strings.Count(sql, "LIMIT 1"), "thread_dialog LATERAL should appear exactly once")
 	})
 }
 
@@ -425,7 +418,7 @@ func TestThreadQueryObject_linkDirectSettings(t *testing.T) {
 		assert.Contains(t, sql, ThreadDialogTable)
 		assert.Contains(t, sql, "LEFT JOIN")
 		assert.Contains(t, sql, DirectSettingsTable)
-		assert.Contains(t, sql, "ds.thread_dialog_id = td.id")
+		assert.Contains(t, sql, "ds.thread_dialog_id=td.id")
 		assert.Equal(t, threadLinkDirectSettings, qo.join&threadLinkDirectSettings)
 		assert.Equal(t, threadLinkThreadDialog, qo.join&threadLinkThreadDialog)
 	})
@@ -477,11 +470,6 @@ func TestThreadQueryObject_EnsureJoins(t *testing.T) {
 			wantJoins:    []string{"INNER JOIN", "LEFT JOIN", DirectSettingsTable},
 		},
 		{
-			name:         "members lateral join",
-			requiredJoin: threadLinkMembersLateral,
-			wantJoins:    []string{"LEFT JOIN", "lateral", "array_agg"},
-		},
-		{
 			name:         "full members lateral join",
 			requiredJoin: threadLinkFullMembersLateral,
 			wantJoins:    []string{"LEFT JOIN", "lateral", "jsonb_agg"},
@@ -522,8 +510,8 @@ func TestThreadQueryObject_WithFields(t *testing.T) {
 		},
 		{
 			name:      "field requiring join",
-			fields:    []string{"member_ids"},
-			wantInSQL: []string{"ml.member_ids", "lateral"},
+			fields:    []string{"members"},
+			wantInSQL: []string{"members_data", "lateral", "jsonb_agg"},
 		},
 		{
 			name:         "invalid field ignored",
@@ -741,7 +729,7 @@ func TestThreadQueryObject_ComplexQuery(t *testing.T) {
 }
 
 func TestThreadQueryObject_SubjectWithMembersFilter(t *testing.T) {
-	t.Run("subject expression changes with members filter", func(t *testing.T) {
+	t.Run("subject expression unchanged with members filter", func(t *testing.T) {
 		qo := NewThreadQueryObject()
 		memberID := uuid.New()
 
@@ -751,11 +739,12 @@ func TestThreadQueryObject_SubjectWithMembersFilter(t *testing.T) {
 		sql, _, err := qo.ToSql()
 		require.NoError(t, err)
 
-		// Should contain CASE expression for direct thread title
-		assert.Contains(t, sql, "case")
-		assert.Contains(t, sql, "when")
-		assert.Contains(t, sql, "ds.title")
-		assert.Contains(t, sql, DirectSettingsTable)
+		// WithContactIDFilter alone should NOT trigger the computed subject expression
+		assert.Contains(t, sql, "t.subject")
+		assert.NotContains(t, sql, "ds.title")
+		assert.NotContains(t, sql, DirectSettingsTable)
+		// But the contact members lateral join should be present
+		assert.Contains(t, sql, "contact_members_filter")
 	})
 
 	t.Run("subject expression without members filter", func(t *testing.T) {
