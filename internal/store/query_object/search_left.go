@@ -158,9 +158,12 @@ func (q *searchLeftQueryObject) linkMembersLateral() {
 					'role', %[1]s.thread_role
 				)
 			) as members_data
-			from %[2]s %[1]s
-			where %[1]s.thread_id = %[3]s.id
-			  and %[1]s.deleted_at is null
+			from (
+				select distinct on (member_id) id, member_id, created_at, updated_at, thread_role
+				from %[2]s
+				where thread_id = %[3]s.id
+				order by member_id, deleted_at desc nulls last
+			) %[1]s
 		) m on true
 	`, threadThreadDialogAlias, ThreadDialogTable, threadAlias))
 }
