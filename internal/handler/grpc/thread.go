@@ -17,6 +17,7 @@ var (
 )
 
 type ThreadManagementService interface {
+	Get(ctx context.Context, req *dto.ThreadGetRequest) (*model.Thread, error)
 	Search(ctx context.Context, searchRequest *dto.ThreadSearchRequest) ([]*model.Thread, error)
 	AddMember(context.Context, *dto.AddMemberRequest) (uuid.UUID, error)
 	RemoveMember(context.Context, *dto.RemoveMemberRequest) error
@@ -48,6 +49,20 @@ func NewThreadService(threadManager ThreadManagementService, threadVariables Thr
 		outMapper:       &mapper.ThreadOutConverter{},
 		threadVariables: threadVariables,
 	}
+}
+
+func (ts *ThreadManagementServer) Get(ctx context.Context, req *impb.GetThreadRequest) (*impb.Thread, error) {
+	getReq, err := ts.inMapper.ConvertGet(req)
+	if err != nil {
+		return nil, err
+	}
+
+	thread, err := ts.threadManager.Get(ctx, getReq)
+	if err != nil {
+		return nil, err
+	}
+
+	return ts.outMapper.ConvertToThread(thread), nil
 }
 
 func (ts *ThreadManagementServer) Search(ctx context.Context, req *impb.ThreadSearchRequest) (*impb.SearchThreadResponse, error) {
