@@ -90,11 +90,8 @@ require (
 	github.com/sethvargo/go-retry v0.3.0 // indirect
 	github.com/shirou/gopsutil/v4 v4.25.6 // indirect
 	github.com/sirupsen/logrus v1.9.3 // indirect
-	github.com/stoewer/go-strcase v1.3.1 // indirect
 	github.com/tklauser/go-sysconf v0.3.12 // indirect
 	github.com/tklauser/numcpus v0.6.1 // indirect
-	github.com/webitel/protos/gen/go/rpc v0.0.1 // indirect
-	github.com/webitel/webitel-go-kit/infra/errors v0.0.2-0.20260424081817-15dec057ee90 // indirect
 	github.com/webitel/wlog v0.0.0-20250325101442-de4f125c1ec7 // indirect
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
 	go.opentelemetry.io/contrib/bridges/otelzap v0.11.0 // indirect

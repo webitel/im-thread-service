@@ -6,7 +6,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/webitel/im-thread-service/internal/domain/event"
 	"github.com/webitel/im-thread-service/internal/domain/model"
-	"github.com/webitel/im-thread-service/internal/service/dto"
 	queryobject "github.com/webitel/im-thread-service/internal/store/query_object"
 )
 
@@ -60,7 +59,7 @@ type ThreadPermissionStore interface {
 }
 
 type MessageHistory interface {
-	Search(ctx context.Context, query queryobject.QueryObject) ([]*dto.HistoryMessage, error)
+	Search(ctx context.Context, query queryobject.QueryObject) ([]*model.Message, error)
 }
 
 type DirectThreadDialogOrchestration interface {
