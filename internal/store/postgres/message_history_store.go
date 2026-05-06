@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/webitel/im-thread-service/internal/service/dto"
+	"github.com/webitel/im-thread-service/internal/domain/model"
 	queryobject "github.com/webitel/im-thread-service/internal/store/query_object"
 	"github.com/webitel/webitel-go-kit/pkg/errors"
 )
@@ -19,7 +19,7 @@ func NewMessageHistoryStore(db Querier) *messageHistoryStore {
 	}
 }
 
-func (s *messageHistoryStore) Search(ctx context.Context, query queryobject.QueryObject) ([]*dto.HistoryMessage, error) {
+func (s *messageHistoryStore) Search(ctx context.Context, query queryobject.QueryObject) ([]*model.Message, error) {
 	sql, args, err := query.ToSql()
 	if err != nil {
 		return nil, errors.Internal("preparing history message query", errors.WithCause(err), errors.WithID("postgres.message_history_store.search"))
@@ -35,10 +35,10 @@ func (s *messageHistoryStore) Search(ctx context.Context, query queryobject.Quer
 		)
 	}
 
-	messages, err := pgx.CollectRows(rows, pgx.RowToAddrOfStructByNameLax[dto.HistoryMessage])
+	messages, err := pgx.CollectRows(rows, pgx.RowToAddrOfStructByNameLax[model.Message])
 	if err != nil {
 		if err == pgx.ErrNoRows {
-			return nil, errors.NotFound("no messages found for passed filters", errors.WithCause(err), errors.WithID("postgres.message_history_store.search"))
+			return nil, nil
 		}
 		return nil, errors.Internal("collecting messages records", errors.WithCause(err), errors.WithID("postgres.message_history_store.search"))
 	}

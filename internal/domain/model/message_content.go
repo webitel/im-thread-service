@@ -127,5 +127,5 @@ func (c *InteractiveCallback) WithCreatedEvent() *InteractiveCallback {
 func (c *InteractiveCallback) Events() []event.Outboxer { return slices.Clone(c.events) }
 
 func (c *InteractiveCallback) ReactedAtUnix() int64 {
-	return c.ReactedAt.UTC().Unix()
+	return c.ReactedAt.UTC().UnixMilli()
 }
