@@ -18,9 +18,9 @@ var (
 
 type ThreadManagementService interface {
 	Search(ctx context.Context, searchRequest *dto.ThreadSearchRequest) ([]*model.Thread, error)
-	Get(ctx context.Context, req *dto.ThreadGetRequest) (*model.Thread, error)
 	AddMember(context.Context, *dto.AddMemberRequest) (uuid.UUID, error)
 	RemoveMember(context.Context, *dto.RemoveMemberRequest) error
+	Transfer(context.Context, *dto.TransferThreadRequest) (uuid.UUID, error)
 }
 
 type ThreadVariablesOperator interface {
@@ -74,18 +74,21 @@ func (ts *ThreadManagementServer) Search(ctx context.Context, req *impb.ThreadSe
 	return &res, nil
 }
 
-func (ts *ThreadManagementServer) Get(ctx context.Context, req *impb.GetThreadRequest) (*impb.Thread, error) {
-	internalReq, err := ts.inMapper.ConvertGet(req)
+// Transfer implements [thread.ThreadManagementServer].
+func (ts *ThreadManagementServer) Transfer(ctx context.Context, req *impb.TransferRequest) (*impb.TransferResponse, error) {
+	internalRequest, err := ts.inMapper.ConvertTransferThreadRequest(req)
 	if err != nil {
 		return nil, err
 	}
 
-	thread, err := ts.threadManager.Get(ctx, internalReq)
+	newMember, err := ts.threadManager.Transfer(ctx, internalRequest)
 	if err != nil {
 		return nil, err
 	}
 
-	return ts.outMapper.ConvertToThread(thread), nil
+	return &impb.TransferResponse{Member: &impb.ThreadMember{
+		Id: newMember.String(),
+	}}, nil
 }
 
 // AddMember implements [thread.ThreadManagementServer].
@@ -117,13 +120,6 @@ func (ts *ThreadManagementServer) RemoveMember(ctx context.Context, request *imp
 	}
 
 	return &impb.RemoveMemberResponse{}, nil
-}
-
-// CreateGroup implements [thread.ThreadManagementServer].
-func (ts *ThreadManagementServer) CreateGroup(ctx context.Context, request *impb.CreateGroupRequest) (*impb.Thread, error) {
-	// internalRequest := ts.inMapper.ConvertCreateGroup(request)
-
-	return nil, errors.Internal("method not implemented yet")
 }
 
 func (ts *ThreadManagementServer) SetVariables(ctx context.Context, req *impb.SetVariablesRequest) (*impb.ThreadVariables, error) {

@@ -362,6 +362,75 @@ func TestAddMember_SetsInvitedByFromInitiatorDialogID(t *testing.T) {
 	require.Equal(t, initiatorMemberID, *threadDialogStore.lastCreate.InvitedBy)
 }
 
+func TestTransfer_AddsMemberRemovesInitiatorAndSendsTransferSystemMessage(t *testing.T) {
+	threadID := uuid.New()
+	initiatorContactID := uuid.New()
+	initiatorMemberID := uuid.New()
+	newMemberContactID := uuid.New()
+	otherContactID := uuid.New()
+
+	threadDialogStore := &fakeThreadDialogStore{
+		fullViewResult: []*model.ThreadDialogExtended{
+			{
+				BaseModel:  shared.BaseModel{ID: initiatorMemberID, DomainID: 1},
+				ContactID:  initiatorContactID,
+				ThreadID:   threadID,
+				ThreadRole: model.RoleOwner,
+				Permissions: model.ThreadPermissions{
+					CanAddMembers: true,
+				},
+				Settings: model.BaseThreadSetting{Title: "Thread title"},
+			},
+		},
+		quickViewResult: []*model.ThreadDialog{
+			{BaseModel: shared.BaseModel{ID: uuid.New()}, ContactID: newMemberContactID, ThreadID: threadID, ThreadRole: model.RoleMember},
+			{BaseModel: shared.BaseModel{ID: uuid.New()}, ContactID: otherContactID, ThreadID: threadID, ThreadRole: model.RoleMember},
+		},
+	}
+	messageStore := &fakeMessageStore{}
+	outboxStore := &fakeOutboxStore{}
+
+	svc := &ThreadManagementService{
+		uow:            fakeUnitOfWork{threadDialogStore: threadDialogStore, messageStore: messageStore, outboxStore: outboxStore},
+		privacyChecker: fakePrivacyChecker{},
+	}
+
+	newMemberID, err := svc.Transfer(context.Background(), &dto.TransferThreadRequest{
+		ThreadID:           threadID,
+		NewMemberContactID: newMemberContactID,
+		InitiatorContactID: initiatorContactID,
+		NewMemberRole:      model.RoleMember,
+	})
+
+	require.NoError(t, err)
+	require.NotEqual(t, uuid.Nil, newMemberID)
+	require.NotNil(t, threadDialogStore.lastCreate)
+	require.NotNil(t, threadDialogStore.lastCreate.InvitedBy)
+	require.Equal(t, initiatorMemberID, *threadDialogStore.lastCreate.InvitedBy)
+	require.Equal(t, initiatorMemberID, threadDialogStore.lastDeleteID)
+	require.NotNil(t, threadDialogStore.lastReason)
+	require.Equal(t, memberTransferedLeaveReason, *threadDialogStore.lastReason)
+	require.NotNil(t, messageStore.lastSavedSystemMessage)
+	require.NotNil(t, messageStore.lastSavedSystemMessage.System)
+	require.Equal(t, memberTransferedSystemMessageType, messageStore.lastSavedSystemMessage.System.Type)
+	require.Equal(t, initiatorMemberID, messageStore.lastSavedSystemMessage.System.Metadata["transfered_member_id"])
+	require.Equal(t, newMemberID, messageStore.lastSavedSystemMessage.System.Metadata["new_member_id"])
+	require.GreaterOrEqual(t, len(outboxStore.published), 1)
+}
+
+func TestTransfer_ReturnsValidationErrorWhenInitiatorIsNil(t *testing.T) {
+	svc := &ThreadManagementService{}
+
+	_, err := svc.Transfer(context.Background(), &dto.TransferThreadRequest{
+		ThreadID:           uuid.New(),
+		NewMemberContactID: uuid.New(),
+		InitiatorContactID: uuid.Nil,
+		NewMemberRole:      model.RoleMember,
+	})
+
+	require.Error(t, err)
+}
+
 var _ store.UnitOfWork = fakeUnitOfWork{}
 var _ store.ThreadDialogStore = (*fakeThreadDialogStore)(nil)
 var _ store.ThreadStore = nil
