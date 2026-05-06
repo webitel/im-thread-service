@@ -47,7 +47,7 @@ func NewMessageService(
 
 func (s *MessageService) SendText(ctx context.Context, in *dto.SendTextRequest) (*dto.SendTextResponse, error) {
 	if err := guards.SendTextGuard(in); err != nil {
-		return nil, fmt.Errorf("validation: %w", err)
+		return nil, errors.InvalidArgument("validating text message", errors.WithCause(err), errors.WithID("service.message.send_text"))
 	}
 
 	log := s.logger.With("operation", "message.SendText")
@@ -109,7 +109,7 @@ func (s *MessageService) SendText(ctx context.Context, in *dto.SendTextRequest) 
 			slog.String("from", msg.From.ID.String()),
 		)
 
-		return nil, errors.Internal("error saving text message", errors.WithCause(err))
+		return nil, errors.Internal("error saving text message", errors.WithCause(err), errors.WithID("service.message.send_text"))
 	}
 
 	return &dto.SendTextResponse{ID: msg.ID, To: in.To}, nil
