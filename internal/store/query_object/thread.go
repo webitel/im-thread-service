@@ -348,7 +348,8 @@ func (q *threadQueryObject) linkLastMessageLateral() {
 							'mime', md.mime, 'size', md.size, 'created_at', md.created_at
 						))
 						from im_message.message_documents md
-						where md.message_id = md.id and m.type = 2
+						where md.message_id = m.id
+						and (m.type = 2 or (m.type=5 and m.interactive->'attachments'->'documents' is not null))
 					),
 					'images', (
 						select jsonb_agg(jsonb_build_object(
@@ -357,8 +358,40 @@ func (q *threadQueryObject) linkLastMessageLateral() {
                         	'height', mi.height, 'created_at', mi.created_at
 						))
 						from im_message.message_images mi
-						where mi.message_id = m.id and m.type = 3
-					)
+						where mi.message_id = m.id and
+						(m.type = 3 or (m.type=5 and m.interactive->'attachments'->'images' is not null))
+					),
+					'location', (
+						select jsonb_build_object(
+							'address', ml.address,
+							'name', ml.name,
+							'latitude', ml.latitude,
+							'longitude', ml.longitude
+						)
+						from im_message.message_locations ml
+						where m.type = 6 and m.id=ml.message_id
+						limit 1
+					),
+					'contact', (
+						select jsonb_build_object(
+							'name', mc.name,
+							'phone_number', mc.phone_number,
+							'email', mc.email
+						)
+						from im_message.message_contacts mc
+						where m.type = 7 and m.id=mc.message_id
+						limit 1
+					),
+					'system', (
+						select jsonb_build_object(
+							'type', sm.type,
+							'metadata', sm.metadata
+							)
+						from im_message.system_messages sm
+						where m.type = 4 and sm.message_id=m.id
+						limit 1
+					),
+					'interactive', m.interactive
 				) as last_msg
 			from im_message.messages m
 			where m.thread_id = t.id

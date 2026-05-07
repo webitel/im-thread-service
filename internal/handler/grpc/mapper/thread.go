@@ -175,16 +175,20 @@ func (s *ThreadOutConverter) ConvertToThread(source *model.Thread) *impb.Thread 
 		}
 
 		lastMsg = &impb.HistoryMessage{
-			Id:        message.ID.String(),
-			ThreadId:  source.ID.String(),
-			SenderId:  message.SenderID.String(),
-			Type:      int32(message.Type),
-			Body:      message.Body,
-			Metadata:  msgMd,
-			CreatedAt: message.CreatedAtUnixMillis(),
-			UpdatedAt: message.UpdatedAtUnixMillis(),
-			Documents: mapDocs(message.Documents),
-			Images:    mapImages(message.Images),
+			Id:          message.ID.String(),
+			ThreadId:    source.ID.String(),
+			SenderId:    message.SenderID.String(),
+			Type:        int32(message.Type),
+			Body:        message.Body,
+			Metadata:    msgMd,
+			CreatedAt:   message.CreatedAtUnixMillis(),
+			UpdatedAt:   message.UpdatedAtUnixMillis(),
+			Documents:   mapDocs(message.Documents),
+			Images:      mapImages(message.Images),
+			Location:    mapLocation(message.Location),
+			Contact:     mapContact(message.Contact),
+			System:      mapSystem(message.System),
+			Interactive: mapInteractive(message.Interactive),
 		}
 	}
 
