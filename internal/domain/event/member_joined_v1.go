@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	MemberJoinedEvent = "im.message.member.joined"
+	MemberJoinedEvent = "im.thread.member.joined"
 )
 
 type MemberJoined struct {
@@ -51,53 +51,9 @@ func (e *MemberJoined) ToOutbox() (OutboxEvent, error) {
 
 func (e *MemberJoined) Topic() string {
 	return fmt.Sprintf(
-		"im_message.%s.message.member.%s.%s",
-		e.RecipientID(),
-		"joined",
+		"im_thread.%s.member.%s.joined.%s",
+		e.ThreadID,
+		e.ContactID,
 		e.Version(),
 	)
-}
-
-type MemberJoinedBuilder struct {
-	event *MemberJoined
-}
-
-func NewMemberJoinedBuilder() *MemberJoinedBuilder {
-	return &MemberJoinedBuilder{
-		event: new(MemberJoined),
-	}
-}
-
-func (b *MemberJoinedBuilder) WithMessageID(messageID uuid.UUID) *MemberJoinedBuilder {
-	b.event.MessageID = messageID
-	return b
-}
-
-func (b *MemberJoinedBuilder) WithThreadID(threadID uuid.UUID) *MemberJoinedBuilder {
-	b.event.ThreadID = threadID
-	return b
-}
-
-func (b *MemberJoinedBuilder) WithDomainID(domainID int32) *MemberJoinedBuilder {
-	b.event.DomainID = domainID
-	return b
-}
-
-func (b *MemberJoinedBuilder) WithContactID(contactID uuid.UUID) *MemberJoinedBuilder {
-	b.event.ContactID = contactID
-	return b
-}
-
-func (b *MemberJoinedBuilder) WithOccurredAt(occurredAt time.Time) *MemberJoinedBuilder {
-	b.event.OccurredAt = occurredAt
-	return b
-}
-
-func (b *MemberJoinedBuilder) WithSystem(system *SystemPayload) *MemberJoinedBuilder {
-	b.event.System = system
-	return b
-}
-
-func (b *MemberJoinedBuilder) Build() *MemberJoined {
-	return b.event
 }

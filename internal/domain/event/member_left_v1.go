@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	MemberLeftEvent = "im.message.member.left"
+	MemberLeftEvent = "im.thread.member.left"
 )
 
 type MemberLeft struct {
@@ -51,53 +51,9 @@ func (e *MemberLeft) ToOutbox() (OutboxEvent, error) {
 
 func (e *MemberLeft) Topic() string {
 	return fmt.Sprintf(
-		"im_message.%s.message.member.%s.%s",
-		e.RecipientID(),
-		"left",
+		"im_thread.%s.member.%s.left.%s",
+		e.ThreadID,
+		e.ContactID,
 		e.Version(),
 	)
-}
-
-type MemberLeftBuilder struct {
-	event *MemberLeft
-}
-
-func NewMemberLeftBuilder() *MemberLeftBuilder {
-	return &MemberLeftBuilder{
-		event: new(MemberLeft),
-	}
-}
-
-func (b *MemberLeftBuilder) WithMessageID(messageID uuid.UUID) *MemberLeftBuilder {
-	b.event.MessageID = messageID
-	return b
-}
-
-func (b *MemberLeftBuilder) WithThreadID(threadID uuid.UUID) *MemberLeftBuilder {
-	b.event.ThreadID = threadID
-	return b
-}
-
-func (b *MemberLeftBuilder) WithDomainID(domainID int32) *MemberLeftBuilder {
-	b.event.DomainID = domainID
-	return b
-}
-
-func (b *MemberLeftBuilder) WithContactID(contactID uuid.UUID) *MemberLeftBuilder {
-	b.event.ContactID = contactID
-	return b
-}
-
-func (b *MemberLeftBuilder) WithOccurredAt(occurredAt time.Time) *MemberLeftBuilder {
-	b.event.OccurredAt = occurredAt
-	return b
-}
-
-func (b *MemberLeftBuilder) WithSystem(system *SystemPayload) *MemberLeftBuilder {
-	b.event.System = system
-	return b
-}
-
-func (b *MemberLeftBuilder) Build() *MemberLeft {
-	return b.event
 }

@@ -414,14 +414,14 @@ func (t *ThreadManagementService) sendAddMemberSystemMessage(ctx context.Context
 		return err
 	}
 
-	joinedEvent := event.NewMemberJoinedBuilder().
-		WithMessageID(savedMsg.ID).
-		WithThreadID(args.threadID).
-		WithDomainID(int32(args.domainID)).
-		WithContactID(newMember.ContactID).
-		WithOccurredAt(savedMsg.CreatedAt).
-		WithSystem(event.NewSystemPayload(systemMessage.Type, systemMessage.Metadata)).
-		Build()
+	joinedEvent := &event.MemberJoined{
+		MessageID:  savedMsg.ID,
+		ThreadID:   args.threadID,
+		DomainID:   int32(args.domainID),
+		ContactID:  newMember.ContactID,
+		OccurredAt: savedMsg.CreatedAt,
+		System:     event.NewSystemPayload(systemMessage.Type, systemMessage.Metadata),
+	}
 
 	return t.publishMemberEvent(ctx, uow, joinedEvent)
 }
@@ -559,14 +559,14 @@ func (t *ThreadManagementService) sendRemoveMemberSystemMessage(ctx context.Cont
 		return err
 	}
 
-	leftEvent := event.NewMemberLeftBuilder().
-		WithMessageID(savedMsg.ID).
-		WithThreadID(removedMember.ThreadID).
-		WithDomainID(int32(args.domainID)).
-		WithContactID(removedMember.ContactID).
-		WithOccurredAt(savedMsg.CreatedAt).
-		WithSystem(event.NewSystemPayload(memberRemovedSystemMessageType, metadata)).
-		Build()
+	leftEvent := &event.MemberLeft{
+		MessageID:  savedMsg.ID,
+		ThreadID:   removedMember.ThreadID,
+		DomainID:   int32(args.domainID),
+		ContactID:  removedMember.ContactID,
+		OccurredAt: savedMsg.CreatedAt,
+		System:     event.NewSystemPayload(memberRemovedSystemMessageType, metadata),
+	}
 
 	return t.publishMemberEvent(ctx, uow, leftEvent)
 }
@@ -625,26 +625,26 @@ func (t *ThreadManagementService) sendTransferSystemMessage(ctx context.Context,
 		return err
 	}
 
-	leftEvent := event.NewMemberLeftBuilder().
-		WithMessageID(savedMsg.ID).
-		WithThreadID(args.threadID).
-		WithDomainID(int32(args.domainID)).
-		WithContactID(args.initiator.ContactID).
-		WithOccurredAt(savedMsg.CreatedAt).
-		WithSystem(event.NewSystemPayload(memberTransferedSystemMessageType, metadata)).
-		Build()
+	leftEvent := &event.MemberLeft{
+		MessageID:  savedMsg.ID,
+		ThreadID:   args.threadID,
+		DomainID:   int32(args.domainID),
+		ContactID:  args.initiator.ContactID,
+		OccurredAt: savedMsg.CreatedAt,
+		System:     event.NewSystemPayload(memberTransferedSystemMessageType, metadata),
+	}
 	if err = t.publishMemberEvent(ctx, uow, leftEvent); err != nil {
 		return err
 	}
 
-	joinedEvent := event.NewMemberJoinedBuilder().
-		WithMessageID(savedMsg.ID).
-		WithThreadID(args.threadID).
-		WithDomainID(int32(args.domainID)).
-		WithContactID(args.newMember.ContactID).
-		WithOccurredAt(savedMsg.CreatedAt).
-		WithSystem(event.NewSystemPayload(memberTransferedSystemMessageType, metadata)).
-		Build()
+	joinedEvent := &event.MemberJoined{
+		MessageID:  savedMsg.ID,
+		ThreadID:   args.threadID,
+		DomainID:   int32(args.domainID),
+		ContactID:  args.newMember.ContactID,
+		OccurredAt: savedMsg.CreatedAt,
+		System:     event.NewSystemPayload(memberTransferedSystemMessageType, metadata),
+	}
 	return t.publishMemberEvent(ctx, uow, joinedEvent)
 }
 
