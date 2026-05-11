@@ -149,8 +149,10 @@ func (t *ThreadManagementService) AddMember(ctx context.Context, req *dto.AddMem
 		if err != nil {
 			return uuid.Nil, err
 		}
-		titleForTarget = initiator.Settings.Title
-		invitedBy = &initiator.ID
+		if initiator != nil {
+			titleForTarget = initiator.Settings.Title
+			invitedBy = &initiator.ID
+		}
 	}
 
 	rolePermissions, err := getDefaultPermissionsByRole(req.NewMemberRole)
@@ -407,32 +409,46 @@ func (t *ThreadManagementService) sendAddMemberSystemMessage(ctx context.Context
 		}
 	}
 
-	return t.sendThreadSystemMessage(ctx, uow, message)
+	savedMsg, err := t.sendThreadSystemMessage(ctx, uow, message)
+	if err != nil {
+		return err
+	}
+
+	joinedEvent := &event.MemberJoined{
+		MessageID:  savedMsg.ID,
+		ThreadID:   args.threadID,
+		DomainID:   int32(args.domainID),
+		ContactID:  newMember.ContactID,
+		OccurredAt: savedMsg.CreatedAt,
+		System:     event.NewSystemPayload(systemMessage.Type, systemMessage.Metadata),
+	}
+
+	return t.publishMemberEvent(ctx, uow, joinedEvent)
 }
 
-func (s *ThreadManagementService) sendThreadSystemMessage(ctx context.Context, uow store.UnitOfWork, msg *model.Message) error {
+func (s *ThreadManagementService) sendThreadSystemMessage(ctx context.Context, uow store.UnitOfWork, msg *model.Message) (*model.Message, error) {
 	if msg.ThreadID == uuid.Nil {
-		return errors.New("thread id cannot be nil")
+		return nil, errors.New("thread id cannot be nil")
 	}
 	if msg.DomainID <= 0 {
-		return errors.New("domain id must be greater than zero")
+		return nil, errors.New("domain id must be greater than zero")
 	}
 	if msg.To == nil {
-		return errors.New("message recipients cannot be nil")
+		return nil, errors.New("message recipients cannot be nil")
 	}
 	savedMsg, err := uow.Messages().SaveSystemMessage(ctx, msg)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	savedMsg.WithCreatedEvent(uuid.NewString(), &msg.From)
 	events := savedMsg.Events()
 
 	for _, e := range events {
 		if err = uow.Outbox().Publish(ctx, buildMessageCreatedTopic(e.RecipientID(), e.Version()), e); err != nil {
-			return err
+			return nil, err
 		}
 	}
-	return nil
+	return savedMsg, nil
 }
 
 func (t *ThreadManagementService) RemoveMember(ctx context.Context, req *dto.RemoveMemberRequest) error {
@@ -538,7 +554,21 @@ func (t *ThreadManagementService) sendRemoveMemberSystemMessage(ctx context.Cont
 		}
 	}
 
-	return t.sendThreadSystemMessage(ctx, uow, message)
+	savedMsg, err := t.sendThreadSystemMessage(ctx, uow, message)
+	if err != nil {
+		return err
+	}
+
+	leftEvent := &event.MemberLeft{
+		MessageID:  savedMsg.ID,
+		ThreadID:   removedMember.ThreadID,
+		DomainID:   int32(args.domainID),
+		ContactID:  removedMember.ContactID,
+		OccurredAt: savedMsg.CreatedAt,
+		System:     event.NewSystemPayload(memberRemovedSystemMessageType, metadata),
+	}
+
+	return t.publishMemberEvent(ctx, uow, leftEvent)
 }
 
 func (t *ThreadManagementService) sendTransferSystemMessage(ctx context.Context, uow store.UnitOfWork, args *transferMemberEventArgs) error {
@@ -590,7 +620,32 @@ func (t *ThreadManagementService) sendTransferSystemMessage(ctx context.Context,
 		},
 	}
 
-	return t.sendThreadSystemMessage(ctx, uow, message)
+	savedMsg, err := t.sendThreadSystemMessage(ctx, uow, message)
+	if err != nil {
+		return err
+	}
+
+	leftEvent := &event.MemberLeft{
+		MessageID:  savedMsg.ID,
+		ThreadID:   args.threadID,
+		DomainID:   int32(args.domainID),
+		ContactID:  args.initiator.ContactID,
+		OccurredAt: savedMsg.CreatedAt,
+		System:     event.NewSystemPayload(memberTransferedSystemMessageType, metadata),
+	}
+	if err = t.publishMemberEvent(ctx, uow, leftEvent); err != nil {
+		return err
+	}
+
+	joinedEvent := &event.MemberJoined{
+		MessageID:  savedMsg.ID,
+		ThreadID:   args.threadID,
+		DomainID:   int32(args.domainID),
+		ContactID:  args.newMember.ContactID,
+		OccurredAt: savedMsg.CreatedAt,
+		System:     event.NewSystemPayload(memberTransferedSystemMessageType, metadata),
+	}
+	return t.publishMemberEvent(ctx, uow, joinedEvent)
 }
 
 func (t *ThreadManagementService) verifyRemoveMember(initiator *model.ThreadDialogExtended, target *model.ThreadDialogExtended) error {
@@ -858,4 +913,8 @@ func (t *ThreadManagementService) publishThreadCreatedEvents(ctx context.Context
 		}
 	}
 	return nil
+}
+
+func (t *ThreadManagementService) publishMemberEvent(ctx context.Context, uow store.UnitOfWork, e ThreadEvent) error {
+	return uow.Outbox().Publish(ctx, e.Topic(), e)
 }
