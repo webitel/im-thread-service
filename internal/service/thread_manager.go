@@ -374,6 +374,7 @@ func (t *ThreadManagementService) sendAddMemberSystemMessage(ctx context.Context
 	}
 	var (
 		newMember     = args.newMember
+		body          = "Member added"
 		systemMessage = &model.MessageSystem{
 			Type: memberAddedSystemMessageType,
 			Metadata: map[string]any{
@@ -390,7 +391,8 @@ func (t *ThreadManagementService) sendAddMemberSystemMessage(ctx context.Context
 			To:             args.receivers,
 			Type:           model.MessageTypeSystem,
 			System:         systemMessage,
-			Metadata:       model.BuildMetadata(""),
+			Body:           body,
+			Metadata:       model.BuildMetadata(body),
 			SendTo: shared.Peer{
 				ID:   newMember.ContactID,
 				Type: shared.PeerContact,
@@ -399,6 +401,11 @@ func (t *ThreadManagementService) sendAddMemberSystemMessage(ctx context.Context
 		initiator = args.initiator
 	)
 	if initiator != nil {
+		message.SenderID = initiator.ContactID
+		message.From = shared.Peer{
+			ID:   initiator.ContactID,
+			Type: shared.PeerContact,
+		}
 		message.Member = &model.ThreadDialog{
 			BaseModel: shared.BaseModel{
 				ID: initiator.ID,
@@ -440,6 +447,8 @@ func (s *ThreadManagementService) sendThreadSystemMessage(ctx context.Context, u
 	if err != nil {
 		return nil, err
 	}
+	savedMsg.To = msg.To
+	savedMsg.From = msg.From
 	savedMsg.WithCreatedEvent(uuid.NewString(), &msg.From)
 	events := savedMsg.Events()
 
@@ -527,13 +536,15 @@ func (t *ThreadManagementService) sendRemoveMemberSystemMessage(ctx context.Cont
 	if args.reason != nil {
 		metadata["reason"] = *args.reason
 	}
+	body := "Member removed"
 	message := &model.Message{
 		IdempotencyKey: uuid.NewString(),
 		ThreadID:       removedMember.ThreadID,
 		DomainID:       int32(args.domainID),
 		To:             args.receivers,
 		Type:           model.MessageTypeSystem,
-		Metadata:       model.BuildMetadata(""),
+		Body:           body,
+		Metadata:       model.BuildMetadata(body),
 		System: &model.MessageSystem{
 			Type:     memberRemovedSystemMessageType,
 			Metadata: metadata,
@@ -544,6 +555,11 @@ func (t *ThreadManagementService) sendRemoveMemberSystemMessage(ctx context.Cont
 		},
 	}
 	if args.initiator != nil {
+		message.SenderID = args.initiator.ContactID
+		message.From = shared.Peer{
+			ID:   args.initiator.ContactID,
+			Type: shared.PeerContact,
+		}
 		message.Member = &model.ThreadDialog{
 			BaseModel: shared.BaseModel{
 				ID: args.initiator.ID,
