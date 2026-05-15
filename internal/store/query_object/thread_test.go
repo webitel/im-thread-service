@@ -25,7 +25,7 @@ func TestThreadQueryObject_DefaultFields(t *testing.T) {
 
 	expectedFields := []string{
 		"id", "domain_id", "created_at", "updated_at",
-		"kind", "owner", "subject", "description", "member_ids",
+		"kind", "owner", "subject", "description", "members",
 	}
 
 	assert.Equal(t, expectedFields, fields)
@@ -69,12 +69,6 @@ func TestThreadQueryObject_FieldsMetadata(t *testing.T) {
 			field:            "description",
 			wantSortable:     true,
 			wantRequiresJoin: 0,
-		},
-		{
-			name:             "member_ids field",
-			field:            "member_ids",
-			wantSortable:     false,
-			wantRequiresJoin: threadLinkMembersLateral,
 		},
 		{
 			name:             "members field",
@@ -396,7 +390,7 @@ func TestThreadQueryObject_linkThreadDialog(t *testing.T) {
 
 		assert.Contains(t, sql, "INNER JOIN")
 		assert.Contains(t, sql, ThreadDialogTable)
-		assert.Contains(t, sql, "td.thread_id = t.id")
+		assert.Contains(t, sql, "td.thread_id=t.id")
 		assert.Equal(t, threadLinkThreadDialog, qo.join&threadLinkThreadDialog)
 	})
 
@@ -425,7 +419,7 @@ func TestThreadQueryObject_linkDirectSettings(t *testing.T) {
 		assert.Contains(t, sql, ThreadDialogTable)
 		assert.Contains(t, sql, "LEFT JOIN")
 		assert.Contains(t, sql, DirectSettingsTable)
-		assert.Contains(t, sql, "ds.thread_dialog_id = td.id")
+		assert.Contains(t, sql, "ds.thread_dialog_id=td.id")
 		assert.Equal(t, threadLinkDirectSettings, qo.join&threadLinkDirectSettings)
 		assert.Equal(t, threadLinkThreadDialog, qo.join&threadLinkThreadDialog)
 	})
@@ -477,11 +471,6 @@ func TestThreadQueryObject_EnsureJoins(t *testing.T) {
 			wantJoins:    []string{"INNER JOIN", "LEFT JOIN", DirectSettingsTable},
 		},
 		{
-			name:         "members lateral join",
-			requiredJoin: threadLinkMembersLateral,
-			wantJoins:    []string{"LEFT JOIN", "lateral", "array_agg"},
-		},
-		{
 			name:         "full members lateral join",
 			requiredJoin: threadLinkFullMembersLateral,
 			wantJoins:    []string{"LEFT JOIN", "lateral", "jsonb_agg"},
@@ -522,8 +511,8 @@ func TestThreadQueryObject_WithFields(t *testing.T) {
 		},
 		{
 			name:      "field requiring join",
-			fields:    []string{"member_ids"},
-			wantInSQL: []string{"ml.member_ids", "lateral"},
+			fields:    []string{"members"},
+			wantInSQL: []string{"m.members_data", "lateral"},
 		},
 		{
 			name:         "invalid field ignored",
@@ -585,7 +574,7 @@ func TestThreadQueryObject_WithSort(t *testing.T) {
 		},
 		{
 			name:       "non-sortable field ignored",
-			sortFields: []string{"+member_ids"},
+			sortFields: []string{"+members"},
 			wantInSQL:  []string{},
 		},
 	}
@@ -705,7 +694,7 @@ func TestThreadQueryObject_ComplexQuery(t *testing.T) {
 		memberID := uuid.New()
 		ownerID := uuid.New()
 
-		qo.WithFields([]string{"id", "subject", "member_ids", "members"}).
+		qo.WithFields([]string{"id", "subject", "members"}).
 			WithIDFilter(threadID).
 			WithDomainIDFilter(1).
 			WithKindFilter(model.ThreadDirect).
