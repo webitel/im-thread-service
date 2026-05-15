@@ -30,6 +30,7 @@ const (
 
 type MessageHistorySearcher interface {
 	Search(ctx context.Context, hmiDTO *dto.HistoryMessageInputDTO) (model.MessageSlice, queryobject.PageInfo[queryobject.MessageHistoryCursor], error)
+	SearchDialogsMessageHistory(ctx context.Context, req *dto.DialogsMessageHistoryInputDTO) (*dto.DialogsMessageHistoryOutputDTO, error)
 }
 
 type (
@@ -80,6 +81,44 @@ func (m *MessageHistoryEnricher) Search(ctx context.Context, hmiDTO *dto.History
 	}
 
 	return messages, pageInfo, nil
+}
+
+func (m *MessageHistoryEnricher) SearchDialogsMessageHistory(ctx context.Context, req *dto.DialogsMessageHistoryInputDTO) (*dto.DialogsMessageHistoryOutputDTO, error) {
+	out, err := m.MessageHistorySearcher.SearchDialogsMessageHistory(ctx, req)
+	if err != nil || out == nil {
+		return out, err
+	}
+
+	var all model.MessageSlice
+	for _, s := range out.Items {
+		if s == nil {
+			continue
+		}
+		all = append(all, s.Messages...)
+	}
+
+	if len(all) == 0 {
+		return out, nil
+	}
+
+	fileIDs := collectUniqueFileIDs(all)
+	if len(fileIDs) == 0 {
+		return out, nil
+	}
+
+	requestedMetadata := shouldLoadMetadata(req.Fields, 0)
+	loadMetadata := (requestedMetadata & (UseDocumentStorageMD | UseImageStorageMD)) != 0
+
+	linkMap, err := m.fetchFileLinks(ctx, fileIDs, req.DomainID, loadMetadata)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch file links: %w", err)
+	}
+
+	if err := m.enrichMessages(all, linkMap, requestedMetadata); err != nil {
+		return nil, fmt.Errorf("failed to enrich messages: %w", err)
+	}
+
+	return out, nil
 }
 
 // fetchFileLinks fetches file links from the storage service for the given file IDs.

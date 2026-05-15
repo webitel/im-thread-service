@@ -1,6 +1,8 @@
 package mapper
 
 import (
+	"time"
+
 	"github.com/google/uuid"
 	impb "github.com/webitel/im-thread-service/gen/go/thread/v1"
 	"github.com/webitel/im-thread-service/internal/domain/model"
@@ -40,6 +42,46 @@ func MapSearchMessageHistoryRequest2HistoryMessageInputDTO(mhr *impb.SearchMessa
 	}
 }
 
+func MapSearchDialogsMessageHistoryRequest2DialogsMessageHistoryInputDTO(mhr *impb.SearchDialogsMessageHistoryRequest) *dto.DialogsMessageHistoryInputDTO {
+	var (
+		threadID  uuid.UUID
+		senderIds = utils.Map(mhr.SenderIds, utils.IdsParser)
+		types     = utils.Map(mhr.Types, func(i int32) int { return int(i) })
+		cursor    *dto.HistoryMessageCursor
+	)
+
+	threadID, _ = uuid.Parse(mhr.GetThreadId())
+
+	if mhr.Cursor != nil {
+		cursor = new(dto.HistoryMessageCursor)
+		{
+			id, _ := uuid.Parse(mhr.Cursor.Id)
+			cursor.Id = id
+			cursor.Direction = mhr.GetCursor().GetBefore()
+		}
+	}
+
+	var periodFrom, periodTo time.Time
+	if v := mhr.GetPeriodFrom(); v > 0 {
+		periodFrom = time.UnixMilli(v)
+	}
+	if v := mhr.GetPeriodTo(); v > 0 {
+		periodTo = time.UnixMilli(v)
+	}
+
+	return &dto.DialogsMessageHistoryInputDTO{
+		DomainID:   int(mhr.GetDomainId()),
+		Fields:     mhr.Fields,
+		ThreadID:   threadID,
+		SenderIds:  senderIds,
+		Types:      types,
+		PeriodFrom: periodFrom,
+		PeriodTo:   periodTo,
+		Cursor:     cursor,
+		Size:       int(mhr.GetSize()),
+	}
+}
+
 func MapMessage2SearchMessageHistoryResponse(messages []*model.Message) *impb.SearchMessageHistoryResponse {
 	responseMessages := utils.Map(messages, func(m *model.Message) *impb.HistoryMessage {
 		var (
@@ -72,6 +114,70 @@ func MapMessage2SearchMessageHistoryResponse(messages []*model.Message) *impb.Se
 
 	return &impb.SearchMessageHistoryResponse{
 		Items: responseMessages,
+	}
+}
+
+func MapDialogsMessageHistoryOutputDTO2SearchDialogsMessageHistoryResponse(out *dto.DialogsMessageHistoryOutputDTO) *impb.SearchDialogsMessageHistoryResponse {
+	if out == nil {
+		return &impb.SearchDialogsMessageHistoryResponse{}
+	}
+
+	threadConverter := new(ThreadOutConverter)
+
+	items := utils.Map(out.Items, func(s *dto.SessionMessageHistory) *impb.SessionMessageHistory {
+		if s == nil {
+			return nil
+		}
+
+		messages := utils.Map(s.Messages, func(m *model.Message) *impb.HistoryMessage {
+			md, err := structpb.NewStruct(m.Metadata)
+			if err != nil {
+				return nil
+			}
+
+			return &impb.HistoryMessage{
+				Id:          m.ID.String(),
+				ThreadId:    m.ThreadID.String(),
+				SenderId:    m.SenderID.String(),
+				Body:        m.Body,
+				Type:        int32(m.Type),
+				Metadata:    md,
+				CreatedAt:   max(m.CreatedAt.UnixMilli(), 0),
+				UpdatedAt:   max(m.UpdatedAt.UnixMilli(), 0),
+				Documents:   mapDocs(m.Documents),
+				Images:      mapImages(m.Images),
+				Location:    mapLocation(m.Location),
+				Contact:     mapContact(m.Contact),
+				System:      mapSystem(m.System),
+				Interactive: mapInteractive(m.Interactive),
+			}
+		})
+
+		return &impb.SessionMessageHistory{
+			MemberId:    s.MemberID.String(),
+			InvitedBy:   s.InvitedBy.String(),
+			ThreadRole:  threadConverter.ConvertThreadRole(s.ThreadRole),
+			LeaveReason: s.LeaveReason,
+			Messages:    messages,
+		}
+	})
+
+	from := utils.Map(out.From, func(d *model.ThreadDialog) *impb.ThreadMember {
+		if d == nil {
+			return nil
+		}
+		return &impb.ThreadMember{
+			Id:        d.ID.String(),
+			ContactId: d.ContactID.String(),
+			Role:      threadConverter.ConvertThreadRole(d.ThreadRole),
+		}
+	})
+
+	return &impb.SearchDialogsMessageHistoryResponse{
+		Items:      items,
+		From:       from,
+		NextCursor: out.NextCursor,
+		PrevCursor: out.PrevCursor,
 	}
 }
 

@@ -12,6 +12,7 @@ import (
 
 type MessageHistoryService interface {
 	Search(context.Context, *dto.HistoryMessageInputDTO) (model.MessageSlice, queryobject.PageInfo[queryobject.MessageHistoryCursor], error)
+	SearchDialogsMessageHistory(ctx context.Context, req *dto.DialogsMessageHistoryInputDTO) (*dto.DialogsMessageHistoryOutputDTO, error)
 }
 
 type (
@@ -51,4 +52,15 @@ func (s *MessageHistoryServer) SearchThreadMessagesHistory(ctx context.Context, 
 	}
 
 	return resp, nil
+}
+
+func (s *MessageHistoryServer) SearchDialogsMessageHistory(ctx context.Context, req *impb.SearchDialogsMessageHistoryRequest) (*impb.SearchDialogsMessageHistoryResponse, error) {
+	dialogsDTO := mapper.MapSearchDialogsMessageHistoryRequest2DialogsMessageHistoryInputDTO(req)
+
+	out, err := s.messageHistorySearcher.SearchDialogsMessageHistory(ctx, dialogsDTO)
+	if err != nil {
+		return nil, err
+	}
+
+	return mapper.MapDialogsMessageHistoryOutputDTO2SearchDialogsMessageHistoryResponse(out), nil
 }
