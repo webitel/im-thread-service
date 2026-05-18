@@ -181,7 +181,11 @@ func (s *MessageService) SendImage(ctx context.Context, in *dto.SendImageRequest
 }
 
 func (s *MessageService) SendDocument(ctx context.Context, in *dto.SendDocumentRequest) (*dto.SendDocumentResponse, error) {
-	if err := guards.SendDocumentGuard(in); err != nil {
+	log := s.logger.With("operation", "send_document")
+
+	if err := in.Validate(); err != nil {
+		log.Warn("send document request validation", "error", err)
+
 		return nil, errors.InvalidArgument("send document request validation", errors.WithCause(err), errors.WithID("service.message.send_document"))
 	}
 
@@ -191,6 +195,8 @@ func (s *MessageService) SendDocument(ctx context.Context, in *dto.SendDocumentR
 		DomainID: int(in.DomainID),
 	})
 	if err != nil {
+		log.Error("resolving thread", "error", err, "from", in.From.ID.String(), "to", in.To.ID.String(), "to_type", in.To.Type.String())
+
 		return nil, err
 	}
 
@@ -199,6 +205,8 @@ func (s *MessageService) SendDocument(ctx context.Context, in *dto.SendDocumentR
 		attachments[i] = doc
 	}
 	if err := s.mediaProcessor.Process(ctx, in.DomainID, attachments); err != nil {
+		log.Error("processing input media", "error", err)
+
 		return nil, err
 	}
 
