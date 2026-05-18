@@ -1,8 +1,11 @@
 package dto
 
 import (
+	"net/url"
+
 	"github.com/google/uuid"
 	"github.com/webitel/im-thread-service/internal/domain/shared"
+	"github.com/webitel/webitel-go-kit/pkg/errors"
 )
 
 type Document struct {
@@ -13,9 +16,41 @@ type Document struct {
 	URL      string
 }
 
+func (document *Document) Validate() error {
+	if document == nil {
+		return errors.InvalidArgument("document is required", errors.WithID("dto.document.validate"))
+	}
+
+	if document.ID <= 0 && document.URL == "" {
+		return errors.InvalidArgument("either ID or URL is reqired", errors.WithID("dto.document.validate"))
+	}
+
+	if document.URL != "" {
+		if _, err := url.Parse(document.URL); err != nil {
+			return errors.InvalidArgument("provided invalid download URL", errors.WithCause(err), errors.WithID("dto.document.validate"))
+		}
+	}
+
+	return nil
+}
+
 type DocumentRequest struct {
 	Body      string
 	Documents []*Document
+}
+
+func (documentRequest *DocumentRequest) Validate() error {
+	if documentRequest == nil {
+		return errors.InvalidArgument("document request is required", errors.WithID("dto.document.validate"))
+	}
+
+	for i := range documentRequest.Documents {
+		if err := documentRequest.Documents[i].Validate(); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 type SendDocumentRequest struct {
@@ -24,6 +59,26 @@ type SendDocumentRequest struct {
 	Document DocumentRequest
 	DomainID int64  `json:"domain_id"`
 	SendID   string `json:"send_id"`
+}
+
+func (sendDocumentRequest *SendDocumentRequest) Validate() error {
+	if sendDocumentRequest == nil {
+		return errors.InvalidArgument("send document request is required", errors.WithID("dto.document.validate"))
+	}
+
+	if sendDocumentRequest.DomainID <= 0 {
+		return errors.InvalidArgument("domain id is required and must be gt 0", errors.WithID("dto.document.validate"))
+	}
+
+	if sendDocumentRequest.From.ID == uuid.Nil {
+		return errors.InvalidArgument("from peer id is required", errors.WithID("dto.document.validate"))
+	}
+
+	if sendDocumentRequest.To.ID == uuid.Nil {
+		return errors.InvalidArgument("to peer is required", errors.WithID("dto.document.validate"))
+	}
+
+	return nil
 }
 
 type SendDocumentResponse struct {
@@ -39,3 +94,4 @@ func (d *Document) SetID(id int64)      { d.ID = id }
 func (d *Document) SetMime(mime string) { d.MimeType = mime }
 func (d *Document) SetName(name string) { d.Name = name }
 func (d *Document) SetURL(url string)   { d.URL = url }
+func (d *Document) SetSize(size int64)  { d.Size = size }

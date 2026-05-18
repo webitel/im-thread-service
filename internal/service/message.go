@@ -181,7 +181,11 @@ func (s *MessageService) SendImage(ctx context.Context, in *dto.SendImageRequest
 }
 
 func (s *MessageService) SendDocument(ctx context.Context, in *dto.SendDocumentRequest) (*dto.SendDocumentResponse, error) {
-	if err := guards.SendDocumentGuard(in); err != nil {
+	log := s.logger.With("operation", "send_document")
+
+	if err := in.Validate(); err != nil {
+		log.Warn("send document request validation", "error", err)
+
 		return nil, errors.InvalidArgument("send document request validation", errors.WithCause(err), errors.WithID("service.message.send_document"))
 	}
 
@@ -191,6 +195,8 @@ func (s *MessageService) SendDocument(ctx context.Context, in *dto.SendDocumentR
 		DomainID: int(in.DomainID),
 	})
 	if err != nil {
+		log.Error("resolving thread", "error", err, "from", in.From.ID.String(), "to", in.To.ID.String(), "to_type", in.To.Type.String())
+
 		return nil, err
 	}
 
@@ -199,12 +205,23 @@ func (s *MessageService) SendDocument(ctx context.Context, in *dto.SendDocumentR
 		attachments[i] = doc
 	}
 	if err := s.mediaProcessor.Process(ctx, in.DomainID, attachments); err != nil {
+		log.Error("processing input media", "error", err)
+
 		return nil, err
 	}
 
-	fileLinksChan := s.mediaProcessor.FetchFileLinks(ctx, in.DomainID, attachments)
-	if err := enrichAttachmentsLinks(ctx, attachments, fileLinksChan); err != nil {
-		s.logger.ErrorContext(ctx, "enriching attachments links", "err", err)
+	filesMetadata, err := s.mediaProcessor.FetchFileLinksWithMetadata(ctx, in.DomainID, attachments)
+	if err != nil {
+		return nil, errors.Wrap(err, errors.WithID("service.message.send_document"))
+	}
+
+	for i := range attachments {
+		if fileMetadata, ok := filesMetadata.FilesMetadata[attachments[i].GetID()]; ok {
+			attachments[i].SetMime(fileMetadata.Mime)
+			attachments[i].SetName(fileMetadata.Name)
+			attachments[i].SetURL(fileMetadata.URL)
+			attachments[i].SetSize(fileMetadata.Size)
+		}
 	}
 
 	msg := model.NewDocumentMessage(model.MessageCreate{
@@ -224,7 +241,8 @@ func (s *MessageService) SendDocument(ctx context.Context, in *dto.SendDocumentR
 			return errors.Internal("save message", errors.WithCause(err), errors.WithID("service.message.send_document"))
 		}
 
-		if _, err := uow.Messages().SaveDocuments(txCtx, saved.ID, msg.Documents); err != nil {
+		_, err = uow.Messages().SaveDocuments(txCtx, saved.ID, msg.Documents)
+		if err != nil {
 			return errors.Internal("save documents", errors.WithCause(err), errors.WithID("service.message.send_document"))
 		}
 

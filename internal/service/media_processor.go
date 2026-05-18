@@ -3,12 +3,15 @@ package service
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/webitel/im-thread-service/gen/go/storage"
 	storageclient "github.com/webitel/im-thread-service/infra/webitel/storage"
 	"github.com/webitel/im-thread-service/internal/utils"
 	"github.com/webitel/webitel-go-kit/pkg/errors"
+	"golang.org/x/sync/errgroup"
+	"google.golang.org/grpc/status"
 )
 
 type AttachmentProcessor interface {
@@ -20,11 +23,13 @@ type AttachmentProcessor interface {
 	SetMime(string)
 	SetURL(string)
 	SetName(string)
+	SetSize(int64)
 }
 
 type MediaProcessor interface {
 	Process(ctx context.Context, domainID int64, items []AttachmentProcessor) error
 	FetchFileLinks(ctx context.Context, domainID int64, itemsWithID []AttachmentProcessor) <-chan fetchLinksResult
+	FetchFileLinksWithMetadata(ctx context.Context, domainID int64, filesWithID []AttachmentProcessor) (storageFilesResponse, error)
 }
 
 type storageProcessor struct {
@@ -77,6 +82,81 @@ type fetchLinksResult struct {
 	FileLinks map[int64]string
 }
 
+type fileMetadata struct {
+	Size int64
+	Mime string
+	Name string
+	URL  string
+}
+
+type storageFilesResponse struct {
+	FilesMetadata map[int64]*fileMetadata
+}
+
+func (storageProcessor *storageProcessor) FetchFileLinksWithMetadata(ctx context.Context, domainID int64, filesWithID []AttachmentProcessor) (storageFilesResponse, error) {
+	if len(filesWithID) == 0 {
+		return storageFilesResponse{FilesMetadata: make(map[int64]*fileMetadata)}, nil
+	}
+
+	g, ctx := errgroup.WithContext(ctx)
+
+	g.SetLimit(10)
+
+	var mu sync.Mutex
+	resultFilesMetadata := make(map[int64]*fileMetadata, len(filesWithID))
+
+	for _, file := range filesWithID {
+		f := file
+
+		g.Go(func() error {
+			fileID := f.GetID()
+
+			result, err := storageProcessor.client.GenerateFileLink(ctx, &storage.GenerateFileLinkRequest{
+				DomainId: domainID,
+				FileId:   fileID,
+				Action:   "download",
+				Source:   "file",
+				Metadata: true,
+			})
+
+			if err != nil {
+				if st, ok := status.FromError(err); ok {
+					return errors.New(fmt.Sprintf("failed to generate file link for id %d", fileID), errors.WithCause(err), errors.WithID("service.media_processor"), errors.WithCode(st.Code()))
+				}
+
+				return errors.Internal(fmt.Sprintf("failed to generate file link for id %d", fileID), errors.WithCause(err), errors.WithID("service.media_processor"))
+			}
+
+			url, err := utils.ResolveFullURL(result.GetBaseUrl(), result.GetUrl())
+			if err != nil {
+				return errors.Internal(fmt.Sprintf("failed to resolve url for id: %d", fileID), errors.WithCause(err), errors.WithID("service.media_processor"))
+			}
+
+			meta := &fileMetadata{
+				URL: url,
+			}
+
+			if metadata := result.GetMetadata(); metadata != nil {
+				meta.Mime = metadata.GetMimeType()
+				meta.Name = metadata.GetName()
+				meta.Size = metadata.GetSize()
+			}
+
+			mu.Lock()
+			resultFilesMetadata[fileID] = meta
+			mu.Unlock()
+
+			return nil
+		})
+	}
+
+	if err := g.Wait(); err != nil {
+		return storageFilesResponse{}, err
+	}
+
+	return storageFilesResponse{FilesMetadata: resultFilesMetadata}, nil
+}
+
 func (p *storageProcessor) FetchFileLinks(ctx context.Context, domainID int64, itemsWithID []AttachmentProcessor) <-chan fetchLinksResult {
 	resultChan := make(chan fetchLinksResult, 1)
 
@@ -92,6 +172,7 @@ func (p *storageProcessor) FetchFileLinks(ctx context.Context, domainID int64, i
 				DomainId: domainID,
 				FileId:   item.GetID(),
 				Action:   "download",
+				Metadata: true,
 			})
 		}
 
