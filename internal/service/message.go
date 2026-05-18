@@ -210,9 +210,18 @@ func (s *MessageService) SendDocument(ctx context.Context, in *dto.SendDocumentR
 		return nil, err
 	}
 
-	fileLinksChan := s.mediaProcessor.FetchFileLinks(ctx, in.DomainID, attachments)
-	if err := enrichAttachmentsLinks(ctx, attachments, fileLinksChan); err != nil {
-		s.logger.ErrorContext(ctx, "enriching attachments links", "err", err)
+	filesMetadata, err := s.mediaProcessor.FetchFileLinksWithMetadata(ctx, in.DomainID, attachments)
+	if err != nil {
+		return nil, errors.Wrap(err, errors.WithID("service.message.send_document"))
+	}
+
+	for i := range attachments {
+		if fileMetadata, ok := filesMetadata.FilesMetadata[attachments[i].GetID()]; ok {
+			attachments[i].SetMime(fileMetadata.Mime)
+			attachments[i].SetName(fileMetadata.Name)
+			attachments[i].SetURL(fileMetadata.URL)
+			attachments[i].SetSize(fileMetadata.Size)
+		}
 	}
 
 	msg := model.NewDocumentMessage(model.MessageCreate{
@@ -232,7 +241,8 @@ func (s *MessageService) SendDocument(ctx context.Context, in *dto.SendDocumentR
 			return errors.Internal("save message", errors.WithCause(err), errors.WithID("service.message.send_document"))
 		}
 
-		if _, err := uow.Messages().SaveDocuments(txCtx, saved.ID, msg.Documents); err != nil {
+		_, err = uow.Messages().SaveDocuments(txCtx, saved.ID, msg.Documents)
+		if err != nil {
 			return errors.Internal("save documents", errors.WithCause(err), errors.WithID("service.message.send_document"))
 		}
 

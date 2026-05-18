@@ -94,3 +94,4 @@ func (d *Document) SetID(id int64)      { d.ID = id }
 func (d *Document) SetMime(mime string) { d.MimeType = mime }
 func (d *Document) SetName(name string) { d.Name = name }
 func (d *Document) SetURL(url string)   { d.URL = url }
+func (d *Document) SetSize(size int64)  { d.Size = size }

@@ -9,6 +9,7 @@ import (
 	"github.com/webitel/im-thread-service/infra/webitel"
 	"github.com/webitel/webitel-go-kit/infra/discovery"
 	rpc "github.com/webitel/webitel-go-kit/infra/transport/gRPC"
+	"github.com/webitel/webitel-go-kit/pkg/errors"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -97,6 +98,26 @@ func (c *Client) BulkGenerateFileLink(ctx context.Context, req *storagev1.BulkGe
 	}
 
 	return resp, nil
+}
+
+func (c *Client) GenerateFileLink(ctx context.Context, in *storagev1.GenerateFileLinkRequest) (*storagev1.GenerateFileLinkResponse, error) {
+	var response *storagev1.GenerateFileLinkResponse
+	err := c.rpc.Execute(ctx, func(fsc storagev1.FileServiceClient) error {
+		resp, err := fsc.GenerateFileLink(ctx, in)
+		if err != nil {
+			if st, ok := status.FromError(err); ok {
+				return errors.Wrap(err, errors.WithCode(st.Code()), errors.WithID("storage.client.generate_file_link"))
+			}
+
+			return errors.Wrap(err, errors.WithID("storage.client.generate_file_link"))
+		}
+
+		response = resp
+
+		return nil
+	})
+
+	return response, err
 }
 
 // Close gracefully shuts down the underlying gRPC connection pool

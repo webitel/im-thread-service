@@ -21,6 +21,7 @@ type MessageImage struct {
 	CreatedAt  time.Time      `json:"created_at" db:"created_at"`
 	Thumbnails map[string]any `json:"thumbnails,omitempty" db:"thumbnails"`
 	URL        string         `json:"url"`
+	Size       int64
 }
 
 func (mi *MessageImage) GetID() int64        { return mi.FileID }
@@ -32,6 +33,7 @@ func (mi *MessageImage) SetURL(url string)   { mi.URL = url }
 func (mi *MessageImage) SetName(name string) { mi.Name = name }
 func (mi *MessageImage) SetMime(mime string) { mi.Mime = mime }
 func (mi *MessageImage) SetID(id int64)      { mi.FileID = id }
+func (mi *MessageImage) SetSize(size int64)  { mi.Size = size }
 
 type MessageDocument struct {
 	ID        uuid.UUID `json:"id" db:"id"`
@@ -53,3 +55,4 @@ func (md *MessageDocument) GetMimeType() string { return md.Mime }
 func (md *MessageDocument) SetURL(url string)   { md.URL = url }
 func (md *MessageDocument) SetName(name string) { md.Name = name }
 func (md *MessageDocument) SetMime(mime string) { md.Mime = mime }
+func (md *MessageDocument) SetSize(size int64)  { md.Size = size }
