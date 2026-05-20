@@ -62,9 +62,7 @@ func (m *MessageHistoryEnricher) Search(ctx context.Context, hmiDTO *dto.History
 		return messages, pageInfo, nil
 	}
 
-	var (
-		requestedMetadata int
-	)
+	var requestedMetadata int
 
 	requestedMetadata = shouldLoadMetadata(hmiDTO.Fields, requestedMetadata)
 
@@ -242,10 +240,14 @@ func processAttachments[T model.MessageAttachment](
 ) error {
 	for _, item := range attachments {
 		fileID := item.GetFileID()
-		if link, ok := linkMap[fileID]; ok {
-			if err := enrichFunc(item, link, useMD); err != nil {
-				return fmt.Errorf("failed to enrich file %d: %w", fileID, err)
-			}
+
+		link, ok := linkMap[fileID]
+		if !ok {
+			continue
+		}
+
+		if err := enrichFunc(item, link, useMD); err != nil {
+			return fmt.Errorf("failed to enrich file %d: %w", fileID, err)
 		}
 	}
 
@@ -271,11 +273,11 @@ func enrichDocument(doc *model.MessageDocument, link *storage.GenerateFileLinkRe
 
 	doc.URL = fullURL
 
-	if useMetadata && link.Metadata != nil {
-		doc.FileID = link.Metadata.GetId()
-		doc.Size = link.Metadata.GetSize()
-		doc.Mime = link.Metadata.GetMimeType()
-		doc.Name = link.Metadata.GetName()
+	if useMetadata && link.GetMetadata() != nil {
+		doc.FileID = link.GetMetadata().GetId()
+		doc.Size = link.GetMetadata().GetSize()
+		doc.Mime = link.GetMetadata().GetMimeType()
+		doc.Name = link.GetMetadata().GetName()
 	}
 
 	return nil
@@ -300,10 +302,10 @@ func enrichImage(img *model.MessageImage, link *storage.GenerateFileLinkResponse
 
 	img.URL = fullURL
 
-	if useMetadata && link.Metadata != nil {
-		img.FileID = link.Metadata.GetId()
-		img.Mime = link.Metadata.GetMimeType()
-		img.Name = link.Metadata.GetName()
+	if useMetadata && link.GetMetadata() != nil {
+		img.FileID = link.GetMetadata().GetId()
+		img.Mime = link.GetMetadata().GetMimeType()
+		img.Name = link.GetMetadata().GetName()
 	}
 
 	return nil

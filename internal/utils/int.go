@@ -9,5 +9,6 @@ func ConvertInts[U, T Int](s []T) (out []U) {
 	for i := range s {
 		out[i] = U(s[i])
 	}
+
 	return out
 }

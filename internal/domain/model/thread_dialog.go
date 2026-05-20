@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
 	"github.com/webitel/im-thread-service/internal/domain/shared"
 )
 
@@ -57,6 +58,7 @@ func (threadDialogs ThreadDialogs) ExtractExternalPeers() []*ExternalPeerPair {
 	}
 
 	var external []*ExternalPeerPair
+
 	for _, threadDialog := range threadDialogs {
 		if threadDialog.Via != nil {
 			external = append(external, &ExternalPeerPair{

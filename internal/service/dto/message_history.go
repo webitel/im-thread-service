@@ -52,9 +52,9 @@ type (
 	HistoryMessageInputDTO struct {
 		DomainID  int
 		Fields    []string
-		Ids       uuid.UUIDs
-		ThreadIds uuid.UUIDs
-		SenderIds uuid.UUIDs
+		IDs       uuid.UUIDs
+		ThreadIDs uuid.UUIDs
+		SenderIDs uuid.UUIDs
 		Types     []int
 		Cursor    *HistoryMessageCursor
 		Sort      string
@@ -63,7 +63,7 @@ type (
 
 	HistoryMessageCursor struct {
 		CreatedAt time.Time
-		Id        uuid.UUID
+		ID        uuid.UUID
 		Direction bool
 	}
 )

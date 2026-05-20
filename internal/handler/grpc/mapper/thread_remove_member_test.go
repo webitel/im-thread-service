@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
 	impb "github.com/webitel/im-thread-service/gen/go/thread/v1"
 )
 

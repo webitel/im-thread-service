@@ -2,6 +2,7 @@ package utils
 
 import (
 	"github.com/google/uuid"
+
 	queryobject "github.com/webitel/im-thread-service/internal/store/query_object"
 )
 
@@ -10,24 +11,28 @@ func Map[T, U any](s []T, f func(T) U) []U {
 	for i, v := range s {
 		res[i] = f(v)
 	}
+
 	return res
 }
 
 func Where[T any](s []T, predicate func(T) bool) []T {
 	var result []T
+
 	for _, v := range s {
 		if predicate(v) {
 			result = append(result, v)
 		}
 	}
+
 	return result
 }
 
-func IdsParser(s string) uuid.UUID {
+func IDsParser(s string) uuid.UUID {
 	id, err := uuid.Parse(s)
 	if err != nil {
 		return uuid.Nil
 	}
+
 	return id
 }
 

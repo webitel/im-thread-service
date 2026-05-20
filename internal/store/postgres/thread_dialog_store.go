@@ -6,9 +6,11 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+
+	"github.com/webitel/webitel-go-kit/pkg/errors"
+
 	"github.com/webitel/im-thread-service/internal/domain/model"
 	"github.com/webitel/im-thread-service/internal/domain/shared"
-	"github.com/webitel/webitel-go-kit/pkg/errors"
 )
 
 type threadDialogStore struct {
@@ -55,8 +57,7 @@ func (t *threadDialogStore) Create(ctx context.Context, member *model.ThreadDial
 		return nil, errors.InvalidArgument("newMemberID cannot be nil", errors.WithID("postgres.thread_dialog_store.create"))
 	}
 
-	var (
-		query = `
+	query := `
 		WITH inserted_dialog AS
 		(
 			 INSERT INTO im_thread.thread_dialog(domain_id, member_id, thread_id, thread_role, invited_by, via)
@@ -88,7 +89,6 @@ func (t *threadDialogStore) Create(ctx context.Context, member *model.ThreadDial
 		LEFT JOIN inserted_permissions perm ON dial.id = perm.thread_dialog_id
 		LEFT JOIN inserted_thread_direct_settings sett ON dial.id = sett.thread_dialog_id
 		`
-	)
 
 	rows, err := t.db.Query(ctx, query, pgx.NamedArgs{
 		"MemberID":                    member.ContactID,
@@ -183,21 +183,19 @@ func mapToThreadDialogModel(dialog *threadDialog) (*model.ThreadDialog, error) {
 }
 
 func (t *threadDialogStore) Delete(ctx context.Context, memberID uuid.UUID, leaveReason *string) error {
-
 	if memberID == uuid.Nil {
 		return errors.New("newMemberID cannot be nil")
 	}
 
-	var (
-		query = `UPDATE im_thread.thread_dialog
+	query := `UPDATE im_thread.thread_dialog
 		SET deleted_at = NOW(), leave_reason = $2
 		WHERE id = $1`
-	)
 
 	res, err := t.db.Exec(ctx, query, memberID, leaveReason)
 	if err != nil {
 		return err
 	}
+
 	if res.RowsAffected() == 0 {
 		return errors.New("no thread member found to delete")
 	}
@@ -238,6 +236,7 @@ func (t *threadDialogStore) GetQuickView(ctx context.Context, filter *model.Thre
 	if err != nil {
 		return nil, err
 	}
+
 	return collectRows(rows, mapToThreadDialogModel)
 }
 
@@ -289,10 +288,9 @@ func (t *threadDialogStore) GetFullView(ctx context.Context, filter *model.Threa
 	}
 
 	return collectRows(rows, mapToThreadDialogExtendedModel)
-
 }
 
-func (t *threadDialogStore) FindActorsPair(ctx context.Context, initiatorContactID uuid.UUID, targetMemberID uuid.UUID) (*model.ThreadDialogExtended, *model.ThreadDialogExtended, error) {
+func (t *threadDialogStore) FindActorsPair(ctx context.Context, initiatorContactID, targetMemberID uuid.UUID) (*model.ThreadDialogExtended, *model.ThreadDialogExtended, error) {
 	query := `
 	SELECT
 	-- basic thread dialog fields
@@ -338,14 +336,15 @@ func (t *threadDialogStore) FindActorsPair(ctx context.Context, initiatorContact
 		if initiatorDialog != nil && targetDialog != nil {
 			break
 		}
+
 		if dialog.ContactID == initiatorContactID {
 			initiatorDialog = dialog
 		}
+
 		if dialog.ID == targetMemberID {
 			targetDialog = dialog
 		}
 	}
 
 	return initiatorDialog, targetDialog, nil
-
 }

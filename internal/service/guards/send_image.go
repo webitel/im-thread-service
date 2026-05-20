@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
+
 	"github.com/webitel/im-thread-service/internal/service/dto"
 )
 
@@ -21,6 +22,7 @@ func SendImageGuard(req *dto.SendImageRequest) error {
 			return err
 		}
 	}
+
 	return nil
 }
 
@@ -29,9 +31,11 @@ func checkImageBase() ImageMessageGuard {
 		if req == nil {
 			return errors.New("request is nil")
 		}
+
 		if req.From.ID == uuid.Nil || req.To.ID == uuid.Nil {
 			return errors.New("sender and receiver ids are required")
 		}
+
 		return nil
 	}
 }
@@ -70,6 +74,7 @@ func checkImagesIntegrity() ImageMessageGuard {
 				return fmt.Errorf("%s: %w", prefix, err)
 			}
 		}
+
 		return nil
 	}
 }

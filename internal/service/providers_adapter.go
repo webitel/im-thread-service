@@ -2,41 +2,42 @@ package service
 
 import (
 	"context"
+	stderrs "errors"
 	"log/slog"
 	"strconv"
 	"sync"
 
-	stderrs "errors"
+	"github.com/webitel/webitel-go-kit/pkg/errors"
 
 	"github.com/webitel/im-thread-service/gen/go/provider/v1"
 	improviders "github.com/webitel/im-thread-service/infra/webitel/im-providers"
 	"github.com/webitel/im-thread-service/internal/domain/model"
-	"github.com/webitel/webitel-go-kit/pkg/errors"
 )
 
 type ProvidersAdapter interface {
 	SendMessage(ctx context.Context, message *model.Message) error
 }
 
-type baseRpcProvidersAdapter struct {
+type baseRPCProvidersAdapter struct {
 	logger          *slog.Logger
 	providersClient *improviders.Client
 }
 
-func newBaseRpcProvidersAdapter(logger *slog.Logger, providersClient *improviders.Client) *baseRpcProvidersAdapter {
+func newBaseRPCProvidersAdapter(logger *slog.Logger, providersClient *improviders.Client) *baseRPCProvidersAdapter {
 	log := logger.With("component", "base_rpc_providers_adapter")
 
-	return &baseRpcProvidersAdapter{
+	return &baseRPCProvidersAdapter{
 		logger:          log,
 		providersClient: providersClient,
 	}
 }
 
-func (a *baseRpcProvidersAdapter) SendMessage(ctx context.Context, message *model.Message) error {
+func (a *baseRPCProvidersAdapter) SendMessage(ctx context.Context, message *model.Message) error {
 	log := a.logger.With("operation", "send_message")
 
 	if message == nil {
 		log.Warn("received nil pointer message")
+
 		return errors.InvalidArgument("received nil pointer message", errors.WithID("service.providers_adapter.send_message"))
 	}
 
@@ -54,6 +55,7 @@ func (a *baseRpcProvidersAdapter) SendMessage(ctx context.Context, message *mode
 	for _, externalPeer := range externalPairs {
 		wg.Go(func() {
 			var err error
+
 			userID := externalPeer.ContactID.String()
 
 			switch message.Type {
@@ -79,13 +81,22 @@ func (a *baseRpcProvidersAdapter) SendMessage(ctx context.Context, message *mode
 					ExternalUserId: userID,
 					Text:           message.Body,
 				})
+			case model.MessageTypeContact:
+			case model.MessageTypeInteractive:
+			case model.MessageTypeLocation:
+			case model.MessageTypeSystem:
+			case model.MessageTypeUnknown:
+
 			}
 
-			if err != nil {
-				errorsMu.Lock()
-				errorsArray = append(errorsArray, err)
-				errorsMu.Unlock()
+			if err == nil {
+				return
 			}
+
+			errorsMu.Lock()
+
+			errorsArray = append(errorsArray, err)
+			errorsMu.Unlock()
 		})
 	}
 
@@ -106,6 +117,7 @@ func extractFirstFile[T AttachmentProcessor](media []T) *provider.ProviderFile {
 	}
 
 	first := media[0]
+
 	return &provider.ProviderFile{
 		Id:       strconv.Itoa(int(first.GetID())),
 		Url:      first.GetURL(),

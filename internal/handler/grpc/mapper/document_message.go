@@ -13,6 +13,7 @@ func MapToSendDocumentRequest(in *impb.SendDocumentRequest) *dto.SendDocumentReq
 	}
 
 	var docReq dto.DocumentRequest
+
 	docReq.Body = in.GetBody()
 	docReq.Documents = make([]*dto.Document, 0, len(in.GetDocuments()))
 
@@ -40,6 +41,7 @@ func MapToSendDocumentResponse(out *dto.SendDocumentResponse) *impb.SendDocument
 	if out == nil {
 		return nil
 	}
+
 	return &impb.SendDocumentResponse{
 		Id: out.ID.String(),
 		To: MapPeerToProto(out.To),

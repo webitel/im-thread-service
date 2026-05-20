@@ -3,10 +3,11 @@ package webiteldi
 import (
 	"context"
 
+	"go.uber.org/fx"
+
 	imcontact "github.com/webitel/im-thread-service/infra/webitel/im-contact"
 	improviders "github.com/webitel/im-thread-service/infra/webitel/im-providers"
 	storageclient "github.com/webitel/im-thread-service/infra/webitel/storage"
-	"go.uber.org/fx"
 )
 
 var Module = fx.Module(
@@ -20,7 +21,7 @@ var Module = fx.Module(
 	// [LIFECYCLE] Ensures the gRPC connection pool is closed gracefully on app shutdown
 	fx.Invoke(func(lc fx.Lifecycle, client *imcontact.Client) {
 		lc.Append(fx.Hook{
-			OnStop: func(ctx context.Context) error {
+			OnStop: func(_ context.Context) error {
 				return client.Close()
 			},
 		})
@@ -28,7 +29,7 @@ var Module = fx.Module(
 
 	fx.Invoke(func(lc fx.Lifecycle, client *improviders.Client) {
 		lc.Append(fx.Hook{
-			OnStop: func(ctx context.Context) error {
+			OnStop: func(_ context.Context) error {
 				return client.Close()
 			},
 		})

@@ -14,6 +14,7 @@ import (
 	"errors"
 
 	"github.com/google/uuid"
+
 	"github.com/webitel/im-thread-service/internal/service/dto"
 )
 
@@ -31,6 +32,7 @@ func SendTextGuard(request *dto.SendTextRequest) error {
 			return err
 		}
 	}
+
 	return nil
 }
 
@@ -39,6 +41,7 @@ func checkNilRequest() MessageGuard {
 		if req == nil {
 			return errors.New("request is nil")
 		}
+
 		return nil
 	}
 }
@@ -48,6 +51,7 @@ func checkEmptyPeers() MessageGuard {
 		if req.From.ID == uuid.Nil || req.To.ID == uuid.Nil {
 			return errors.New("sender and receiver ids are required")
 		}
+
 		return nil
 	}
 }
@@ -57,6 +61,7 @@ func checkEmptyBody() MessageGuard {
 		if req.Body == "" {
 			return errors.New("message body is empty")
 		}
+
 		return nil
 	}
 }

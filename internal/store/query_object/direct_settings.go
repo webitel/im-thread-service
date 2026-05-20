@@ -82,7 +82,6 @@ var (
 )
 
 type DirectSettingsQuery struct {
-	limit      int
 	fields     []string
 	sortFields []string
 	builder    squirrel.SelectBuilder
@@ -109,18 +108,20 @@ func (q *DirectSettingsQuery) ensureJoin(requiredJoin int) {
 		))
 	}
 
-	if requiredJoin&directSettingsLinkThread != 0 && q.join&directSettingsLinkThread == 0 {
-		q.ensureJoin(directSettingsLinkThreadDialog)
-
-		q.join |= directSettingsLinkThread
-		q.builder = q.builder.InnerJoin(fmt.Sprintf(
-			"%s %s ON %s.id = %s.thread_id",
-			ThreadTable,
-			directSettingThreadAlias,
-			directSettingThreadAlias,
-			directSettingThreadDialogAlias,
-		))
+	if requiredJoin&directSettingsLinkThread == 0 || q.join&directSettingsLinkThread != 0 {
+		return
 	}
+
+	q.ensureJoin(directSettingsLinkThreadDialog)
+
+	q.join |= directSettingsLinkThread
+	q.builder = q.builder.InnerJoin(fmt.Sprintf(
+		"%s %s ON %s.id = %s.thread_id",
+		ThreadTable,
+		directSettingThreadAlias,
+		directSettingThreadAlias,
+		directSettingThreadDialogAlias,
+	))
 }
 
 func (q *DirectSettingsQuery) WithFields(fields []string) *DirectSettingsQuery {
@@ -132,11 +133,13 @@ func (q *DirectSettingsQuery) WithFields(fields []string) *DirectSettingsQuery {
 	for _, f := range fields {
 		if meta, ok := directSettingsFieldsMeta[f]; ok && !slices.Contains(validFields, f) {
 			validFields = append(validFields, f)
+
 			q.ensureJoin(meta.requiresJoin)
 		}
 	}
 
 	q.fields = validFields
+
 	return q
 }
 
@@ -170,6 +173,7 @@ func (q *DirectSettingsQuery) WithSort(sortFields ...string) *DirectSettingsQuer
 	}
 
 	q.sortFields = validSortFields
+
 	return q
 }
 
@@ -177,20 +181,23 @@ func (q *DirectSettingsQuery) WithIDFilter(ids ...uuid.UUID) *DirectSettingsQuer
 	if len(ids) != 0 {
 		q.builder = q.builder.Where(squirrel.Eq{directSettingAlias + ".id": ids})
 	}
+
 	return q
 }
 
-func (q *DirectSettingsQuery) WithDomainIDFilter(domainIds ...int) *DirectSettingsQuery {
-	if len(domainIds) != 0 {
-		q.builder = q.builder.Where(squirrel.Eq{directSettingAlias + ".domain_id": domainIds})
+func (q *DirectSettingsQuery) WithDomainIDFilter(domainIDs ...int) *DirectSettingsQuery {
+	if len(domainIDs) != 0 {
+		q.builder = q.builder.Where(squirrel.Eq{directSettingAlias + ".domain_id": domainIDs})
 	}
+
 	return q
 }
 
-func (q *DirectSettingsQuery) WithThreadDialogIDFilter(threadDialogIds ...uuid.UUID) *DirectSettingsQuery {
-	if len(threadDialogIds) != 0 {
-		q.builder = q.builder.Where(squirrel.Eq{directSettingAlias + ".thread_dialog_id": threadDialogIds})
+func (q *DirectSettingsQuery) WithThreadDialogIDFilter(threadDialogIDs ...uuid.UUID) *DirectSettingsQuery {
+	if len(threadDialogIDs) != 0 {
+		q.builder = q.builder.Where(squirrel.Eq{directSettingAlias + ".thread_dialog_id": threadDialogIDs})
 	}
+
 	return q
 }
 
@@ -200,19 +207,21 @@ func (q *DirectSettingsQuery) WithThreadIDFilter(threadIDs ...uuid.UUID) *Direct
 		q.ensureJoin(directSettingsLinkThread)
 		q.builder = q.builder.Where(squirrel.Eq{directSettingThreadAlias + ".id": threadIDs})
 	}
+
 	return q
 }
 
-func (q *DirectSettingsQuery) WithMemberIDFilter(memberIds ...uuid.UUID) *DirectSettingsQuery {
-	if len(memberIds) != 0 {
+func (q *DirectSettingsQuery) WithMemberIDFilter(memberIDs ...uuid.UUID) *DirectSettingsQuery {
+	if len(memberIDs) != 0 {
 		q.ensureJoin(directSettingsLinkThreadDialog)
-		q.builder = q.builder.Where(squirrel.Eq{directSettingThreadDialogAlias + ".member_id": memberIds})
+		q.builder = q.builder.Where(squirrel.Eq{directSettingThreadDialogAlias + ".member_id": memberIDs})
 	}
+
 	return q
 }
 
-func (q *DirectSettingsQuery) WithThreadIDMemberIDFilter(threadID uuid.UUID, memberIds ...uuid.UUID) *DirectSettingsQuery {
-	if len(memberIds) == 0 {
+func (q *DirectSettingsQuery) WithThreadIDMemberIDFilter(threadID uuid.UUID, memberIDs ...uuid.UUID) *DirectSettingsQuery {
+	if len(memberIDs) == 0 {
 		return q
 	}
 
@@ -220,7 +229,7 @@ func (q *DirectSettingsQuery) WithThreadIDMemberIDFilter(threadID uuid.UUID, mem
 
 	q.builder = q.builder.Where(squirrel.Eq{
 		directSettingThreadDialogAlias + ".thread_id": threadID,
-		directSettingThreadDialogAlias + ".member_id": memberIds,
+		directSettingThreadDialogAlias + ".member_id": memberIDs,
 	})
 
 	return q
@@ -230,7 +239,9 @@ func (q *DirectSettingsQuery) WithLimit(limit int) *DirectSettingsQuery {
 	if limit < 1 || limit > 100 {
 		limit = DefaultLimit
 	}
+
 	q.builder = q.builder.Limit(uint64(limit))
+
 	return q
 }
 
@@ -248,13 +259,17 @@ func (q *DirectSettingsQuery) ToSQL() (string, []any, error) {
 		direction := sortField[0:1]
 		fieldName := sortField[1:]
 
-		if meta, ok := directSettingsFieldsMeta[fieldName]; ok {
-			orderDir := "ASC"
-			if direction == "-" {
-				orderDir = "DESC"
-			}
-			q.builder = q.builder.OrderBy(fmt.Sprintf("%s %s", meta.sqlExpr, orderDir))
+		meta, ok := directSettingsFieldsMeta[fieldName]
+		if !ok {
+			continue
 		}
+
+		orderDir := "ASC"
+		if direction == "-" {
+			orderDir = "DESC"
+		}
+
+		q.builder = q.builder.OrderBy(fmt.Sprintf("%s %s", meta.sqlExpr, orderDir))
 	}
 
 	return q.builder.ToSql()

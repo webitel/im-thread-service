@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/jackc/pgx/v5"
+
 	"github.com/webitel/im-thread-service/internal/domain/model"
 	"github.com/webitel/im-thread-service/internal/domain/shared"
 	queryobject "github.com/webitel/im-thread-service/internal/store/query_object"
@@ -26,7 +27,7 @@ func NewDirectSettingsStore(db Querier) *directSettingsStore {
 func (d *directSettingsStore) Create(ctx context.Context, setting *model.DirectThreadSetting) (*model.DirectThreadSetting, error) {
 	query := `
 		insert into im_thread.direct_settings (
-			domain_id, thread_dialog_id, title 
+			domain_id, thread_dialog_id, title
 		)
 		values
 		(@DomainID, @ThreadDialogID, @Title)
@@ -60,12 +61,12 @@ func (d *directSettingsStore) Create(ctx context.Context, setting *model.DirectT
 }
 
 // TODO: implement
-func (d *directSettingsStore) Delete(ctx context.Context) error {
+func (d *directSettingsStore) Delete(_ context.Context) error {
 	panic("unimplemented")
 }
 
 func (d *directSettingsStore) Search(ctx context.Context, query queryobject.QueryObject) ([]*model.DirectThreadSetting, error) {
-	sql, args, err := query.ToSql()
+	sql, args, err := query.ToSQL()
 	if err != nil {
 		return nil, err
 	}
@@ -101,6 +102,6 @@ func mapDirectSettingRecordToModel(record *directSettingsRecord) *model.DirectTh
 }
 
 // TODO: implement
-func (d *directSettingsStore) Update(ctx context.Context) ([]*model.DirectThreadSetting, error) {
+func (d *directSettingsStore) Update(_ context.Context) ([]*model.DirectThreadSetting, error) {
 	panic("unimplemented")
 }

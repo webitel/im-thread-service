@@ -4,8 +4,10 @@ import (
 	"net/url"
 
 	"github.com/google/uuid"
-	"github.com/webitel/im-thread-service/internal/domain/shared"
+
 	"github.com/webitel/webitel-go-kit/pkg/errors"
+
+	"github.com/webitel/im-thread-service/internal/domain/shared"
 )
 
 type Document struct {
@@ -16,17 +18,17 @@ type Document struct {
 	URL      string
 }
 
-func (document *Document) Validate() error {
-	if document == nil {
+func (d *Document) Validate() error {
+	if d == nil {
 		return errors.InvalidArgument("document is required", errors.WithID("dto.document.validate"))
 	}
 
-	if document.ID <= 0 && document.URL == "" {
+	if d.ID <= 0 && d.URL == "" {
 		return errors.InvalidArgument("either ID or URL is reqired", errors.WithID("dto.document.validate"))
 	}
 
-	if document.URL != "" {
-		if _, err := url.Parse(document.URL); err != nil {
+	if d.URL != "" {
+		if _, err := url.Parse(d.URL); err != nil {
 			return errors.InvalidArgument("provided invalid download URL", errors.WithCause(err), errors.WithID("dto.document.validate"))
 		}
 	}

@@ -4,8 +4,10 @@ import (
 	"context"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/webitel/im-thread-service/internal/domain/model"
+
 	"github.com/webitel/webitel-go-kit/pkg/errors"
+
+	"github.com/webitel/im-thread-service/internal/domain/model"
 )
 
 type interactiveCallbackStore struct {

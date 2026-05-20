@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
 	"github.com/webitel/im-thread-service/internal/domain/event"
 	"github.com/webitel/im-thread-service/internal/domain/shared"
 )
@@ -41,6 +42,7 @@ type MessageCreate struct {
 // NewImageMessage initializes a message with image attachments and stages events.
 func NewImageMessage(in MessageCreate) *Message {
 	cleanText := prepareText(in.Body)
+
 	domainImages := make([]*MessageImage, 0, len(in.Images))
 	for _, img := range in.Images {
 		fID, _ := strconv.ParseInt(img.FileID, 10, 64)
@@ -53,10 +55,10 @@ func NewImageMessage(in MessageCreate) *Message {
 	}
 
 	msg := &Message{
-		ID:        uuid.New(),
-		ThreadID:  in.ThreadID,
-		DomainID:  in.DomainID,
-		From:      in.From,
+		ID:       uuid.New(),
+		ThreadID: in.ThreadID,
+		DomainID: in.DomainID,
+		From:     in.From,
 		Member: &ThreadDialog{
 			BaseModel: shared.BaseModel{ID: in.MemberID},
 		},
@@ -74,6 +76,7 @@ func NewImageMessage(in MessageCreate) *Message {
 // NewDocumentMessage initializes a message with document attachments and stages events.
 func NewDocumentMessage(in MessageCreate) *Message {
 	cleanText := prepareText(in.Body)
+
 	domainDocs := make([]*MessageDocument, 0, len(in.Documents))
 	for _, d := range in.Documents {
 		fID, _ := strconv.ParseInt(d.FileID, 10, 64)
@@ -112,6 +115,7 @@ func mapImagesToPayload(imgs []*MessageImage) []event.ImagePayload {
 	for _, i := range imgs {
 		res = append(res, event.ImagePayload{FileID: i.FileID, Mime: i.Mime, Name: i.Name, URL: i.URL})
 	}
+
 	return res
 }
 
@@ -120,5 +124,6 @@ func mapDocumentsToPayload(docs []*MessageDocument) []event.DocumentPayload {
 	for _, d := range docs {
 		res = append(res, event.DocumentPayload{FileID: d.FileID, Mime: d.Mime, Name: d.Name, Size: d.Size, URL: d.URL})
 	}
+
 	return res
 }

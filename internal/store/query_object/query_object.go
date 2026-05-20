@@ -9,7 +9,7 @@ import (
 )
 
 type QueryObject interface {
-	ToSql() (string, []any, error)
+	ToSQL() (string, []any, error)
 }
 
 type Entity interface {
@@ -54,11 +54,13 @@ func (q *baseQueryObject[T]) WithFields(fields []string) T {
 	for _, f := range fields {
 		if meta, ok := q.entity.FieldsMetadata()[f]; ok && !slices.Contains(validFields, f) {
 			validFields = append(validFields, f)
+
 			q.entity.EnsureJoins(meta.requiresJoin)
 		}
 	}
 
 	q.fields = validFields
+
 	return q.entity
 }
 
@@ -92,6 +94,7 @@ func (q *baseQueryObject[T]) WithSort(sortFields ...string) T {
 	}
 
 	q.sortFields = validSortFields
+
 	return q.entity
 }
 
@@ -105,6 +108,7 @@ func (q *baseQueryObject[T]) WithLimit(limit int, quota ...int) T {
 	}
 
 	q.builder = q.builder.Limit(uint64(limit) + 1)
+
 	return q.entity
 }
 
@@ -124,10 +128,11 @@ func (q *baseQueryObject[T]) escapeLikePattern(s string) string {
 	s = strings.ReplaceAll(s, "\\", "\\\\")
 	s = strings.ReplaceAll(s, "%", "\\%")
 	s = strings.ReplaceAll(s, "_", "\\_")
+
 	return s
 }
 
-func (q *baseQueryObject[T]) ToSql() (string, []any, error) {
+func (q *baseQueryObject[T]) ToSQL() (string, []any, error) {
 	if len(q.fields) < 1 {
 		q.fields = q.entity.DefaultFields()
 	}
@@ -146,13 +151,17 @@ func (q *baseQueryObject[T]) ToSql() (string, []any, error) {
 		direction := sortField[0:1]
 		fieldName := sortField[1:]
 
-		if meta, ok := q.entity.FieldsMetadata()[fieldName]; ok {
-			orderDir := "ASC"
-			if direction == "-" {
-				orderDir = "DESC"
-			}
-			q.builder = q.builder.OrderBy(fmt.Sprintf("%s %s", meta.sqlExpr, orderDir))
+		meta, ok := q.entity.FieldsMetadata()[fieldName]
+		if !ok {
+			continue
 		}
+
+		orderDir := "ASC"
+		if direction == "-" {
+			orderDir = "DESC"
+		}
+
+		q.builder = q.builder.OrderBy(fmt.Sprintf("%s %s", meta.sqlExpr, orderDir))
 	}
 
 	sql, args, err := q.builder.ToSql()

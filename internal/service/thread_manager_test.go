@@ -6,12 +6,13 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
+	"go.uber.org/mock/gomock"
+
 	mock_store "github.com/webitel/im-thread-service/gen/mocks/_internal/store"
 	"github.com/webitel/im-thread-service/internal/domain/model"
 	"github.com/webitel/im-thread-service/internal/domain/shared"
 	"github.com/webitel/im-thread-service/internal/service/dto"
 	"github.com/webitel/im-thread-service/internal/store"
-	"go.uber.org/mock/gomock"
 )
 
 func Test_thread_EnsureDirectThread(t *testing.T) {
@@ -65,6 +66,7 @@ func Test_thread_EnsureDirectThread(t *testing.T) {
 		mockThreadStore.EXPECT().Create(gomock.Any(), gomock.Any()).DoAndReturn(
 			func(ctx context.Context, m *model.Thread) (*model.Thread, error) {
 				m.ID = newThreadID
+
 				return m, nil
 			},
 		)

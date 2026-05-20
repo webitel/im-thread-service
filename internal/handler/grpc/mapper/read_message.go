@@ -9,6 +9,7 @@ func MapToReadMessageRequest(pb *impb.ReadMessageRequest) *dto.ReadMessageReques
 	if pb == nil {
 		return nil
 	}
+
 	return &dto.ReadMessageRequest{
 		MessageID: pb.GetId(),
 		ThreadID:  pb.GetThreadId(),

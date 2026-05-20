@@ -42,9 +42,10 @@ func ProvideServer(conf *config.Config, logger *slog.Logger, tls *infratls.Confi
 	}
 
 	lc.Append(fx.Hook{
-		OnStart: func(ctx context.Context) error {
+		OnStart: func(_ context.Context) error {
 			go func() {
 				logger.Info(fmt.Sprintf("listen grpc %s:%d", srv.Host(), srv.Port()))
+
 				if err := srv.Listen(); err != nil {
 					logger.Error("grpc server error", "err", err)
 				}
@@ -52,7 +53,7 @@ func ProvideServer(conf *config.Config, logger *slog.Logger, tls *infratls.Confi
 
 			return nil
 		},
-		OnStop: func(ctx context.Context) error {
+		OnStop: func(_ context.Context) error {
 			if err := srv.Shutdown(); err != nil {
 				logger.Error("error stopping grpc server", "err", err.Error())
 
@@ -131,6 +132,7 @@ func New(addr string, opts ...Option) (*Server, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	port, _ := strconv.Atoi(p)
 
 	if h == "::" {
@@ -154,7 +156,7 @@ func (s *Server) Listen() error {
 func (s *Server) Shutdown() error {
 	s.log.Debug("receive shutdown grpc")
 	err := s.listener.Close()
-	s.Server.GracefulStop()
+	s.GracefulStop()
 
 	return err
 }
@@ -176,6 +178,7 @@ func publicAddr() string {
 	if err != nil {
 		return ""
 	}
+
 	for _, i := range interfaces {
 		addresses, err := i.Addrs()
 		if err != nil {
@@ -184,6 +187,7 @@ func publicAddr() string {
 
 		for _, addr := range addresses {
 			var ip net.IP
+
 			switch v := addr.(type) {
 			case *net.IPNet:
 				ip = v.IP
@@ -203,8 +207,8 @@ func publicAddr() string {
 	return ""
 }
 
-func isPublicIP(IP net.IP) bool {
-	if IP.IsLoopback() || IP.IsLinkLocalMulticast() || IP.IsLinkLocalUnicast() {
+func isPublicIP(ip net.IP) bool {
+	if ip.IsLoopback() || ip.IsLinkLocalMulticast() || ip.IsLinkLocalUnicast() {
 		return false
 	}
 

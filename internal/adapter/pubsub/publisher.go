@@ -2,6 +2,7 @@ package pubsub
 
 import (
 	"github.com/ThreeDotsLabs/watermill/message"
+
 	infrapubsub "github.com/webitel/im-thread-service/infra/pubsub"
 	"github.com/webitel/im-thread-service/infra/pubsub/factory"
 )

@@ -6,10 +6,12 @@ import (
 
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/google/uuid"
+
+	"github.com/webitel/webitel-go-kit/pkg/errors"
+
 	"github.com/webitel/im-thread-service/internal/adapter/pubsub"
 	"github.com/webitel/im-thread-service/internal/domain/model"
 	"github.com/webitel/im-thread-service/internal/store"
-	"github.com/webitel/webitel-go-kit/pkg/errors"
 )
 
 type threadVariables struct {
@@ -28,12 +30,14 @@ func (tv *threadVariables) Set(ctx context.Context, variables *model.SetThreadVa
 	result, err := tv.store.Set(ctx, variables)
 	if err != nil {
 		log.Error("failed to set thread variables", "error", err)
+
 		return nil, err
 	}
 
 	brokerMessage, err := prepareVariablesMessage(ctx, result)
 	if err != nil {
 		log.Error("prepare set variables broker message", "error", err)
+
 		return nil, err
 	}
 
@@ -57,6 +61,7 @@ func (tv *threadVariables) Search(ctx context.Context, query model.GetThreadVari
 	result, err := tv.store.Search(ctx, query)
 	if err != nil {
 		log.Error("search thread variables", "error", err)
+
 		return model.Page[*model.ThreadVariables]{}, err
 	}
 
@@ -69,6 +74,7 @@ func (tv *threadVariables) Locate(ctx context.Context, threadID uuid.UUID) (*mod
 	result, err := tv.store.Locate(ctx, threadID)
 	if err != nil {
 		log.Error("sql store locate", "error", err)
+
 		return nil, err
 	}
 
@@ -81,12 +87,14 @@ func (tv *threadVariables) Flush(ctx context.Context, flushCmd model.FlushVariab
 	result, err := tv.store.Flush(ctx, flushCmd)
 	if err != nil {
 		log.Error("sql store flush", "error", err)
+
 		return nil, err
 	}
 
 	brokerMessage, err := prepareVariablesMessage(ctx, result)
 	if err != nil {
 		log.Error("prepare flush variables broker message", "error", err)
+
 		return nil, err
 	}
 

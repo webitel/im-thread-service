@@ -1,19 +1,18 @@
 package service
 
 import (
+	"go.uber.org/fx"
+
 	storageclient "github.com/webitel/im-thread-service/infra/webitel/storage"
 	"github.com/webitel/im-thread-service/internal/adapter/pubsub"
-
 	"github.com/webitel/im-thread-service/internal/service/decorators"
-
-	"go.uber.org/fx"
 )
 
 var Module = fx.Module(
 	"service",
 
 	fx.Provide(
-		fx.Annotate(newBaseRpcProvidersAdapter, fx.As(new(ProvidersAdapter))),
+		fx.Annotate(newBaseRPCProvidersAdapter, fx.As(new(ProvidersAdapter))),
 		NewMessageService,
 		NewThreadService,
 		NewThreadPermissionService,

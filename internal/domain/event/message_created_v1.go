@@ -33,9 +33,7 @@ type OutboxEvent struct {
 	Metadata map[string]string
 }
 
-var (
-	_ Outboxer = (*MessageCreated)(nil)
-)
+var _ Outboxer = (*MessageCreated)(nil)
 
 type MessageCreated struct {
 	MessageID   uuid.UUID           `json:"message_id"`

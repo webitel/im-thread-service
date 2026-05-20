@@ -6,11 +6,13 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+
+	"github.com/webitel/webitel-go-kit/pkg/errors"
+
 	"github.com/webitel/im-thread-service/internal/domain/model"
 	"github.com/webitel/im-thread-service/internal/domain/shared"
 	queryobject "github.com/webitel/im-thread-service/internal/store/query_object"
 	"github.com/webitel/im-thread-service/internal/utils"
-	"github.com/webitel/webitel-go-kit/pkg/errors"
 )
 
 // [D]ata [A]cess [O]bjects
@@ -77,7 +79,7 @@ func (s *threadStore) Create(ctx context.Context, req *model.Thread) (*model.Thr
 }
 
 func (s *threadStore) Search(ctx context.Context, query queryobject.QueryObject) ([]*model.Thread, error) {
-	sql, args, err := query.ToSql()
+	sql, args, err := query.ToSQL()
 	if err != nil {
 		return nil, errors.Internal("preparing search thread query", errors.WithCause(err), errors.WithID("postgres.thread_store.search"))
 	}
@@ -100,7 +102,7 @@ func (s *threadStore) Search(ctx context.Context, query queryobject.QueryObject)
 }
 
 func (s *threadStore) Get(ctx context.Context, query queryobject.QueryObject) (*model.Thread, error) {
-	sql, args, err := query.ToSql()
+	sql, args, err := query.ToSQL()
 	if err != nil {
 		return nil, errors.Internal("preparing get thread query", errors.WithCause(err), errors.WithID("postgres.thread_store.get"))
 	}
@@ -115,6 +117,7 @@ func (s *threadStore) Get(ctx context.Context, query queryobject.QueryObject) (*
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, errors.NotFound("thread not found", errors.WithID("postgres.thread_store.get"))
 		}
+
 		return nil, errors.Internal("collecting get thread record", errors.WithCause(err), errors.WithID("postgres.thread_store.get"))
 	}
 
@@ -165,7 +168,7 @@ func (s *threadStore) ResolveThread(ctx context.Context, q model.ResolveThreadQu
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			if q.To.Type == shared.PeerContact { // in case of contact thread no rows means that it`s first message for contact
-				return nil, nil
+				return nil, nil //nolint:nilnil
 			}
 
 			return nil, errors.Forbidden(
@@ -240,14 +243,14 @@ func prepareResolveThreadQuery(q model.ResolveThreadQuery) (string, pgx.NamedArg
 }
 
 // TODO: rewrite to soft delete logic!
-func (t *threadStore) Delete(ctx context.Context, threadID uuid.UUID) error {
+func (s *threadStore) Delete(ctx context.Context, threadID uuid.UUID) error {
 	if threadID == uuid.Nil {
 		return errors.InvalidArgument("thread id is required", errors.WithID("postgres.thread_store.delete"))
 	}
 
 	query := `DELETE FROM im_thread.thread WHERE id = $1`
 
-	cmdTag, err := t.db.Exec(ctx, query, threadID)
+	cmdTag, err := s.db.Exec(ctx, query, threadID)
 	if err != nil {
 		return errors.Internal("executing delete thread query", errors.WithCause(err), errors.WithID("postgres.thread_store.delete"), errors.WithValue("thread_id", threadID.String()))
 	}
