@@ -22,11 +22,12 @@ type ThreadManager interface {
 }
 
 type MessageService struct {
-	uow            store.UnitOfWork
-	logger         *slog.Logger
-	threader       ThreadManager
-	contactClient  *imcontact.Client
-	mediaProcessor MediaProcessor
+	uow              store.UnitOfWork
+	logger           *slog.Logger
+	threader         ThreadManager
+	contactClient    *imcontact.Client
+	mediaProcessor   MediaProcessor
+	providersAdapter ProvidersAdapter
 }
 
 func NewMessageService(
@@ -35,14 +36,20 @@ func NewMessageService(
 	threader ThreadManager,
 	contactClient *imcontact.Client,
 	mediaProcessor MediaProcessor,
+	providersAdapter ProvidersAdapter,
 ) *MessageService {
 	return &MessageService{
-		uow:            uow,
-		logger:         logger,
-		threader:       threader,
-		contactClient:  contactClient,
-		mediaProcessor: mediaProcessor,
+		uow:              uow,
+		logger:           logger,
+		threader:         threader,
+		contactClient:    contactClient,
+		mediaProcessor:   mediaProcessor,
+		providersAdapter: providersAdapter,
 	}
+}
+
+func (s *MessageService) sendMessageToExternalProvider(ctx context.Context, message *model.Message) error {
+	return s.providersAdapter.SendMessage(ctx, message)
 }
 
 func (s *MessageService) SendText(ctx context.Context, in *dto.SendTextRequest) (*dto.SendTextResponse, error) {
@@ -112,6 +119,10 @@ func (s *MessageService) SendText(ctx context.Context, in *dto.SendTextRequest) 
 		return nil, errors.Internal("error saving text message", errors.WithCause(err), errors.WithID("service.message.send_text"))
 	}
 
+	if err = s.sendMessageToExternalProvider(ctx, msg); err != nil {
+		log.Error("sending text message to external providers", "error", err)
+	}
+
 	return &dto.SendTextResponse{ID: msg.ID, To: in.To}, nil
 }
 
@@ -175,6 +186,10 @@ func (s *MessageService) SendImage(ctx context.Context, in *dto.SendImageRequest
 	if err != nil {
 		s.logger.ErrorContext(ctx, "send image failed", "err", err)
 		return nil, err
+	}
+
+	if err = s.sendMessageToExternalProvider(ctx, msg); err != nil {
+		s.logger.Error("sending image message to external providers", "error", err)
 	}
 
 	return &dto.SendImageResponse{ID: msg.ID, To: in.To}, nil
@@ -261,6 +276,10 @@ func (s *MessageService) SendDocument(ctx context.Context, in *dto.SendDocumentR
 		return nil, err
 	}
 
+	if err = s.sendMessageToExternalProvider(ctx, msg); err != nil {
+		log.Error("sending document message to external providers", "error", err)
+	}
+
 	return &dto.SendDocumentResponse{ID: msg.ID, To: in.To}, nil
 }
 
@@ -320,6 +339,10 @@ func (s *MessageService) SendLocation(ctx context.Context, msg *model.Message) (
 		return nil, err
 	}
 
+	if err = s.sendMessageToExternalProvider(ctx, msg); err != nil {
+		log.Error("sending location message to external providers", "error", err)
+	}
+
 	return savedMsg, err
 }
 
@@ -348,6 +371,10 @@ func (s *MessageService) SendContact(ctx context.Context, msg *model.Message) (*
 	if err != nil {
 		log.ErrorContext(ctx, "contact_transaction_failed", "err", err)
 		return nil, err
+	}
+
+	if err = s.sendMessageToExternalProvider(ctx, msg); err != nil {
+		log.Error("sending contact message to external providers", "error", err)
 	}
 
 	return savedMsg, err
@@ -396,6 +423,10 @@ func (s *MessageService) SendInteractive(ctx context.Context, msg *model.Message
 	if err != nil {
 		log.ErrorContext(ctx, "transaction_failed", "err", err)
 		return nil, err
+	}
+
+	if err = s.sendMessageToExternalProvider(ctx, msg); err != nil {
+		log.Error("sending interactive message to external providers", "error", err)
 	}
 
 	return savedMsg, nil

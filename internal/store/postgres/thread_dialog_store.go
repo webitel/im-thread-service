@@ -37,30 +37,30 @@ type threadDialog struct {
 	CanChangeMembersPermissions bool             `db:"can_change_members_permissions"`
 	CanRemoveMembers            bool             `db:"can_remove_members"`
 	CanChangeThreadInfo         bool             `db:"can_change_thread_info"`
+	Via                         *string          `db:"via"`
 
 	Title string `db:"title"`
 }
 
 func (t *threadDialogStore) Create(ctx context.Context, member *model.ThreadDialogExtended) (*model.ThreadDialogExtended, error) {
-
 	if member == nil {
-		return nil, errors.New("new member required")
+		return nil, errors.InvalidArgument("new member required", errors.WithID("postgres.thread_dialog_store.create"))
 	}
 
 	if member.ThreadID == uuid.Nil {
-		return nil, errors.New("threadID cannot be nil")
+		return nil, errors.InvalidArgument("threadID cannot be nil", errors.WithID("postgres.thread_dialog_store.create"))
 	}
 
 	if member.ContactID == uuid.Nil {
-		return nil, errors.New("newMemberID cannot be nil")
+		return nil, errors.InvalidArgument("newMemberID cannot be nil", errors.WithID("postgres.thread_dialog_store.create"))
 	}
 
 	var (
 		query = `
 		WITH inserted_dialog AS
 		(
-			 INSERT INTO im_thread.thread_dialog(domain_id, member_id, thread_id, thread_role, invited_by)
-			(SELECT domain_id, @MemberID, id, @ThreadRole, @InvitedBy FROM im_thread.thread WHERE id = @ThreadID LIMIT 1)
+			 INSERT INTO im_thread.thread_dialog(domain_id, member_id, thread_id, thread_role, invited_by, via)
+			(SELECT domain_id, @MemberID, id, @ThreadRole, @InvitedBy, @Via FROM im_thread.thread WHERE id = @ThreadID LIMIT 1)
 			RETURNING *
 		),
 		inserted_permissions AS
@@ -101,14 +101,29 @@ func (t *threadDialogStore) Create(ctx context.Context, member *model.ThreadDial
 		"CanRemoveMembers":            member.Permissions.CanRemoveMembers,
 		"CanChangeThreadInfo":         member.Permissions.CanChangeThreadInfo,
 		"ThreadTitle":                 member.Settings.Title,
+		"Via":                         member.Via,
 	})
 	if err != nil {
-		return nil, err
+		return nil, errors.Internal("creating thread dialog", errors.WithCause(err), errors.WithID("postgres.thread_dialog_store.create"))
 	}
 
 	result, err := pgx.CollectExactlyOneRow(rows, pgx.RowToAddrOfStructByNameLax[threadDialog])
 	if err != nil {
-		return nil, err
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, errors.NotFound(
+				"creating thread dialog for given thread",
+				errors.WithCause(err),
+				errors.WithID("postgres.thread_dialog_store.create"),
+				errors.WithValue("thread_id", member.ThreadID.String()),
+			)
+		}
+
+		return nil, errors.Internal(
+			"collecting created thread result",
+			errors.WithCause(err),
+			errors.WithID("postgres.thread_dialog_store.create"),
+			errors.WithValue("thread_id", member.ThreadID.String()),
+		)
 	}
 
 	return mapToThreadDialogExtendedModel(result)
@@ -116,7 +131,7 @@ func (t *threadDialogStore) Create(ctx context.Context, member *model.ThreadDial
 
 func mapToThreadDialogExtendedModel(dialog *threadDialog) (*model.ThreadDialogExtended, error) {
 	if dialog == nil {
-		return nil, errors.New("thread dialog cannot be nil")
+		return nil, errors.InvalidArgument("thread dialog cannot be nil", errors.WithID("postgres.thread_dialog_store.map_to_thread_dialog_extended_model"))
 	}
 
 	return &model.ThreadDialogExtended{
@@ -132,6 +147,7 @@ func mapToThreadDialogExtendedModel(dialog *threadDialog) (*model.ThreadDialogEx
 		ContactID:   dialog.ContactID,
 		ThreadID:    dialog.ThreadID,
 		ThreadRole:  dialog.Role,
+		Via:         dialog.Via,
 		Permissions: model.ThreadPermissions{
 			CanSendMessages:             dialog.CanSendMessages,
 			CanAddMembers:               dialog.CanAddMembers,

@@ -13,6 +13,7 @@ var Module = fx.Module(
 	"service",
 
 	fx.Provide(
+		fx.Annotate(newBaseRpcProvidersAdapter, fx.As(new(ProvidersAdapter))),
 		NewMessageService,
 		NewThreadService,
 		NewThreadPermissionService,

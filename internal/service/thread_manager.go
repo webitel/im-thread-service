@@ -816,16 +816,16 @@ func extendedThreadDialogToSimpleMapper(tde *model.ThreadDialogExtended) *model.
 
 func (t *ThreadManagementService) initializeDirectThreadDialogs(ctx context.Context, uow store.UnitOfWork, threadID uuid.UUID, domainID int, from, to *shared.Peer) ([]*model.ThreadDialogExtended, error) {
 	if from == nil || to == nil {
-		return nil, errors.New("from and to peers cannot be nil")
+		return nil, errors.InvalidArgument("from and to peers is required", errors.WithID("service.thread_manager.initialize_direct_thread_dialogs"))
 	}
 	if uow == nil {
-		return nil, errors.New("unit of work cannot be nil")
+		return nil, errors.InvalidArgument("unit of work cannot be nil", errors.WithID("service.thread_manager.initialize_direct_thread_dialogs"))
 	}
 	if to.Identity == nil || from.Identity == nil {
-		return nil, errors.New("from and to peers must have identity")
+		return nil, errors.InvalidArgument("from and to peers must have identity", errors.WithID("service.thread_manager.initialize_direct_thread_dialogs"))
 	}
 	if to.Identity.Name == "" || from.Identity.Name == "" {
-		return nil, errors.New("from and to peers must have identity with non empty name")
+		return nil, errors.InvalidArgument("from and to peers must have identity with non empty name", errors.WithID("service.thread_manager.initialize_direct_thread_dialogs"))
 	}
 
 	initiatorRole := model.RoleOwner
@@ -850,6 +850,7 @@ func (t *ThreadManagementService) initializeDirectThreadDialogs(ctx context.Cont
 			ContactID:   from.ID,
 			ThreadRole:  initiatorRole,
 			Permissions: *initiatorPermissions,
+			Via:         from.ResolveVia(),
 			Settings: model.BaseThreadSetting{
 				Title: to.Identity.Name,
 			},
@@ -858,6 +859,7 @@ func (t *ThreadManagementService) initializeDirectThreadDialogs(ctx context.Cont
 			BaseModel:   baseModel,
 			ThreadID:    threadID,
 			ContactID:   to.ID,
+			Via:         to.ResolveVia(),
 			ThreadRole:  peerRole,
 			Permissions: *targetPermissions,
 			Settings: model.BaseThreadSetting{

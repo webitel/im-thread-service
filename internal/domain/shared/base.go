@@ -22,6 +22,7 @@ const (
 type Identity struct {
 	Issuer string
 	Name   string
+	Via    *string
 }
 
 type Peer struct {
@@ -42,6 +43,15 @@ func (p Peer) ResolveThreadID() *uuid.UUID {
 		return nil
 	}
 	return &p.ID
+}
+
+func (p Peer) ResolveVia() *string {
+	identity := p.Identity
+	if identity == nil {
+		return nil
+	}
+
+	return identity.Via
 }
 
 type BaseModel struct {

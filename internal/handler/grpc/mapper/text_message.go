@@ -33,6 +33,7 @@ func MapPeerFromProto(pb *impb.Peer) shared.Peer {
 		p.Identity = &shared.Identity{
 			Issuer: pb.GetIdentity().GetIssuer(),
 			Name:   pb.GetIdentity().GetName(),
+			Via:    pb.GetIdentity().Via,
 		}
 	case *impb.Peer_GroupId:
 		p.ID, _ = uuid.Parse(kind.GroupId)
@@ -43,11 +44,6 @@ func MapPeerFromProto(pb *impb.Peer) shared.Peer {
 	case *impb.Peer_ThreadId:
 		p.ID, _ = uuid.Parse(kind.ThreadId)
 		p.Type = shared.PeerThread
-	}
-
-	p.Identity = &shared.Identity{
-		Issuer: pb.GetIdentity().GetIssuer(),
-		Name:   pb.GetIdentity().GetName(),
 	}
 
 	return p

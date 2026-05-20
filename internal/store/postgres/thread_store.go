@@ -202,7 +202,8 @@ func prepareResolveThreadQuery(q model.ResolveThreadQuery) (string, pgx.NamedArg
 					jsonb_build_object(
 						'id', td3.id,
 						'member_role', td3.thread_role,
-						'member_id', td3.member_id
+						'member_id', td3.member_id,
+						'via', td3.via
 					)
 				) as members
 				from im_thread.thread_dialog td3
@@ -223,12 +224,14 @@ func prepareResolveThreadQuery(q model.ResolveThreadQuery) (string, pgx.NamedArg
 					where td_check.thread_id = t.id
 					  and td_check.member_id = @FromID::uuid
 					  and td_check.deleted_at is null
+					  and (@FromVia::text is null or td_check.via = @FromVia::text)
 				)
 			limit 1;
 	`
 
 	args := pgx.NamedArgs{
 		"FromID":     q.From.ResolveContactID(),
+		"FromVia":    q.From.ResolveVia(),
 		"ToPeerID":   q.To.ResolveContactID(),
 		"ToThreadID": q.To.ResolveThreadID(),
 	}

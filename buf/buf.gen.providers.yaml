@@ -1,0 +1,25 @@
+version: v2
+managed:
+  enabled: true
+  override:
+    - file_option: go_package
+      value: github.com/webitel/protos/gen/go/im/provider/v1;provider
+  disable:
+    - module: buf.build/googleapis/googleapis
+    - module: buf.build/bufbuild/protovalidate
+plugins:
+  - remote: buf.build/protocolbuffers/go:v1.34.1
+    out: ../gen/go
+    opt:
+      - module=github.com/webitel/protos/gen/go/im
+
+  - remote: buf.build/grpc/go:v1.5.1
+    out: ../gen/go
+    opt:
+      - module=github.com/webitel/protos/gen/go/im
+
+inputs:
+  - git_repo: https://github.com/webitel/protos.git
+    branch: main
+    subdir: im
+    depth: 1

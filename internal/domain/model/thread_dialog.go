@@ -17,37 +17,63 @@ const (
 	RoleOwner
 )
 
-type (
-	ThreadDialogExtended struct {
-		shared.BaseModel
+type ThreadDialogExtended struct {
+	shared.BaseModel
 
-		ContactID   uuid.UUID  `json:"member_id" db:"member_id"`
-		ThreadID    uuid.UUID  `json:"thread_id" db:"thread_id"`
-		ThreadRole  ThreadRole `json:"member_role" db:"thread_role"`
-		DeletedAt   *time.Time `json:"deleted_at" db:"deleted_at"`
-		InvitedBy   *uuid.UUID `json:"invited_by" db:"invited_by"`
-		LeaveReason *string    `json:"leave_reason" db:"leave_reason"`
+	ContactID   uuid.UUID  `json:"member_id" db:"member_id"`
+	ThreadID    uuid.UUID  `json:"thread_id" db:"thread_id"`
+	ThreadRole  ThreadRole `json:"member_role" db:"thread_role"`
+	DeletedAt   *time.Time `json:"deleted_at" db:"deleted_at"`
+	InvitedBy   *uuid.UUID `json:"invited_by" db:"invited_by"`
+	LeaveReason *string    `json:"leave_reason" db:"leave_reason"`
+	Via         *string    `json:"via,omitempty" db:"via"`
 
-		Permissions ThreadPermissions `json:"permissions" db:"permissions"`
-		Settings    BaseThreadSetting `json:"settings" db:"settings"`
+	Permissions ThreadPermissions `json:"permissions" db:"permissions"`
+	Settings    BaseThreadSetting `json:"settings" db:"settings"`
+}
+
+type ThreadDialog struct {
+	shared.BaseModel
+
+	ContactID   uuid.UUID  `json:"member_id" db:"member_id"`
+	ThreadID    uuid.UUID  `json:"thread_id" db:"thread_id"`
+	ThreadRole  ThreadRole `json:"member_role" db:"thread_role"`
+	DeletedAt   *time.Time `json:"deleted_at" db:"deleted_at"`
+	InvitedBy   *uuid.UUID `json:"invited_by" db:"invited_by"`
+	LeaveReason *string    `json:"leave_reason" db:"leave_reason"`
+	Via         *string    `json:"via,omitempty" db:"via"`
+}
+
+type ThreadDialogs []*ThreadDialog
+
+type ExternalPeerPair struct {
+	ContactID uuid.UUID
+	Via       string
+}
+
+func (threadDialogs ThreadDialogs) ExtractExternalPeers() []*ExternalPeerPair {
+	if len(threadDialogs) == 0 {
+		return nil
 	}
-	ThreadDialog struct {
-		shared.BaseModel
 
-		ContactID   uuid.UUID  `json:"member_id" db:"member_id"`
-		ThreadID    uuid.UUID  `json:"thread_id" db:"thread_id"`
-		ThreadRole  ThreadRole `json:"member_role" db:"thread_role"`
-		DeletedAt   *time.Time `json:"deleted_at" db:"deleted_at"`
-		InvitedBy   *uuid.UUID `json:"invited_by" db:"invited_by"`
-		LeaveReason *string    `json:"leave_reason" db:"leave_reason"`
+	var external []*ExternalPeerPair
+	for _, threadDialog := range threadDialogs {
+		if threadDialog.Via != nil {
+			external = append(external, &ExternalPeerPair{
+				ContactID: threadDialog.ContactID,
+				Via:       *threadDialog.Via,
+			})
+		}
 	}
 
-	DirectThreadDialog struct {
-		ThreadDialogExtended
+	return external
+}
 
-		Settings *DirectThreadSetting
-	}
-)
+type DirectThreadDialog struct {
+	ThreadDialogExtended
+
+	Settings *DirectThreadSetting
+}
 
 type CreateDirectThreadDialogRequest struct {
 	DomainID int
