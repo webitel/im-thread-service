@@ -107,6 +107,9 @@ func (storageProcessor *storageProcessor) FetchFileLinksWithMetadata(ctx context
 
 	for _, file := range filesWithID {
 		f := file
+		if f.GetID() <= 0 {
+			continue
+		}
 
 		g.Go(func() error {
 			fileID := f.GetID()
