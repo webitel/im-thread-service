@@ -63,7 +63,7 @@ func (a *baseRPCProvidersAdapter) SendMessage(ctx context.Context, message *mode
 				_, err = a.providersClient.SendDocument(ctx, &provider.ProviderSendDocumentRequest{
 					GateId:         externalPeer.Via,
 					ExternalUserId: userID,
-					Document:       extractFirstFile(message.Documents),
+					Documents:      extratcFiles(message.Documents),
 					Caption:        message.Body,
 				})
 
@@ -71,7 +71,7 @@ func (a *baseRPCProvidersAdapter) SendMessage(ctx context.Context, message *mode
 				_, err = a.providersClient.SendImage(ctx, &provider.ProviderSendImageRequest{
 					GateId:         externalPeer.Via,
 					ExternalUserId: userID,
-					Image:          extractFirstFile(message.Images),
+					Images:         extratcFiles(message.Images),
 					Caption:        message.Body,
 				})
 
@@ -111,13 +111,17 @@ func (a *baseRPCProvidersAdapter) SendMessage(ctx context.Context, message *mode
 	return nil
 }
 
-func extractFirstFile[T AttachmentProcessor](media []T) *provider.ProviderFile {
-	if len(media) == 0 {
-		return nil
+func extratcFiles[T AttachmentProcessor](files []T) []*provider.ProviderFile {
+	providerFiles := make([]*provider.ProviderFile, 0, len(files))
+
+	for _, file := range files {
+		providerFiles = append(providerFiles, extractFile(file))
 	}
 
-	first := media[0]
+	return providerFiles
+}
 
+func extractFile[T AttachmentProcessor](first T) *provider.ProviderFile {
 	return &provider.ProviderFile{
 		Id:       strconv.Itoa(int(first.GetID())),
 		Url:      first.GetURL(),
