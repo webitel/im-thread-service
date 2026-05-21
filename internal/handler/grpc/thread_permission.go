@@ -8,9 +8,7 @@ import (
 	"github.com/webitel/im-thread-service/internal/handler/grpc/mapper"
 )
 
-var (
-	_ impb.ThreadPermissionManagementServer = &ThreadPermissionManagementServer{}
-)
+var _ impb.ThreadPermissionManagementServer = &ThreadPermissionManagementServer{}
 
 type ThreadPermissionManagementService interface {
 	Get(ctx context.Context, req *model.GetThreadPermissionRequest) ([]*model.ThreadPermission, error)
@@ -34,7 +32,6 @@ func NewThreadPermissionServer(threadManager ThreadPermissionManagementService) 
 }
 
 func (t *ThreadPermissionManagementServer) GetThreadPermissions(ctx context.Context, req *impb.GetThreadPermissionsRequest) (*impb.GetThreadPermissionsResponse, error) {
-
 	converted, err := t.inConverter.ConvertGetThreadPermissionRequest(req)
 	if err != nil {
 		return nil, err

@@ -87,36 +87,43 @@ func NewThreadCreatedBuilder() *ThreadCreatedBuilder {
 
 func (b *ThreadCreatedBuilder) WithID(id uuid.UUID) *ThreadCreatedBuilder {
 	b.event.ID = id
+
 	return b
 }
 
 func (b *ThreadCreatedBuilder) WithDomainID(domainID int32) *ThreadCreatedBuilder {
 	b.event.DomainID = domainID
+
 	return b
 }
 
 func (b *ThreadCreatedBuilder) WithCreatedAt(createdAt time.Time) *ThreadCreatedBuilder {
 	b.event.CreatedAt = createdAt
+
 	return b
 }
 
 func (b *ThreadCreatedBuilder) WithSubject(subject string) *ThreadCreatedBuilder {
 	b.event.Subject = subject
+
 	return b
 }
 
 func (b *ThreadCreatedBuilder) WithRecipient(recipient *Recipient) *ThreadCreatedBuilder {
 	b.event.Recipient = recipient
+
 	return b
 }
 
 func (b *ThreadCreatedBuilder) WithKind(kind string) *ThreadCreatedBuilder {
 	b.event.Kind = kind
+
 	return b
 }
 
 func (b *ThreadCreatedBuilder) WithMembers(members []*ThreadMember) *ThreadCreatedBuilder {
 	b.event.Members = members
+
 	return b
 }
 

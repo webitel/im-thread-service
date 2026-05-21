@@ -7,6 +7,7 @@ import (
 	"github.com/ThreeDotsLabs/watermill"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+
 	"github.com/webitel/im-thread-service/internal/store"
 )
 
@@ -80,6 +81,7 @@ func (u *unitOfWork) Messages() store.MessageStore {
 	if u.messageStore == nil {
 		u.messageStore = NewMessageStore(u.querier)
 	}
+
 	return u.messageStore
 }
 
@@ -87,6 +89,7 @@ func (u *unitOfWork) Outbox() store.OutboxStore {
 	if u.outboxStore == nil {
 		u.outboxStore = NewOutboxStore(u.querier, u.wmlogger)
 	}
+
 	return u.outboxStore
 }
 
@@ -134,6 +137,7 @@ func (u *unitOfWork) WithinTransaction(ctx context.Context, fn func(ctx context.
 	defer func() {
 		if p := recover(); p != nil {
 			_ = tx.Rollback(ctx) // [ROLLBACK]
+
 			panic(p)
 		}
 	}()
@@ -143,6 +147,7 @@ func (u *unitOfWork) WithinTransaction(ctx context.Context, fn func(ctx context.
 		if rbErr := tx.Rollback(ctx); rbErr != nil { // [ROLLBACK]
 			return fmt.Errorf("tx error: %w, rollback error: %v", err, rbErr)
 		}
+
 		return err
 	}
 

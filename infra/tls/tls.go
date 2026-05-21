@@ -36,6 +36,7 @@ func ProvideTLSConfig(cfg *config.Config) (*Config, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	conf.Client, err = Load(connConfig.Client, tls.NoClientCert)
 	if err != nil {
 		return nil, err
@@ -54,6 +55,7 @@ func Load(connConfig config.TLSConfig, authType tls.ClientAuthType) (*tls.Config
 	if err != nil {
 		return nil, err
 	}
+
 	caCertPool := x509.NewCertPool()
 	caCertPool.AppendCertsFromPEM(caCert)
 

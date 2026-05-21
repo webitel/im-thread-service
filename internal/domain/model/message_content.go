@@ -7,9 +7,11 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
+	"github.com/webitel/webitel-go-kit/pkg/errors"
+
 	"github.com/webitel/im-thread-service/internal/domain/event"
 	"github.com/webitel/im-thread-service/internal/domain/shared"
-	"github.com/webitel/webitel-go-kit/pkg/errors"
 )
 
 type MessageSystem struct {
@@ -44,6 +46,7 @@ func (m *MessageInteractive) Value() (driver.Value, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	return payload, nil
 }
 
@@ -52,6 +55,7 @@ func (m *MessageInteractive) Scan(value any) error {
 	if !ok {
 		return errors.Internal("error scaning interactive message")
 	}
+
 	return json.Unmarshal(payload, m)
 }
 
@@ -121,6 +125,7 @@ func (c *InteractiveCallback) WithCreatedEvent() *InteractiveCallback {
 		CallbackData: c.CallbackData,
 		ReactedAt:    c.ReactedAt,
 	})
+
 	return c
 }
 

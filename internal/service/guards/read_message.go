@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
+
 	"github.com/webitel/im-thread-service/internal/service/dto"
 )
 
@@ -23,6 +24,7 @@ func ValidateReadMessage(request *dto.ReadMessageRequest) error {
 			return err
 		}
 	}
+
 	return nil
 }
 
@@ -32,6 +34,7 @@ func checkNilReadRequest() ReadMessageGuard {
 		if req == nil {
 			return errors.New("request is nil")
 		}
+
 		return nil
 	}
 }
@@ -43,6 +46,7 @@ func checkReadIdentifiers() ReadMessageGuard {
 		if req.MessageID == "" {
 			return errors.New("message id is required")
 		}
+
 		if _, err := uuid.Parse(req.MessageID); err != nil {
 			return fmt.Errorf("invalid message id format: %w", err)
 		}
@@ -51,6 +55,7 @@ func checkReadIdentifiers() ReadMessageGuard {
 		if req.ThreadID == "" {
 			return errors.New("thread id is required")
 		}
+
 		if _, err := uuid.Parse(req.ThreadID); err != nil {
 			return fmt.Errorf("invalid thread id format: %w", err)
 		}

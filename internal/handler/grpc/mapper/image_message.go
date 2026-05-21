@@ -40,6 +40,7 @@ func MapToSendImageResponse(out *dto.SendImageResponse) *impb.SendImageResponse 
 	if out == nil {
 		return nil
 	}
+
 	return &impb.SendImageResponse{
 		Id: out.ID.String(),
 		To: MapPeerToProto(out.To),

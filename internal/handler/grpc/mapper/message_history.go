@@ -2,37 +2,38 @@ package mapper
 
 import (
 	"github.com/google/uuid"
+	"google.golang.org/protobuf/types/known/structpb"
+
 	impb "github.com/webitel/im-thread-service/gen/go/thread/v1"
 	"github.com/webitel/im-thread-service/internal/domain/model"
 	"github.com/webitel/im-thread-service/internal/service/dto"
 	"github.com/webitel/im-thread-service/internal/utils"
 	"github.com/webitel/im-thread-service/internal/utils/set"
-	"google.golang.org/protobuf/types/known/structpb"
 )
 
 func MapSearchMessageHistoryRequest2HistoryMessageInputDTO(mhr *impb.SearchMessageHistoryRequest) *dto.HistoryMessageInputDTO {
 	var (
-		ids       = utils.Map(mhr.Ids, utils.IdsParser)
-		threadIds = utils.Map([]string{mhr.ThreadId}, utils.IdsParser)
-		senderIds = utils.Map(mhr.SenderIds, utils.IdsParser)
-		types     = utils.Map(mhr.Types, func(i int32) int { return int(i) })
+		ids       = utils.Map(mhr.GetIds(), utils.IDsParser)
+		threadIDs = utils.Map([]string{mhr.GetThreadId()}, utils.IDsParser)
+		senderIDs = utils.Map(mhr.GetSenderIds(), utils.IDsParser)
+		types     = utils.Map(mhr.GetTypes(), func(i int32) int { return int(i) })
 		cursor    *dto.HistoryMessageCursor
 	)
 
-	if mhr.Cursor != nil {
+	if mhr.GetCursor() != nil {
 		cursor = new(dto.HistoryMessageCursor)
 		{
-			id, _ := uuid.Parse(mhr.Cursor.Id)
-			cursor.Id = id
+			id, _ := uuid.Parse(mhr.GetCursor().GetId())
+			cursor.ID = id
 			cursor.Direction = mhr.GetCursor().GetBefore()
 		}
 	}
 
 	return &dto.HistoryMessageInputDTO{
-		Fields:    mhr.Fields,
-		Ids:       ids,
-		ThreadIds: threadIds,
-		SenderIds: senderIds,
+		Fields:    mhr.GetFields(),
+		IDs:       ids,
+		ThreadIDs: threadIDs,
+		SenderIDs: senderIDs,
 		Size:      int(mhr.GetSize()),
 		Types:     types,
 		Cursor:    cursor,
@@ -241,6 +242,7 @@ func mapContact(contact *model.MessageContact) *impb.Contact {
 	if contact == nil {
 		return nil
 	}
+
 	return &impb.Contact{
 		Name:        contact.Name,
 		Email:       contact.Email,
@@ -249,9 +251,7 @@ func mapContact(contact *model.MessageContact) *impb.Contact {
 }
 
 func GetUniqueFrom(messages []*model.Message) []*impb.ThreadMember {
-	var (
-		set = set.New[model.ThreadDialog](0)
-	)
+	set := set.New[model.ThreadDialog](0)
 
 	for _, message := range messages {
 		if mem := message.Member; mem != nil {
@@ -260,6 +260,7 @@ func GetUniqueFrom(messages []*model.Message) []*impb.ThreadMember {
 	}
 
 	threadConverter := new(ThreadOutConverter)
+
 	return utils.Map(set.Slice(), func(p model.ThreadDialog) *impb.ThreadMember {
 		role := threadConverter.ConvertThreadRole(p.ThreadRole)
 

@@ -7,10 +7,12 @@ import (
 	"github.com/georgysavva/scany/v2/pgxscan"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+
+	"github.com/webitel/webitel-go-kit/pkg/errors"
+
 	"github.com/webitel/im-thread-service/internal/domain/model"
 	"github.com/webitel/im-thread-service/internal/domain/shared"
 	"github.com/webitel/im-thread-service/internal/utils"
-	"github.com/webitel/webitel-go-kit/pkg/errors"
 )
 
 type (
@@ -46,10 +48,12 @@ func NewDirectThreadDialogOrchestration(db Querier) *directThreadDialogOrchestra
 		db: db,
 	}
 }
+
 func (d *directThreadDialogOrchestration) InitializeFullDirectThread(ctx context.Context, req *model.CreateDirectThreadDialogRequest) ([]*model.DirectThreadDialog, error) {
 	if req == nil {
 		return nil, errors.InvalidArgument("request cannot be nil")
 	}
+
 	query := `
 		with inserted_dialogs as (
 			insert into im_thread.thread_dialog (
@@ -117,9 +121,7 @@ func (d *directThreadDialogOrchestration) InitializeFullDirectThread(ctx context
 		return nil, err
 	}
 
-	result := utils.Map(records, func(tdr *threadDialogRecord) *model.DirectThreadDialog {
-		return mapThreadDialogRecordToModel(tdr)
-	})
+	result := utils.Map(records, mapThreadDialogRecordToModel)
 
 	return result, nil
 }
@@ -204,12 +206,13 @@ func (d *directThreadDialogOrchestration) InitializePermissions(ctx context.Cont
 	if err != nil {
 		return nil, err
 	}
+
 	var perm model.ThreadPermissions
+
 	err = pgxscan.ScanOne(&perm, rows)
 	if err != nil {
 		return nil, err
 	}
 
 	return &perm, nil
-
 }

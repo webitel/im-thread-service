@@ -27,6 +27,7 @@ func NewMessageHistoryServer(messageHistorySearcher MessageHistoryService) *Mess
 		messageHistorySearcher: messageHistorySearcher,
 	}
 }
+
 func (s *MessageHistoryServer) SearchThreadMessagesHistory(ctx context.Context, req *impb.SearchMessageHistoryRequest) (*impb.SearchMessageHistoryResponse, error) {
 	hmiDTO := mapper.MapSearchMessageHistoryRequest2HistoryMessageInputDTO(req)
 

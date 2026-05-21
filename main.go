@@ -1,7 +1,7 @@
 package main
 
 import (
-	"fmt"
+	"log/slog"
 
 	"github.com/webitel/im-thread-service/cmd"
 )
@@ -10,7 +10,8 @@ import (
 
 func main() {
 	if err := cmd.Run(); err != nil {
-		fmt.Println(err.Error())
+		slog.Error("running cmd", "error", err)
+
 		return
 	}
 }

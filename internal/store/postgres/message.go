@@ -2,16 +2,17 @@ package postgres
 
 import (
 	"context"
-
 	"fmt"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+
+	"github.com/webitel/webitel-go-kit/pkg/errors"
+
 	"github.com/webitel/im-thread-service/internal/domain/model"
 	"github.com/webitel/im-thread-service/internal/store"
 	queryobject "github.com/webitel/im-thread-service/internal/store/query_object"
-	"github.com/webitel/webitel-go-kit/pkg/errors"
 )
 
 type messageStore struct {
@@ -26,18 +27,23 @@ func validateMessageForSave(msg *model.Message, operationID string) error {
 	if msg == nil {
 		return errors.InvalidArgument("message cannot be nil", errors.WithID(operationID))
 	}
+
 	if msg.ThreadID == uuid.Nil {
 		return errors.InvalidArgument("message thread id cannot be nil", errors.WithID(operationID))
 	}
+
 	if msg.DomainID <= 0 {
 		return errors.InvalidArgument("message domain id must be greater than zero", errors.WithID(operationID))
 	}
+
 	if msg.Type == model.MessageTypeSystem {
 		return nil
 	}
+
 	if msg.Member == nil {
 		return errors.InvalidArgument("message member cannot be nil", errors.WithID(operationID))
 	}
+
 	if msg.Member.ID == uuid.Nil {
 		return errors.InvalidArgument("message member id cannot be nil", errors.WithID(operationID))
 	}
@@ -238,6 +244,7 @@ func (m *messageStore) ReadMessage(ctx context.Context, read struct {
 				return fmt.Errorf("read_message: message or thread not found: %w", err)
 			}
 		}
+
 		return fmt.Errorf("read_message: failed to execute insert: %w", err)
 	}
 
@@ -571,6 +578,7 @@ func prepareSaveInteractiveMessageQuery(msg *model.Message) (string, pgx.NamedAr
 			documentsSizes = append(documentsSizes, int(doc.Size))
 		}
 	}
+
 	if msg.Images != nil {
 		for _, img := range msg.Images {
 			imagesFileIDs = append(imagesFileIDs, int(img.FileID))

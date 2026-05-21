@@ -7,11 +7,9 @@ import (
 	"strings"
 )
 
-var (
-	allowedImageMimes = map[string]bool{
-		"image/jpeg": true, "image/png": true, "image/gif": true, "image/webp": true, "image/svg+xml": true,
-	}
-)
+var allowedImageMimes = map[string]bool{
+	"image/jpeg": true, "image/png": true, "image/gif": true, "image/webp": true, "image/svg+xml": true,
+}
 
 // [VALIDATE_URL] ENSURES STRING IS A SECURE ABSOLUTE URL FROM TRUSTED SOURCE
 func validateURL(rawURL string) error {
@@ -33,23 +31,15 @@ func validateURL(rawURL string) error {
 	return nil
 }
 
-// ValidateFilename ensures the name is safe and has a reasonable length
-func validateFilename(name string) error {
-	trimmed := strings.TrimSpace(name)
-	if len(trimmed) < 1 || len(trimmed) > 255 {
-		return errors.New("filename must be between 1 and 255 characters")
-	}
-
-	return nil
-}
-
 // ValidateMime checks if the mime type is present and formatted correctly
 func validateMime(mime string, isImage bool) error {
 	if mime == "" || !strings.Contains(mime, "/") {
 		return fmt.Errorf("invalid or empty mime type: %s", mime)
 	}
+
 	if isImage && !allowedImageMimes[strings.ToLower(mime)] {
 		return fmt.Errorf("unsupported image mime type: %s", mime)
 	}
+
 	return nil
 }

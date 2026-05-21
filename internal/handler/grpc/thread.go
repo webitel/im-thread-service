@@ -4,17 +4,17 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+
+	"github.com/webitel/webitel-go-kit/pkg/errors"
+
 	impb "github.com/webitel/im-thread-service/gen/go/thread/v1"
 	"github.com/webitel/im-thread-service/internal/domain/model"
 	"github.com/webitel/im-thread-service/internal/handler/grpc/mapper"
 	"github.com/webitel/im-thread-service/internal/service/dto"
 	"github.com/webitel/im-thread-service/internal/utils"
-	"github.com/webitel/webitel-go-kit/pkg/errors"
 )
 
-var (
-	_ impb.ThreadManagementServer = (*ThreadManagementServer)(nil)
-)
+var _ impb.ThreadManagementServer = (*ThreadManagementServer)(nil)
 
 type ThreadManagementService interface {
 	Get(ctx context.Context, req *dto.ThreadGetRequest) (*model.Thread, error)
@@ -76,11 +76,9 @@ func (ts *ThreadManagementServer) Search(ctx context.Context, req *impb.ThreadSe
 		return nil, err
 	}
 
-	next, threads := utils.ProcessPagination(int(req.Size), threads)
+	next, threads := utils.ProcessPagination(int(req.GetSize()), threads)
 
-	var (
-		res = impb.SearchThreadResponse{Next: next}
-	)
+	res := impb.SearchThreadResponse{Next: next}
 
 	for _, threadModel := range threads {
 		res.Items = append(res.Items, ts.outMapper.ConvertToThread(threadModel))
@@ -166,12 +164,12 @@ func (ts *ThreadManagementServer) SearchVariables(ctx context.Context, req *impb
 }
 
 func (ts *ThreadManagementServer) LocateVariables(ctx context.Context, req *impb.LocateVariablesRequest) (*impb.ThreadVariables, error) {
-	threadId, err := uuid.Parse(req.GetThreadId())
+	threadID, err := uuid.Parse(req.GetThreadId())
 	if err != nil {
 		return nil, errors.InvalidArgument("invalid thread id format", errors.WithCause(err))
 	}
 
-	vars, err := ts.threadVariables.Locate(ctx, threadId)
+	vars, err := ts.threadVariables.Locate(ctx, threadID)
 	if err != nil {
 		return nil, err
 	}

@@ -28,7 +28,7 @@ func NewOutboxSubscriber(
 			// [SCHEMA_MAPPING]
 			// Point Watermill to our custom schema and table naming convention
 			SchemaAdapter: sql.DefaultPostgreSQLSchema{
-				GenerateMessagesTableName: func(topic string) string {
+				GenerateMessagesTableName: func(_ string) string {
 					return "im_message.messages_outbox"
 				},
 			},
@@ -36,7 +36,7 @@ func NewOutboxSubscriber(
 			// [OFFSETS_MANAGEMENT]
 			// Store ack progress in messages_offsets to ensure At-Least-Once delivery
 			OffsetsAdapter: sql.DefaultPostgreSQLOffsetsAdapter{
-				GenerateMessagesOffsetsTableName: func(topic string) string {
+				GenerateMessagesOffsetsTableName: func(_ string) string {
 					return "im_message.messages_offsets"
 				},
 			},

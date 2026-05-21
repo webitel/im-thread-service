@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
 	"github.com/webitel/im-thread-service/internal/domain/event"
 	"github.com/webitel/im-thread-service/internal/domain/shared"
 )
@@ -67,10 +68,11 @@ func (m *Message) AddEvent(event event.Outboxer) {
 func (m *Message) Events() []event.Outboxer {
 	e := m.domainEvents
 	m.domainEvents = nil
+
 	return e
 }
 
-func (m *Message) WithCreatedEvent(sendID string, from *shared.Peer) *Message {
+func (m *Message) WithCreatedEvent(sendID string, _ *shared.Peer) *Message {
 	if m == nil {
 		return m
 	}
@@ -94,6 +96,7 @@ func (m *Message) WithCreatedEvent(sendID string, from *shared.Peer) *Message {
 	}
 
 	var messageFrom *event.ThreadMember
+
 	for _, member := range m.To {
 		if member.ContactID == m.From.ID {
 			messageFrom = &event.ThreadMember{
@@ -176,6 +179,7 @@ func mapMarkupToEvent(markup *KeyboardButtonMarkup) *event.KeyboardMarkup {
 		if row == nil {
 			continue
 		}
+
 		rows = append(rows, &event.KeyboardRow{
 			Buttons: mapButtonsToEvent(row.Buttons),
 		})
@@ -194,6 +198,7 @@ func mapListReplyToEvent(list *KeyboardListReply) *event.KeyboardListReply {
 		if s == nil {
 			continue
 		}
+
 		sections = append(sections, &event.KeyboardRowWithSection{
 			Section: s.Section,
 			Buttons: mapButtonsToEvent(s.Buttons),
@@ -238,5 +243,6 @@ func mapButtonsToEvent(btns []*KeyboardButton) []*event.KeyboardButton {
 
 		res = append(res, eventBtn)
 	}
+
 	return res
 }

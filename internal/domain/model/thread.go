@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
 	"github.com/webitel/im-thread-service/internal/domain/event"
 	"github.com/webitel/im-thread-service/internal/domain/shared"
 )
@@ -21,9 +22,9 @@ type ThreadKind int
 
 const (
 	ThreadUnspecified ThreadKind = iota
-	ThreadDirect                 // user to user
-	ThreadGroup                  //group with many users, bots etc.
-	ThreadChannel                //channel, right now not implemented!
+	ThreadDirect
+	ThreadGroup
+	ThreadChannel
 )
 
 type Thread struct {
@@ -56,5 +57,6 @@ func (t *Thread) AddEvents(e ...event.Base) {
 func (t *Thread) PullEvents() []event.Base {
 	events := t.events
 	t.events = nil
+
 	return events
 }

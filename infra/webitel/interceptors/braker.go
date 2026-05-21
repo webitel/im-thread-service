@@ -33,21 +33,23 @@ func (bi *BreakerInterceptor) UnaryClientInterceptor() grpc.UnaryClientIntercept
 			},
 		}))
 
-		cb := val.(*gobreaker.CircuitBreaker)
-
+		cb, ok := val.(*gobreaker.CircuitBreaker)
+		if !ok {
+			return invoker(ctx, method, req, reply, cc, opts...)
+		}
 		// [EXECUTE] Wrap the network call
+
 		_, err := cb.Execute(func() (any, error) {
 			invokerErr := invoker(ctx, method, req, reply, cc, opts...)
 			if invokerErr != nil {
 				st, ok := status.FromError(invokerErr)
 				if ok {
-					// Only trip for infrastructure errors (Server down, Network, Timeout)
-					switch st.Code() {
-					case codes.Internal, codes.Unavailable, codes.DeadlineExceeded:
+					if code := st.Code(); code == codes.Internal || code == codes.Unavailable || code == codes.DeadlineExceeded {
 						return nil, invokerErr
 					}
 				}
 			}
+
 			return nil, invokerErr
 		})
 
