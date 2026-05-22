@@ -5,6 +5,7 @@ import (
 
 	"github.com/Masterminds/squirrel"
 	"github.com/google/uuid"
+
 	"github.com/webitel/im-thread-service/internal/domain/model"
 )
 
@@ -24,21 +25,21 @@ func NewSearchLeftQueryObject(memberID uuid.UUID) *searchLeftQueryObject {
 	obj.baseQueryObject = newBaseQueryObject(from, obj)
 
 	obj.builder = obj.builder.Prefix(fmt.Sprintf(`
-		WITH latest_membership AS (
+		WITH membership_periods AS (
 			SELECT
+				id,
 				thread_id,
 				member_id,
-				created_at AS member_since,
+				created_at AS joined_at,
 				deleted_at AS left_at
 			FROM %s
 			WHERE member_id = ?
 			  AND deleted_at IS NOT NULL
-			ORDER BY deleted_at DESC
 		)
 	`, ThreadDialogTable), memberID)
 
 	obj.builder = obj.builder.
-		InnerJoin("latest_membership lm ON lm.thread_id = t.id")
+		InnerJoin("membership_periods lm ON lm.thread_id = t.id")
 
 	return obj
 }
@@ -53,8 +54,8 @@ func (q *searchLeftQueryObject) DefaultFields() []string {
 func (q *searchLeftQueryObject) FieldsMetadata() map[string]fieldMetadata {
 	return map[string]fieldMetadata{
 		"id": {
-			sqlExpr:     "t.id",
-			aliasedExpr: "t.id as id",
+			sqlExpr:     "lm.id",
+			aliasedExpr: "lm.id as id",
 			sortable:    true,
 		},
 		"domain_id": {
@@ -63,13 +64,13 @@ func (q *searchLeftQueryObject) FieldsMetadata() map[string]fieldMetadata {
 			sortable:    true,
 		},
 		"created_at": {
-			sqlExpr:     "t.created_at",
-			aliasedExpr: "t.created_at as created_at",
+			sqlExpr:     "lm.joined_at",
+			aliasedExpr: "lm.joined_at as created_at",
 			sortable:    true,
 		},
 		"updated_at": {
-			sqlExpr:     "t.updated_at",
-			aliasedExpr: "t.updated_at as updated_at",
+			sqlExpr:     "lm.left_at",
+			aliasedExpr: "lm.left_at as updated_at",
 			sortable:    true,
 		},
 		"kind": {
@@ -104,11 +105,6 @@ func (q *searchLeftQueryObject) FieldsMetadata() map[string]fieldMetadata {
 			requiresJoin: searchLeftLinkLastMessageLateral,
 			sortable:     false,
 		},
-		"deleted_at": {
-			sqlExpr:     "lm.left_at",
-			aliasedExpr: "lm.left_at as deleted_at",
-			sortable:    true,
-		},
 	}
 }
 
@@ -116,6 +112,7 @@ func (q *searchLeftQueryObject) EnsureJoins(requiredJoin int) {
 	if requiredJoin&searchLeftLinkMembersLateral != 0 {
 		q.linkMembersLateral()
 	}
+
 	if requiredJoin&searchLeftLinkLastMessageLateral != 0 {
 		q.linkLastMessageLateral()
 	}
@@ -125,6 +122,7 @@ func (q *searchLeftQueryObject) ToSql() (string, []any, error) {
 	if len(q.sortFields) == 0 {
 		q.builder = q.builder.OrderBy("lm.left_at DESC")
 	}
+
 	return q.baseQueryObject.ToSql()
 }
 
@@ -132,6 +130,7 @@ func (q *searchLeftQueryObject) WithDomainIDFilter(id int) *searchLeftQueryObjec
 	if id != 0 {
 		q.builder = q.builder.Where(squirrel.Eq{"t.domain_id": id})
 	}
+
 	return q
 }
 
@@ -139,6 +138,7 @@ func (q *searchLeftQueryObject) WithKindFilter(kinds ...model.ThreadKind) *searc
 	if len(kinds) != 0 {
 		q.builder = q.builder.Where(squirrel.Eq{"t.kind": kinds})
 	}
+
 	return q
 }
 
@@ -146,6 +146,7 @@ func (q *searchLeftQueryObject) linkMembersLateral() {
 	if q.join&searchLeftLinkMembersLateral != 0 {
 		return
 	}
+
 	q.join |= searchLeftLinkMembersLateral
 	q.builder = q.builder.LeftJoin(fmt.Sprintf(`
 		lateral (
@@ -159,10 +160,18 @@ func (q *searchLeftQueryObject) linkMembersLateral() {
 				)
 			) as members_data
 			from (
-				select distinct on (member_id) id, member_id, created_at, updated_at, thread_role
-				from %[2]s
-				where thread_id = %[3]s.id
-				order by member_id, deleted_at desc nulls last
+				select distinct on (td_src.member_id)
+				       td_src.id, td_src.member_id, td_src.created_at, td_src.updated_at, td_src.thread_role
+				from %[2]s td_src
+				where td_src.thread_id = %[3]s.id
+				  and exists (
+				    select 1
+				    from im_message.messages msg_m
+				    where msg_m.thread_id = %[3]s.id
+				      and msg_m.sender_id = td_src.member_id
+				      and msg_m.created_at between lm.joined_at and lm.left_at
+				  )
+				order by td_src.member_id, td_src.deleted_at desc nulls last
 			) %[1]s
 		) m on true
 	`, threadThreadDialogAlias, ThreadDialogTable, threadAlias))
@@ -186,8 +195,7 @@ func (q *searchLeftQueryObject) linkLastMessageLateral() {
 			) as last_msg
 			from im_message.messages msg_i
 			where msg_i.thread_id = t.id
-			  and msg_i.sender_id = lm.member_id
-			  and msg_i.created_at between lm.member_since and lm.left_at
+			  and msg_i.created_at between lm.joined_at and lm.left_at
 			order by msg_i.created_at desc
 			limit 1
 		) msg on true
