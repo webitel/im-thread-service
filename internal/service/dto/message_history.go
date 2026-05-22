@@ -59,6 +59,7 @@ type (
 		Cursor    *HistoryMessageCursor
 		Sort      string
 		Size      int
+		CallerID  uuid.UUID
 	}
 
 	HistoryMessageCursor struct {
