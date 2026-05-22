@@ -46,6 +46,16 @@ type (
 		Page       int
 	}
 
+	SearchLeftRequest struct {
+		Fields   []string
+		MemberID uuid.UUID
+		DomainID int
+		Kinds    []model.ThreadKind
+		Size     int
+		Sort     string
+		Page     int
+	}
+
 	ThreadMembersResponse struct {
 		Members uuid.UUIDs `db:"members"`
 	}

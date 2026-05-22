@@ -74,6 +74,23 @@ func (s *ThreadInConverter) convertThreadKinds(kinds []impb.ThreadKind) []model.
 	return out
 }
 
+func (s *ThreadInConverter) ConvertSearchLeft(in *impb.SearchLeftRequest) (*dto.SearchLeftRequest, error) {
+	memberID, err := uuid.Parse(in.GetMemberId())
+	if err != nil {
+		return nil, errors.InvalidArgument("invalid member_id format", errors.WithCause(err))
+	}
+
+	return &dto.SearchLeftRequest{
+		Fields:   in.GetFields(),
+		MemberID: memberID,
+		DomainID: int(in.GetDomainId()),
+		Kinds:    s.convertThreadKinds(in.GetKinds()),
+		Size:     int(in.GetSize()),
+		Sort:     in.GetSort(),
+		Page:     int(in.GetPage()),
+	}, nil
+}
+
 func (s *ThreadInConverter) ConvertAddMemberRequest(in *impb.AddMemberRequest) (*dto.AddMemberRequest, error) {
 	threadID, err := uuid.Parse(in.GetThreadId())
 	if err != nil {

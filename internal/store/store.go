@@ -51,6 +51,7 @@ type ThreadStore interface {
 	Get(ctx context.Context, query queryobject.QueryObject) (*model.Thread, error)
 	Search(ctx context.Context, query queryobject.QueryObject) ([]*model.Thread, error)
 	ResolveThread(ctx context.Context, q model.ResolveThreadQuery) (*model.Thread, error)
+	SearchLeft(ctx context.Context, query queryobject.QueryObject) ([]*model.Thread, error)
 }
 
 type ThreadPermissionStore interface {

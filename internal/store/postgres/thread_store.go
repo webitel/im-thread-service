@@ -242,6 +242,25 @@ func prepareResolveThreadQuery(q model.ResolveThreadQuery) (string, pgx.NamedArg
 	return query, args
 }
 
+func (s *threadStore) SearchLeft(ctx context.Context, query queryobject.QueryObject) ([]*model.Thread, error) {
+	sql, args, err := query.ToSql()
+	if err != nil {
+		return nil, errors.Internal("preparing search left query", errors.WithCause(err), errors.WithID("postgres.thread_store.search_left"))
+	}
+
+	rows, err := s.db.Query(ctx, sql, args...)
+	if err != nil {
+		return nil, errors.Internal("executing search left query", errors.WithCause(err), errors.WithID("postgres.thread_store.search_left"))
+	}
+
+	records, err := collectRows(rows, mapThreadRecordToModel)
+	if err != nil {
+		return nil, errors.Internal("collecting search left records", errors.WithCause(err), errors.WithID("postgres.thread_store.search_left"))
+	}
+
+	return records, nil
+}
+
 // TODO: rewrite to soft delete logic!
 func (s *threadStore) Delete(ctx context.Context, threadID uuid.UUID) error {
 	if threadID == uuid.Nil {
