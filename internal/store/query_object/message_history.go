@@ -134,6 +134,28 @@ func (q *MessageHistoryQuery) WithCursor(cursor *dto.HistoryMessageCursor) *Mess
 	return q
 }
 
+func (q *MessageHistoryQuery) WithCallerLimitation(callerID uuid.UUID, threadIDs uuid.UUIDs) *MessageHistoryQuery {
+	if callerID == uuid.Nil {
+		return q
+	}
+
+	q.base = q.base.Where(
+		`
+		exists (
+			select 1
+			from im_thread.thread_dialog acl
+			where acl.thread_id = any(?::uuid[])
+			and acl.member_id = ?::uuid
+			and acl.deleted_at is null
+		)
+	`,
+		threadIDs,
+		callerID,
+	)
+
+	return q
+}
+
 func (q *MessageHistoryQuery) WithLimit(limit int) *MessageHistoryQuery {
 	if limit > 0 && limit <= 100 {
 		q.paginatorCfg.Limit = uint64(limit)

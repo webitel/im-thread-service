@@ -38,6 +38,7 @@ func MapSearchMessageHistoryRequest2HistoryMessageInputDTO(mhr *impb.SearchMessa
 		Types:     types,
 		Cursor:    cursor,
 		DomainID:  int(mhr.GetDomainId()),
+		CallerID:  utils.IDsParser(mhr.GetCallerId()),
 	}
 }
 
