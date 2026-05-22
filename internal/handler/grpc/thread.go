@@ -116,7 +116,7 @@ func (ts *ThreadManagementServer) SearchLeft(ctx context.Context, req *impb.Sear
 		return nil, err
 	}
 
-	next, threads := utils.ProcessPagination(int(req.Size), threads)
+	next, threads := utils.ProcessPagination(int(req.GetSize()), threads)
 
 	res := &impb.SearchLeftResponse{Next: next}
 	for _, t := range threads {

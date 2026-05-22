@@ -118,12 +118,12 @@ func (q *searchLeftQueryObject) EnsureJoins(requiredJoin int) {
 	}
 }
 
-func (q *searchLeftQueryObject) ToSql() (string, []any, error) {
+func (q *searchLeftQueryObject) ToSQL() (string, []any, error) {
 	if len(q.sortFields) == 0 {
 		q.builder = q.builder.OrderBy("lm.left_at DESC")
 	}
 
-	return q.baseQueryObject.ToSql()
+	return q.baseQueryObject.ToSQL()
 }
 
 func (q *searchLeftQueryObject) WithDomainIDFilter(id int) *searchLeftQueryObject {
@@ -181,6 +181,7 @@ func (q *searchLeftQueryObject) linkLastMessageLateral() {
 	if q.join&searchLeftLinkLastMessageLateral != 0 {
 		return
 	}
+
 	q.join |= searchLeftLinkLastMessageLateral
 	q.builder = q.builder.LeftJoin(`
 		lateral (
