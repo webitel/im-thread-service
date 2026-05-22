@@ -4,6 +4,8 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
+
+	"github.com/webitel/webitel-go-kit/pkg/errors"
 )
 
 type MessageHistoryCursor struct {
@@ -19,7 +21,7 @@ type MessageHistoryCursorMapper struct{}
 
 func (MessageHistoryCursorMapper) ToValues(c MessageHistoryCursor) (CursorValues, error) {
 	if c.ID == uuid.Nil {
-		return nil, fmt.Errorf("MessageHistoryCursorMapper: ID must not be nil UUID")
+		return nil, errors.New("MessageHistoryCursorMapper: ID must not be nil UUID")
 	}
 
 	return CursorValues{
@@ -30,15 +32,17 @@ func (MessageHistoryCursorMapper) ToValues(c MessageHistoryCursor) (CursorValues
 func (MessageHistoryCursorMapper) FromValues(v CursorValues) (MessageHistoryCursor, error) {
 	idRaw, ok := v["id"]
 	if !ok {
-		return MessageHistoryCursor{}, fmt.Errorf("MessageHistoryCursorMapper: missing id")
+		return MessageHistoryCursor{}, errors.New("MessageHistoryCursorMapper: missing id")
 	}
 
 	var id uuid.UUID
+
 	switch raw := idRaw.(type) {
 	case uuid.UUID:
 		id = raw
 	case string:
 		var err error
+
 		id, err = uuid.Parse(raw)
 		if err != nil {
 			return MessageHistoryCursor{}, fmt.Errorf("MessageHistoryCursorMapper: invalid id %q: %w", raw, err)
@@ -60,7 +64,7 @@ func NewRawParamsCursorCodec[C any](parser RawCursorParser[C]) RawParamsCursorCo
 	return RawParamsCursorCodec[C]{parser: parser}
 }
 
-func (c RawParamsCursorCodec[C]) Encode(cur C) (Cursor, error) {
+func (c RawParamsCursorCodec[C]) Encode(_ C) (Cursor, error) {
 	return "", nil
 }
 
@@ -98,6 +102,7 @@ func NewMessageHistoryConfig(
 
 func NewMessageHistoryConfigFromRaw(limit uint64, raw MessageHistoryCursor, before bool) (Config[MessageHistoryCursor], error) {
 	codec := NewRawParamsCursorCodec(parseMessageHistoryRawCursor)
+
 	cur, hasCursor, err := parseMessageHistoryFields(raw.ID)
 	if err != nil {
 		return Config[MessageHistoryCursor]{}, fmt.Errorf("invalid cursor params: %w", err)

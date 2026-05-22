@@ -33,27 +33,25 @@ type OutboxEvent struct {
 	Metadata map[string]string
 }
 
-var (
-	_ Outboxer = (*MessageCreated)(nil)
-)
+var _ Outboxer = (*MessageCreated)(nil)
 
 type MessageCreated struct {
-	MessageID   uuid.UUID         `json:"message_id"`
-	ThreadID    uuid.UUID         `json:"thread_id"`
-	DomainID    int32             `json:"domain_id"`
-	From        *ThreadMember     `json:"from"`
-	To          []*ThreadMember   `json:"to"`
-	SendID      string            `json:"send_id"`
-	Body        string            `json:"body"`
-	Type        int16             `json:"type"` // 1:TEXT, 2:FILE, 3:IMAGE, 4:SYSTEM
-	OccurredAt  time.Time         `json:"occurred_at"`
-	Metadata    map[string]any    `json:"metadata,omitempty"`
-	Images      []ImagePayload    `json:"images,omitempty"`
-	Documents   []DocumentPayload `json:"documents,omitempty"`
-	Location    *LocationPayload  `json:"location,omitempty"`
-	Contact     *ContactPayload   `json:"contact,omitempty"`
-	Interactive json.RawMessage   `json:"interactive,omitempty"` // raw interactive payload due to dynamic schema
-	System      *SystemPayload    `json:"system,omitempty"`
+	MessageID   uuid.UUID           `json:"message_id"`
+	ThreadID    uuid.UUID           `json:"thread_id"`
+	DomainID    int32               `json:"domain_id"`
+	From        *ThreadMember       `json:"from"`
+	To          []*ThreadMember     `json:"to"`
+	SendID      string              `json:"send_id"`
+	Body        string              `json:"body"`
+	Type        int16               `json:"type"` // 1:TEXT, 2:FILE, 3:IMAGE, 4:SYSTEM
+	OccurredAt  time.Time           `json:"occurred_at"`
+	Metadata    map[string]any      `json:"metadata,omitempty"`
+	Images      []ImagePayload      `json:"images,omitempty"`
+	Documents   []DocumentPayload   `json:"documents,omitempty"`
+	Location    *LocationPayload    `json:"location,omitempty"`
+	Contact     *ContactPayload     `json:"contact,omitempty"`
+	Interactive *InteractivePayload `json:"interactive,omitempty"` // raw interactive payload due to dynamic schema
+	System      *SystemPayload      `json:"system,omitempty"`
 }
 
 type ThreadMember struct {
@@ -140,4 +138,56 @@ func NewLocationPayload(latitude, longitude float64, address, name *string) *Loc
 		Address:   address,
 		Name:      name,
 	}
+}
+
+const (
+	ActionTypeURL      = "url"
+	ActionTypeCallback = "callback"
+	ActionTypeRequest  = "request"
+)
+
+type KeyboardButtonURL struct {
+	URL string `json:"url"`
+}
+
+type KeyboardButtonCallback struct {
+	Data string `json:"data"`
+}
+
+type KeyboardButtonRequest struct {
+	Action string `json:"action"`
+}
+
+type KeyboardButton struct {
+	ID       string         `json:"id"`
+	Label    string         `json:"label"`
+	Metadata map[string]any `json:"metadata,omitempty"`
+
+	Type     string                  `json:"type"`
+	URL      *KeyboardButtonURL      `json:"url,omitempty"`
+	Callback *KeyboardButtonCallback `json:"callback,omitempty"`
+	Request  *KeyboardButtonRequest  `json:"request,omitempty"`
+}
+
+type KeyboardRow struct {
+	Buttons []*KeyboardButton `json:"buttons"`
+}
+
+type KeyboardRowWithSection struct {
+	Section string            `json:"section"`
+	Buttons []*KeyboardButton `json:"buttons"`
+}
+
+type KeyboardListReply struct {
+	MainButtonTitle string                    `json:"main_button_title"`
+	Sections        []*KeyboardRowWithSection `json:"sections"`
+}
+
+type KeyboardMarkup struct {
+	Rows []*KeyboardRow `json:"rows"`
+}
+
+type InteractivePayload struct {
+	Markup    *KeyboardMarkup    `json:"markup,omitempty"`
+	ListReply *KeyboardListReply `json:"list_reply,omitempty"`
 }

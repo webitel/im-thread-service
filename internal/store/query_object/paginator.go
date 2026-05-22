@@ -7,6 +7,8 @@ import (
 	"strings"
 
 	sq "github.com/Masterminds/squirrel"
+
+	"github.com/webitel/webitel-go-kit/pkg/errors"
 )
 
 type Direction string
@@ -27,6 +29,7 @@ func (o Order) reverse() Order {
 	if o == OrderAsc {
 		return OrderDesc
 	}
+
 	return OrderAsc
 }
 
@@ -60,6 +63,7 @@ func (JSONBase64Codec[C]) Encode(c C) (Cursor, error) {
 	if err != nil {
 		return "", fmt.Errorf("paginator: JSONBase64Codec encode: %w", err)
 	}
+
 	return Cursor(base64.StdEncoding.EncodeToString(b)), nil
 }
 
@@ -68,16 +72,21 @@ func (JSONBase64Codec[C]) Decode(cur Cursor) (C, bool, error) {
 	if cur == "" {
 		return zero, false, nil
 	}
+
 	b, err := base64.StdEncoding.DecodeString(string(cur))
 	if err != nil {
 		return zero, false, fmt.Errorf("paginator: JSONBase64Codec decode base64: %w", err)
 	}
+
 	var c C
+
 	dec := json.NewDecoder(strings.NewReader(string(b)))
 	dec.UseNumber()
+
 	if err := dec.Decode(&c); err != nil {
 		return zero, false, fmt.Errorf("paginator: JSONBase64Codec decode json: %w", err)
 	}
+
 	return c, true, nil
 }
 
@@ -89,6 +98,7 @@ type MapCursorMapper[C any] struct {
 func (m MapCursorMapper[C]) ToValues(c C) (CursorValues, error) {
 	return m.ToValuesFn(c)
 }
+
 func (m MapCursorMapper[C]) FromValues(v CursorValues) (C, error) {
 	return m.FromValuesFn(v)
 }
@@ -130,11 +140,13 @@ func (p *SquirrelPaginator[C]) Apply(builder sq.SelectBuilder, cfg Config[C]) (s
 	}
 
 	var cursorValues CursorValues
+
 	if cfg.HasCursor {
 		cv, err := cfg.Mapper.ToValues(cfg.Cursor)
 		if err != nil {
 			return builder, fmt.Errorf("paginator: cursor mapper ToValues: %w", err)
 		}
+
 		cursorValues = cv
 	}
 
@@ -145,6 +157,7 @@ func (p *SquirrelPaginator[C]) Apply(builder sq.SelectBuilder, cfg Config[C]) (s
 		if err != nil {
 			return builder, err
 		}
+
 		builder = builder.Where(pred)
 	}
 
@@ -153,7 +166,7 @@ func (p *SquirrelPaginator[C]) Apply(builder sq.SelectBuilder, cfg Config[C]) (s
 	return builder, nil
 }
 
-func BuildPageInfo[Row any, C any](
+func BuildPageInfo[Row, C any](
 	rows *[]Row,
 	cfg Config[C],
 	extract CursorExtractor[Row, C],
@@ -190,28 +203,34 @@ func BuildPageInfo[Row any, C any](
 
 	if info.HasNextPage {
 		last := (*rows)[len(*rows)-1]
+
 		cur, err := extract(last)
 		if err != nil {
 			return PageInfo[C]{}, fmt.Errorf("paginator: extract next cursor: %w", err)
 		}
+
 		token, err := cfg.Codec.Encode(cur)
 		if err != nil {
 			return PageInfo[C]{}, fmt.Errorf("paginator: encode next cursor: %w", err)
 		}
+
 		info.NextCursor = cur
 		info.NextToken = token
 	}
 
 	if info.HasPrevPage {
 		first := (*rows)[0]
+
 		cur, err := extract(first)
 		if err != nil {
 			return PageInfo[C]{}, fmt.Errorf("paginator: extract prev cursor: %w", err)
 		}
+
 		token, err := cfg.Codec.Encode(cur)
 		if err != nil {
 			return PageInfo[C]{}, fmt.Errorf("paginator: encode prev cursor: %w", err)
 		}
+
 		info.PrevCursor = cur
 		info.PrevToken = token
 	}
@@ -221,17 +240,18 @@ func BuildPageInfo[Row any, C any](
 
 func ValidateConfig[C any](cfg Config[C]) error {
 	if cfg.Limit == 0 {
-		return fmt.Errorf("paginator: Limit must be > 0")
+		return errors.New("paginator: Limit must be > 0")
 	}
 
 	if len(cfg.Columns) == 0 {
-		return fmt.Errorf("paginator: at least one Column is required")
+		return errors.New("paginator: at least one Column is required")
 	}
 
 	for i, c := range cfg.Columns {
 		if strings.TrimSpace(c.Name) == "" {
 			return fmt.Errorf("paginator: column[%d] has empty Name", i)
 		}
+
 		if c.Order != OrderAsc && c.Order != OrderDesc {
 			return fmt.Errorf("paginator: column[%d] has invalid Order %q", i, c.Order)
 		}
@@ -242,11 +262,11 @@ func ValidateConfig[C any](cfg Config[C]) error {
 	}
 
 	if cfg.Codec == nil {
-		return fmt.Errorf("paginator: Codec is required")
+		return errors.New("paginator: Codec is required")
 	}
 
 	if cfg.Mapper == nil {
-		return fmt.Errorf("paginator: Mapper is required")
+		return errors.New("paginator: Mapper is required")
 	}
 
 	return nil
@@ -256,6 +276,7 @@ func EffectiveOrder(col Column, dir Direction) Order {
 	if dir == DirectionBefore {
 		return col.Order.reverse()
 	}
+
 	return col.Order
 }
 
@@ -263,6 +284,7 @@ func applyOrderBy(builder sq.SelectBuilder, cols []Column, dir Direction) sq.Sel
 	for _, col := range cols {
 		builder = builder.OrderBy(fmt.Sprintf("%s %s", col.Name, EffectiveOrder(col, dir)))
 	}
+
 	return builder
 }
 
@@ -274,11 +296,13 @@ func buildCursorPredicate(cols []Column, values CursorValues, dir Direction) (sq
 	}
 
 	var or sq.Or
+
 	for i := range cols {
 		var and sq.And
 		for j := range i {
 			and = append(and, sq.Eq{cols[j].Name: normaliseJSONNumber(values[cols[j].Name])})
 		}
+
 		op := inequalityOp(cols[i].Order, dir)
 		and = append(and, sq.Expr(
 			fmt.Sprintf("%s %s ?", cols[i].Name, op),
@@ -286,6 +310,7 @@ func buildCursorPredicate(cols []Column, values CursorValues, dir Direction) (sq
 		))
 		or = append(or, and)
 	}
+
 	return or, nil
 }
 
@@ -294,6 +319,7 @@ func inequalityOp(order Order, dir Direction) string {
 		(order == OrderDesc && dir == DirectionBefore) {
 		return ">"
 	}
+
 	return "<"
 }
 
@@ -302,12 +328,15 @@ func normaliseJSONNumber(v any) any {
 	if !ok {
 		return v
 	}
+
 	if i, err := n.Int64(); err == nil {
 		return i
 	}
+
 	if f, err := n.Float64(); err == nil {
 		return f
 	}
+
 	return v
 }
 

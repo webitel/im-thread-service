@@ -9,7 +9,9 @@ func convertToUUIDs(in []string) (uuid.UUIDs, error) {
 		if err != nil {
 			return nil, err
 		}
+
 		out[i] = converted
 	}
+
 	return out, nil
 }

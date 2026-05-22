@@ -31,11 +31,13 @@ func New(ctx context.Context, logger *slog.Logger, dsn string) (*PgxDB, error) {
 	)
 
 	var lastErr error
+
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
 		if err := dbpool.Ping(ctx); err == nil {
 			if attempt > 1 {
 				logger.Info("Database connection established", slog.Int("attempts", attempt))
 			}
+
 			return &PgxDB{
 				master: dbpool,
 				logger: logger,

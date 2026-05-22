@@ -2,30 +2,35 @@ package mapper
 
 import (
 	"github.com/google/uuid"
+
+	"github.com/webitel/webitel-go-kit/pkg/errors"
+
 	impb "github.com/webitel/im-thread-service/gen/go/thread/v1"
 	"github.com/webitel/im-thread-service/internal/domain/model"
 )
 
-type ThreadPermissionInConverter struct {
-}
+type ThreadPermissionInConverter struct{}
 
 func (s *ThreadPermissionInConverter) ConvertGetThreadPermissionRequest(in *impb.GetThreadPermissionsRequest) (*model.GetThreadPermissionRequest, error) {
 	if in == nil {
-		return nil, nil
+		return nil, errors.InvalidArgument("received nil pointer get thread permissions request", errors.WithID("mapper.thread_permissions.convert_get_thread_permission_request"))
 	}
 
 	newMemberID, err := uuid.Parse(in.GetMemberId())
 	if err != nil {
 		return nil, err
 	}
+
 	converted := &model.GetThreadPermissionRequest{
 		MemberID: newMemberID,
 	}
+
 	if in.InitiatorContactId != nil {
-		initiatorID, err := uuid.Parse(*in.InitiatorContactId)
+		initiatorID, err := uuid.Parse(in.GetInitiatorContactId())
 		if err != nil {
 			return nil, err
 		}
+
 		converted.RequestInitiatorID = &initiatorID
 	}
 
@@ -34,13 +39,17 @@ func (s *ThreadPermissionInConverter) ConvertGetThreadPermissionRequest(in *impb
 
 func (s *ThreadPermissionInConverter) ConvertUpdateThreadPermissionRequest(in *impb.UpdateThreadPermissionsRequest) (*model.UpdateThreadPermissionRequest, error) {
 	if in == nil {
-		return nil, nil
+		return nil, errors.InvalidArgument(
+			"received nil pointer update thread permissions request",
+			errors.WithID("mapper.thread_permissions.convert_update_thread_permission_request"),
+		)
 	}
 
 	targetMemberID, err := uuid.Parse(in.GetMemberId())
 	if err != nil {
 		return nil, err
 	}
+
 	converted := &model.UpdateThreadPermissionRequest{
 		TargetMemberID: targetMemberID,
 
@@ -51,22 +60,24 @@ func (s *ThreadPermissionInConverter) ConvertUpdateThreadPermissionRequest(in *i
 		CanSendMessages:             in.CanSendMessages,
 	}
 	if in.InitiatorContactId != nil {
-		initiatorID, err := uuid.Parse(*in.InitiatorContactId)
+		initiatorID, err := uuid.Parse(in.GetInitiatorContactId())
 		if err != nil {
 			return nil, err
 		}
+
 		converted.InitiatorContactID = &initiatorID
 	}
+
 	return converted, nil
 }
 
-type ThreadPermissionOutConverter struct {
-}
+type ThreadPermissionOutConverter struct{}
 
 func (s *ThreadPermissionOutConverter) ConvertThreadPermission(in *model.ThreadPermission) *impb.ThreadPermissions {
 	if in == nil {
 		return nil
 	}
+
 	return &impb.ThreadPermissions{
 		CanSendMessages:             in.CanSendMessages,
 		CanAddMembers:               in.CanAddMembers,
@@ -85,9 +96,11 @@ func (s *ThreadPermissionOutConverter) ConvertThreadPermissions(in []*model.Thre
 	if in == nil {
 		return nil
 	}
+
 	out := make([]*impb.ThreadPermissions, len(in))
 	for i, permission := range in {
 		out[i] = s.ConvertThreadPermission(permission)
 	}
+
 	return out
 }

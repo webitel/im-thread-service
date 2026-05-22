@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
 	"github.com/webitel/webitel-go-kit/pkg/errors"
 )
 
@@ -73,6 +74,7 @@ func (tv *ThreadVariables) GetVariable(key string) (VariableEntry, bool) {
 	defer tv.lock.RUnlock()
 
 	val, ok := tv.Variables[key]
+
 	return val, ok
 }
 
@@ -110,7 +112,7 @@ func (tv *ThreadVariables) PrepareFlushTopic(flushBy uuid.UUID) string {
 func (tv *ThreadVariables) ToPayload() ([]byte, error) {
 	if tv == nil {
 		return nil, errors.InvalidArgument(
-			"thread varaibles object is nil",
+			"thread variables object is nil",
 			errors.WithID("model.thread_variables.to_payload"),
 		)
 	}
@@ -131,5 +133,6 @@ func (tv *ThreadVariables) ToPayload() ([]byte, error) {
 			errors.WithID("model.thread_variables.to_payload"),
 		)
 	}
+
 	return payload, nil
 }

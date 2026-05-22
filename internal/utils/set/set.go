@@ -2,9 +2,7 @@ package set
 
 import "iter"
 
-var (
-	sentinel = nothing{}
-)
+var sentinel = nothing{}
 
 type (
 	nothing struct{}
@@ -28,15 +26,14 @@ func (s *Set[T]) Insert(item T) bool {
 	if s.items == nil {
 		s.items = make(map[T]nothing)
 	}
+
 	s.items[item] = sentinel
 
 	return true
 }
 
 func (s *Set[T]) InsertSlice(items []T) bool {
-	var (
-		modified bool
-	)
+	var modified bool
 
 	for _, item := range items {
 		if s.Insert(item) {
@@ -58,9 +55,7 @@ func (s *Set[T]) Items() iter.Seq[T] {
 }
 
 func (s *Set[T]) Slice() []T {
-	var (
-		result = make([]T, 0, len(s.items))
-	)
+	result := make([]T, 0, len(s.items))
 
 	for item := range s.items {
 		result = append(result, item)

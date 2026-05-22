@@ -7,12 +7,14 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+
+	"github.com/webitel/webitel-go-kit/pkg/errors"
+
 	"github.com/webitel/im-thread-service/internal/domain/event"
 	"github.com/webitel/im-thread-service/internal/domain/model"
 	"github.com/webitel/im-thread-service/internal/domain/shared"
 	"github.com/webitel/im-thread-service/internal/service/dto"
 	"github.com/webitel/im-thread-service/internal/store"
-	queryobject "github.com/webitel/im-thread-service/internal/store/query_object"
 )
 
 type fakeUnitOfWork struct {
@@ -67,46 +69,37 @@ type fakeThreadDialogStore struct {
 func (f *fakeThreadDialogStore) Create(ctx context.Context, threadDialog *model.ThreadDialogExtended) (*model.ThreadDialogExtended, error) {
 	f.lastCreate = threadDialog
 	if threadDialog == nil {
-		return nil, nil
+		return nil, errors.InvalidArgument("received nil pointer thread dialog")
 	}
+
 	if threadDialog.ID == uuid.Nil {
-		threadDialog.BaseModel.ID = uuid.New()
+		threadDialog.ID = uuid.New()
 	}
+
 	return threadDialog, nil
 }
 
 func (f *fakeThreadDialogStore) Delete(ctx context.Context, memberID uuid.UUID, leaveReason *string) error {
 	f.lastDeleteID = memberID
 	f.lastReason = leaveReason
+
 	return nil
 }
 
 func (f *fakeThreadDialogStore) GetQuickView(ctx context.Context, filter *model.ThreadDialogStoreFilter) ([]*model.ThreadDialog, error) {
 	f.lastFilter = filter
+
 	return f.quickViewResult, nil
 }
 
 func (f *fakeThreadDialogStore) GetFullView(ctx context.Context, filter *model.ThreadDialogStoreFilter) ([]*model.ThreadDialogExtended, error) {
 	f.lastFilter = filter
+
 	return f.fullViewResult, nil
 }
 
 func (f *fakeThreadDialogStore) FindActorsPair(ctx context.Context, initiatorsContact, targetMember uuid.UUID) (*model.ThreadDialogExtended, *model.ThreadDialogExtended, error) {
 	return f.initiatorPair, f.targetPair, nil
-}
-
-type fakeThreadStore struct{}
-
-func (f fakeThreadStore) Create(ctx context.Context, req *model.Thread) (*model.Thread, error) {
-	return nil, nil
-}
-
-func (f fakeThreadStore) Search(ctx context.Context, query queryobject.QueryObject) ([]*model.Thread, error) {
-	return nil, nil
-}
-
-func (f fakeThreadStore) ResolveDirect(ctx context.Context, from, to uuid.UUID) (*model.Thread, error) {
-	return nil, nil
 }
 
 type publishedOutboxEvent struct {
@@ -120,6 +113,7 @@ type fakeOutboxStore struct {
 
 func (f *fakeOutboxStore) Publish(ctx context.Context, topic string, event event.Outboxer) error {
 	f.published = append(f.published, publishedOutboxEvent{topic: topic, event: event})
+
 	return nil
 }
 
@@ -148,7 +142,8 @@ func (f *fakeMessageStore) ReadMessage(ctx context.Context, read struct {
 	ThreadID  uuid.UUID
 	MessageID uuid.UUID
 	UserID    uuid.UUID
-}) error {
+},
+) error {
 	return nil
 }
 
@@ -169,13 +164,16 @@ func (f *fakeMessageStore) SaveSystemMessage(ctx context.Context, msg *model.Mes
 	if msg.ID == uuid.Nil {
 		msg.ID = uuid.New()
 	}
+
 	now := time.Now().UTC()
 	if msg.CreatedAt.IsZero() {
 		msg.CreatedAt = now
 	}
+
 	if msg.UpdatedAt.IsZero() {
 		msg.UpdatedAt = now
 	}
+
 	return msg, nil
 }
 
@@ -362,9 +360,80 @@ func TestAddMember_SetsInvitedByFromInitiatorDialogID(t *testing.T) {
 	require.Equal(t, initiatorMemberID, *threadDialogStore.lastCreate.InvitedBy)
 }
 
-var _ store.UnitOfWork = fakeUnitOfWork{}
-var _ store.ThreadDialogStore = (*fakeThreadDialogStore)(nil)
-var _ store.ThreadStore = nil
-var _ store.OutboxStore = (*fakeOutboxStore)(nil)
-var _ store.MessageStore = (*fakeMessageStore)(nil)
-var _ = dto.AddMemberRequest{}
+func TestTransfer_AddsMemberRemovesInitiatorAndSendsTransferSystemMessage(t *testing.T) {
+	threadID := uuid.New()
+	initiatorContactID := uuid.New()
+	initiatorMemberID := uuid.New()
+	newMemberContactID := uuid.New()
+	otherContactID := uuid.New()
+
+	threadDialogStore := &fakeThreadDialogStore{
+		fullViewResult: []*model.ThreadDialogExtended{
+			{
+				BaseModel:  shared.BaseModel{ID: initiatorMemberID, DomainID: 1},
+				ContactID:  initiatorContactID,
+				ThreadID:   threadID,
+				ThreadRole: model.RoleOwner,
+				Permissions: model.ThreadPermissions{
+					CanAddMembers: true,
+				},
+				Settings: model.BaseThreadSetting{Title: "Thread title"},
+			},
+		},
+		quickViewResult: []*model.ThreadDialog{
+			{BaseModel: shared.BaseModel{ID: uuid.New()}, ContactID: newMemberContactID, ThreadID: threadID, ThreadRole: model.RoleMember},
+			{BaseModel: shared.BaseModel{ID: uuid.New()}, ContactID: otherContactID, ThreadID: threadID, ThreadRole: model.RoleMember},
+		},
+	}
+	messageStore := &fakeMessageStore{}
+	outboxStore := &fakeOutboxStore{}
+
+	svc := &ThreadManagementService{
+		uow:            fakeUnitOfWork{threadDialogStore: threadDialogStore, messageStore: messageStore, outboxStore: outboxStore},
+		privacyChecker: fakePrivacyChecker{},
+	}
+
+	newMemberID, err := svc.Transfer(context.Background(), &dto.TransferThreadRequest{
+		ThreadID:           threadID,
+		NewMemberContactID: newMemberContactID,
+		InitiatorContactID: initiatorContactID,
+		NewMemberRole:      model.RoleMember,
+	})
+
+	require.NoError(t, err)
+	require.NotEqual(t, uuid.Nil, newMemberID)
+	require.NotNil(t, threadDialogStore.lastCreate)
+	require.NotNil(t, threadDialogStore.lastCreate.InvitedBy)
+	require.Equal(t, initiatorMemberID, *threadDialogStore.lastCreate.InvitedBy)
+	require.Equal(t, initiatorMemberID, threadDialogStore.lastDeleteID)
+	require.NotNil(t, threadDialogStore.lastReason)
+	require.Equal(t, memberTransferedLeaveReason, *threadDialogStore.lastReason)
+	require.NotNil(t, messageStore.lastSavedSystemMessage)
+	require.NotNil(t, messageStore.lastSavedSystemMessage.System)
+	require.Equal(t, memberTransferedSystemMessageType, messageStore.lastSavedSystemMessage.System.Type)
+	require.Equal(t, initiatorMemberID, messageStore.lastSavedSystemMessage.System.Metadata["transferred_member_id"])
+	require.Equal(t, newMemberID, messageStore.lastSavedSystemMessage.System.Metadata["new_member_id"])
+	require.GreaterOrEqual(t, len(outboxStore.published), 1)
+}
+
+func TestTransfer_ReturnsValidationErrorWhenInitiatorIsNil(t *testing.T) {
+	svc := &ThreadManagementService{}
+
+	_, err := svc.Transfer(context.Background(), &dto.TransferThreadRequest{
+		ThreadID:           uuid.New(),
+		NewMemberContactID: uuid.New(),
+		InitiatorContactID: uuid.Nil,
+		NewMemberRole:      model.RoleMember,
+	})
+
+	require.Error(t, err)
+}
+
+var (
+	_ store.UnitOfWork        = fakeUnitOfWork{}
+	_ store.ThreadDialogStore = (*fakeThreadDialogStore)(nil)
+	_ store.ThreadStore       = nil
+	_ store.OutboxStore       = (*fakeOutboxStore)(nil)
+	_ store.MessageStore      = (*fakeMessageStore)(nil)
+	_                         = dto.AddMemberRequest{}
+)

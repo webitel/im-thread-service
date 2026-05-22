@@ -5,28 +5,34 @@ import (
 
 	sq "github.com/Masterminds/squirrel"
 	"github.com/google/uuid"
+
+	"github.com/webitel/im-thread-service/internal/domain/model"
 	"github.com/webitel/im-thread-service/internal/service/dto"
 )
 
 var (
 	availableFields = map[string]bool{
-		"id":         true,
-		"thread_id":  true,
-		"sender_id":  true,
-		"type":       true,
-		"body":       true,
-		"metadata":   true,
-		"created_at": true,
-		"updated_at": true,
-		"documents":  true,
-		"images":     true,
-		"member":     true,
+		"id":          true,
+		"thread_id":   true,
+		"sender_id":   true,
+		"type":        true,
+		"body":        true,
+		"metadata":    true,
+		"created_at":  true,
+		"updated_at":  true,
+		"documents":   true,
+		"images":      true,
+		"member":      true,
+		"interactive": true,
+		"location":    true,
+		"contact":     true,
+		"system":      true,
 	}
 	defaultFields = []string{
 		"id", "thread_id", "sender_id",
 		"type", "body", "metadata",
 		"created_at", "updated_at", "images", "documents",
-		"member",
+		"member", "interactive", "location", "contact", "system",
 	}
 )
 
@@ -51,15 +57,19 @@ func NewMessageHistoryQuery() *MessageHistoryQuery {
 func (q *MessageHistoryQuery) WithFields(fields []string) *MessageHistoryQuery {
 	if len(fields) == 0 {
 		q.fields = defaultFields
+
 		return q
 	}
+
 	valid := make([]string, 0, len(fields))
 	for _, f := range fields {
 		if availableFields[f] && !slices.Contains(valid, f) {
 			valid = append(valid, f)
 		}
 	}
+
 	q.fields = valid
+
 	return q
 }
 
@@ -67,27 +77,31 @@ func (q *MessageHistoryQuery) WithDomainIDsFilter(domainIDs ...int) *MessageHist
 	if len(domainIDs) != 0 && domainIDs[0] != 0 {
 		q.base = q.base.Where(sq.Eq{"domain_id": domainIDs})
 	}
+
 	return q
 }
 
-func (q *MessageHistoryQuery) WithIdsFilter(ids ...uuid.UUID) *MessageHistoryQuery {
+func (q *MessageHistoryQuery) WithIDsFilter(ids ...uuid.UUID) *MessageHistoryQuery {
 	if len(ids) != 0 {
 		q.base = q.base.Where(sq.Eq{"id": ids})
 	}
+
 	return q
 }
 
-func (q *MessageHistoryQuery) WithThreadIdsFilter(threadIds ...uuid.UUID) *MessageHistoryQuery {
-	if len(threadIds) != 0 {
-		q.base = q.base.Where(sq.Eq{"thread_id": threadIds})
+func (q *MessageHistoryQuery) WithThreadIDsFilter(threadIDs ...uuid.UUID) *MessageHistoryQuery {
+	if len(threadIDs) != 0 {
+		q.base = q.base.Where(sq.Eq{"thread_id": threadIDs})
 	}
+
 	return q
 }
 
-func (q *MessageHistoryQuery) WithSenderIdsFilter(senderIds ...uuid.UUID) *MessageHistoryQuery {
-	if len(senderIds) != 0 {
-		q.base = q.base.Where(sq.Eq{"sender_id": senderIds})
+func (q *MessageHistoryQuery) WithSenderIDsFilter(senderIDs ...uuid.UUID) *MessageHistoryQuery {
+	if len(senderIDs) != 0 {
+		q.base = q.base.Where(sq.Eq{"sender_id": senderIDs})
 	}
+
 	return q
 }
 
@@ -95,6 +109,7 @@ func (q *MessageHistoryQuery) WithTypeFilter(types ...int) *MessageHistoryQuery 
 	if len(types) != 0 {
 		q.base = q.base.Where(sq.Eq{"type": types})
 	}
+
 	return q
 }
 
@@ -106,7 +121,7 @@ func (q *MessageHistoryQuery) WithCursor(cursor *dto.HistoryMessageCursor) *Mess
 	cfg, err := NewMessageHistoryConfigFromRaw(
 		uint64(q.limitOrDefault()),
 		MessageHistoryCursor{
-			ID: cursor.Id,
+			ID: cursor.ID,
 		},
 		cursor.Direction,
 	)
@@ -115,6 +130,29 @@ func (q *MessageHistoryQuery) WithCursor(cursor *dto.HistoryMessageCursor) *Mess
 	}
 
 	q.paginatorCfg = cfg
+
+	return q
+}
+
+func (q *MessageHistoryQuery) WithCallerLimitation(callerID uuid.UUID, threadIDs uuid.UUIDs) *MessageHistoryQuery {
+	if callerID == uuid.Nil {
+		return q
+	}
+
+	q.base = q.base.Where(
+		`
+		exists (
+			select 1
+			from im_thread.thread_dialog acl
+			where acl.thread_id = any(?::uuid[])
+			and acl.member_id = ?::uuid
+			and acl.deleted_at is null
+		)
+	`,
+		threadIDs,
+		callerID,
+	)
+
 	return q
 }
 
@@ -122,10 +160,11 @@ func (q *MessageHistoryQuery) WithLimit(limit int) *MessageHistoryQuery {
 	if limit > 0 && limit <= 100 {
 		q.paginatorCfg.Limit = uint64(limit)
 	}
+
 	return q
 }
 
-func (q *MessageHistoryQuery) ToSql() (string, []any, error) {
+func (q *MessageHistoryQuery) ToSQL() (string, []any, error) {
 	if len(q.fields) == 0 {
 		q.fields = defaultFields
 	}
@@ -152,8 +191,8 @@ func (q *MessageHistoryQuery) ToSql() (string, []any, error) {
 }
 
 func (q *MessageHistoryQuery) BuildPageInfo(
-	rows *[]*dto.HistoryMessage,
-	extract CursorExtractor[*dto.HistoryMessage, MessageHistoryCursor],
+	rows *[]*model.Message,
+	extract CursorExtractor[*model.Message, MessageHistoryCursor],
 ) (PageInfo[MessageHistoryCursor], error) {
 	return BuildPageInfo(rows, q.paginatorCfg, extract)
 }
@@ -162,5 +201,6 @@ func (q *MessageHistoryQuery) limitOrDefault() int {
 	if q.paginatorCfg.Limit > 0 {
 		return int(q.paginatorCfg.Limit)
 	}
+
 	return DefaultLimit
 }

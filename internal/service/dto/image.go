@@ -2,6 +2,7 @@ package dto
 
 import (
 	"github.com/google/uuid"
+
 	"github.com/webitel/im-thread-service/internal/domain/shared"
 )
 
@@ -11,6 +12,7 @@ type (
 		URL      string `json:"url"`
 		MimeType string `json:"mime_type"`
 		Name     string `json:"name"`
+		Size     int64
 	}
 
 	ImageRequest struct {
@@ -40,3 +42,4 @@ func (i *Image) SetID(id int64)      { i.ID = id }
 func (i *Image) SetMime(mime string) { i.MimeType = mime }
 func (i *Image) SetName(name string) { i.Name = name }
 func (i *Image) SetURL(url string)   { i.URL = url }
+func (i *Image) SetSize(size int64)  { i.Size = size }

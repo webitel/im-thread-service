@@ -2,14 +2,28 @@ package mapper
 
 import (
 	"github.com/google/uuid"
+	"google.golang.org/protobuf/types/known/structpb"
+
+	"github.com/webitel/webitel-go-kit/pkg/errors"
+
 	impb "github.com/webitel/im-thread-service/gen/go/thread/v1"
 	"github.com/webitel/im-thread-service/internal/domain/model"
 	"github.com/webitel/im-thread-service/internal/service/dto"
-	"github.com/webitel/webitel-go-kit/pkg/errors"
-	"google.golang.org/protobuf/types/known/structpb"
 )
 
-type ThreadInConverter struct {
+type ThreadInConverter struct{}
+
+func (s *ThreadInConverter) ConvertGet(in *impb.GetThreadRequest) (*dto.ThreadGetRequest, error) {
+	id, err := uuid.Parse(in.GetId())
+	if err != nil {
+		return nil, errors.InvalidArgument("invalid thread id format", errors.WithCause(err))
+	}
+
+	return &dto.ThreadGetRequest{
+		ID:       id,
+		DomainID: int(in.GetDomainId()),
+		Fields:   in.GetFields(),
+	}, nil
 }
 
 func (s *ThreadInConverter) ConvertSearch(in *impb.ThreadSearchRequest) (*dto.ThreadSearchRequest, error) {
@@ -17,10 +31,12 @@ func (s *ThreadInConverter) ConvertSearch(in *impb.ThreadSearchRequest) (*dto.Th
 	if err != nil {
 		return nil, err
 	}
+
 	owners, err := convertToUUIDs(in.GetOwners())
 	if err != nil {
 		return nil, err
 	}
+
 	var domains []int
 	for _, domain := range in.GetDomainIds() {
 		domains = append(domains, int(domain))
@@ -37,7 +53,7 @@ func (s *ThreadInConverter) ConvertSearch(in *impb.ThreadSearchRequest) (*dto.Th
 		Sort:       in.GetSort(),
 		Page:       int(in.GetPage()),
 		Size:       int(in.GetSize()),
-		Ids:        ids,
+		IDs:        ids,
 		DomainIDs:  domains,
 		Kinds:      s.convertThreadKinds(in.GetKinds()),
 		Owners:     owners,
@@ -49,10 +65,12 @@ func (s *ThreadInConverter) convertThreadKinds(kinds []impb.ThreadKind) []model.
 	if kinds == nil {
 		return nil
 	}
+
 	out := make([]model.ThreadKind, len(kinds))
 	for i, kind := range kinds {
 		out[i] = model.ThreadKind(kind)
 	}
+
 	return out
 }
 
@@ -78,6 +96,7 @@ func (s *ThreadInConverter) ConvertAddMemberRequest(in *impb.AddMemberRequest) (
 	if err != nil {
 		return nil, err
 	}
+
 	newContactID, err := uuid.Parse(in.GetNewMemberContactId())
 	if err != nil {
 		return nil, err
@@ -93,11 +112,37 @@ func (s *ThreadInConverter) ConvertAddMemberRequest(in *impb.AddMemberRequest) (
 		if err != nil {
 			return nil, err
 		}
+
 		converted.InitiatorContactID = initiatorContactID
 	}
 
 	return converted, nil
+}
 
+func (s *ThreadInConverter) ConvertTransferThreadRequest(in *impb.TransferRequest) (*dto.TransferThreadRequest, error) {
+	threadID, err := uuid.Parse(in.GetThreadId())
+	if err != nil {
+		return nil, err
+	}
+
+	newContactID, err := uuid.Parse(in.GetNewMemberContactId())
+	if err != nil {
+		return nil, err
+	}
+
+	initiatorContactID, err := uuid.Parse(in.GetInitiatorContactId())
+	if err != nil {
+		return nil, err
+	}
+
+	converted := &dto.TransferThreadRequest{
+		ThreadID:           threadID,
+		NewMemberContactID: newContactID,
+		NewMemberRole:      s.convertMemberRole(in.GetRole()),
+		InitiatorContactID: initiatorContactID,
+	}
+
+	return converted, nil
 }
 
 func (s *ThreadInConverter) ConvertRemoveMemberRequest(in *impb.RemoveMemberRequest) (*dto.RemoveMemberRequest, error) {
@@ -105,18 +150,22 @@ func (s *ThreadInConverter) ConvertRemoveMemberRequest(in *impb.RemoveMemberRequ
 	if err != nil {
 		return nil, err
 	}
+
 	converted := &dto.RemoveMemberRequest{
 		TargetMemberID: targetMemberID,
 	}
+
 	if in.Reason != nil {
 		reason := in.GetReason()
 		converted.Reason = &reason
 	}
+
 	if in.InitiatorContactId != nil {
 		initiatorContactID, err := uuid.Parse(in.GetInitiatorContactId())
 		if err != nil {
 			return nil, err
 		}
+
 		converted.InitiatorContactID = initiatorContactID
 	}
 
@@ -133,13 +182,14 @@ func (s *ThreadInConverter) convertMemberRole(in impb.ThreadRole) model.ThreadRo
 		return model.RoleMember
 	case impb.ThreadRole_ROLE_SUPERVISOR:
 		return model.RoleSupervisor
+	case impb.ThreadRole_ROLE_UNSPECIFIED:
+		return model.UnspecifiedRole
 	default:
 		return model.UnspecifiedRole
 	}
 }
 
-type ThreadOutConverter struct {
-}
+type ThreadOutConverter struct{}
 
 func (s *ThreadOutConverter) ConvertToThread(source *model.Thread) *impb.Thread {
 	if source == nil {
@@ -147,6 +197,7 @@ func (s *ThreadOutConverter) ConvertToThread(source *model.Thread) *impb.Thread 
 	}
 
 	var lastMsg *impb.HistoryMessage
+
 	if message := source.LastMessage; message != nil {
 		msgMd, err := structpb.NewStruct(message.Metadata)
 		if err != nil {
@@ -154,16 +205,20 @@ func (s *ThreadOutConverter) ConvertToThread(source *model.Thread) *impb.Thread 
 		}
 
 		lastMsg = &impb.HistoryMessage{
-			Id:        message.ID.String(),
-			ThreadId:  source.ID.String(),
-			SenderId:  message.SenderID.String(),
-			Type:      int32(message.Type),
-			Body:      message.Body,
-			Metadata:  msgMd,
-			CreatedAt: message.CreatedAtUnixMillis(),
-			UpdatedAt: message.UpdatedAtUnixMillis(),
-			Documents: mapDocs(message.Documents),
-			Images:    mapImages(message.Images),
+			Id:          message.ID.String(),
+			ThreadId:    source.ID.String(),
+			SenderId:    message.SenderID.String(),
+			Type:        int32(message.Type),
+			Body:        message.Body,
+			Metadata:    msgMd,
+			CreatedAt:   message.CreatedAtUnixMillis(),
+			UpdatedAt:   message.UpdatedAtUnixMillis(),
+			Documents:   mapDocs(message.Documents),
+			Images:      mapImages(message.Images),
+			Location:    mapLocation(message.Location),
+			Contact:     mapContact(message.Contact),
+			System:      mapSystem(message.System),
+			Interactive: mapInteractive(message.Interactive),
 		}
 	}
 
@@ -190,6 +245,7 @@ func (s *ThreadOutConverter) convertThreadMembers(members []*model.ThreadDialog)
 	if members == nil {
 		return nil
 	}
+
 	out := make([]*impb.ThreadMember, len(members))
 	for i, member := range members {
 		out[i] = &impb.ThreadMember{
@@ -198,6 +254,7 @@ func (s *ThreadOutConverter) convertThreadMembers(members []*model.ThreadDialog)
 			Role:      s.ConvertThreadRole(member.ThreadRole),
 		}
 	}
+
 	return out
 }
 
@@ -211,28 +268,30 @@ func (s *ThreadOutConverter) ConvertThreadRole(in model.ThreadRole) impb.ThreadR
 		return impb.ThreadRole_ROLE_MEMBER
 	case model.RoleSupervisor:
 		return impb.ThreadRole_ROLE_SUPERVISOR
+	case model.UnspecifiedRole:
+		return impb.ThreadRole_ROLE_UNSPECIFIED
 	default:
 		return impb.ThreadRole_ROLE_UNSPECIFIED
 	}
 }
 
 func MapSetVariablesRequestToCommand(req *impb.SetVariablesRequest) (*model.SetThreadVariablesCommand, error) {
-	errorsIdWrapper := errors.WithID("grpc.thread.SetVariables")
+	errorsIDWrapper := errors.WithID("grpc.thread.SetVariables")
 
-	threadID, err := uuid.Parse(req.ThreadId)
+	threadID, err := uuid.Parse(req.GetThreadId())
 	if err != nil {
-		return nil, errors.InvalidArgument("invalid originator uuid format", errors.WithCause(err), errorsIdWrapper)
+		return nil, errors.InvalidArgument("invalid originator uuid format", errors.WithCause(err), errorsIDWrapper)
 	}
 
 	originator, err := uuid.Parse(req.GetMemberId())
 	if err != nil {
-		return nil, errors.InvalidArgument("invalid originator uuid format", errors.WithCause(err), errorsIdWrapper)
+		return nil, errors.InvalidArgument("invalid originator uuid format", errors.WithCause(err), errorsIDWrapper)
 	}
 
 	vars := make(map[string]model.VariableEntry)
 	for _, v := range req.GetVariables() {
 		vars[v.GetKey()] = model.VariableEntry{
-			Value: v.Value.AsMap(),
+			Value: v.GetValue().AsMap(),
 			SetBy: originator,
 		}
 	}
@@ -272,24 +331,26 @@ func MapThreadVariablesToProto(vars *model.ThreadVariables) *impb.ThreadVariable
 }
 
 func MapSearchVariablesRequestToQuery(req *impb.SearchVariablesRequest) (model.GetThreadVariablesQuery, error) {
-	var threadIds uuid.UUIDs
+	var threadIDs uuid.UUIDs
 	if len(req.GetThreadIds()) > 0 {
-		threadIds = make([]uuid.UUID, len(req.GetThreadIds()))
+		threadIDs = make([]uuid.UUID, len(req.GetThreadIds()))
 		for i, id := range req.GetThreadIds() {
 			var err error
-			threadIds[i], err = uuid.Parse(id)
+
+			threadIDs[i], err = uuid.Parse(id)
 			if err != nil {
 				return model.GetThreadVariablesQuery{}, errors.InvalidArgument("invalid thread id format", errors.WithCause(err))
 			}
 		}
 	}
+
 	return model.GetThreadVariablesQuery{
 		Pagination: model.Pagination{
 			Limit: int(req.GetSize()),
 			Page:  int(req.GetPage()),
 		},
 		Fields:    req.GetFields(),
-		ThreadIDs: threadIds,
+		ThreadIDs: threadIDs,
 	}, nil
 }
 
@@ -298,6 +359,7 @@ func MapThreadVariablesPageToProto(page *model.Page[*model.ThreadVariables]) *im
 	for i, v := range page.Items {
 		items[i] = MapThreadVariablesToProto(v)
 	}
+
 	return &impb.SearchVariablesResponse{
 		Items: items,
 		Next:  page.HasNext,
@@ -305,16 +367,18 @@ func MapThreadVariablesPageToProto(page *model.Page[*model.ThreadVariables]) *im
 }
 
 func MapFlushVariablesRequestToCommand(req *impb.FlushVariablesRequest) (*model.FlushVariablesCommand, error) {
-	threadId, err := uuid.Parse(req.GetThreadId())
+	threadID, err := uuid.Parse(req.GetThreadId())
 	if err != nil {
 		return nil, errors.InvalidArgument("invalid thread id format", errors.WithCause(err))
 	}
+
 	originator, err := uuid.Parse(req.GetMemberId())
 	if err != nil {
 		return nil, errors.InvalidArgument("invalid originator id format", errors.WithCause(err))
 	}
+
 	return &model.FlushVariablesCommand{
-		ThreadID: threadId,
+		ThreadID: threadID,
 		Member:   originator,
 		Keys:     req.GetKeys(),
 	}, nil

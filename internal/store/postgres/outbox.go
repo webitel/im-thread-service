@@ -9,6 +9,8 @@ import (
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/webitel/webitel-go-kit/pkg/errors"
+
 	"github.com/webitel/im-thread-service/internal/domain/event"
 	"github.com/webitel/im-thread-service/internal/domain/model"
 	"github.com/webitel/im-thread-service/internal/store"
@@ -28,7 +30,7 @@ func NewOutboxStore(q Querier, wmlogger watermill.LoggerAdapter) store.OutboxSto
 		wmlogger: wmlogger,
 		config: sql.PublisherConfig{
 			SchemaAdapter: sql.DefaultPostgreSQLSchema{
-				GenerateMessagesTableName: func(topic string) string {
+				GenerateMessagesTableName: func(_ string) string {
 					return "im_message.messages_outbox"
 				},
 			},
@@ -38,13 +40,13 @@ func NewOutboxStore(q Querier, wmlogger watermill.LoggerAdapter) store.OutboxSto
 
 var _ store.OutboxStore = (*outboxStore)(nil)
 
-func (o *outboxStore) Publish(ctx context.Context, topic string, event event.Outboxer) error {
+func (o *outboxStore) Publish(_ context.Context, topic string, event event.Outboxer) error {
 	// [ATOMICITY_CHECK]
 	// Watermill SQL publisher MUST run within an active transaction
 	// to ensure the business logic and event storage are committed together.
 	tx, ok := o.q.(pgx.Tx)
 	if !ok {
-		return fmt.Errorf("outbox publish: transaction required (querier is not pgx.Tx)")
+		return errors.New("outbox publish: transaction required (querier is not pgx.Tx)")
 	}
 
 	ev, err := event.ToOutbox()
@@ -89,7 +91,7 @@ func (o *outboxStore) Cleanup(ctx context.Context, opt *model.OutboxCleanupOptio
         WITH to_delete AS (
             SELECT transaction_id, "offset"
             FROM im_message.messages_outbox
-            WHERE 
+            WHERE
                 (transaction_id, "offset") <= (
                     SELECT last_processed_transaction_id, offset_acked
                     FROM im_message.messages_offsets
@@ -106,6 +108,7 @@ func (o *outboxStore) Cleanup(ctx context.Context, opt *model.OutboxCleanupOptio
           AND im_message.messages_outbox."offset" = to_delete."offset"`
 
 	var totalDeleted int64
+
 	for {
 		// [BATCHED_DELETE]
 		// Loop execution to prevent long-lived locks and WAL bloat

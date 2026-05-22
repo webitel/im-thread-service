@@ -5,8 +5,10 @@ import (
 	"slices"
 
 	"github.com/huandu/go-sqlbuilder"
-	"github.com/webitel/im-thread-service/internal/domain/model"
+
 	"github.com/webitel/webitel-go-kit/pkg/errors"
+
+	"github.com/webitel/im-thread-service/internal/domain/model"
 )
 
 const (
@@ -37,9 +39,11 @@ func applyLimit(sb *sqlbuilder.SelectBuilder, limitVal int) {
 	if limitVal > maxLimit {
 		limitVal = maxLimit
 	}
+
 	if limitVal <= 0 {
 		limitVal = limitDefault
 	}
+
 	sb.Limit(limitVal + 1)
 }
 
@@ -58,16 +62,18 @@ func applySort(sb *sqlbuilder.SelectBuilder, sort string, entity *sqlbuilder.Str
 	}
 
 	sb.OrderBy(fmt.Sprintf("%s %s", sf.Field, sf.Order))
+
 	return nil
 }
 
 func applyPagination(sb *sqlbuilder.SelectBuilder, p model.Pagination, entity *sqlbuilder.Struct) error {
 	applyLimit(sb, p.Limit)
 	applyOffset(sb, p.Page, p.Limit)
+
 	return applySort(sb, p.Sort, entity)
 }
 
-func applyOffset(sb *sqlbuilder.SelectBuilder, page int, limit int) {
+func applyOffset(sb *sqlbuilder.SelectBuilder, page, limit int) {
 	if page > 1 {
 		offset := (page - 1) * limit
 		sb.Offset(offset)
@@ -78,6 +84,7 @@ func validateSortField(field string, entity *sqlbuilder.Struct) error {
 	if !slices.Contains(entity.Columns(), field) {
 		return errors.InvalidArgument(fmt.Sprintf("invalid sort field: %q", field))
 	}
+
 	return nil
 }
 
@@ -85,6 +92,7 @@ func buildPage[T any](items []T, limit int) model.Page[T] {
 	if limit <= 0 {
 		limit = limitDefault
 	}
+
 	if limit > maxLimit {
 		limit = maxLimit
 	}
@@ -113,12 +121,14 @@ func performColumnsValidation(cols []string, entity *sqlbuilder.Struct) []string
 	}
 
 	n := 0
+
 	for _, c := range cols {
 		if _, exists := validMap[c]; exists {
 			cols[n] = c
 			n++
 		}
 	}
+
 	cols = cols[:n]
 
 	if len(cols) == 0 {

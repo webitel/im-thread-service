@@ -1,11 +1,11 @@
 package model
 
 import (
-	"encoding/json"
 	"maps"
 	"time"
 
 	"github.com/google/uuid"
+
 	"github.com/webitel/im-thread-service/internal/domain/event"
 	"github.com/webitel/im-thread-service/internal/domain/shared"
 )
@@ -68,10 +68,11 @@ func (m *Message) AddEvent(event event.Outboxer) {
 func (m *Message) Events() []event.Outboxer {
 	e := m.domainEvents
 	m.domainEvents = nil
+
 	return e
 }
 
-func (m *Message) WithCreatedEvent(sendID string, from *shared.Peer) *Message {
+func (m *Message) WithCreatedEvent(sendID string, _ *shared.Peer) *Message {
 	if m == nil {
 		return m
 	}
@@ -95,6 +96,7 @@ func (m *Message) WithCreatedEvent(sendID string, from *shared.Peer) *Message {
 	}
 
 	var messageFrom *event.ThreadMember
+
 	for _, member := range m.To {
 		if member.ContactID == m.From.ID {
 			messageFrom = &event.ThreadMember{
@@ -139,14 +141,108 @@ func (m *Message) WithCreatedEvent(sendID string, from *shared.Peer) *Message {
 	}
 
 	if m.Interactive != nil {
-		var err error
-		e.Interactive, err = json.Marshal(m.Interactive)
-		if err != nil {
-			e.Interactive = nil
-		}
+		e.Interactive = m.Interactive.AsEvent()
 	}
 
 	m.AddEvent(e)
 
 	return m
+}
+
+func (m *MessageInteractive) AsEvent() *event.InteractivePayload {
+	if m == nil {
+		return nil
+	}
+
+	payload := &event.InteractivePayload{}
+
+	if m.Kind.Markup != nil {
+		payload.Markup = mapMarkupToEvent(m.Kind.Markup)
+	}
+
+	if m.Kind.ListReply != nil {
+		payload.ListReply = mapListReplyToEvent(m.Kind.ListReply)
+	}
+
+	return payload
+}
+
+// Внутрішні хелпери для мапінгу
+
+func mapMarkupToEvent(markup *KeyboardButtonMarkup) *event.KeyboardMarkup {
+	if markup == nil {
+		return nil
+	}
+
+	rows := make([]*event.KeyboardRow, 0, len(markup.Rows))
+	for _, row := range markup.Rows {
+		if row == nil {
+			continue
+		}
+
+		rows = append(rows, &event.KeyboardRow{
+			Buttons: mapButtonsToEvent(row.Buttons),
+		})
+	}
+
+	return &event.KeyboardMarkup{Rows: rows}
+}
+
+func mapListReplyToEvent(list *KeyboardListReply) *event.KeyboardListReply {
+	if list == nil {
+		return nil
+	}
+
+	sections := make([]*event.KeyboardRowWithSection, 0, len(list.Sections))
+	for _, s := range list.Sections {
+		if s == nil {
+			continue
+		}
+
+		sections = append(sections, &event.KeyboardRowWithSection{
+			Section: s.Section,
+			Buttons: mapButtonsToEvent(s.Buttons),
+		})
+	}
+
+	return &event.KeyboardListReply{
+		MainButtonTitle: list.Title,
+		Sections:        sections,
+	}
+}
+
+func mapButtonsToEvent(btns []*KeyboardButton) []*event.KeyboardButton {
+	res := make([]*event.KeyboardButton, 0, len(btns))
+	for _, b := range btns {
+		if b == nil {
+			continue
+		}
+
+		eventBtn := &event.KeyboardButton{
+			ID:       b.ID,
+			Label:    b.Label,
+			Metadata: b.Metadata,
+			Type:     b.Type,
+		}
+
+		// Мапінг поліморфних полів залежно від типу
+		switch b.Type {
+		case ActionTypeURL:
+			if b.URL != nil {
+				eventBtn.URL = &event.KeyboardButtonURL{URL: *b.URL}
+			}
+		case ActionTypeCallback:
+			if b.Data != nil {
+				eventBtn.Callback = &event.KeyboardButtonCallback{Data: *b.Data}
+			}
+		case ActionTypeRequest:
+			if b.Action != nil {
+				eventBtn.Request = &event.KeyboardButtonRequest{Action: *b.Action}
+			}
+		}
+
+		res = append(res, eventBtn)
+	}
+
+	return res
 }

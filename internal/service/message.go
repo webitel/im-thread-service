@@ -7,14 +7,16 @@ import (
 	"strconv"
 
 	"github.com/google/uuid"
+
+	"github.com/webitel/webitel-go-kit/pkg/errors"
+
 	imcontact "github.com/webitel/im-thread-service/infra/webitel/im-contact"
 	"github.com/webitel/im-thread-service/internal/domain/event"
 	"github.com/webitel/im-thread-service/internal/domain/model"
 	"github.com/webitel/im-thread-service/internal/domain/shared"
 	"github.com/webitel/im-thread-service/internal/service/dto"
-	guards "github.com/webitel/im-thread-service/internal/service/guards"
+	"github.com/webitel/im-thread-service/internal/service/guards"
 	"github.com/webitel/im-thread-service/internal/store"
-	"github.com/webitel/webitel-go-kit/pkg/errors"
 )
 
 type ThreadManager interface {
@@ -22,11 +24,12 @@ type ThreadManager interface {
 }
 
 type MessageService struct {
-	uow            store.UnitOfWork
-	logger         *slog.Logger
-	threader       ThreadManager
-	contactClient  *imcontact.Client
-	mediaProcessor MediaProcessor
+	uow              store.UnitOfWork
+	logger           *slog.Logger
+	threader         ThreadManager
+	contactClient    *imcontact.Client
+	mediaProcessor   MediaProcessor
+	providersAdapter ProvidersAdapter
 }
 
 func NewMessageService(
@@ -35,19 +38,25 @@ func NewMessageService(
 	threader ThreadManager,
 	contactClient *imcontact.Client,
 	mediaProcessor MediaProcessor,
+	providersAdapter ProvidersAdapter,
 ) *MessageService {
 	return &MessageService{
-		uow:            uow,
-		logger:         logger,
-		threader:       threader,
-		contactClient:  contactClient,
-		mediaProcessor: mediaProcessor,
+		uow:              uow,
+		logger:           logger,
+		threader:         threader,
+		contactClient:    contactClient,
+		mediaProcessor:   mediaProcessor,
+		providersAdapter: providersAdapter,
 	}
+}
+
+func (s *MessageService) sendMessageToExternalProvider(ctx context.Context, message *model.Message) error {
+	return s.providersAdapter.SendMessage(ctx, message)
 }
 
 func (s *MessageService) SendText(ctx context.Context, in *dto.SendTextRequest) (*dto.SendTextResponse, error) {
 	if err := guards.SendTextGuard(in); err != nil {
-		return nil, fmt.Errorf("validation: %w", err)
+		return nil, errors.InvalidArgument("validating text message", errors.WithCause(err), errors.WithID("service.message.send_text"))
 	}
 
 	log := s.logger.With("operation", "message.SendText")
@@ -99,7 +108,6 @@ func (s *MessageService) SendText(ctx context.Context, in *dto.SendTextRequest) 
 
 		return nil
 	})
-
 	if err != nil {
 		log.ErrorContext(
 			ctx,
@@ -109,7 +117,11 @@ func (s *MessageService) SendText(ctx context.Context, in *dto.SendTextRequest) 
 			slog.String("from", msg.From.ID.String()),
 		)
 
-		return nil, errors.Internal("error saving text message", errors.WithCause(err))
+		return nil, errors.Internal("error saving text message", errors.WithCause(err), errors.WithID("service.message.send_text"))
+	}
+
+	if err = s.sendMessageToExternalProvider(ctx, msg); err != nil {
+		log.Error("sending text message to external providers", "error", err)
 	}
 
 	return &dto.SendTextResponse{ID: msg.ID, To: in.To}, nil
@@ -133,6 +145,7 @@ func (s *MessageService) SendImage(ctx context.Context, in *dto.SendImageRequest
 	for i, img := range in.Image.Images {
 		attachments[i] = img
 	}
+
 	if err := s.mediaProcessor.Process(ctx, in.DomainID, attachments); err != nil {
 		return nil, err
 	}
@@ -158,6 +171,7 @@ func (s *MessageService) SendImage(ctx context.Context, in *dto.SendImageRequest
 		if err != nil {
 			return errors.Internal("save message", errors.WithCause(err), errors.WithID("service.message.send_image"))
 		}
+
 		if _, err := uow.Messages().SaveImages(txCtx, saved.ID, msg.Images); err != nil {
 			return errors.Internal("save images", errors.WithCause(err), errors.WithID("service.message.send_image"))
 		}
@@ -171,17 +185,25 @@ func (s *MessageService) SendImage(ctx context.Context, in *dto.SendImageRequest
 
 		return nil
 	})
-
 	if err != nil {
 		s.logger.ErrorContext(ctx, "send image failed", "err", err)
+
 		return nil, err
+	}
+
+	if err = s.sendMessageToExternalProvider(ctx, msg); err != nil {
+		s.logger.Error("sending image message to external providers", "error", err)
 	}
 
 	return &dto.SendImageResponse{ID: msg.ID, To: in.To}, nil
 }
 
 func (s *MessageService) SendDocument(ctx context.Context, in *dto.SendDocumentRequest) (*dto.SendDocumentResponse, error) {
-	if err := guards.SendDocumentGuard(in); err != nil {
+	log := s.logger.With("operation", "send_document")
+
+	if err := in.Validate(); err != nil {
+		log.Warn("send document request validation", "error", err)
+
 		return nil, errors.InvalidArgument("send document request validation", errors.WithCause(err), errors.WithID("service.message.send_document"))
 	}
 
@@ -191,6 +213,8 @@ func (s *MessageService) SendDocument(ctx context.Context, in *dto.SendDocumentR
 		DomainID: int(in.DomainID),
 	})
 	if err != nil {
+		log.Error("resolving thread", "error", err, "from", in.From.ID.String(), "to", in.To.ID.String(), "to_type", in.To.Type.String())
+
 		return nil, err
 	}
 
@@ -198,13 +222,28 @@ func (s *MessageService) SendDocument(ctx context.Context, in *dto.SendDocumentR
 	for i, doc := range in.Document.Documents {
 		attachments[i] = doc
 	}
+
 	if err := s.mediaProcessor.Process(ctx, in.DomainID, attachments); err != nil {
+		log.Error("processing input media", "error", err)
+
 		return nil, err
 	}
 
-	fileLinksChan := s.mediaProcessor.FetchFileLinks(ctx, in.DomainID, attachments)
-	if err := enrichAttachmentsLinks(ctx, attachments, fileLinksChan); err != nil {
-		s.logger.ErrorContext(ctx, "enriching attachments links", "err", err)
+	filesMetadata, err := s.mediaProcessor.FetchFileLinksWithMetadata(ctx, in.DomainID, attachments)
+	if err != nil {
+		return nil, errors.Wrap(err, errors.WithID("service.message.send_document"))
+	}
+
+	for i := range attachments {
+		fileMetadata, ok := filesMetadata.FilesMetadata[attachments[i].GetID()]
+		if !ok {
+			continue
+		}
+
+		attachments[i].SetMime(fileMetadata.Mime)
+		attachments[i].SetName(fileMetadata.Name)
+		attachments[i].SetURL(fileMetadata.URL)
+		attachments[i].SetSize(fileMetadata.Size)
 	}
 
 	msg := model.NewDocumentMessage(model.MessageCreate{
@@ -224,7 +263,8 @@ func (s *MessageService) SendDocument(ctx context.Context, in *dto.SendDocumentR
 			return errors.Internal("save message", errors.WithCause(err), errors.WithID("service.message.send_document"))
 		}
 
-		if _, err := uow.Messages().SaveDocuments(txCtx, saved.ID, msg.Documents); err != nil {
+		_, err = uow.Messages().SaveDocuments(txCtx, saved.ID, msg.Documents)
+		if err != nil {
 			return errors.Internal("save documents", errors.WithCause(err), errors.WithID("service.message.send_document"))
 		}
 
@@ -237,10 +277,14 @@ func (s *MessageService) SendDocument(ctx context.Context, in *dto.SendDocumentR
 
 		return nil
 	})
-
 	if err != nil {
 		s.logger.ErrorContext(ctx, "send document failed", "err", err)
+
 		return nil, err
+	}
+
+	if err = s.sendMessageToExternalProvider(ctx, msg); err != nil {
+		log.Error("sending document message to external providers", "error", err)
 	}
 
 	return &dto.SendDocumentResponse{ID: msg.ID, To: in.To}, nil
@@ -280,15 +324,18 @@ func (s *MessageService) SendLocation(ctx context.Context, msg *model.Message) (
 
 	if err := s.prepareMessageForSending(ctx, msg); err != nil {
 		log.ErrorContext(ctx, "prepare_message_failed", "err", err)
+
 		return nil, err
 	}
 
 	var savedMsg *model.Message
+
 	err := s.uow.WithinTransaction(ctx, func(txCtx context.Context, uow store.UnitOfWork) error {
 		var err error
 		if savedMsg, err = uow.Messages().SaveMessageLocation(txCtx, msg); err != nil {
 			return err
 		}
+
 		savedMsg.To = msg.To
 		savedMsg.IdempotencyKey = msg.IdempotencyKey
 
@@ -296,10 +343,14 @@ func (s *MessageService) SendLocation(ctx context.Context, msg *model.Message) (
 
 		return s.dispatchMessageEvents(txCtx, uow, savedMsg)
 	})
-
 	if err != nil {
 		log.ErrorContext(ctx, "location_transaction_failed", "err", err)
+
 		return nil, err
+	}
+
+	if err = s.sendMessageToExternalProvider(ctx, msg); err != nil {
+		log.Error("sending location message to external providers", "error", err)
 	}
 
 	return savedMsg, err
@@ -310,15 +361,18 @@ func (s *MessageService) SendContact(ctx context.Context, msg *model.Message) (*
 
 	if err := s.prepareMessageForSending(ctx, msg); err != nil {
 		log.ErrorContext(ctx, "prepare_message_failed", "err", err)
+
 		return nil, err
 	}
 
 	var savedMsg *model.Message
+
 	err := s.uow.WithinTransaction(ctx, func(txCtx context.Context, uow store.UnitOfWork) error {
 		var err error
 		if savedMsg, err = uow.Messages().SaveMessageContact(txCtx, msg); err != nil {
 			return err
 		}
+
 		savedMsg.To = msg.To
 		savedMsg.IdempotencyKey = msg.IdempotencyKey
 
@@ -326,10 +380,14 @@ func (s *MessageService) SendContact(ctx context.Context, msg *model.Message) (*
 
 		return s.dispatchMessageEvents(txCtx, uow, savedMsg)
 	})
-
 	if err != nil {
 		log.ErrorContext(ctx, "contact_transaction_failed", "err", err)
+
 		return nil, err
+	}
+
+	if err = s.sendMessageToExternalProvider(ctx, msg); err != nil {
+		log.Error("sending contact message to external providers", "error", err)
 	}
 
 	return savedMsg, err
@@ -340,6 +398,7 @@ func (s *MessageService) SendInteractive(ctx context.Context, msg *model.Message
 
 	if err := s.prepareMessageForSending(ctx, msg); err != nil {
 		log.ErrorContext(ctx, "prepare_message_failed", "err", err)
+
 		return nil, err
 	}
 
@@ -348,12 +407,14 @@ func (s *MessageService) SendInteractive(ctx context.Context, msg *model.Message
 		for _, doc := range msg.Documents {
 			attachments = append(attachments, doc)
 		}
+
 		for _, img := range msg.Images {
 			attachments = append(attachments, img)
 		}
 
 		if err := s.mediaProcessor.Process(ctx, int64(msg.DomainID), attachments); err != nil {
 			log.ErrorContext(ctx, "media_process_failed", "err", err)
+
 			return nil, errors.Internal(
 				"media_process_failed",
 				errors.WithCause(err),
@@ -363,6 +424,7 @@ func (s *MessageService) SendInteractive(ctx context.Context, msg *model.Message
 	}
 
 	var savedMsg *model.Message
+
 	err := s.uow.WithinTransaction(ctx, func(ctx context.Context, uow store.UnitOfWork) error {
 		var err error
 		if savedMsg, err = uow.Messages().SaveInteractiveMessage(ctx, msg); err != nil {
@@ -374,10 +436,14 @@ func (s *MessageService) SendInteractive(ctx context.Context, msg *model.Message
 
 		return s.dispatchMessageEvents(ctx, uow, savedMsg)
 	})
-
 	if err != nil {
 		log.ErrorContext(ctx, "transaction_failed", "err", err)
+
 		return nil, err
+	}
+
+	if err = s.sendMessageToExternalProvider(ctx, msg); err != nil {
+		log.Error("sending interactive message to external providers", "error", err)
 	}
 
 	return savedMsg, nil
@@ -387,6 +453,7 @@ func (s *MessageService) SendInteractiveCallback(ctx context.Context, callback *
 	log := s.logger.With("operation", "send_interactive_callback")
 
 	var savedCallback *model.InteractiveCallback
+
 	err := s.uow.WithinTransaction(ctx, func(ctx context.Context, uow store.UnitOfWork) error {
 		var err error
 		if savedCallback, err = uow.InteractiveCallback().Save(ctx, callback); err != nil {
@@ -397,7 +464,6 @@ func (s *MessageService) SendInteractiveCallback(ctx context.Context, callback *
 
 		return s.dispatchInteractiveCallbackEvents(ctx, uow, savedCallback)
 	})
-
 	if err != nil {
 		log.ErrorContext(
 			ctx,
@@ -407,6 +473,7 @@ func (s *MessageService) SendInteractiveCallback(ctx context.Context, callback *
 			"in_reply_to", callback.InReplyTo,
 			"button_code", callback.ButtonCode,
 		)
+
 		return nil, err
 	}
 
@@ -418,15 +485,18 @@ func (s *MessageService) SendSystemMessage(ctx context.Context, msg *model.Messa
 
 	if err := s.prepareMessageForSending(ctx, msg); err != nil {
 		log.ErrorContext(ctx, "prepare_message_failed", "err", err)
+
 		return nil, err
 	}
 
 	var savedMsg *model.Message
+
 	err := s.uow.WithinTransaction(ctx, func(txCtx context.Context, uow store.UnitOfWork) error {
 		var err error
 		if savedMsg, err = uow.Messages().SaveSystemMessage(txCtx, msg); err != nil {
 			return err
 		}
+
 		savedMsg.To = msg.To
 		savedMsg.IdempotencyKey = msg.IdempotencyKey
 
@@ -434,9 +504,9 @@ func (s *MessageService) SendSystemMessage(ctx context.Context, msg *model.Messa
 
 		return s.dispatchMessageEvents(txCtx, uow, savedMsg)
 	})
-
 	if err != nil {
 		log.ErrorContext(ctx, "transaction_failed", "err", err)
+
 		return nil, err
 	}
 
@@ -467,6 +537,7 @@ func (s *MessageService) dispatchInteractiveCallbackEvents(ctx context.Context, 
 	evs := callback.Events()
 	if len(evs) == 0 {
 		s.logger.Warn("service.message.dispatchInteractiveCallbackEvents: no events to dispatch")
+
 		return nil
 	}
 
@@ -482,7 +553,7 @@ func (s *MessageService) dispatchInteractiveCallbackEvents(ctx context.Context, 
 func (s *MessageService) dispatchMessageEvents(ctx context.Context, uow store.UnitOfWork, msg *model.Message) error {
 	evs := msg.Events()
 	if len(evs) == 0 {
-		return fmt.Errorf("domain events queue is empty: transaction aborted")
+		return errors.New("domain events queue is empty: transaction aborted")
 	}
 
 	return s.dispatchEvents(ctx, uow, evs, func(e event.Outboxer) string {
@@ -506,6 +577,7 @@ func (s *MessageService) dispatchEvents(ctx context.Context, uow store.UnitOfWor
 			return fmt.Errorf("outbox publish failed: %w", err)
 		}
 	}
+
 	return nil
 }
 
@@ -519,6 +591,7 @@ func (s *MessageService) mapImageInputs(dtoImages []*dto.Image) []model.ImageInp
 			MimeType: img.MimeType,
 		})
 	}
+
 	return inputs
 }
 
@@ -533,6 +606,7 @@ func (s *MessageService) mapDocumentInputs(dtoDocs []*dto.Document) []model.Docu
 			URL:      doc.URL,
 		})
 	}
+
 	return inputs
 }
 
@@ -555,12 +629,13 @@ func enrichAttachmentsLinks(ctx context.Context, attachments []AttachmentProcess
 			for i := range attachments {
 				if attachments[i].GetID() == id {
 					attachments[i].SetURL(url)
+
 					break
 				}
 			}
 		}
 	case <-ctx.Done():
-		return errors.Aborted("context cancelled", errors.WithID("service.message.enrich_attachments_links"), errors.WithCause(ctx.Err()))
+		return errors.Aborted("context canceled", errors.WithID("service.message.enrich_attachments_links"), errors.WithCause(ctx.Err()))
 	}
 
 	return nil
@@ -575,5 +650,6 @@ func findSenderMemberID(members []*model.ThreadDialog, contactID uuid.UUID) uuid
 			return m.ID
 		}
 	}
+
 	return uuid.Nil
 }

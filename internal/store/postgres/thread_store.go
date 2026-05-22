@@ -6,11 +6,13 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+
+	"github.com/webitel/webitel-go-kit/pkg/errors"
+
 	"github.com/webitel/im-thread-service/internal/domain/model"
 	"github.com/webitel/im-thread-service/internal/domain/shared"
 	queryobject "github.com/webitel/im-thread-service/internal/store/query_object"
 	"github.com/webitel/im-thread-service/internal/utils"
-	"github.com/webitel/webitel-go-kit/pkg/errors"
 )
 
 // [D]ata [A]cess [O]bjects
@@ -77,7 +79,7 @@ func (s *threadStore) Create(ctx context.Context, req *model.Thread) (*model.Thr
 }
 
 func (s *threadStore) Search(ctx context.Context, query queryobject.QueryObject) ([]*model.Thread, error) {
-	sql, args, err := query.ToSql()
+	sql, args, err := query.ToSQL()
 	if err != nil {
 		return nil, errors.Internal("preparing search thread query", errors.WithCause(err), errors.WithID("postgres.thread_store.search"))
 	}
@@ -97,6 +99,29 @@ func (s *threadStore) Search(ctx context.Context, query queryobject.QueryObject)
 	}
 
 	return records, nil
+}
+
+func (s *threadStore) Get(ctx context.Context, query queryobject.QueryObject) (*model.Thread, error) {
+	sql, args, err := query.ToSQL()
+	if err != nil {
+		return nil, errors.Internal("preparing get thread query", errors.WithCause(err), errors.WithID("postgres.thread_store.get"))
+	}
+
+	rows, err := s.db.Query(ctx, sql, args...)
+	if err != nil {
+		return nil, errors.Internal("executing get thread query", errors.WithCause(err), errors.WithID("postgres.thread_store.get"), errors.WithValue("query", sql))
+	}
+
+	record, err := pgx.CollectExactlyOneRow(rows, pgx.RowToAddrOfStructByNameLax[threadRecord])
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, errors.NotFound("thread not found", errors.WithID("postgres.thread_store.get"))
+		}
+
+		return nil, errors.Internal("collecting get thread record", errors.WithCause(err), errors.WithID("postgres.thread_store.get"))
+	}
+
+	return mapThreadRecordToModel(record)
 }
 
 func mapThreadRecordToModel(record *threadRecord) (*model.Thread, error) {
@@ -143,7 +168,7 @@ func (s *threadStore) ResolveThread(ctx context.Context, q model.ResolveThreadQu
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			if q.To.Type == shared.PeerContact { // in case of contact thread no rows means that it`s first message for contact
-				return nil, nil
+				return nil, nil //nolint:nilnil
 			}
 
 			return nil, errors.Forbidden(
@@ -180,7 +205,8 @@ func prepareResolveThreadQuery(q model.ResolveThreadQuery) (string, pgx.NamedArg
 					jsonb_build_object(
 						'id', td3.id,
 						'member_role', td3.thread_role,
-						'member_id', td3.member_id
+						'member_id', td3.member_id,
+						'via', td3.via
 					)
 				) as members
 				from im_thread.thread_dialog td3
@@ -201,12 +227,14 @@ func prepareResolveThreadQuery(q model.ResolveThreadQuery) (string, pgx.NamedArg
 					where td_check.thread_id = t.id
 					  and td_check.member_id = @FromID::uuid
 					  and td_check.deleted_at is null
+					  and (@FromVia::text is null or td_check.via = @FromVia::text)
 				)
 			limit 1;
 	`
 
 	args := pgx.NamedArgs{
 		"FromID":     q.From.ResolveContactID(),
+		"FromVia":    q.From.ResolveVia(),
 		"ToPeerID":   q.To.ResolveContactID(),
 		"ToThreadID": q.To.ResolveThreadID(),
 	}
@@ -234,14 +262,14 @@ func (s *threadStore) SearchLeft(ctx context.Context, query queryobject.QueryObj
 }
 
 // TODO: rewrite to soft delete logic!
-func (t *threadStore) Delete(ctx context.Context, threadID uuid.UUID) error {
+func (s *threadStore) Delete(ctx context.Context, threadID uuid.UUID) error {
 	if threadID == uuid.Nil {
 		return errors.InvalidArgument("thread id is required", errors.WithID("postgres.thread_store.delete"))
 	}
 
 	query := `DELETE FROM im_thread.thread WHERE id = $1`
 
-	cmdTag, err := t.db.Exec(ctx, query, threadID)
+	cmdTag, err := s.db.Exec(ctx, query, threadID)
 	if err != nil {
 		return errors.Internal("executing delete thread query", errors.WithCause(err), errors.WithID("postgres.thread_store.delete"), errors.WithValue("thread_id", threadID.String()))
 	}

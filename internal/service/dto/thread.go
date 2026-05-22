@@ -2,6 +2,7 @@ package dto
 
 import (
 	"github.com/google/uuid"
+
 	"github.com/webitel/im-thread-service/internal/domain/model"
 	"github.com/webitel/im-thread-service/internal/domain/shared"
 )
@@ -26,9 +27,15 @@ type (
 		MemberIDs   []string
 	}
 
+	ThreadGetRequest struct {
+		ID       uuid.UUID
+		DomainID int
+		Fields   []string
+	}
+
 	ThreadSearchRequest struct {
 		Fields     []string
-		Ids        uuid.UUIDs
+		IDs        uuid.UUIDs
 		DomainIDs  []int
 		Kinds      []model.ThreadKind
 		Owners     uuid.UUIDs
@@ -64,6 +71,12 @@ type RemoveMemberRequest struct {
 	TargetMemberID     uuid.UUID
 	InitiatorContactID uuid.UUID
 	Reason             *string
+}
+type TransferThreadRequest struct {
+	ThreadID           uuid.UUID
+	NewMemberContactID uuid.UUID
+	InitiatorContactID uuid.UUID
+	NewMemberRole      model.ThreadRole
 }
 
 func NewSearchThreadRequest(domainID int, kind model.ThreadKind, from, to *shared.Peer) *SearchThreadDialogRequest {

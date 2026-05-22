@@ -8,18 +8,20 @@ import (
 	"time"
 
 	"github.com/ThreeDotsLabs/watermill"
-	"github.com/webitel/im-thread-service/config"
-	"github.com/webitel/im-thread-service/internal/domain/model"
-	"github.com/webitel/webitel-go-kit/infra/discovery"
-	_ "github.com/webitel/webitel-go-kit/infra/discovery/consul"
-	otelsdk "github.com/webitel/webitel-go-kit/infra/otel/sdk"
-	"github.com/webitel/webitel-go-kit/infra/profiler"
-	"github.com/webitel/webitel-go-kit/pkg/logger"
 	"go.opentelemetry.io/contrib/bridges/otelslog"
 	"go.opentelemetry.io/otel/sdk/resource"
 	semconv "go.opentelemetry.io/otel/semconv/v1.38.0"
 	"go.uber.org/fx"
 
+	"github.com/webitel/webitel-go-kit/infra/discovery"
+	otelsdk "github.com/webitel/webitel-go-kit/infra/otel/sdk"
+	"github.com/webitel/webitel-go-kit/infra/profiler"
+	"github.com/webitel/webitel-go-kit/pkg/logger"
+
+	"github.com/webitel/im-thread-service/config"
+	"github.com/webitel/im-thread-service/internal/domain/model"
+
+	_ "github.com/webitel/webitel-go-kit/infra/discovery/consul" // register consul discovery driver
 	_ "github.com/webitel/webitel-go-kit/infra/otel/sdk/log/otlp"
 	_ "github.com/webitel/webitel-go-kit/infra/otel/sdk/log/stdout"
 	_ "github.com/webitel/webitel-go-kit/infra/otel/sdk/metric/otlp"
@@ -53,6 +55,7 @@ func ProvideLogger(cfg *config.Config, lc fx.Lifecycle) (*slog.Logger, error) {
 		} else {
 			h = slog.NewTextHandler(os.Stdout, opts)
 		}
+
 		handlers = append(handlers, h)
 	}
 
@@ -64,7 +67,7 @@ func ProvideLogger(cfg *config.Config, lc fx.Lifecycle) (*slog.Logger, error) {
 		}
 
 		lc.Append(fx.Hook{
-			OnStop: func(ctx context.Context) error {
+			OnStop: func(_ context.Context) error {
 				return f.Close()
 			},
 		})
@@ -75,6 +78,7 @@ func ProvideLogger(cfg *config.Config, lc fx.Lifecycle) (*slog.Logger, error) {
 		} else {
 			h = slog.NewTextHandler(f, opts)
 		}
+
 		handlers = append(handlers, h)
 	}
 
@@ -82,7 +86,7 @@ func ProvideLogger(cfg *config.Config, lc fx.Lifecycle) (*slog.Logger, error) {
 		service := resource.NewSchemaless(
 			semconv.ServiceName(model.ServiceName),
 			semconv.ServiceVersion(model.Version),
-			semconv.ServiceInstanceID(cfg.Service.Id),
+			semconv.ServiceInstanceID(cfg.Service.ID),
 			semconv.ServiceNamespace(model.ServiceNamespace),
 		)
 		otelHandler := otelslog.NewHandler("slog")
@@ -106,11 +110,13 @@ func ProvideLogger(cfg *config.Config, lc fx.Lifecycle) (*slog.Logger, error) {
 	}
 
 	var finalHandler slog.Handler
-	if len(handlers) == 0 {
+
+	switch len(handlers) {
+	case 0:
 		finalHandler = slog.NewTextHandler(os.Stdout, opts)
-	} else if len(handlers) == 1 {
+	case 1:
 		finalHandler = handlers[0]
-	} else {
+	default:
 		finalHandler = MultiHandler(handlers...)
 	}
 
@@ -149,6 +155,7 @@ func (h *multiHandler) Enabled(ctx context.Context, level slog.Level) bool {
 			return true
 		}
 	}
+
 	return false
 }
 
@@ -158,6 +165,7 @@ func (h *multiHandler) Handle(ctx context.Context, r slog.Record) error {
 			_ = hh.Handle(ctx, r)
 		}
 	}
+
 	return nil
 }
 
@@ -166,6 +174,7 @@ func (h *multiHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
 	for i, hh := range h.handlers {
 		newHandlers[i] = hh.WithAttrs(attrs)
 	}
+
 	return &multiHandler{handlers: newHandlers}
 }
 
@@ -174,6 +183,7 @@ func (h *multiHandler) WithGroup(name string) slog.Handler {
 	for i, hh := range h.handlers {
 		newHandlers[i] = hh.WithGroup(name)
 	}
+
 	return &multiHandler{handlers: newHandlers}
 }
 
@@ -191,7 +201,7 @@ func ProvideSD(cfg *config.Config, log *slog.Logger, lc fx.Lifecycle) (discovery
 
 	si := new(discovery.ServiceInstance)
 	{
-		si.Id = cfg.Service.Id
+		si.Id = cfg.Service.ID
 		si.Name = model.ServiceName
 		si.Version = model.Version
 		si.Metadata = map[string]string{
@@ -208,12 +218,14 @@ func ProvideSD(cfg *config.Config, log *slog.Logger, lc fx.Lifecycle) (discovery
 			if err := provider.Register(ctx, si); err != nil {
 				return err
 			}
+
 			return nil
 		},
 		OnStop: func(ctx context.Context) error {
 			if err := provider.Deregister(ctx, si); err != nil {
 				return err
 			}
+
 			return nil
 		},
 	})

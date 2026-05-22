@@ -2,8 +2,9 @@ package postgres
 
 import (
 	"github.com/jackc/pgx/v5/pgconn"
-	"github.com/webitel/webitel-go-kit/pkg/errors"
 	"google.golang.org/grpc/codes"
+
+	"github.com/webitel/webitel-go-kit/pkg/errors"
 )
 
 func uniqueViolation(err error) error {
@@ -14,15 +15,6 @@ func uniqueViolation(err error) error {
 			errors.WithCode(codes.AlreadyExists),
 		)
 	}
-	return nil
-}
 
-func foreignKeyViolation(err error) error {
-	if pgerr, ok := err.(*pgconn.PgError); ok && pgerr.Code == "23503" {
-		return errors.InvalidArgument(
-			"conflict: foreign key violation",
-			errors.WithCause(pgerr),
-		)
-	}
 	return nil
 }

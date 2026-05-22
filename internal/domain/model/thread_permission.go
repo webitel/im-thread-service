@@ -42,6 +42,7 @@ type ThreadPermissionsAllowance struct {
 
 type PermissionChangeInitiator struct {
 	ThreadPermissions
+
 	ThreadDialogID uuid.UUID
 	Role           ThreadRole
 }
