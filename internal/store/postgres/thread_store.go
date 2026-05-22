@@ -243,7 +243,7 @@ func prepareResolveThreadQuery(q model.ResolveThreadQuery) (string, pgx.NamedArg
 }
 
 func (s *threadStore) SearchLeft(ctx context.Context, query queryobject.QueryObject) ([]*model.Thread, error) {
-	sql, args, err := query.ToSql()
+	sql, args, err := query.ToSQL()
 	if err != nil {
 		return nil, errors.Internal("preparing search left query", errors.WithCause(err), errors.WithID("postgres.thread_store.search_left"))
 	}

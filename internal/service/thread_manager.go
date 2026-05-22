@@ -106,8 +106,9 @@ func (t *ThreadManagementService) Search(ctx context.Context, searchRequest *dto
 
 func (t *ThreadManagementService) SearchLeft(ctx context.Context, req *dto.SearchLeftRequest) ([]*model.Thread, error) {
 	if req == nil {
-		return nil, errors.New("request cannot be nil")
+		return nil, errors.InvalidArgument("request cannot be nil", errors.WithID("service.thread_manager."))
 	}
+
 	if req.MemberID == uuid.Nil {
 		return nil, errors.InvalidArgument("member_id is required")
 	}
