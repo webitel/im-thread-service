@@ -1,6 +1,7 @@
 package queryobject
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -337,7 +338,7 @@ func TestThreadQueryObject_WithDescriptionFilter(t *testing.T) {
 	}
 }
 
-func TestThreadQueryObject_WithMemberIDFilter(t *testing.T) {
+func TestThreadQueryObject_WithContactIDFilter(t *testing.T) {
 	tests := []struct {
 		name      string
 		memberIDs []uuid.UUID
@@ -370,8 +371,75 @@ func TestThreadQueryObject_WithMemberIDFilter(t *testing.T) {
 
 			if tt.wantJoin {
 				assert.Contains(t, sql, ThreadDialogTable)
-				assert.Contains(t, sql, "member_id")
-				assert.Contains(t, sql, "HAVING COUNT(DISTINCT member_id)")
+				assert.Contains(t, sql, "td.member_id")
+				assert.Contains(t, sql, "INNER JOIN "+ThreadDialogTable,
+					"hot path must use a regular inner join — no LATERAL loop-in-loop")
+				assert.NotContains(t, sql, "LATERAL", "contact filter must stay lightweight (no LATERAL)")
+				assert.NotContains(t, sql, "HAVING", "contact filter must stay lightweight (no aggregation)")
+				assert.NotContains(t, sql, "WITH ", "contact filter must stay lightweight (no CTE)")
+			}
+		})
+	}
+}
+
+func TestThreadQueryObject_WithActiveMembersFilter(t *testing.T) {
+	tests := []struct {
+		name          string
+		memberIDs     []uuid.UUID
+		wantFilter    bool
+		wantIntersect bool
+	}{
+		{
+			name:       "empty member ids",
+			memberIDs:  []uuid.UUID{},
+			wantFilter: false,
+		},
+		{
+			name:          "single member id",
+			memberIDs:     []uuid.UUID{uuid.New()},
+			wantFilter:    true,
+			wantIntersect: false,
+		},
+		{
+			name:          "multiple member ids",
+			memberIDs:     []uuid.UUID{uuid.New(), uuid.New(), uuid.New()},
+			wantFilter:    true,
+			wantIntersect: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			qo := NewThreadQueryObject()
+			qo.WithActiveMembersFilter(tt.memberIDs...)
+
+			sql, args, err := qo.ToSql()
+			require.NoError(t, err)
+
+			if !tt.wantFilter {
+				assert.NotContains(t, sql, "WITH ")
+				assert.NotContains(t, sql, "INTERSECT")
+				return
+			}
+
+			assert.Contains(t, sql, "WITH "+activeMembersCTE+" AS",
+				"thread_ids should be computed up front in a CTE")
+			assert.Contains(t, sql, ThreadDialogTable)
+			assert.Contains(t, sql, "member_id=")
+			assert.Contains(t, sql, "deleted_at IS NULL")
+			assert.Contains(t, sql, fmt.Sprintf("SELECT thread_id FROM %s", activeMembersCTE),
+				"outer query filters t.id via PK lookup against the CTE result")
+			assert.Contains(t, sql, "t.id IN", "outer filter is t.id IN (cte)")
+			assert.NotContains(t, sql, "HAVING", "no per-thread aggregation")
+			assert.NotContains(t, sql, "LATERAL", "no LATERAL loop-in-loop")
+			assert.Equal(t, len(tt.memberIDs), len(args))
+
+			if tt.wantIntersect {
+				assert.Contains(t, sql, "INTERSECT")
+				assert.Equal(t, len(tt.memberIDs)-1, strings.Count(sql, "INTERSECT"),
+					"one INTERSECT between each per-member SELECT")
+			} else {
+				assert.NotContains(t, sql, "INTERSECT")
 			}
 		})
 	}
@@ -385,10 +453,9 @@ func TestThreadQueryObject_linkThreadDialog(t *testing.T) {
 		sql, _, err := qo.ToSql()
 		require.NoError(t, err)
 
-		assert.Contains(t, sql, "INNER JOIN")
-		assert.Contains(t, sql, ThreadDialogTable)
-		assert.Contains(t, sql, "LIMIT 1")
-		assert.Contains(t, sql, "ORDER BY id")
+		assert.Contains(t, sql, "INNER JOIN "+ThreadDialogTable)
+		assert.Contains(t, sql, "td.thread_id=t.id")
+		assert.NotContains(t, sql, "LATERAL", "must be a regular inner join, not a LATERAL loop-in-loop")
 		assert.Equal(t, threadLinkThreadDialog, qo.join&threadLinkThreadDialog)
 	})
 
@@ -401,8 +468,8 @@ func TestThreadQueryObject_linkThreadDialog(t *testing.T) {
 		require.NoError(t, err)
 
 		assert.Equal(t, threadLinkThreadDialog, qo.join&threadLinkThreadDialog, "bitflag should be set exactly once")
-		// LIMIT 1 is unique to linkThreadDialog's LATERAL — verify it appears exactly once
-		assert.Equal(t, 1, strings.Count(sql, "LIMIT 1"), "thread_dialog LATERAL should appear exactly once")
+		assert.Equal(t, 1, strings.Count(sql, "INNER JOIN "+ThreadDialogTable),
+			"thread_dialog inner join should appear exactly once")
 	})
 }
 
@@ -743,8 +810,9 @@ func TestThreadQueryObject_SubjectWithMembersFilter(t *testing.T) {
 		assert.Contains(t, sql, "t.subject")
 		assert.NotContains(t, sql, "ds.title")
 		assert.NotContains(t, sql, DirectSettingsTable)
-		// But the contact members lateral join should be present
-		assert.Contains(t, sql, "contact_members_filter")
+		// But the thread_dialog join and member filter should be present
+		assert.Contains(t, sql, "INNER JOIN "+ThreadDialogTable)
+		assert.Contains(t, sql, "td.member_id")
 	})
 
 	t.Run("subject expression without members filter", func(t *testing.T) {

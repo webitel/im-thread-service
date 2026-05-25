@@ -2,6 +2,7 @@ package queryobject
 
 import (
 	"fmt"
+	"strings"
 	"unicode/utf8"
 
 	"github.com/Masterminds/squirrel"
@@ -23,8 +24,9 @@ const (
 	threadLinkFullMembersLateral
 	threadLinkLastMessageLateral
 	threadLinkVariables
-	threadLinkContactMembers
 )
+
+const activeMembersCTE = "active_members_threads"
 
 const variablesBuild = `
 	case when v.thread_id is null
@@ -37,7 +39,6 @@ const variablesBuild = `
 type threadQueryObject struct {
 	*baseQueryObject[*threadQueryObject]
 	mustIncludeComputedSubject bool
-	contactIDFilter            []uuid.UUID
 }
 
 func NewThreadQueryObject() *threadQueryObject {
@@ -189,10 +190,6 @@ func (q *threadQueryObject) EnsureJoins(requiredJoin int) {
 	if requiredJoin&threadLinkVariables != 0 {
 		q.linkVariables()
 	}
-
-	if requiredJoin&threadLinkContactMembers != 0 {
-		q.linkContactMembers()
-	}
 }
 
 func (q *threadQueryObject) WithIDFilter(ids ...uuid.UUID) *threadQueryObject {
@@ -258,9 +255,33 @@ func (q *threadQueryObject) WithContactIDFilter(memberIDs ...uuid.UUID) *threadQ
 		return q
 	}
 
-	q.contactIDFilter = memberIDs
-	q.EnsureJoins(threadLinkContactMembers)
-	q.mustIncludeComputedSubject = true
+	q.EnsureJoins(threadLinkThreadDialog)
+	q.builder = q.builder.Where(squirrel.Eq{threadThreadDialogAlias + ".member_id": memberIDs})
+
+	return q
+}
+
+func (q *threadQueryObject) WithActiveMembersFilter(memberIDs ...uuid.UUID) *threadQueryObject {
+	if len(memberIDs) == 0 {
+		return q
+	}
+
+	selects := make([]string, 0, len(memberIDs))
+	args := make([]any, 0, len(memberIDs))
+	for _, id := range memberIDs {
+		selects = append(selects, fmt.Sprintf(
+			"SELECT thread_id FROM %s WHERE member_id = ? AND deleted_at IS NULL",
+			ThreadDialogTable,
+		))
+		args = append(args, id)
+	}
+
+	cte := fmt.Sprintf("WITH %s AS (%s) ", activeMembersCTE, strings.Join(selects, " INTERSECT "))
+	q.builder = q.builder.Prefix(cte, args...)
+	q.builder = q.builder.Where(fmt.Sprintf(
+		"%s.id IN (SELECT thread_id FROM %s)",
+		threadAlias, activeMembersCTE,
+	))
 
 	return q
 }
@@ -278,15 +299,13 @@ func (q *threadQueryObject) linkThreadDialog() {
 
 	q.join |= threadLinkThreadDialog
 
-	q.builder = q.builder.InnerJoin(fmt.Sprintf(`
-		LATERAL (
-			SELECT id, member_id, deleted_at, thread_role
-			FROM %s
-			WHERE thread_id = %s.id
-			ORDER BY id
-			LIMIT 1
-		) %s ON true
-	`, ThreadDialogTable, threadAlias, threadThreadDialogAlias))
+	q.builder = q.builder.InnerJoin(fmt.Sprintf(
+		"%s %s on %s.thread_id = %s.id",
+		ThreadDialogTable,
+		threadThreadDialogAlias,
+		threadThreadDialogAlias,
+		threadAlias,
+	))
 }
 
 func (q *threadQueryObject) linkDirectSettings() {
@@ -388,27 +407,4 @@ func (q *threadQueryObject) linkVariables() {
 		im_thread.thread_variables v
 		on v.thread_id = t.id
 	`)
-}
-
-func (q *threadQueryObject) linkContactMembers() {
-	if q.join&threadLinkContactMembers != 0 {
-		return
-	}
-
-	q.join |= threadLinkContactMembers
-
-	q.builder = q.builder.InnerJoin(fmt.Sprintf(`
-		LATERAL (
-			SELECT 1
-			FROM %s
-			WHERE thread_id = %s.id
-			  AND member_id = ANY(?)
-			  AND deleted_at IS NULL
-			GROUP BY thread_id
-			HAVING COUNT(DISTINCT member_id) = ?
-		) contact_members_filter ON true
-	`, ThreadDialogTable, threadAlias),
-		q.contactIDFilter,
-		len(q.contactIDFilter),
-	)
 }
