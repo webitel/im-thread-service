@@ -40,6 +40,7 @@ type (
 		Kinds      []model.ThreadKind
 		Owners     uuid.UUIDs
 		Q          string
+		SelfID     uuid.UUID
 		ContactIDs uuid.UUIDs
 		Size       int
 		Sort       string

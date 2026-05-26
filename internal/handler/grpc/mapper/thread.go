@@ -47,6 +47,11 @@ func (s *ThreadInConverter) ConvertSearch(in *impb.ThreadSearchRequest) (*dto.Th
 		return nil, err
 	}
 
+	selfID, err := uuid.Parse(in.GetSelfId())
+	if err != nil {
+		return nil, err
+	}
+
 	return &dto.ThreadSearchRequest{
 		Fields:     in.GetFields(),
 		Q:          in.GetQ(),
@@ -57,6 +62,7 @@ func (s *ThreadInConverter) ConvertSearch(in *impb.ThreadSearchRequest) (*dto.Th
 		DomainIDs:  domains,
 		Kinds:      s.convertThreadKinds(in.GetKinds()),
 		Owners:     owners,
+		SelfID:     selfID,
 		ContactIDs: members,
 	}, nil
 }
