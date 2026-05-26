@@ -263,12 +263,7 @@ func (q *threadQueryObject) WithContactIDFilter(memberIDs ...uuid.UUID) *threadQ
 	return q
 }
 
-// WithSharedMembersFilter narrows results to threads where selfID is an active
-// member AND every contact in memberIDs is also an active member. Useful for
-// "find chats I share with this specific group of people."
-//
-// If selfID is uuid.Nil the filter is skipped entirely. If memberIDs is empty
-// the result is equivalent to a self-only contact filter.
+// WithSharedMembersFilter narrows results to threads where selfID is an active member AND every contact in memberIDs is also an active member.
 func (q *threadQueryObject) WithSharedMembersFilter(selfID uuid.UUID, memberIDs ...uuid.UUID) *threadQueryObject {
 	if selfID == uuid.Nil {
 		return q
