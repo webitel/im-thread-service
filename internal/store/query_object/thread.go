@@ -279,11 +279,14 @@ func (q *threadQueryObject) WithSharedMembersFilter(selfID uuid.UUID, memberIDs 
 	}
 
 	placeholders := make([]string, len(memberIDs))
+
 	args := make([]any, 0, len(memberIDs)+1)
 	for i, id := range memberIDs {
 		placeholders[i] = "?"
+
 		args = append(args, id)
 	}
+
 	args = append(args, len(memberIDs))
 
 	q.builder = q.builder.Where(
