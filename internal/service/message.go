@@ -61,6 +61,17 @@ func (s *MessageService) SendText(ctx context.Context, in *dto.SendTextRequest) 
 
 	log := s.logger.With("operation", "message.SendText")
 
+	{
+		toVia := "<nil>"
+		if in.To.Identity != nil && in.To.Identity.Via != nil {
+			toVia = *in.To.Identity.Via
+		}
+		log.Debug("incoming request",
+			slog.String("to_id", in.To.ID.String()),
+			slog.String("to_via", toVia),
+		)
+	}
+
 	t, err := s.threader.EnsureDirectThread(ctx, &dto.EnsureDirectThreadRequest{
 		From:     &in.From,
 		To:       &in.To,
@@ -76,6 +87,18 @@ func (s *MessageService) SendText(ctx context.Context, in *dto.SendTextRequest) 
 		)
 
 		return nil, err
+	}
+
+	for i, m := range t.Members {
+		via := "<nil>"
+		if m.Via != nil {
+			via = *m.Via
+		}
+		log.Debug("thread member after EnsureDirectThread",
+			slog.Int("index", i),
+			slog.String("contact_id", m.ContactID.String()),
+			slog.String("via", via),
+		)
 	}
 
 	msg := &model.Message{

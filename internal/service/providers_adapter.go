@@ -41,6 +41,18 @@ func (a *baseRPCProvidersAdapter) SendMessage(ctx context.Context, message *mode
 		return errors.InvalidArgument("received nil pointer message", errors.WithID("service.providers_adapter.send_message"))
 	}
 
+	for i, member := range message.To {
+		via := "<nil>"
+		if member.Via != nil {
+			via = *member.Via
+		}
+		log.Debug("recipient",
+			slog.Int("index", i),
+			slog.String("contact_id", member.ContactID.String()),
+			slog.String("via", via),
+		)
+	}
+
 	log.Debug("evaluating external peers",
 		slog.String("message_id", message.ID.String()),
 		slog.String("thread_id", message.ThreadID.String()),
