@@ -899,6 +899,7 @@ func extendedThreadDialogToSimpleMapper(tde *model.ThreadDialogExtended) *model.
 		ContactID:  tde.ContactID,
 		ThreadID:   tde.ThreadID,
 		ThreadRole: tde.ThreadRole,
+		Via:        tde.Via,
 	}
 }
 

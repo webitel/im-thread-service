@@ -34,6 +34,7 @@ type (
 		ID       uuid.UUID `json:"id,omitempty" db:"id"`
 		MemberID uuid.UUID `json:"member_id,omitempty" db:"member_id"`
 		Role     int       `json:"role,omitempty" db:"role"`
+		Via      *string   `json:"via,omitempty" db:"via"`
 	}
 )
 
@@ -132,6 +133,7 @@ func mapThreadRecordToModel(record *threadRecord) (*model.Thread, error) {
 			},
 			ContactID:  tmr.MemberID,
 			ThreadRole: model.ThreadRole(tmr.Role),
+			Via:        tmr.Via,
 		}
 	})
 
