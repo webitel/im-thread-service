@@ -65,6 +65,7 @@ func (a *baseRPCProvidersAdapter) SendMessage(ctx context.Context, message *mode
 					ExternalUserId: userID,
 					Documents:      extratcFiles(message.Documents),
 					Caption:        message.Body,
+					DomainId:       message.DomainID,
 				})
 
 			case model.MessageTypeImage:
@@ -73,6 +74,7 @@ func (a *baseRPCProvidersAdapter) SendMessage(ctx context.Context, message *mode
 					ExternalUserId: userID,
 					Images:         extratcFiles(message.Images),
 					Caption:        message.Body,
+					DomainId:       message.DomainID,
 				})
 
 			case model.MessageTypeText:
@@ -80,6 +82,7 @@ func (a *baseRPCProvidersAdapter) SendMessage(ctx context.Context, message *mode
 					GateId:         externalPeer.Via,
 					ExternalUserId: userID,
 					Text:           message.Body,
+					DomainId:       message.DomainID,
 				})
 			case model.MessageTypeContact:
 			case model.MessageTypeInteractive:

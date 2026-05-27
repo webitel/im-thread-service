@@ -49,8 +49,6 @@ func NewThreadQueryObject() *threadQueryObject {
 	return queryObj
 }
 
-// members means full entity
-// member_ids for lazy loading
 func (q *threadQueryObject) DefaultFields() []string {
 	return []string{
 		"id", "domain_id", "created_at", "updated_at",
