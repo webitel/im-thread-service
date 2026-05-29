@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"slices"
 
+	"github.com/webitel/webitel-go-kit/pkg/errors"
+
 	"github.com/webitel/im-thread-service/gen/go/storage"
 	storageclient "github.com/webitel/im-thread-service/infra/webitel/storage"
 	"github.com/webitel/im-thread-service/internal/domain/model"
@@ -71,11 +73,19 @@ func (m *MessageHistoryEnricher) Search(ctx context.Context, hmiDTO *dto.History
 
 	linkMap, err := m.fetchFileLinks(ctx, fileIDs, hmiDTO.DomainID, loadMetadata)
 	if err != nil {
-		return nil, pageInfo, fmt.Errorf("failed to fetch file links: %w", err)
+		return nil, pageInfo, errors.Internal(
+			"failed to fetch file links",
+			errors.WithCause(err),
+			errors.WithID("decorators.message_history_enricher.Search"),
+		)
 	}
 
 	if err := m.enrichMessages(messages, linkMap, requestedMetadata); err != nil {
-		return nil, pageInfo, fmt.Errorf("failed to enrich messages: %w", err)
+		return nil, pageInfo, errors.Internal(
+			"failed to enrich messages",
+			errors.WithCause(err),
+			errors.WithID("decorators.message_history_enricher.Search"),
+		)
 	}
 
 	return messages, pageInfo, nil
@@ -101,11 +111,19 @@ func (m *MessageHistoryEnricher) SearchLeftThreads(ctx context.Context, req *dto
 
 	linkMap, err := m.fetchFileLinks(ctx, fileIDs, req.DomainID, loadMetadata)
 	if err != nil {
-		return nil, pageInfo, fmt.Errorf("failed to fetch file links: %w", err)
+		return nil, pageInfo, errors.Internal(
+			"failed to fetch file links",
+			errors.WithCause(err),
+			errors.WithID("decorators.message_history_enricher.SearchLeftThreads"),
+		)
 	}
 
 	if err := m.enrichMessages(messages, linkMap, requestedMetadata); err != nil {
-		return nil, pageInfo, fmt.Errorf("failed to enrich messages: %w", err)
+		return nil, pageInfo, errors.Internal(
+			"failed to enrich messages",
+			errors.WithCause(err),
+			errors.WithID("decorators.message_history_enricher.SearchLeftThreads"),
+		)
 	}
 
 	return messages, pageInfo, nil
@@ -145,10 +163,9 @@ func (m *MessageHistoryEnricher) fetchFileLinks(ctx context.Context, fileIDs []i
 	links := response.GetLinks()
 
 	if len(links) != len(fileIDs) {
-		return nil, fmt.Errorf(
-			"storage returned %d links but expected %d",
-			len(links),
-			len(fileIDs),
+		return nil, errors.Internal(
+			fmt.Sprintf("storage returned %d links but expected %d", len(links), len(fileIDs)),
+			errors.WithID("decorators.message_history_enricher.fetchFileLinks"),
 		)
 	}
 
@@ -273,7 +290,11 @@ func processAttachments[T model.MessageAttachment](
 		fileID := item.GetFileID()
 		if link, ok := linkMap[fileID]; ok {
 			if err := enrichFunc(item, link, useMD); err != nil {
-				return fmt.Errorf("failed to enrich file %d: %w", fileID, err)
+				return errors.Internal(
+					fmt.Sprintf("failed to enrich file %d", fileID),
+					errors.WithCause(err),
+					errors.WithID("decorators.message_history_enricher.processAttachments"),
+				)
 			}
 		}
 	}
@@ -295,7 +316,11 @@ func processAttachments[T model.MessageAttachment](
 func enrichDocument(doc *model.MessageDocument, link *storage.GenerateFileLinkResponse, useMetadata bool) error {
 	fullURL, err := utils.ResolveFullURL(link.GetBaseUrl(), link.GetUrl())
 	if err != nil {
-		return fmt.Errorf("failed to resolve URL: %w", err)
+		return errors.Internal(
+			"failed to resolve URL",
+			errors.WithCause(err),
+			errors.WithID("decorators.message_history_enricher.enrichDocument"),
+		)
 	}
 
 	doc.URL = fullURL
@@ -324,7 +349,11 @@ func enrichDocument(doc *model.MessageDocument, link *storage.GenerateFileLinkRe
 func enrichImage(img *model.MessageImage, link *storage.GenerateFileLinkResponse, useMetadata bool) error {
 	fullURL, err := utils.ResolveFullURL(link.GetBaseUrl(), link.GetUrl())
 	if err != nil {
-		return fmt.Errorf("failed to resolve URL: %w", err)
+		return errors.Internal(
+			"failed to resolve URL",
+			errors.WithCause(err),
+			errors.WithID("decorators.message_history_enricher.enrichImage"),
+		)
 	}
 
 	img.URL = fullURL

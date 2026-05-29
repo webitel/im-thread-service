@@ -6,6 +6,7 @@ import (
 
 	"github.com/Masterminds/squirrel"
 	"github.com/google/uuid"
+	"github.com/webitel/webitel-go-kit/pkg/errors"
 
 	"github.com/webitel/im-thread-service/internal/domain/model"
 	"github.com/webitel/im-thread-service/internal/service/dto"
@@ -34,7 +35,7 @@ type leftThreadsMessageHistoryCursorMapper struct{}
 
 func (leftThreadsMessageHistoryCursorMapper) ToValues(c MessageHistoryCursor) (CursorValues, error) {
 	if c.ID == uuid.Nil {
-		return nil, fmt.Errorf("leftThreadsMessageHistoryCursorMapper: ID must not be nil UUID")
+		return nil, errors.NotFound("leftThreadsMessageHistoryCursorMapper: ID must not be nil UUID")
 	}
 
 	return CursorValues{leftThreadsMsgAlias + ".id": c.ID}, nil
@@ -43,7 +44,10 @@ func (leftThreadsMessageHistoryCursorMapper) ToValues(c MessageHistoryCursor) (C
 func (leftThreadsMessageHistoryCursorMapper) FromValues(v CursorValues) (MessageHistoryCursor, error) {
 	idRaw, ok := v[leftThreadsMsgAlias+".id"]
 	if !ok {
-		return MessageHistoryCursor{}, fmt.Errorf("leftThreadsMessageHistoryCursorMapper: missing %s.id", leftThreadsMsgAlias)
+		return MessageHistoryCursor{}, errors.InvalidArgument(
+			fmt.Sprintf("leftThreadsMessageHistoryCursorMapper: missing %s.id", leftThreadsMsgAlias),
+			errors.WithID("queryobject.leftThreadsMessageHistoryCursorMapper.FromValues"),
+		)
 	}
 
 	switch raw := idRaw.(type) {
@@ -52,12 +56,19 @@ func (leftThreadsMessageHistoryCursorMapper) FromValues(v CursorValues) (Message
 	case string:
 		id, err := uuid.Parse(raw)
 		if err != nil {
-			return MessageHistoryCursor{}, fmt.Errorf("leftThreadsMessageHistoryCursorMapper: invalid id %q: %w", raw, err)
+			return MessageHistoryCursor{}, errors.InvalidArgument(
+				fmt.Sprintf("leftThreadsMessageHistoryCursorMapper: invalid id %q", raw),
+				errors.WithCause(err),
+				errors.WithID("queryobject.leftThreadsMessageHistoryCursorMapper.FromValues"),
+			)
 		}
 
 		return MessageHistoryCursor{ID: id}, nil
 	default:
-		return MessageHistoryCursor{}, fmt.Errorf("leftThreadsMessageHistoryCursorMapper: unsupported id type %T", idRaw)
+		return MessageHistoryCursor{}, errors.InvalidArgument(
+			fmt.Sprintf("leftThreadsMessageHistoryCursorMapper: unsupported id type %T", idRaw),
+			errors.WithID("queryobject.leftThreadsMessageHistoryCursorMapper.FromValues"),
+		)
 	}
 }
 

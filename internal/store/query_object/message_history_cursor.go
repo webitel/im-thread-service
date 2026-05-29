@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
+	"github.com/webitel/webitel-go-kit/pkg/errors"
 )
 
 type MessageHistoryCursor struct {
@@ -19,7 +20,10 @@ type MessageHistoryCursorMapper struct{}
 
 func (MessageHistoryCursorMapper) ToValues(c MessageHistoryCursor) (CursorValues, error) {
 	if c.ID == uuid.Nil {
-		return nil, fmt.Errorf("MessageHistoryCursorMapper: ID must not be nil UUID")
+		return nil, errors.InvalidArgument(
+			"MessageHistoryCursorMapper: ID must not be nil UUID",
+			errors.WithID("queryobject.MessageHistoryCursorMapper.ToValues"),
+		)
 	}
 
 	return CursorValues{
@@ -30,7 +34,10 @@ func (MessageHistoryCursorMapper) ToValues(c MessageHistoryCursor) (CursorValues
 func (MessageHistoryCursorMapper) FromValues(v CursorValues) (MessageHistoryCursor, error) {
 	idRaw, ok := v["id"]
 	if !ok {
-		return MessageHistoryCursor{}, fmt.Errorf("MessageHistoryCursorMapper: missing id")
+		return MessageHistoryCursor{}, errors.InvalidArgument(
+			"MessageHistoryCursorMapper: missing id",
+			errors.WithID("queryobject.MessageHistoryCursorMapper.FromValues"),
+		)
 	}
 
 	var id uuid.UUID
@@ -43,10 +50,17 @@ func (MessageHistoryCursorMapper) FromValues(v CursorValues) (MessageHistoryCurs
 
 		id, err = uuid.Parse(raw)
 		if err != nil {
-			return MessageHistoryCursor{}, fmt.Errorf("MessageHistoryCursorMapper: invalid id %q: %w", raw, err)
+			return MessageHistoryCursor{}, errors.InvalidArgument(
+				fmt.Sprintf("MessageHistoryCursorMapper: invalid id %q", raw),
+				errors.WithCause(err),
+				errors.WithID("queryobject.MessageHistoryCursorMapper.FromValues"),
+			)
 		}
 	default:
-		return MessageHistoryCursor{}, fmt.Errorf("MessageHistoryCursorMapper: unsupported id type %T", idRaw)
+		return MessageHistoryCursor{}, errors.InvalidArgument(
+			fmt.Sprintf("MessageHistoryCursorMapper: unsupported id type %T", idRaw),
+			errors.WithID("queryobject.MessageHistoryCursorMapper.FromValues"),
+		)
 	}
 
 	return MessageHistoryCursor{ID: id}, nil
@@ -79,7 +93,11 @@ func NewMessageHistoryConfig(
 
 	cur, ok, err := codec.Decode(rawToken)
 	if err != nil {
-		return Config[MessageHistoryCursor]{}, fmt.Errorf("invalid cursor token: %w", err)
+		return Config[MessageHistoryCursor]{}, errors.InvalidArgument(
+			"invalid cursor token",
+			errors.WithCause(err),
+			errors.WithID("queryobject.NewMessageHistoryConfig"),
+		)
 	}
 
 	dir := DirectionAfter
@@ -103,7 +121,11 @@ func NewMessageHistoryConfigFromRaw(limit uint64, raw MessageHistoryCursor, befo
 
 	cur, hasCursor, err := parseMessageHistoryFields(raw.ID)
 	if err != nil {
-		return Config[MessageHistoryCursor]{}, fmt.Errorf("invalid cursor params: %w", err)
+		return Config[MessageHistoryCursor]{}, errors.InvalidArgument(
+			"invalid cursor params",
+			errors.WithCause(err),
+			errors.WithID("queryobject.NewMessageHistoryConfigFromRaw"),
+		)
 	}
 
 	dir := DirectionAfter
