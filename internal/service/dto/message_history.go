@@ -4,7 +4,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/webitel/im-thread-service/internal/domain/model"
 )
 
 type (
@@ -68,7 +67,7 @@ type (
 		Direction bool
 	}
 
-	DialogsMessageHistoryInputDTO struct {
+	LeftThreadsMessageHistoryInputDTO struct {
 		DomainID   int
 		Fields     []string
 		ThreadID   uuid.UUID
@@ -78,20 +77,5 @@ type (
 		PeriodTo   time.Time
 		Cursor     *HistoryMessageCursor
 		Size       int
-	}
-
-	SessionMessageHistory struct {
-		MemberID    uuid.UUID
-		InvitedBy   uuid.UUID
-		ThreadRole  model.ThreadRole
-		LeaveReason string
-		Messages    model.MessageSlice
-	}
-
-	DialogsMessageHistoryOutputDTO struct {
-		Items      []*SessionMessageHistory
-		From       []*model.ThreadDialog
-		NextCursor string
-		PrevCursor string
 	}
 )

@@ -73,6 +73,7 @@ func (ms *MessageSlice) GetPaging(hasMore, isBackward, hadCursor bool) *Paging {
 		if hasMore {
 			paging.Before = NewMessageCursor(oldest.ID, oldest.CreatedAt, false)
 		}
+
 		return paging
 	}
 

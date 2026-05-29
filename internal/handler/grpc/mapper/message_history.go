@@ -4,34 +4,35 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"google.golang.org/protobuf/types/known/structpb"
+
 	impb "github.com/webitel/im-thread-service/gen/go/thread/v1"
 	"github.com/webitel/im-thread-service/internal/domain/model"
 	"github.com/webitel/im-thread-service/internal/service/dto"
 	"github.com/webitel/im-thread-service/internal/utils"
 	"github.com/webitel/im-thread-service/internal/utils/set"
-	"google.golang.org/protobuf/types/known/structpb"
 )
 
 func MapSearchMessageHistoryRequest2HistoryMessageInputDTO(mhr *impb.SearchMessageHistoryRequest) *dto.HistoryMessageInputDTO {
 	var (
-		ids       = utils.Map(mhr.Ids, utils.IdsParser)
-		threadIds = utils.Map([]string{mhr.ThreadId}, utils.IdsParser)
-		senderIds = utils.Map(mhr.SenderIds, utils.IdsParser)
-		types     = utils.Map(mhr.Types, func(i int32) int { return int(i) })
+		ids       = utils.Map(mhr.GetIds(), utils.IdsParser)
+		threadIds = utils.Map([]string{mhr.GetThreadId()}, utils.IdsParser)
+		senderIds = utils.Map(mhr.GetSenderIds(), utils.IdsParser)
+		types     = utils.Map(mhr.GetTypes(), func(i int32) int { return int(i) })
 		cursor    *dto.HistoryMessageCursor
 	)
 
-	if mhr.Cursor != nil {
+	if mhr.GetCursor() != nil {
 		cursor = new(dto.HistoryMessageCursor)
 		{
-			id, _ := uuid.Parse(mhr.Cursor.Id)
+			id, _ := uuid.Parse(mhr.GetCursor().GetId())
 			cursor.Id = id
 			cursor.Direction = mhr.GetCursor().GetBefore()
 		}
 	}
 
 	return &dto.HistoryMessageInputDTO{
-		Fields:    mhr.Fields,
+		Fields:    mhr.GetFields(),
 		Ids:       ids,
 		ThreadIds: threadIds,
 		SenderIds: senderIds,
@@ -42,20 +43,20 @@ func MapSearchMessageHistoryRequest2HistoryMessageInputDTO(mhr *impb.SearchMessa
 	}
 }
 
-func MapSearchDialogsMessageHistoryRequest2DialogsMessageHistoryInputDTO(mhr *impb.SearchDialogsMessageHistoryRequest) *dto.DialogsMessageHistoryInputDTO {
+func MapSearchLeftThreadsMessageHistoryRequest2LeftThreadsMessageHistoryInputDTO(mhr *impb.SearchLeftThreadsMessageHistoryRequest) *dto.LeftThreadsMessageHistoryInputDTO {
 	var (
 		threadID  uuid.UUID
-		senderIds = utils.Map(mhr.SenderIds, utils.IdsParser)
-		types     = utils.Map(mhr.Types, func(i int32) int { return int(i) })
+		senderIds = utils.Map(mhr.GetSenderIds(), utils.IdsParser)
+		types     = utils.Map(mhr.GetTypes(), func(i int32) int { return int(i) })
 		cursor    *dto.HistoryMessageCursor
 	)
 
 	threadID, _ = uuid.Parse(mhr.GetThreadId())
 
-	if mhr.Cursor != nil {
+	if mhr.GetCursor() != nil {
 		cursor = new(dto.HistoryMessageCursor)
 		{
-			id, _ := uuid.Parse(mhr.Cursor.Id)
+			id, _ := uuid.Parse(mhr.GetCursor().GetId())
 			cursor.Id = id
 			cursor.Direction = mhr.GetCursor().GetBefore()
 		}
@@ -65,13 +66,14 @@ func MapSearchDialogsMessageHistoryRequest2DialogsMessageHistoryInputDTO(mhr *im
 	if v := mhr.GetPeriodFrom(); v > 0 {
 		periodFrom = time.UnixMilli(v)
 	}
+
 	if v := mhr.GetPeriodTo(); v > 0 {
 		periodTo = time.UnixMilli(v)
 	}
 
-	return &dto.DialogsMessageHistoryInputDTO{
+	return &dto.LeftThreadsMessageHistoryInputDTO{
 		DomainID:   int(mhr.GetDomainId()),
-		Fields:     mhr.Fields,
+		Fields:     mhr.GetFields(),
 		ThreadID:   threadID,
 		SenderIds:  senderIds,
 		Types:      types,
@@ -114,70 +116,6 @@ func MapMessage2SearchMessageHistoryResponse(messages []*model.Message) *impb.Se
 
 	return &impb.SearchMessageHistoryResponse{
 		Items: responseMessages,
-	}
-}
-
-func MapDialogsMessageHistoryOutputDTO2SearchDialogsMessageHistoryResponse(out *dto.DialogsMessageHistoryOutputDTO) *impb.SearchDialogsMessageHistoryResponse {
-	if out == nil {
-		return &impb.SearchDialogsMessageHistoryResponse{}
-	}
-
-	threadConverter := new(ThreadOutConverter)
-
-	items := utils.Map(out.Items, func(s *dto.SessionMessageHistory) *impb.SessionMessageHistory {
-		if s == nil {
-			return nil
-		}
-
-		messages := utils.Map(s.Messages, func(m *model.Message) *impb.HistoryMessage {
-			md, err := structpb.NewStruct(m.Metadata)
-			if err != nil {
-				return nil
-			}
-
-			return &impb.HistoryMessage{
-				Id:          m.ID.String(),
-				ThreadId:    m.ThreadID.String(),
-				SenderId:    m.SenderID.String(),
-				Body:        m.Body,
-				Type:        int32(m.Type),
-				Metadata:    md,
-				CreatedAt:   max(m.CreatedAt.UnixMilli(), 0),
-				UpdatedAt:   max(m.UpdatedAt.UnixMilli(), 0),
-				Documents:   mapDocs(m.Documents),
-				Images:      mapImages(m.Images),
-				Location:    mapLocation(m.Location),
-				Contact:     mapContact(m.Contact),
-				System:      mapSystem(m.System),
-				Interactive: mapInteractive(m.Interactive),
-			}
-		})
-
-		return &impb.SessionMessageHistory{
-			MemberId:    s.MemberID.String(),
-			InvitedBy:   s.InvitedBy.String(),
-			ThreadRole:  threadConverter.ConvertThreadRole(s.ThreadRole),
-			LeaveReason: s.LeaveReason,
-			Messages:    messages,
-		}
-	})
-
-	from := utils.Map(out.From, func(d *model.ThreadDialog) *impb.ThreadMember {
-		if d == nil {
-			return nil
-		}
-		return &impb.ThreadMember{
-			Id:        d.ID.String(),
-			ContactId: d.ContactID.String(),
-			Role:      threadConverter.ConvertThreadRole(d.ThreadRole),
-		}
-	})
-
-	return &impb.SearchDialogsMessageHistoryResponse{
-		Items:      items,
-		From:       from,
-		NextCursor: out.NextCursor,
-		PrevCursor: out.PrevCursor,
 	}
 }
 
@@ -347,6 +285,7 @@ func mapContact(contact *model.MessageContact) *impb.Contact {
 	if contact == nil {
 		return nil
 	}
+
 	return &impb.Contact{
 		Name:        contact.Name,
 		Email:       contact.Email,
@@ -355,9 +294,7 @@ func mapContact(contact *model.MessageContact) *impb.Contact {
 }
 
 func GetUniqueFrom(messages []*model.Message) []*impb.ThreadMember {
-	var (
-		set = set.New[model.ThreadDialog](0)
-	)
+	set := set.New[model.ThreadDialog](0)
 
 	for _, message := range messages {
 		if mem := message.Member; mem != nil {
@@ -366,6 +303,7 @@ func GetUniqueFrom(messages []*model.Message) []*impb.ThreadMember {
 	}
 
 	threadConverter := new(ThreadOutConverter)
+
 	return utils.Map(set.Slice(), func(p model.ThreadDialog) *impb.ThreadMember {
 		role := threadConverter.ConvertThreadRole(p.ThreadRole)
 

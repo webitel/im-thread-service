@@ -12,7 +12,7 @@ import (
 
 type MessageHistoryService interface {
 	Search(context.Context, *dto.HistoryMessageInputDTO) (model.MessageSlice, queryobject.PageInfo[queryobject.MessageHistoryCursor], error)
-	SearchDialogsMessageHistory(ctx context.Context, req *dto.DialogsMessageHistoryInputDTO) (*dto.DialogsMessageHistoryOutputDTO, error)
+	SearchLeftThreads(ctx context.Context, req *dto.LeftThreadsMessageHistoryInputDTO) (model.MessageSlice, queryobject.PageInfo[queryobject.MessageHistoryCursor], error)
 }
 
 type (
@@ -28,6 +28,7 @@ func NewMessageHistoryServer(messageHistorySearcher MessageHistoryService) *Mess
 		messageHistorySearcher: messageHistorySearcher,
 	}
 }
+
 func (s *MessageHistoryServer) SearchThreadMessagesHistory(ctx context.Context, req *impb.SearchMessageHistoryRequest) (*impb.SearchMessageHistoryResponse, error) {
 	hmiDTO := mapper.MapSearchMessageHistoryRequest2HistoryMessageInputDTO(req)
 
@@ -54,13 +55,28 @@ func (s *MessageHistoryServer) SearchThreadMessagesHistory(ctx context.Context, 
 	return resp, nil
 }
 
-func (s *MessageHistoryServer) SearchDialogsMessageHistory(ctx context.Context, req *impb.SearchDialogsMessageHistoryRequest) (*impb.SearchDialogsMessageHistoryResponse, error) {
-	dialogsDTO := mapper.MapSearchDialogsMessageHistoryRequest2DialogsMessageHistoryInputDTO(req)
+func (s *MessageHistoryServer) SearchLeftThreadsMessageHistory(ctx context.Context, req *impb.SearchLeftThreadsMessageHistoryRequest) (*impb.SearchMessageHistoryResponse, error) {
+	requestDTO := mapper.MapSearchLeftThreadsMessageHistoryRequest2LeftThreadsMessageHistoryInputDTO(req)
 
-	out, err := s.messageHistorySearcher.SearchDialogsMessageHistory(ctx, dialogsDTO)
+	messages, pageInfo, err := s.messageHistorySearcher.SearchLeftThreads(ctx, requestDTO)
 	if err != nil {
 		return nil, err
 	}
 
-	return mapper.MapDialogsMessageHistoryOutputDTO2SearchDialogsMessageHistoryResponse(out), nil
+	resp := mapper.MapMessage2SearchMessageHistoryResponse(messages)
+	resp.From = mapper.GetUniqueFrom(messages)
+
+	if pageInfo.HasNextPage {
+		resp.NextCursor = &impb.HistoryMessageCursorResponse{
+			Id: pageInfo.NextCursor.ID.String(),
+		}
+	}
+
+	if pageInfo.HasPrevPage {
+		resp.PrevCursor = &impb.HistoryMessageCursorResponse{
+			Id: pageInfo.PrevCursor.ID.String(),
+		}
+	}
+
+	return resp, nil
 }

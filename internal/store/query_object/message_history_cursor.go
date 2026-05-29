@@ -34,11 +34,13 @@ func (MessageHistoryCursorMapper) FromValues(v CursorValues) (MessageHistoryCurs
 	}
 
 	var id uuid.UUID
+
 	switch raw := idRaw.(type) {
 	case uuid.UUID:
 		id = raw
 	case string:
 		var err error
+
 		id, err = uuid.Parse(raw)
 		if err != nil {
 			return MessageHistoryCursor{}, fmt.Errorf("MessageHistoryCursorMapper: invalid id %q: %w", raw, err)
@@ -98,6 +100,7 @@ func NewMessageHistoryConfig(
 
 func NewMessageHistoryConfigFromRaw(limit uint64, raw MessageHistoryCursor, before bool) (Config[MessageHistoryCursor], error) {
 	codec := NewRawParamsCursorCodec(parseMessageHistoryRawCursor)
+
 	cur, hasCursor, err := parseMessageHistoryFields(raw.ID)
 	if err != nil {
 		return Config[MessageHistoryCursor]{}, fmt.Errorf("invalid cursor params: %w", err)

@@ -19,8 +19,8 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	MessageHistory_SearchThreadMessagesHistory_FullMethodName = "/webitel.im.service.thread.v1.MessageHistory/SearchThreadMessagesHistory"
-	MessageHistory_SearchDialogsMessageHistory_FullMethodName = "/webitel.im.service.thread.v1.MessageHistory/SearchDialogsMessageHistory"
+	MessageHistory_SearchThreadMessagesHistory_FullMethodName     = "/webitel.im.service.thread.v1.MessageHistory/SearchThreadMessagesHistory"
+	MessageHistory_SearchLeftThreadsMessageHistory_FullMethodName = "/webitel.im.service.thread.v1.MessageHistory/SearchLeftThreadsMessageHistory"
 )
 
 // MessageHistoryClient is the client API for MessageHistory service.
@@ -31,7 +31,7 @@ const (
 type MessageHistoryClient interface {
 	// Search for messages in a thread.
 	SearchThreadMessagesHistory(ctx context.Context, in *SearchMessageHistoryRequest, opts ...grpc.CallOption) (*SearchMessageHistoryResponse, error)
-	SearchDialogsMessageHistory(ctx context.Context, in *SearchDialogsMessageHistoryRequest, opts ...grpc.CallOption) (*SearchDialogsMessageHistoryResponse, error)
+	SearchLeftThreadsMessageHistory(ctx context.Context, in *SearchLeftThreadsMessageHistoryRequest, opts ...grpc.CallOption) (*SearchMessageHistoryResponse, error)
 }
 
 type messageHistoryClient struct {
@@ -52,10 +52,10 @@ func (c *messageHistoryClient) SearchThreadMessagesHistory(ctx context.Context, 
 	return out, nil
 }
 
-func (c *messageHistoryClient) SearchDialogsMessageHistory(ctx context.Context, in *SearchDialogsMessageHistoryRequest, opts ...grpc.CallOption) (*SearchDialogsMessageHistoryResponse, error) {
+func (c *messageHistoryClient) SearchLeftThreadsMessageHistory(ctx context.Context, in *SearchLeftThreadsMessageHistoryRequest, opts ...grpc.CallOption) (*SearchMessageHistoryResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(SearchDialogsMessageHistoryResponse)
-	err := c.cc.Invoke(ctx, MessageHistory_SearchDialogsMessageHistory_FullMethodName, in, out, cOpts...)
+	out := new(SearchMessageHistoryResponse)
+	err := c.cc.Invoke(ctx, MessageHistory_SearchLeftThreadsMessageHistory_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -70,7 +70,7 @@ func (c *messageHistoryClient) SearchDialogsMessageHistory(ctx context.Context, 
 type MessageHistoryServer interface {
 	// Search for messages in a thread.
 	SearchThreadMessagesHistory(context.Context, *SearchMessageHistoryRequest) (*SearchMessageHistoryResponse, error)
-	SearchDialogsMessageHistory(context.Context, *SearchDialogsMessageHistoryRequest) (*SearchDialogsMessageHistoryResponse, error)
+	SearchLeftThreadsMessageHistory(context.Context, *SearchLeftThreadsMessageHistoryRequest) (*SearchMessageHistoryResponse, error)
 	mustEmbedUnimplementedMessageHistoryServer()
 }
 
@@ -84,8 +84,8 @@ type UnimplementedMessageHistoryServer struct{}
 func (UnimplementedMessageHistoryServer) SearchThreadMessagesHistory(context.Context, *SearchMessageHistoryRequest) (*SearchMessageHistoryResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SearchThreadMessagesHistory not implemented")
 }
-func (UnimplementedMessageHistoryServer) SearchDialogsMessageHistory(context.Context, *SearchDialogsMessageHistoryRequest) (*SearchDialogsMessageHistoryResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method SearchDialogsMessageHistory not implemented")
+func (UnimplementedMessageHistoryServer) SearchLeftThreadsMessageHistory(context.Context, *SearchLeftThreadsMessageHistoryRequest) (*SearchMessageHistoryResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SearchLeftThreadsMessageHistory not implemented")
 }
 func (UnimplementedMessageHistoryServer) mustEmbedUnimplementedMessageHistoryServer() {}
 func (UnimplementedMessageHistoryServer) testEmbeddedByValue()                        {}
@@ -126,20 +126,20 @@ func _MessageHistory_SearchThreadMessagesHistory_Handler(srv interface{}, ctx co
 	return interceptor(ctx, in, info, handler)
 }
 
-func _MessageHistory_SearchDialogsMessageHistory_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(SearchDialogsMessageHistoryRequest)
+func _MessageHistory_SearchLeftThreadsMessageHistory_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SearchLeftThreadsMessageHistoryRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(MessageHistoryServer).SearchDialogsMessageHistory(ctx, in)
+		return srv.(MessageHistoryServer).SearchLeftThreadsMessageHistory(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: MessageHistory_SearchDialogsMessageHistory_FullMethodName,
+		FullMethod: MessageHistory_SearchLeftThreadsMessageHistory_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(MessageHistoryServer).SearchDialogsMessageHistory(ctx, req.(*SearchDialogsMessageHistoryRequest))
+		return srv.(MessageHistoryServer).SearchLeftThreadsMessageHistory(ctx, req.(*SearchLeftThreadsMessageHistoryRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -156,8 +156,8 @@ var MessageHistory_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _MessageHistory_SearchThreadMessagesHistory_Handler,
 		},
 		{
-			MethodName: "SearchDialogsMessageHistory",
-			Handler:    _MessageHistory_SearchDialogsMessageHistory_Handler,
+			MethodName: "SearchLeftThreadsMessageHistory",
+			Handler:    _MessageHistory_SearchLeftThreadsMessageHistory_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

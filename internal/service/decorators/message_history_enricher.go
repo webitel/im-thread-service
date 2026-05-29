@@ -30,7 +30,7 @@ const (
 
 type MessageHistorySearcher interface {
 	Search(ctx context.Context, hmiDTO *dto.HistoryMessageInputDTO) (model.MessageSlice, queryobject.PageInfo[queryobject.MessageHistoryCursor], error)
-	SearchDialogsMessageHistory(ctx context.Context, req *dto.DialogsMessageHistoryInputDTO) (*dto.DialogsMessageHistoryOutputDTO, error)
+	SearchLeftThreads(ctx context.Context, req *dto.LeftThreadsMessageHistoryInputDTO) (model.MessageSlice, queryobject.PageInfo[queryobject.MessageHistoryCursor], error)
 }
 
 type (
@@ -63,9 +63,7 @@ func (m *MessageHistoryEnricher) Search(ctx context.Context, hmiDTO *dto.History
 		return messages, pageInfo, nil
 	}
 
-	var (
-		requestedMetadata int
-	)
+	var requestedMetadata int
 
 	requestedMetadata = shouldLoadMetadata(hmiDTO.Fields, requestedMetadata)
 
@@ -83,27 +81,19 @@ func (m *MessageHistoryEnricher) Search(ctx context.Context, hmiDTO *dto.History
 	return messages, pageInfo, nil
 }
 
-func (m *MessageHistoryEnricher) SearchDialogsMessageHistory(ctx context.Context, req *dto.DialogsMessageHistoryInputDTO) (*dto.DialogsMessageHistoryOutputDTO, error) {
-	out, err := m.MessageHistorySearcher.SearchDialogsMessageHistory(ctx, req)
-	if err != nil || out == nil {
-		return out, err
+func (m *MessageHistoryEnricher) SearchLeftThreads(ctx context.Context, req *dto.LeftThreadsMessageHistoryInputDTO) (model.MessageSlice, queryobject.PageInfo[queryobject.MessageHistoryCursor], error) {
+	messages, pageInfo, err := m.MessageHistorySearcher.SearchLeftThreads(ctx, req)
+	if err != nil {
+		return nil, pageInfo, err
 	}
 
-	var all model.MessageSlice
-	for _, s := range out.Items {
-		if s == nil {
-			continue
-		}
-		all = append(all, s.Messages...)
+	if len(messages) == 0 {
+		return messages, pageInfo, nil
 	}
 
-	if len(all) == 0 {
-		return out, nil
-	}
-
-	fileIDs := collectUniqueFileIDs(all)
+	fileIDs := collectUniqueFileIDs(messages)
 	if len(fileIDs) == 0 {
-		return out, nil
+		return messages, pageInfo, nil
 	}
 
 	requestedMetadata := shouldLoadMetadata(req.Fields, 0)
@@ -111,14 +101,14 @@ func (m *MessageHistoryEnricher) SearchDialogsMessageHistory(ctx context.Context
 
 	linkMap, err := m.fetchFileLinks(ctx, fileIDs, req.DomainID, loadMetadata)
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch file links: %w", err)
+		return nil, pageInfo, fmt.Errorf("failed to fetch file links: %w", err)
 	}
 
-	if err := m.enrichMessages(all, linkMap, requestedMetadata); err != nil {
-		return nil, fmt.Errorf("failed to enrich messages: %w", err)
+	if err := m.enrichMessages(messages, linkMap, requestedMetadata); err != nil {
+		return nil, pageInfo, fmt.Errorf("failed to enrich messages: %w", err)
 	}
 
-	return out, nil
+	return messages, pageInfo, nil
 }
 
 // fetchFileLinks fetches file links from the storage service for the given file IDs.
@@ -310,11 +300,11 @@ func enrichDocument(doc *model.MessageDocument, link *storage.GenerateFileLinkRe
 
 	doc.URL = fullURL
 
-	if useMetadata && link.Metadata != nil {
-		doc.FileID = link.Metadata.GetId()
-		doc.Size = link.Metadata.GetSize()
-		doc.Mime = link.Metadata.GetMimeType()
-		doc.Name = link.Metadata.GetName()
+	if useMetadata && link.GetMetadata() != nil {
+		doc.FileID = link.GetMetadata().GetId()
+		doc.Size = link.GetMetadata().GetSize()
+		doc.Mime = link.GetMetadata().GetMimeType()
+		doc.Name = link.GetMetadata().GetName()
 	}
 
 	return nil
@@ -339,10 +329,10 @@ func enrichImage(img *model.MessageImage, link *storage.GenerateFileLinkResponse
 
 	img.URL = fullURL
 
-	if useMetadata && link.Metadata != nil {
-		img.FileID = link.Metadata.GetId()
-		img.Mime = link.Metadata.GetMimeType()
-		img.Name = link.Metadata.GetName()
+	if useMetadata && link.GetMetadata() != nil {
+		img.FileID = link.GetMetadata().GetId()
+		img.Mime = link.GetMetadata().GetMimeType()
+		img.Name = link.GetMetadata().GetName()
 	}
 
 	return nil
