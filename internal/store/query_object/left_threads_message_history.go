@@ -259,7 +259,7 @@ func (q *leftThreadsMessageHistoryQueryObject) WithCursor(cursor *dto.HistoryMes
 
 	cfg, err := NewMessageHistoryConfigFromRaw(
 		q.pageLimitOrDefault(),
-		MessageHistoryCursor{ID: cursor.Id},
+		MessageHistoryCursor{ID: cursor.ID},
 		cursor.Direction,
 	)
 	if err != nil {
@@ -283,7 +283,7 @@ func (q *leftThreadsMessageHistoryQueryObject) WithLimit(limit int) *leftThreads
 	return q
 }
 
-func (q *leftThreadsMessageHistoryQueryObject) ToSql() (string, []any, error) {
+func (q *leftThreadsMessageHistoryQueryObject) ToSQL() (string, []any, error) {
 	if q.paginatorCfg.Limit == 0 {
 		q.paginatorCfg.Limit = uint64(DefaultLimit)
 	}
