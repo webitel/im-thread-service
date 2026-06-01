@@ -24,7 +24,8 @@ func CompactSQL(s string) string {
 			case '\t', '\n', '\v', '\f', '\r', ' ', 0x85, 0xA0:
 				is = true
 			}
-			return // false
+
+			return is // false
 		}
 		isPunct = func(char rune) (is bool) {
 			switch char {
@@ -40,14 +41,16 @@ func CompactSQL(s string) string {
 			case '+', '-', '*', '/', '<', '>', '=', '~', '!', '@', '#', '%', '^', '&', '|':
 				is = true
 			}
-			return // false
+
+			return is // false
 		}
 		isQuote = func() (is bool) {
 			switch char {
 			case '\'', '"': // SQUOTE, DQUOTE:
 				is = true
 			}
-			return // false
+
+			return is // false
 		}
 		// context
 		space   bool // [IN] [w]hite[sp]ace(s)
@@ -64,6 +67,7 @@ func CompactSQL(s string) string {
 						comment = 0  // close
 						hold = 0     // clear
 					}
+
 					return true // still IN ...
 				}
 			case '*':
@@ -78,6 +82,7 @@ func CompactSQL(s string) string {
 						comment = 0  // close
 						hold = 0     // clear
 					}
+
 					return true // still IN ...
 				}
 				// default: 0
@@ -90,8 +95,10 @@ func CompactSQL(s string) string {
 					if char == hold {
 						hold = 0       // clear
 						comment = char // start
+
 						return true
 					}
+
 					return false
 				}
 			// comment: start(/*)
@@ -100,8 +107,10 @@ func CompactSQL(s string) string {
 					if char == '*' {
 						hold = 0       // clear
 						comment = char // start
+
 						return true
 					}
+
 					return false
 				}
 			case 0:
@@ -134,37 +143,51 @@ func CompactSQL(s string) string {
 			// close(?)
 			if quote == char { // inLiteral(?)
 				quote = 0
+
 				return true // as last
 			}
 			// start(!)
 			quote = char
+
 			return true
 		}
 		// [re]write
 		output = func() {
 			if hold > 0 {
-				w.WriteRune(hold)
+				if _, err := w.WriteRune(hold); err != nil {
+					return
+				}
+
 				last = hold
 				hold = 0
 			}
+
 			if space {
 				space = false
+
 				if !isPunct(last) && !isPunct(char) {
-					w.WriteRune(' ') // INJECT SPACE(' ')
+					if _, err := w.WriteRune(' '); err != nil { // INJECT SPACE(' ')
+						return
+					}
 				}
 			}
-			w.WriteRune(char)
+
+			if _, err := w.WriteRune(char); err != nil {
+				return
+			}
+
 			last = char
 		}
 	)
 
 	var e int
-	for {
 
+	for {
 		char, _, err = r.ReadRune()
 		if err != nil {
 			break
 		}
+
 		e++ // char index position
 
 		if isComment() {
@@ -175,12 +198,14 @@ func CompactSQL(s string) string {
 		if isLiteral() {
 			// [re]write: as is (!)
 			output()
+
 			continue
 		}
 
 		if isSpace() {
 			// fold sequence ...
 			space = true
+
 			continue
 		}
 		// [re]write: [hold]char

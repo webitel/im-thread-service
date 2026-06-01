@@ -7,10 +7,11 @@ import (
 
 	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill/message"
+	"go.uber.org/fx"
+
 	"github.com/webitel/im-thread-service/config"
 	"github.com/webitel/im-thread-service/infra/pubsub/factory"
 	"github.com/webitel/im-thread-service/infra/pubsub/factory/amqp"
-	"go.uber.org/fx"
 )
 
 type Provider interface {
@@ -48,14 +49,18 @@ func ProvidePubSub(cfg *config.Config, l *slog.Logger, lc fx.Lifecycle) (Provide
 	if err != nil {
 		return nil, err
 	}
+
 	lc.Append(fx.Hook{
-		OnStop: func(ctx context.Context) error {
+		OnStop: func(_ context.Context) error {
 			return router.Close()
 		},
 		OnStart: func(ctx context.Context) error {
-			go func() error {
-				return router.Run(ctx)
+			go func() {
+				if err := router.Run(ctx); err != nil {
+					slog.Error("[BROKER] running router", "error", err)
+				}
 			}()
+
 			return nil
 		},
 	})
@@ -72,9 +77,11 @@ func NewDefaultProvider(router *message.Router, factory factory.Factory) (Provid
 	if router == nil {
 		return nil, errors.New("router is required")
 	}
+
 	if factory == nil {
 		return nil, errors.New("factory is required")
 	}
+
 	return &DefaultProvider{
 		router:  router,
 		factory: factory,
@@ -84,6 +91,7 @@ func NewDefaultProvider(router *message.Router, factory factory.Factory) (Provid
 func (p *DefaultProvider) GetRouter() *message.Router {
 	return p.router
 }
+
 func (p *DefaultProvider) GetFactory() factory.Factory {
 	return p.factory
 }

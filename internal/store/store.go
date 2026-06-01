@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+
 	"github.com/webitel/im-thread-service/internal/domain/event"
 	"github.com/webitel/im-thread-service/internal/domain/model"
 	queryobject "github.com/webitel/im-thread-service/internal/store/query_object"
@@ -50,6 +51,7 @@ type ThreadStore interface {
 	Get(ctx context.Context, query queryobject.QueryObject) (*model.Thread, error)
 	Search(ctx context.Context, query queryobject.QueryObject) ([]*model.Thread, error)
 	ResolveThread(ctx context.Context, q model.ResolveThreadQuery) (*model.Thread, error)
+	SearchLeft(ctx context.Context, query queryobject.QueryObject) ([]*model.Thread, error)
 }
 
 type ThreadPermissionStore interface {

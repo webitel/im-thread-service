@@ -6,6 +6,7 @@ import (
 
 	"github.com/Masterminds/squirrel"
 	"github.com/google/uuid"
+
 	"github.com/webitel/im-thread-service/internal/domain/model"
 )
 
@@ -35,6 +36,7 @@ const variablesBuild = `
 
 type threadQueryObject struct {
 	*baseQueryObject[*threadQueryObject]
+
 	mustIncludeComputedSubject bool
 }
 
@@ -47,8 +49,6 @@ func NewThreadQueryObject() *threadQueryObject {
 	return queryObj
 }
 
-// members means full entity
-// member_ids for lazy loading
 func (q *threadQueryObject) DefaultFields() []string {
 	return []string{
 		"id", "domain_id", "created_at", "updated_at",
@@ -79,6 +79,7 @@ func (q *threadQueryObject) FieldsMetadata() map[string]fieldMetadata {
 			`, threadAlias, model.ThreadDirect, threadDirectSettingsAlias, threadAlias)
 		}
 	)
+
 	return map[string]fieldMetadata{
 		"id": {
 			sqlExpr:      "t.id",
@@ -199,6 +200,7 @@ func (q *threadQueryObject) WithIDFilter(ids ...uuid.UUID) *threadQueryObject {
 
 func (q *threadQueryObject) WithSubject() *threadQueryObject {
 	q.mustIncludeComputedSubject = true
+
 	return q
 }
 
@@ -261,6 +263,7 @@ func (q *threadQueryObject) WithContactIDFilter(memberIDs ...uuid.UUID) *threadQ
 func (q *threadQueryObject) WithoutDeletedAtFilter() *threadQueryObject {
 	q.EnsureJoins(threadLinkThreadDialog)
 	q.builder = q.builder.Where(squirrel.Eq{threadThreadDialogAlias + ".deleted_at": nil})
+
 	return q
 }
 

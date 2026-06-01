@@ -4,21 +4,22 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+
+	"github.com/webitel/webitel-go-kit/pkg/errors"
+
 	impb "github.com/webitel/im-thread-service/gen/go/thread/v1"
 	"github.com/webitel/im-thread-service/internal/domain/model"
 	"github.com/webitel/im-thread-service/internal/handler/grpc/mapper"
 	"github.com/webitel/im-thread-service/internal/service/dto"
 	"github.com/webitel/im-thread-service/internal/utils"
-	"github.com/webitel/webitel-go-kit/pkg/errors"
 )
 
-var (
-	_ impb.ThreadManagementServer = (*ThreadManagementServer)(nil)
-)
+var _ impb.ThreadManagementServer = (*ThreadManagementServer)(nil)
 
 type ThreadManagementService interface {
 	Get(ctx context.Context, req *dto.ThreadGetRequest) (*model.Thread, error)
 	Search(ctx context.Context, searchRequest *dto.ThreadSearchRequest) ([]*model.Thread, error)
+	SearchLeft(ctx context.Context, req *dto.SearchLeftRequest) ([]*model.Thread, error)
 	AddMember(context.Context, *dto.AddMemberRequest) (uuid.UUID, error)
 	RemoveMember(context.Context, *dto.RemoveMemberRequest) error
 	Transfer(context.Context, *dto.TransferThreadRequest) (uuid.UUID, error)
@@ -76,11 +77,9 @@ func (ts *ThreadManagementServer) Search(ctx context.Context, req *impb.ThreadSe
 		return nil, err
 	}
 
-	next, threads := utils.ProcessPagination(int(req.Size), threads)
+	next, threads := utils.ProcessPagination(int(req.GetSize()), threads)
 
-	var (
-		res = impb.SearchThreadResponse{Next: next}
-	)
+	res := impb.SearchThreadResponse{Next: next}
 
 	for _, threadModel := range threads {
 		res.Items = append(res.Items, ts.outMapper.ConvertToThread(threadModel))
@@ -104,6 +103,27 @@ func (ts *ThreadManagementServer) Transfer(ctx context.Context, req *impb.Transf
 	return &impb.TransferResponse{Member: &impb.ThreadMember{
 		Id: newMember.String(),
 	}}, nil
+}
+
+func (ts *ThreadManagementServer) SearchLeft(ctx context.Context, req *impb.SearchLeftRequest) (*impb.SearchLeftResponse, error) {
+	search, err := ts.inMapper.ConvertSearchLeft(req)
+	if err != nil {
+		return nil, err
+	}
+
+	threads, err := ts.threadManager.SearchLeft(ctx, search)
+	if err != nil {
+		return nil, err
+	}
+
+	next, threads := utils.ProcessPagination(int(req.GetSize()), threads)
+
+	res := &impb.SearchLeftResponse{Next: next}
+	for _, t := range threads {
+		res.Items = append(res.Items, ts.outMapper.ConvertToThread(t))
+	}
+
+	return res, nil
 }
 
 // AddMember implements [thread.ThreadManagementServer].
@@ -166,12 +186,12 @@ func (ts *ThreadManagementServer) SearchVariables(ctx context.Context, req *impb
 }
 
 func (ts *ThreadManagementServer) LocateVariables(ctx context.Context, req *impb.LocateVariablesRequest) (*impb.ThreadVariables, error) {
-	threadId, err := uuid.Parse(req.GetThreadId())
+	threadID, err := uuid.Parse(req.GetThreadId())
 	if err != nil {
 		return nil, errors.InvalidArgument("invalid thread id format", errors.WithCause(err))
 	}
 
-	vars, err := ts.threadVariables.Locate(ctx, threadId)
+	vars, err := ts.threadVariables.Locate(ctx, threadID)
 	if err != nil {
 		return nil, err
 	}

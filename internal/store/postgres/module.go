@@ -5,10 +5,11 @@ import (
 	"log/slog"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.uber.org/fx"
+
 	"github.com/webitel/im-thread-service/config"
 	"github.com/webitel/im-thread-service/infra/db/pg"
 	"github.com/webitel/im-thread-service/internal/store"
-	"go.uber.org/fx"
 )
 
 var Module = fx.Module("store",
@@ -72,8 +73,9 @@ func ProvideNewDBConnection(cfg *config.Config, l *slog.Logger, lc fx.Lifecycle)
 	}
 
 	lc.Append(fx.Hook{
-		OnStop: func(ctx context.Context) error {
+		OnStop: func(_ context.Context) error {
 			db.Master().Close()
+
 			return nil
 		},
 	})

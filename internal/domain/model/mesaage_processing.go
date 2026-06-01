@@ -6,8 +6,9 @@ import (
 	"unicode/utf8"
 
 	"github.com/rivo/uniseg"
-	"github.com/webitel/im-thread-service/internal/domain/shared"
 	"golang.org/x/text/unicode/norm"
+
+	"github.com/webitel/im-thread-service/internal/domain/shared"
 )
 
 var (
@@ -20,6 +21,7 @@ func prepareText(s string) string {
 	if !utf8.ValidString(s) {
 		s = strings.ToValidUTF8(s, "")
 	}
+
 	return norm.NFC.String(s)
 }
 
@@ -32,6 +34,7 @@ func BuildMetadata(text string) map[string]any {
 
 func extractEntities(text string) []shared.Entity {
 	var entities []shared.Entity
+
 	collect := func(re *regexp.Regexp, entityType string) {
 		matches := re.FindAllStringIndex(text, -1)
 		for _, loc := range matches {
@@ -45,5 +48,6 @@ func extractEntities(text string) []shared.Entity {
 	}
 	collect(linkRegex, "link")
 	collect(mentionRegex, "mention")
+
 	return entities
 }

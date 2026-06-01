@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+
 	"github.com/webitel/im-thread-service/internal/domain/model"
 	"github.com/webitel/im-thread-service/internal/domain/shared"
 )
@@ -22,6 +23,7 @@ func testDialog(id uuid.UUID, role model.ThreadRole, permissions model.ThreadPer
 
 func Test_checkForSelfPermissionChange(t *testing.T) {
 	initiatorUUID := uuid.New()
+
 	tests := []struct {
 		name string // description of this test case
 		// Named input parameters for target function.
@@ -60,8 +62,10 @@ func Test_checkForSelfPermissionChange(t *testing.T) {
 				if !tt.wantErr {
 					t.Errorf("checkForSelfPermissionChange() failed: %v", gotErr)
 				}
+
 				return
 			}
+
 			if tt.wantErr {
 				t.Fatal("checkForSelfPermissionChange() succeeded unexpectedly")
 			}
@@ -72,6 +76,7 @@ func Test_checkForSelfPermissionChange(t *testing.T) {
 func Test_checkForDownRoleHierarchy(t *testing.T) {
 	initiatorUUID := uuid.New()
 	targetUUID := uuid.New()
+
 	tests := []struct {
 		name string // description of this test case
 		// Named input parameters for target function.
@@ -110,8 +115,10 @@ func Test_checkForDownRoleHierarchy(t *testing.T) {
 				if !tt.wantErr {
 					t.Errorf("checkForDownRoleHierarchy() failed: %v", gotErr)
 				}
+
 				return
 			}
+
 			if tt.wantErr {
 				t.Fatal("checkForDownRoleHierarchy() succeeded unexpectedly")
 			}
@@ -122,6 +129,7 @@ func Test_checkForDownRoleHierarchy(t *testing.T) {
 func Test_checkForPermissionToChangeMembersPermissions(t *testing.T) {
 	initiatorUUID := uuid.New()
 	targetUUID := uuid.New()
+
 	tests := []struct {
 		name string // description of this test case
 		// Named input parameters for target function.
@@ -152,8 +160,10 @@ func Test_checkForPermissionToChangeMembersPermissions(t *testing.T) {
 				if !tt.wantErr {
 					t.Errorf("checkForPermissionToChangeMembersPermissions() failed: %v", gotErr)
 				}
+
 				return
 			}
+
 			if tt.wantErr {
 				t.Fatal("checkForPermissionToChangeMembersPermissions() succeeded unexpectedly")
 			}
@@ -208,8 +218,10 @@ func Test_checkPermissionChangeAllowedByTargetRole(t *testing.T) {
 				if !tt.wantErr {
 					t.Errorf("checkPermissionChangeAllowedByTargetRole() failed: %v", gotErr)
 				}
+
 				return
 			}
+
 			if tt.wantErr {
 				t.Fatal("checkPermissionChangeAllowedByTargetRole() succeeded unexpectedly")
 			}
@@ -264,8 +276,10 @@ func Test_checkInitiatorHasSamePermissionThatChanged(t *testing.T) {
 				if !tt.wantErr {
 					t.Errorf("checkInitiatorHasSamePermissionThatChanged() failed: %v", gotErr)
 				}
+
 				return
 			}
+
 			if tt.wantErr {
 				t.Fatal("checkInitiatorHasSamePermissionThatChanged() succeeded unexpectedly")
 			}

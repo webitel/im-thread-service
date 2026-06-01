@@ -1,6 +1,11 @@
 package server
 
 import (
+	"go.uber.org/fx"
+
+	"github.com/webitel/webitel-go-kit/infra/discovery"
+	"github.com/webitel/webitel-go-kit/infra/profiler"
+
 	"github.com/webitel/im-thread-service/config"
 	leader "github.com/webitel/im-thread-service/infra/discovery/consul"
 	"github.com/webitel/im-thread-service/infra/pubsub"
@@ -13,9 +18,6 @@ import (
 	"github.com/webitel/im-thread-service/internal/service/decorators"
 	"github.com/webitel/im-thread-service/internal/store"
 	"github.com/webitel/im-thread-service/internal/store/postgres"
-	"github.com/webitel/webitel-go-kit/infra/discovery"
-	"github.com/webitel/webitel-go-kit/infra/profiler"
-	"go.uber.org/fx"
 )
 
 func NewApp(cfg *config.Config) *fx.App {
@@ -31,7 +33,7 @@ func MainModule(cfg *config.Config) fx.Option {
 			ProvideSD,
 			ProvideProfiler,
 		),
-		fx.Invoke(func(discovery discovery.DiscoveryProvider) error { return nil }),
+		fx.Invoke(func(_ discovery.DiscoveryProvider) error { return nil }),
 		tls.Module,
 		pubsub.Module,
 

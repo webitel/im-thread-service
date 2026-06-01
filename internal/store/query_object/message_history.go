@@ -81,7 +81,7 @@ func (q *MessageHistoryQuery) WithDomainIDsFilter(domainIDs ...int) *MessageHist
 	return q
 }
 
-func (q *MessageHistoryQuery) WithIdsFilter(ids ...uuid.UUID) *MessageHistoryQuery {
+func (q *MessageHistoryQuery) WithIDsFilter(ids ...uuid.UUID) *MessageHistoryQuery {
 	if len(ids) != 0 {
 		q.base = q.base.Where(sq.Eq{"id": ids})
 	}
@@ -89,17 +89,17 @@ func (q *MessageHistoryQuery) WithIdsFilter(ids ...uuid.UUID) *MessageHistoryQue
 	return q
 }
 
-func (q *MessageHistoryQuery) WithThreadIdsFilter(threadIds ...uuid.UUID) *MessageHistoryQuery {
-	if len(threadIds) != 0 {
-		q.base = q.base.Where(sq.Eq{"thread_id": threadIds})
+func (q *MessageHistoryQuery) WithThreadIDsFilter(threadIDs ...uuid.UUID) *MessageHistoryQuery {
+	if len(threadIDs) != 0 {
+		q.base = q.base.Where(sq.Eq{"thread_id": threadIDs})
 	}
 
 	return q
 }
 
-func (q *MessageHistoryQuery) WithSenderIdsFilter(senderIds ...uuid.UUID) *MessageHistoryQuery {
-	if len(senderIds) != 0 {
-		q.base = q.base.Where(sq.Eq{"sender_id": senderIds})
+func (q *MessageHistoryQuery) WithSenderIDsFilter(senderIDs ...uuid.UUID) *MessageHistoryQuery {
+	if len(senderIDs) != 0 {
+		q.base = q.base.Where(sq.Eq{"sender_id": senderIDs})
 	}
 
 	return q
@@ -121,7 +121,7 @@ func (q *MessageHistoryQuery) WithCursor(cursor *dto.HistoryMessageCursor) *Mess
 	cfg, err := NewMessageHistoryConfigFromRaw(
 		uint64(q.limitOrDefault()),
 		MessageHistoryCursor{
-			ID: cursor.Id,
+			ID: cursor.ID,
 		},
 		cursor.Direction,
 	)
@@ -134,6 +134,28 @@ func (q *MessageHistoryQuery) WithCursor(cursor *dto.HistoryMessageCursor) *Mess
 	return q
 }
 
+func (q *MessageHistoryQuery) WithCallerLimitation(callerID uuid.UUID, threadIDs uuid.UUIDs) *MessageHistoryQuery {
+	if callerID == uuid.Nil {
+		return q
+	}
+
+	q.base = q.base.Where(
+		`
+		exists (
+			select 1
+			from im_thread.thread_dialog acl
+			where acl.thread_id = any(?::uuid[])
+			and acl.member_id = ?::uuid
+			and acl.deleted_at is null
+		)
+	`,
+		threadIDs,
+		callerID,
+	)
+
+	return q
+}
+
 func (q *MessageHistoryQuery) WithLimit(limit int) *MessageHistoryQuery {
 	if limit > 0 && limit <= 100 {
 		q.paginatorCfg.Limit = uint64(limit)
@@ -142,7 +164,7 @@ func (q *MessageHistoryQuery) WithLimit(limit int) *MessageHistoryQuery {
 	return q
 }
 
-func (q *MessageHistoryQuery) ToSql() (string, []any, error) {
+func (q *MessageHistoryQuery) ToSQL() (string, []any, error) {
 	if len(q.fields) == 0 {
 		q.fields = defaultFields
 	}

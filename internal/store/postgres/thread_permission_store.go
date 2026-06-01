@@ -2,18 +2,18 @@ package postgres
 
 import (
 	"context"
-	"log/slog"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/webitel/im-thread-service/internal/domain/model"
+
 	"github.com/webitel/webitel-go-kit/pkg/errors"
+
+	"github.com/webitel/im-thread-service/internal/domain/model"
 )
 
 type threadDialogPermissionStore struct {
-	db     Querier
-	logger *slog.Logger
+	db Querier
 }
 
 type threadPermissionRecord struct {
@@ -41,12 +41,14 @@ func (t *threadDialogPermissionStore) Get(ctx context.Context, in *model.ThreadP
 	if in == nil {
 		return nil, errors.InvalidArgument("request must not be nil")
 	}
+
 	if in.ThreadID == nil && len(in.MemberIDs) == 0 {
 		return nil, errors.InvalidArgument("thread id or member id required")
 	}
+
 	var (
 		query = `
-		SELECT 
+		SELECT
 			perm.id,
 			perm.thread_id,
 			perm.thread_dialog_id,
@@ -72,11 +74,13 @@ func (t *threadDialogPermissionStore) Get(ctx context.Context, in *model.ThreadP
 		query += " LIMIT @Limit"
 		args["Limit"] = in.Size
 	}
+
 	rows, err := t.db.Query(ctx, query, args)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
+
 	return collectRows(rows, mapToThreadPermission)
 }
 
@@ -84,14 +88,16 @@ func (t *threadDialogPermissionStore) Create(ctx context.Context, in *model.Thre
 	if in == nil {
 		return nil, errors.InvalidArgument("permissions must not be nil")
 	}
+
 	if in.ThreadDialogID == uuid.Nil {
 		return nil, errors.InvalidArgument("thread dialog id required cannot be nil")
 	}
+
 	if in.ThreadID == uuid.Nil {
 		return nil, errors.InvalidArgument("thread id required cannot be nil")
 	}
-	var (
-		query = `
+
+	query := `
 		INSERT INTO im_thread.thread_permission (
 			thread_id,
 			thread_dialog_id,
@@ -108,7 +114,6 @@ func (t *threadDialogPermissionStore) Create(ctx context.Context, in *model.Thre
 			@CanChangeMembersPermissions,
 			@CanChangeThreadInfo
 		) RETURNING id, thread_id, thread_dialog_id, can_send_messages, can_add_members, can_remove_members, can_change_members_permissions, can_change_thread_info, created_at, updated_at`
-	)
 
 	rows, err := t.db.Query(ctx, query, pgx.NamedArgs{
 		"ThreadDialogID":              in.ThreadDialogID,
@@ -118,7 +123,6 @@ func (t *threadDialogPermissionStore) Create(ctx context.Context, in *model.Thre
 		"CanChangeMembersPermissions": in.CanChangeMembersPermissions,
 		"CanChangeThreadInfo":         in.CanChangeThreadInfo,
 	})
-
 	if err != nil {
 		return nil, err
 	}
@@ -132,6 +136,7 @@ func mapToThreadPermission(p *threadPermissionRecord) (*model.ThreadPermission, 
 	if p == nil {
 		return nil, errors.New("thread permission flat model required to map")
 	}
+
 	return &model.ThreadPermission{
 		ThreadPermissions: model.ThreadPermissions{
 			CanSendMessages:             p.CanSendMessages,
@@ -153,11 +158,12 @@ func (t *threadDialogPermissionStore) Update(ctx context.Context, in *model.Upda
 	if in == nil {
 		return nil, errors.InvalidArgument("permissions must not be nil")
 	}
+
 	if in.TargetMemberID == uuid.Nil {
 		return nil, errors.InvalidArgument("initiator and target must be provided")
 	}
-	var (
-		query = `
+
+	query := `
 		UPDATE im_thread.thread_permission
 		SET can_send_messages = COALESCE(@CanSendMessages, can_send_messages),
 			can_add_members = COALESCE(@CanAddMembers, can_add_members),
@@ -167,7 +173,6 @@ func (t *threadDialogPermissionStore) Update(ctx context.Context, in *model.Upda
 			updated_at = NOW()
 		WHERE thread_dialog_id = ANY(SELECT id FROM im_thread.thread_dialog WHERE thread_id = @ThreadID AND member_id = @TargetMemberID)
 	 RETURNING id, thread_id, thread_dialog_id, can_send_messages, can_add_members, can_remove_members, can_change_members_permissions, can_change_thread_info, created_at, updated_at`
-	)
 
 	rows, err := t.db.Query(ctx, query,
 		pgx.NamedArgs{

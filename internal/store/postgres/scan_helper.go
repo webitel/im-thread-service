@@ -2,7 +2,7 @@ package postgres
 
 import "github.com/jackc/pgx/v5"
 
-func collectRows[ResultType any, FlatType any](rows pgx.Rows, flatToResultTypeMapper func(*FlatType) (*ResultType, error)) ([]*ResultType, error) {
+func collectRows[ResultType, FlatType any](rows pgx.Rows, flatToResultTypeMapper func(*FlatType) (*ResultType, error)) ([]*ResultType, error) {
 	scannedFlatTypes, err := pgx.CollectRows(rows, pgx.RowToAddrOfStructByNameLax[FlatType])
 	if err != nil {
 		return nil, err
@@ -15,12 +15,14 @@ func collectRows[ResultType any, FlatType any](rows pgx.Rows, flatToResultTypeMa
 		if err != nil {
 			return nil, err
 		}
+
 		res = append(res, domainModel)
 	}
+
 	return res, nil
 }
 
-func collectRow[ResultType any, FlatType any](rows pgx.Rows, flatToResultTypeMapper func(*FlatType) (*ResultType, error)) (*ResultType, error) {
+func collectRow[ResultType, FlatType any](rows pgx.Rows, flatToResultTypeMapper func(*FlatType) (*ResultType, error)) (*ResultType, error) {
 	scannedFlatType, err := pgx.CollectExactlyOneRow(rows, pgx.RowToAddrOfStructByNameLax[FlatType])
 	if err != nil {
 		return nil, err

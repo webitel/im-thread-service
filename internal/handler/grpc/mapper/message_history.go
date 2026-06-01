@@ -15,9 +15,9 @@ import (
 
 func MapSearchMessageHistoryRequest2HistoryMessageInputDTO(mhr *impb.SearchMessageHistoryRequest) *dto.HistoryMessageInputDTO {
 	var (
-		ids       = utils.Map(mhr.GetIds(), utils.IdsParser)
-		threadIds = utils.Map([]string{mhr.GetThreadId()}, utils.IdsParser)
-		senderIds = utils.Map(mhr.GetSenderIds(), utils.IdsParser)
+		ids       = utils.Map(mhr.GetIds(), utils.IDsParser)
+		threadIDs = utils.Map([]string{mhr.GetThreadId()}, utils.IDsParser)
+		senderIDs = utils.Map(mhr.GetSenderIds(), utils.IDsParser)
 		types     = utils.Map(mhr.GetTypes(), func(i int32) int { return int(i) })
 		cursor    *dto.HistoryMessageCursor
 	)
@@ -26,20 +26,21 @@ func MapSearchMessageHistoryRequest2HistoryMessageInputDTO(mhr *impb.SearchMessa
 		cursor = new(dto.HistoryMessageCursor)
 		{
 			id, _ := uuid.Parse(mhr.GetCursor().GetId())
-			cursor.Id = id
+			cursor.ID = id
 			cursor.Direction = mhr.GetCursor().GetBefore()
 		}
 	}
 
 	return &dto.HistoryMessageInputDTO{
 		Fields:    mhr.GetFields(),
-		Ids:       ids,
-		ThreadIds: threadIds,
-		SenderIds: senderIds,
+		IDs:       ids,
+		ThreadIDs: threadIDs,
+		SenderIDs: senderIDs,
 		Size:      int(mhr.GetSize()),
 		Types:     types,
 		Cursor:    cursor,
 		DomainID:  int(mhr.GetDomainId()),
+		CallerID:  utils.IDsParser(mhr.GetCallerId()),
 	}
 }
 

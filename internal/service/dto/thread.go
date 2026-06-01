@@ -2,6 +2,7 @@ package dto
 
 import (
 	"github.com/google/uuid"
+
 	"github.com/webitel/im-thread-service/internal/domain/model"
 	"github.com/webitel/im-thread-service/internal/domain/shared"
 )
@@ -34,7 +35,7 @@ type (
 
 	ThreadSearchRequest struct {
 		Fields     []string
-		Ids        uuid.UUIDs
+		IDs        uuid.UUIDs
 		DomainIDs  []int
 		Kinds      []model.ThreadKind
 		Owners     uuid.UUIDs
@@ -43,6 +44,16 @@ type (
 		Size       int
 		Sort       string
 		Page       int
+	}
+
+	SearchLeftRequest struct {
+		Fields   []string
+		MemberID uuid.UUID
+		DomainID int
+		Kinds    []model.ThreadKind
+		Size     int
+		Sort     string
+		Page     int
 	}
 
 	ThreadMembersResponse struct {

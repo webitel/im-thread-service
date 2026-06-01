@@ -7,13 +7,13 @@ import (
 	"github.com/huandu/go-sqlbuilder"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/webitel/im-thread-service/internal/domain/model"
+
 	"github.com/webitel/webitel-go-kit/pkg/errors"
+
+	"github.com/webitel/im-thread-service/internal/domain/model"
 )
 
-var (
-	threadVarsEntity = sqlbuilder.NewStruct(new(model.ThreadVariables)).For(sqlbuilder.PostgreSQL)
-)
+var threadVarsEntity = sqlbuilder.NewStruct(new(model.ThreadVariables)).For(sqlbuilder.PostgreSQL)
 
 type threadVariablesStore struct {
 	db Querier
@@ -103,7 +103,10 @@ func prepareThreadVariablesSetQuery(variables *model.SetThreadVariablesCommand) 
 }
 
 func (s *threadVariablesStore) Search(ctx context.Context, query model.GetThreadVariablesQuery) (model.Page[*model.ThreadVariables], error) {
-	sql, args := prepareThreadVariablesSearhcQuery(query)
+	sql, args, err := prepareThreadVariablesSearhcQuery(query)
+	if err != nil {
+		return model.Page[*model.ThreadVariables]{}, errors.Internal("preparing search thread variable query", errors.WithCause(err), errors.WithID("postgres.thread_variables.search"))
+	}
 
 	rows, err := s.db.Query(ctx, sql, args...)
 	if err != nil {
@@ -134,18 +137,22 @@ func (s *threadVariablesStore) Search(ctx context.Context, query model.GetThread
 	return buildPage(vars, query.Limit), nil
 }
 
-func prepareThreadVariablesSearhcQuery(query model.GetThreadVariablesQuery) (string, []any) {
+func prepareThreadVariablesSearhcQuery(query model.GetThreadVariablesQuery) (string, []any, error) {
 	sb := threadVarsEntity.
 		SelectFrom("im_thread.thread_variables").
 		Select(performColumnsValidation(query.Fields, threadVarsEntity)...)
 
-	applyPagination(sb, query.Pagination, threadVarsEntity)
+	if err := applyPagination(sb, query.Pagination, threadVarsEntity); err != nil {
+		return "", nil, err
+	}
 
 	if len(query.ThreadIDs) > 0 {
 		sb.Where(sb.Any("thread_id", "=", query.ThreadIDs))
 	}
 
-	return sb.Build()
+	stmt, args := sb.Build()
+
+	return stmt, args, nil
 }
 
 func (s *threadVariablesStore) Locate(ctx context.Context, threadID uuid.UUID) (*model.ThreadVariables, error) {
@@ -163,7 +170,7 @@ func (s *threadVariablesStore) Locate(ctx context.Context, threadID uuid.UUID) (
 	vars, err := pgx.CollectExactlyOneRow(rows, pgx.RowToAddrOfStructByNameLax[model.ThreadVariables])
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, nil
+			return nil, nil //nolint:nilnil
 		}
 
 		return nil, errors.Internal(
@@ -189,6 +196,7 @@ func prepareThreadVariablesLocateQuery(threadID uuid.UUID) (string, []any) {
 
 func (s *threadVariablesStore) Flush(ctx context.Context, flushCmd model.FlushVariablesCommand) (*model.ThreadVariables, error) {
 	query, args := prepareThreadVariablesFLushQuery(flushCmd)
+
 	rows, err := s.db.Query(ctx, query, args)
 	if err != nil {
 		return nil, errors.Internal(

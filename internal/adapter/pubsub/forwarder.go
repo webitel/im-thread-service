@@ -20,10 +20,11 @@ import (
 	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/ThreeDotsLabs/watermill/message/router/middleware"
+	"go.uber.org/fx"
+
 	leader "github.com/webitel/im-thread-service/infra/discovery/consul"
 	"github.com/webitel/im-thread-service/internal/domain/model"
 	"github.com/webitel/im-thread-service/internal/store"
-	"go.uber.org/fx"
 )
 
 // [CONSTANTS] Technical identifiers for infrastructure components
@@ -51,7 +52,8 @@ func RegisterOutboxForwarder(
 	}
 
 	// [STABILITY] Core middleware for resilience and observability
-	router.AddMiddleware(middleware.Recoverer)           // Prevent service crash on handler panic
+	router.AddMiddleware(middleware.Recoverer) // Prevent service crash on handler panic
+
 	throttle := middleware.NewThrottle(100, time.Second) // 100 msg/sec
 	router.AddMiddleware(throttle.Middleware)
 
@@ -63,6 +65,7 @@ func RegisterOutboxForwarder(
 	if err != nil {
 		return err
 	}
+
 	router.AddMiddleware(poisonHandler)
 
 	// [RETRY] Configurable backoff strategy for transient failures
@@ -106,7 +109,7 @@ func RegisterOutboxForwarder(
 	mainCtx, cancelMain := context.WithCancel(context.Background())
 
 	lc.Append(fx.Hook{
-		OnStart: func(ctx context.Context) error {
+		OnStart: func(_ context.Context) error {
 			slog.Info("starting webitel outbox forwarder with leadership election")
 
 			// [LEADERSHIP] Only the active Leader node performs outbox relay to prevent DUPLICATE delivery
@@ -133,9 +136,10 @@ func RegisterOutboxForwarder(
 
 			return nil
 		},
-		OnStop: func(ctx context.Context) error {
+		OnStop: func(_ context.Context) error {
 			slog.Info("shutting down webitel outbox forwarder")
 			cancelMain() // Signal LeaderElector and workers to stop
+
 			return router.Close()
 		},
 	})
@@ -156,7 +160,8 @@ func StartOutboxCleanupJob(ctx context.Context, outbox store.OutboxStore, logger
 	for {
 		select {
 		case <-ctx.Done():
-			logger.Debug("outbox cleanup job: context cancelled")
+			logger.Debug("outbox cleanup job: context canceled")
+
 			return
 		case <-ticker.C:
 			doCleanup(ctx, outbox, logger)
@@ -175,6 +180,7 @@ func doCleanup(ctx context.Context, outbox store.OutboxStore, logger *slog.Logge
 	})
 	if err != nil {
 		logger.Error("outbox cleanup failed", "error", err)
+
 		return
 	}
 

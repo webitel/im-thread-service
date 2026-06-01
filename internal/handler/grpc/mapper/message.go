@@ -4,51 +4,53 @@ import (
 	"fmt"
 	"strconv"
 
+	"github.com/webitel/webitel-go-kit/pkg/errors"
+
 	impb "github.com/webitel/im-thread-service/gen/go/thread/v1"
 	"github.com/webitel/im-thread-service/internal/domain/model"
-	"github.com/webitel/webitel-go-kit/pkg/errors"
 )
 
 func convertInteractivePbButtonKindToDomain(in *impb.KeyboardButton) *model.KeyboardButton {
-	switch v := in.Kind.(type) {
+	switch v := in.GetKind().(type) {
 	case *impb.KeyboardButton_Callback:
 		return &model.KeyboardButton{
-			ID:       in.Id,
-			Label:    in.Label,
+			ID:       in.GetId(),
+			Label:    in.GetLabel(),
 			Type:     model.ActionTypeCallback,
-			Metadata: in.Metadata.AsMap(),
+			Metadata: in.GetMetadata().AsMap(),
 			Data:     &v.Callback.Data,
 		}
 	case *impb.KeyboardButton_Request:
 		return &model.KeyboardButton{
-			ID:       in.Id,
-			Label:    in.Label,
+			ID:       in.GetId(),
+			Label:    in.GetLabel(),
 			Type:     model.ActionTypeRequest,
-			Metadata: in.Metadata.AsMap(),
+			Metadata: in.GetMetadata().AsMap(),
 			Action:   &v.Request.Action,
 		}
 	case *impb.KeyboardButton_Url:
 		return &model.KeyboardButton{
-			ID:       in.Id,
-			Label:    in.Label,
+			ID:       in.GetId(),
+			Label:    in.GetLabel(),
 			Type:     model.ActionTypeURL,
-			Metadata: in.Metadata.AsMap(),
+			Metadata: in.GetMetadata().AsMap(),
 			URL:      &v.Url.Url,
 		}
 	default:
 		return &model.KeyboardButton{
-			ID:       in.Id,
-			Label:    in.Label,
+			ID:       in.GetId(),
+			Label:    in.GetLabel(),
 			Type:     model.ActionTypeNone,
-			Metadata: in.Metadata.AsMap(),
+			Metadata: in.GetMetadata().AsMap(),
 		}
 	}
 }
 
 func convertPbMarkupToDomain(markup *impb.KeyboardMarkup) (*model.KeyboardButtonMarkup, error) {
-	rows := make([]*model.KeyboardButtonRow, 0, len(markup.Rows))
+	rows := make([]*model.KeyboardButtonRow, 0, len(markup.GetRows()))
 	uniqueCodes := make(map[string]struct{})
-	for _, r := range markup.Rows {
+
+	for _, r := range markup.GetRows() {
 		row := convertPbButtonRowToDomain(r)
 		for _, b := range row.Buttons {
 			if _, ok := uniqueCodes[b.ID]; ok {
@@ -58,20 +60,24 @@ func convertPbMarkupToDomain(markup *impb.KeyboardMarkup) (*model.KeyboardButton
 					errors.WithID("mapper.message.convertInteractivePbListReplyToDomain"),
 				)
 			}
+
 			uniqueCodes[b.ID] = struct{}{}
 		}
+
 		rows = append(rows, row)
 	}
+
 	return &model.KeyboardButtonMarkup{
 		Rows: rows,
 	}, nil
 }
 
 func convertPbButtonRowToDomain(row *impb.KeyboardRow) *model.KeyboardButtonRow {
-	buttons := make([]*model.KeyboardButton, 0, len(row.Buttons))
-	for _, b := range row.Buttons {
+	buttons := make([]*model.KeyboardButton, 0, len(row.GetButtons()))
+	for _, b := range row.GetButtons() {
 		buttons = append(buttons, convertInteractivePbButtonKindToDomain(b))
 	}
+
 	return &model.KeyboardButtonRow{
 		Buttons: buttons,
 	}
@@ -82,7 +88,7 @@ func ConvertInteractivePbToDomain(in *impb.Interactive) (*model.MessageInteracti
 		SingleUse: in.GetSingleUse(),
 	}
 
-	switch in.Attachments.(type) {
+	switch in.GetAttachments().(type) {
 	case *impb.Interactive_Documents:
 		interactive.Attachments = &model.MessageContent{Documents: true}
 	case *impb.Interactive_Images:
@@ -95,6 +101,7 @@ func ConvertInteractivePbToDomain(in *impb.Interactive) (*model.MessageInteracti
 		if err != nil {
 			return nil, err
 		}
+
 		interactive.Kind = model.InteractiveKind{
 			ListReply: listReply,
 		}
@@ -103,6 +110,7 @@ func ConvertInteractivePbToDomain(in *impb.Interactive) (*model.MessageInteracti
 		if err != nil {
 			return nil, err
 		}
+
 		interactive.Kind = model.InteractiveKind{
 			Markup: markup,
 		}
@@ -112,40 +120,45 @@ func ConvertInteractivePbToDomain(in *impb.Interactive) (*model.MessageInteracti
 }
 
 func convertInteractivePbListReplyToDomain(in *impb.KeyboardListReply) (*model.KeyboardListReply, error) {
-	sections := make([]*model.ListReplySection, 0, len(in.Sections))
+	sections := make([]*model.ListReplySection, 0, len(in.GetSections()))
+
 	uniqueCodes := make(map[string]struct{})
-	for _, s := range in.Sections {
-		buttons := make([]*model.KeyboardButton, 0, len(s.Buttons))
-		for _, b := range s.Buttons {
-			if _, exists := uniqueCodes[b.Id]; exists {
+	for _, s := range in.GetSections() {
+		buttons := make([]*model.KeyboardButton, 0, len(s.GetButtons()))
+		for _, b := range s.GetButtons() {
+			if _, exists := uniqueCodes[b.GetId()]; exists {
 				return nil, errors.InvalidArgument(
 					"button id must be unique for each button per list reply",
-					errors.WithCause(fmt.Errorf("duplicate button id: %s", b.Id)),
+					errors.WithCause(fmt.Errorf("duplicate button id: %s", b.GetId())),
 					errors.WithID("mapper.message.convertInteractivePbListReplyToDomain"),
 				)
 			}
-			uniqueCodes[b.Id] = struct{}{}
+
+			uniqueCodes[b.GetId()] = struct{}{}
 			buttons = append(buttons, convertInteractivePbButtonKindToDomain(b))
 		}
+
 		sections = append(sections, &model.ListReplySection{
-			Section: s.Section,
+			Section: s.GetSection(),
 			Buttons: buttons,
 		})
 	}
+
 	return &model.KeyboardListReply{
-		Title:    in.MainButtonTitle,
+		Title:    in.GetMainButtonTitle(),
 		Sections: sections,
 	}, nil
 }
 
 func ConvertPbDocumentsToDomain(in *impb.Documents) []*model.MessageDocument {
-	if in == nil || len(in.Documents) == 0 {
+	if in == nil || len(in.GetDocuments()) == 0 {
 		return nil
 	}
 
-	documents := make([]*model.MessageDocument, 0, len(in.Documents))
-	for _, d := range in.Documents {
+	documents := make([]*model.MessageDocument, 0, len(in.GetDocuments()))
+	for _, d := range in.GetDocuments() {
 		var internalID int
+
 		if d.GetId() != "" {
 			var err error
 			if internalID, err = strconv.Atoi(d.GetId()); err != nil {
@@ -161,23 +174,26 @@ func ConvertPbDocumentsToDomain(in *impb.Documents) []*model.MessageDocument {
 			URL:    d.GetUrl(),
 		})
 	}
+
 	return documents
 }
 
 func ConvertPbImagesToDomain(in *impb.Images) []*model.MessageImage {
-	if in == nil || len(in.Images) == 0 {
+	if in == nil || len(in.GetImages()) == 0 {
 		return nil
 	}
 
-	images := make([]*model.MessageImage, 0, len(in.Images))
-	for _, img := range in.Images {
+	images := make([]*model.MessageImage, 0, len(in.GetImages()))
+	for _, img := range in.GetImages() {
 		var internalID int
+
 		if img.GetId() != "" {
 			var err error
 			if internalID, err = strconv.Atoi(img.GetId()); err != nil {
 				internalID = 0
 			}
 		}
+
 		images = append(images, &model.MessageImage{
 			FileID: int64(internalID),
 			URL:    img.GetLink(),
@@ -185,5 +201,6 @@ func ConvertPbImagesToDomain(in *impb.Images) []*model.MessageImage {
 			Mime:   img.GetMimeType(),
 		})
 	}
+
 	return images
 }

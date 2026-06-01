@@ -5,6 +5,7 @@ import (
 	"log/slog"
 
 	"github.com/google/uuid"
+
 	impb "github.com/webitel/im-thread-service/gen/go/thread/v1"
 	"github.com/webitel/im-thread-service/internal/domain/model"
 	"github.com/webitel/im-thread-service/internal/domain/shared"
@@ -53,6 +54,7 @@ func (m *MessageServer) SendImage(ctx context.Context, in *impb.SendImageRequest
 	out, err := m.handler.SendImage(ctx, mapper.MapToSendImageRequest(in))
 	if err != nil {
 		m.logger.Error("failed to send image", "error", err)
+
 		return nil, err
 	}
 
@@ -63,6 +65,7 @@ func (m *MessageServer) SendDocument(ctx context.Context, in *impb.SendDocumentR
 	out, err := m.handler.SendDocument(ctx, mapper.MapToSendDocumentRequest(in))
 	if err != nil {
 		m.logger.Error("failed to send document", "error", err)
+
 		return nil, err
 	}
 
@@ -73,6 +76,7 @@ func (m *MessageServer) Read(ctx context.Context, in *impb.ReadMessageRequest) (
 	err := m.handler.Read(ctx, mapper.MapToReadMessageRequest(in))
 	if err != nil {
 		m.logger.Error("failed to read message", "error", err)
+
 		return nil, err
 	}
 
@@ -83,15 +87,15 @@ func (m *MessageServer) SendLocation(ctx context.Context, in *impb.SendLocationR
 	msg := &model.Message{
 		DomainID:       in.GetDomainId(),
 		IdempotencyKey: in.GetSendId(),
-		From:           mapper.MapPeerFromProto(in.From),
-		SendTo:         mapper.MapPeerFromProto(in.To),
+		From:           mapper.MapPeerFromProto(in.GetFrom()),
+		SendTo:         mapper.MapPeerFromProto(in.GetTo()),
 		Type:           model.MessageTypeLocation,
-		Metadata:       in.Metadata.AsMap(),
+		Metadata:       in.GetMetadata().AsMap(),
 		SenderID:       uuid.UUID{},
 		Location: &model.MessageLocation{
 			Address:   in.Address,
-			Latitude:  in.Latitude,
-			Longitude: in.Longitude,
+			Latitude:  in.GetLatitude(),
+			Longitude: in.GetLongitude(),
 			Name:      in.Name,
 		},
 	}
@@ -103,7 +107,7 @@ func (m *MessageServer) SendLocation(ctx context.Context, in *impb.SendLocationR
 
 	return &impb.SendMessageResponse{
 		To: []*impb.Peer{
-			in.To,
+			in.GetTo(),
 		},
 		Id: saved.ID.String(),
 	}, nil
@@ -113,10 +117,10 @@ func (m *MessageServer) SendContact(ctx context.Context, in *impb.SendContactReq
 	msg := &model.Message{
 		IdempotencyKey: in.GetSendId(),
 		DomainID:       in.GetDomainId(),
-		From:           mapper.MapPeerFromProto(in.From),
-		SendTo:         mapper.MapPeerFromProto(in.To),
+		From:           mapper.MapPeerFromProto(in.GetFrom()),
+		SendTo:         mapper.MapPeerFromProto(in.GetTo()),
 		Type:           model.MessageTypeContact,
-		Metadata:       in.Metadata.AsMap(),
+		Metadata:       in.GetMetadata().AsMap(),
 		Contact: &model.MessageContact{
 			Name:        in.Name,
 			PhoneNumber: in.PhoneNumber,
@@ -131,7 +135,7 @@ func (m *MessageServer) SendContact(ctx context.Context, in *impb.SendContactReq
 
 	return &impb.SendMessageResponse{
 		To: []*impb.Peer{
-			in.To,
+			in.GetTo(),
 		},
 		Id: saved.ID.String(),
 	}, nil
@@ -150,7 +154,7 @@ func (m *MessageServer) SendInteractive(ctx context.Context, in *impb.SendIntera
 		SendTo:         mapper.MapPeerFromProto(in.GetTo()),
 		Body:           in.GetBody(),
 		Type:           model.MessageTypeInteractive,
-		Metadata:       in.Metadata.AsMap(),
+		Metadata:       in.GetMetadata().AsMap(),
 		Interactive:    interactive,
 		Images:         mapper.ConvertPbImagesToDomain(in.GetInteractive().GetImages()),
 		Documents:      mapper.ConvertPbDocumentsToDomain(in.GetInteractive().GetDocuments()),
@@ -163,7 +167,7 @@ func (m *MessageServer) SendInteractive(ctx context.Context, in *impb.SendIntera
 
 	return &impb.SendMessageResponse{
 		To: []*impb.Peer{
-			in.To,
+			in.GetTo(),
 		},
 		Id: processed.ID.String(),
 	}, nil
@@ -201,7 +205,7 @@ func (m *MessageServer) SendSystemMessage(ctx context.Context, in *impb.SendSyst
 
 	return &impb.SendMessageResponse{
 		To: []*impb.Peer{
-			in.To,
+			in.GetTo(),
 		},
 		Id: saved.ID.String(),
 	}, nil

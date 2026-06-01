@@ -2,6 +2,7 @@ package mapper
 
 import (
 	"github.com/google/uuid"
+
 	impb "github.com/webitel/im-thread-service/gen/go/thread/v1"
 	"github.com/webitel/im-thread-service/internal/domain/shared"
 	"github.com/webitel/im-thread-service/internal/service/dto"
@@ -11,6 +12,7 @@ func MapToSendTextRequest(in *impb.SendTextRequest) *dto.SendTextRequest {
 	if in == nil {
 		return nil
 	}
+
 	return &dto.SendTextRequest{
 		From:     MapPeerFromProto(in.GetFrom()),
 		To:       MapPeerFromProto(in.GetTo()),
@@ -26,13 +28,15 @@ func MapPeerFromProto(pb *impb.Peer) shared.Peer {
 	}
 
 	var p shared.Peer
-	switch kind := pb.Kind.(type) {
+
+	switch kind := pb.GetKind().(type) {
 	case *impb.Peer_ContactId:
 		p.ID, _ = uuid.Parse(kind.ContactId)
 		p.Type = shared.PeerContact
 		p.Identity = &shared.Identity{
 			Issuer: pb.GetIdentity().GetIssuer(),
 			Name:   pb.GetIdentity().GetName(),
+			Via:    pb.GetIdentity().Via,
 		}
 	case *impb.Peer_GroupId:
 		p.ID, _ = uuid.Parse(kind.GroupId)
@@ -45,11 +49,6 @@ func MapPeerFromProto(pb *impb.Peer) shared.Peer {
 		p.Type = shared.PeerThread
 	}
 
-	p.Identity = &shared.Identity{
-		Issuer: pb.GetIdentity().GetIssuer(),
-		Name:   pb.GetIdentity().GetName(),
-	}
-
 	return p
 }
 
@@ -57,6 +56,7 @@ func MapToSendTextResponse(out *dto.SendTextResponse) *impb.SendTextResponse {
 	if out == nil {
 		return nil
 	}
+
 	return &impb.SendTextResponse{
 		Id: out.ID.String(),
 		To: MapPeerToProto(out.To),
@@ -66,6 +66,7 @@ func MapToSendTextResponse(out *dto.SendTextResponse) *impb.SendTextResponse {
 func MapPeerToProto(p shared.Peer) *impb.Peer {
 	idStr := p.ID.String()
 	res := &impb.Peer{}
+
 	switch p.Type {
 	case shared.PeerContact:
 		res.Kind = &impb.Peer_ContactId{ContactId: idStr}
@@ -76,5 +77,6 @@ func MapPeerToProto(p shared.Peer) *impb.Peer {
 	case shared.PeerThread:
 		res.Kind = &impb.Peer_ThreadId{ThreadId: idStr}
 	}
+
 	return res
 }

@@ -22,7 +22,7 @@ func NewMessageHistoryStore(db Querier) *messageHistoryStore {
 }
 
 func (s *messageHistoryStore) Search(ctx context.Context, query queryobject.QueryObject) ([]*model.Message, error) {
-	sql, args, err := query.ToSql()
+	sql, args, err := query.ToSQL()
 	if err != nil {
 		return nil, errors.Internal("preparing history message query", errors.WithCause(err), errors.WithID("postgres.message_history_store.search"))
 	}

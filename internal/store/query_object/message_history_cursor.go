@@ -20,10 +20,7 @@ type MessageHistoryCursorMapper struct{}
 
 func (MessageHistoryCursorMapper) ToValues(c MessageHistoryCursor) (CursorValues, error) {
 	if c.ID == uuid.Nil {
-		return nil, errors.InvalidArgument(
-			"MessageHistoryCursorMapper: ID must not be nil UUID",
-			errors.WithID("queryobject.MessageHistoryCursorMapper.ToValues"),
-		)
+		return nil, errors.New("MessageHistoryCursorMapper: ID must not be nil UUID")
 	}
 
 	return CursorValues{
@@ -34,10 +31,7 @@ func (MessageHistoryCursorMapper) ToValues(c MessageHistoryCursor) (CursorValues
 func (MessageHistoryCursorMapper) FromValues(v CursorValues) (MessageHistoryCursor, error) {
 	idRaw, ok := v["id"]
 	if !ok {
-		return MessageHistoryCursor{}, errors.InvalidArgument(
-			"MessageHistoryCursorMapper: missing id",
-			errors.WithID("queryobject.MessageHistoryCursorMapper.FromValues"),
-		)
+		return MessageHistoryCursor{}, errors.New("MessageHistoryCursorMapper: missing id")
 	}
 
 	var id uuid.UUID
@@ -76,7 +70,7 @@ func NewRawParamsCursorCodec[C any](parser RawCursorParser[C]) RawParamsCursorCo
 	return RawParamsCursorCodec[C]{parser: parser}
 }
 
-func (c RawParamsCursorCodec[C]) Encode(cur C) (Cursor, error) {
+func (c RawParamsCursorCodec[C]) Encode(_ C) (Cursor, error) {
 	return "", nil
 }
 

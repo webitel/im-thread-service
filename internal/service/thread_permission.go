@@ -5,9 +5,11 @@ import (
 	"log/slog"
 
 	"github.com/google/uuid"
+
+	"github.com/webitel/webitel-go-kit/pkg/errors"
+
 	"github.com/webitel/im-thread-service/internal/domain/model"
 	"github.com/webitel/im-thread-service/internal/store"
-	"github.com/webitel/webitel-go-kit/pkg/errors"
 )
 
 var (
@@ -89,17 +91,21 @@ func (s *ThreadPermissionService) Get(ctx context.Context, req *model.GetThreadP
 	if req == nil {
 		return nil, errors.InvalidArgument("invalid permission get request")
 	}
+
 	if req.RequestInitiatorID != nil {
 		initiator, target, err := s.store.ThreadDialogStore().FindActorsPair(ctx, *req.RequestInitiatorID, req.MemberID)
 		if err != nil {
 			return nil, err
 		}
+
 		if initiator == nil {
 			return nil, errors.New("request initiator is not a member of the thread")
 		}
+
 		if target == nil {
 			return nil, errors.New("target member is not a member of the thread")
 		}
+
 		if initiator.ThreadRole < target.ThreadRole {
 			return nil, errors.New("request initiator does not have enough role permissions to get target permissions")
 		}
@@ -114,17 +120,21 @@ func (s *ThreadPermissionService) Update(ctx context.Context, req *model.UpdateT
 	if req == nil {
 		return nil, errors.InvalidArgument("invalid permission change request")
 	}
+
 	if req.InitiatorContactID != nil {
 		initiator, target, err := s.store.ThreadDialogStore().FindActorsPair(ctx, *req.InitiatorContactID, req.TargetMemberID)
 		if err != nil {
 			return nil, err
 		}
+
 		if initiator == nil {
 			return nil, errors.New("request initiator is not a member of the thread")
 		}
+
 		if target == nil {
 			return nil, errors.New("target member is not a member of the thread")
 		}
+
 		validationStruct := &permissionChangeValidationStruct{
 			Initiator: initiator,
 			Target:    target,
@@ -135,6 +145,7 @@ func (s *ThreadPermissionService) Update(ctx context.Context, req *model.UpdateT
 			return nil, err
 		}
 	}
+
 	return s.store.ThreadPermissionStore().Update(ctx, req)
 }
 
@@ -149,21 +160,21 @@ func (s *ThreadPermissionService) validatePermissionChangeRequest(req *permissio
 	if req == nil {
 		return errors.InvalidArgument("invalid permission change request")
 	}
-	var (
-		checks = []func(*permissionChangeValidationStruct) error{
-			checkForSelfPermissionChange,
-			checkForDownRoleHierarchy,
-			checkForPermissionToChangeMembersPermissions,
-			checkInitiatorHasSamePermissionThatChanged,
-			checkPermissionChangeAllowedByTargetRole,
-		}
-	)
+
+	checks := []func(*permissionChangeValidationStruct) error{
+		checkForSelfPermissionChange,
+		checkForDownRoleHierarchy,
+		checkForPermissionToChangeMembersPermissions,
+		checkInitiatorHasSamePermissionThatChanged,
+		checkPermissionChangeAllowedByTargetRole,
+	}
 
 	for _, check := range checks {
 		if err := check(req); err != nil {
 			return err
 		}
 	}
+
 	return nil
 }
 
@@ -171,10 +182,12 @@ func checkForSelfPermissionChange(req *permissionChangeValidationStruct) error {
 	if req == nil || req.Initiator == nil || req.Target == nil {
 		return errors.InvalidArgument("invalid permission change request")
 	}
+
 	initiator, target := req.Initiator, req.Target
 	if initiator.ID == target.ID {
 		return errors.New("can't change self permissions")
 	}
+
 	return nil
 }
 
@@ -182,10 +195,12 @@ func checkForDownRoleHierarchy(req *permissionChangeValidationStruct) error {
 	if req == nil || req.Initiator == nil || req.Target == nil {
 		return errors.InvalidArgument("invalid permission change request")
 	}
+
 	initiator, target := req.Initiator, req.Target
 	if initiator.ThreadRole <= target.ThreadRole {
 		return errors.New("initiator does not have enough role permissions to change target")
 	}
+
 	return nil
 }
 
@@ -193,10 +208,12 @@ func checkForPermissionToChangeMembersPermissions(req *permissionChangeValidatio
 	if req == nil || req.Initiator == nil {
 		return errors.InvalidArgument("invalid permission change request")
 	}
+
 	initiator := req.Initiator
 	if !initiator.Permissions.CanChangeMembersPermissions {
 		return errors.New("initiator does not have permission to change members permissions")
 	}
+
 	return nil
 }
 
@@ -204,9 +221,11 @@ func checkPermissionChangeAllowedByTargetRole(req *permissionChangeValidationStr
 	if req == nil {
 		return errors.InvalidArgument("invalid permission change request")
 	}
+
 	if req.Changes == nil {
 		return errors.InvalidArgument("invalid permission change request")
 	}
+
 	if req.Target == nil {
 		return errors.InvalidArgument("permission change target cannot be nil")
 	}
@@ -215,6 +234,7 @@ func checkPermissionChangeAllowedByTargetRole(req *permissionChangeValidationStr
 	if err != nil {
 		return errors.New("failed to get allowed permissions by target role", errors.WithCause(err))
 	}
+
 	changes := req.Changes
 	rules := []struct {
 		requested *bool
@@ -235,7 +255,6 @@ func checkPermissionChangeAllowedByTargetRole(req *permissionChangeValidationStr
 	}
 
 	return nil
-
 }
 
 func getAllowedPermissionsByRole(role model.ThreadRole) (*model.ThreadPermissionsAllowance, error) {
@@ -243,6 +262,7 @@ func getAllowedPermissionsByRole(role model.ThreadRole) (*model.ThreadPermission
 	if !ok {
 		return nil, errors.New("unknown member role")
 	}
+
 	return allowed, nil
 }
 
@@ -251,12 +271,15 @@ func getDefaultPermissionsByRole(role model.ThreadRole) (*model.ThreadPermission
 	if !ok {
 		return nil, errors.New("unknown member role")
 	}
+
 	return defaultPermissions, nil
 }
+
 func checkInitiatorHasSamePermissionThatChanged(req *permissionChangeValidationStruct) error {
 	if req == nil || req.Initiator == nil {
 		return errors.InvalidArgument("invalid permission change request")
 	}
+
 	if req.Changes == nil {
 		return errors.InvalidArgument("invalid permission change request")
 	}

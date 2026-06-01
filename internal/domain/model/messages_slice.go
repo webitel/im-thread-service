@@ -11,7 +11,7 @@ type (
 
 	MessageCursor struct {
 		CreatedAt time.Time
-		Id        uuid.UUID
+		ID        uuid.UUID
 		Direction bool
 	}
 
@@ -24,7 +24,7 @@ type (
 func NewMessageCursor(id uuid.UUID, createdAt time.Time, direction bool) *MessageCursor {
 	return &MessageCursor{
 		CreatedAt: createdAt,
-		Id:        id,
+		ID:        id,
 		Direction: direction,
 	}
 }
