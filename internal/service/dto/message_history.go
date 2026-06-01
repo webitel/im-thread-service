@@ -67,4 +67,16 @@ type (
 		ID        uuid.UUID
 		Direction bool
 	}
+
+	LeftThreadsMessageHistoryInputDTO struct {
+		DomainID   int
+		Fields     []string
+		ThreadID   uuid.UUID
+		SenderIds  uuid.UUIDs
+		Types      []int
+		PeriodFrom time.Time
+		PeriodTo   time.Time
+		Cursor     *HistoryMessageCursor
+		Size       int
+	}
 )

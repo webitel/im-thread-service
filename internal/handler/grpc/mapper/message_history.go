@@ -1,6 +1,8 @@
 package mapper
 
 import (
+	"time"
+
 	"github.com/google/uuid"
 	"google.golang.org/protobuf/types/known/structpb"
 
@@ -39,6 +41,47 @@ func MapSearchMessageHistoryRequest2HistoryMessageInputDTO(mhr *impb.SearchMessa
 		Cursor:    cursor,
 		DomainID:  int(mhr.GetDomainId()),
 		CallerID:  utils.IDsParser(mhr.GetCallerId()),
+	}
+}
+
+func MapSearchLeftThreadsMessageHistoryRequest2LeftThreadsMessageHistoryInputDTO(mhr *impb.SearchLeftThreadsMessageHistoryRequest) *dto.LeftThreadsMessageHistoryInputDTO {
+	var (
+		threadID  uuid.UUID
+		senderIds = utils.Map(mhr.GetSenderIds(), utils.IdsParser)
+		types     = utils.Map(mhr.GetTypes(), func(i int32) int { return int(i) })
+		cursor    *dto.HistoryMessageCursor
+	)
+
+	threadID, _ = uuid.Parse(mhr.GetThreadId())
+
+	if mhr.GetCursor() != nil {
+		cursor = new(dto.HistoryMessageCursor)
+		{
+			id, _ := uuid.Parse(mhr.GetCursor().GetId())
+			cursor.Id = id
+			cursor.Direction = mhr.GetCursor().GetBefore()
+		}
+	}
+
+	var periodFrom, periodTo time.Time
+	if v := mhr.GetPeriodFrom(); v > 0 {
+		periodFrom = time.UnixMilli(v)
+	}
+
+	if v := mhr.GetPeriodTo(); v > 0 {
+		periodTo = time.UnixMilli(v)
+	}
+
+	return &dto.LeftThreadsMessageHistoryInputDTO{
+		DomainID:   int(mhr.GetDomainId()),
+		Fields:     mhr.GetFields(),
+		ThreadID:   threadID,
+		SenderIds:  senderIds,
+		Types:      types,
+		PeriodFrom: periodFrom,
+		PeriodTo:   periodTo,
+		Cursor:     cursor,
+		Size:       int(mhr.GetSize()),
 	}
 }
 

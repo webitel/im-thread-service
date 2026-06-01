@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
-
 	"github.com/webitel/webitel-go-kit/pkg/errors"
 )
 
@@ -45,10 +44,17 @@ func (MessageHistoryCursorMapper) FromValues(v CursorValues) (MessageHistoryCurs
 
 		id, err = uuid.Parse(raw)
 		if err != nil {
-			return MessageHistoryCursor{}, fmt.Errorf("MessageHistoryCursorMapper: invalid id %q: %w", raw, err)
+			return MessageHistoryCursor{}, errors.InvalidArgument(
+				fmt.Sprintf("MessageHistoryCursorMapper: invalid id %q", raw),
+				errors.WithCause(err),
+				errors.WithID("queryobject.MessageHistoryCursorMapper.FromValues"),
+			)
 		}
 	default:
-		return MessageHistoryCursor{}, fmt.Errorf("MessageHistoryCursorMapper: unsupported id type %T", idRaw)
+		return MessageHistoryCursor{}, errors.InvalidArgument(
+			fmt.Sprintf("MessageHistoryCursorMapper: unsupported id type %T", idRaw),
+			errors.WithID("queryobject.MessageHistoryCursorMapper.FromValues"),
+		)
 	}
 
 	return MessageHistoryCursor{ID: id}, nil
@@ -81,7 +87,11 @@ func NewMessageHistoryConfig(
 
 	cur, ok, err := codec.Decode(rawToken)
 	if err != nil {
-		return Config[MessageHistoryCursor]{}, fmt.Errorf("invalid cursor token: %w", err)
+		return Config[MessageHistoryCursor]{}, errors.InvalidArgument(
+			"invalid cursor token",
+			errors.WithCause(err),
+			errors.WithID("queryobject.NewMessageHistoryConfig"),
+		)
 	}
 
 	dir := DirectionAfter
@@ -105,7 +115,11 @@ func NewMessageHistoryConfigFromRaw(limit uint64, raw MessageHistoryCursor, befo
 
 	cur, hasCursor, err := parseMessageHistoryFields(raw.ID)
 	if err != nil {
-		return Config[MessageHistoryCursor]{}, fmt.Errorf("invalid cursor params: %w", err)
+		return Config[MessageHistoryCursor]{}, errors.InvalidArgument(
+			"invalid cursor params",
+			errors.WithCause(err),
+			errors.WithID("queryobject.NewMessageHistoryConfigFromRaw"),
+		)
 	}
 
 	dir := DirectionAfter
