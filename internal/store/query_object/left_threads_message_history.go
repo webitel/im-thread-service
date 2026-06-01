@@ -259,7 +259,7 @@ func (q *leftThreadsMessageHistoryQueryObject) WithCursor(cursor *dto.HistoryMes
 
 	cfg, err := NewMessageHistoryConfigFromRaw(
 		q.pageLimitOrDefault(),
-		MessageHistoryCursor{ID: cursor.Id},
+		MessageHistoryCursor{ID: cursor.ID},
 		cursor.Direction,
 	)
 	if err != nil {
