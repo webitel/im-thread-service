@@ -13,12 +13,15 @@ func MapToSendTextRequest(in *impb.SendTextRequest) *dto.SendTextRequest {
 		return nil
 	}
 
+	sendAs, _ := uuid.Parse(in.GetSendAs())
+
 	return &dto.SendTextRequest{
 		From:     MapPeerFromProto(in.GetFrom()),
 		To:       MapPeerFromProto(in.GetTo()),
 		Body:     in.GetBody(),
 		DomainID: in.GetDomainId(),
 		SendID:   in.GetSendId(),
+		SendAs:   &sendAs,
 	}
 }
 

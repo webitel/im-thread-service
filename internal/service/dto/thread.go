@@ -12,6 +12,7 @@ type (
 		DomainID int
 		From     *shared.Peer
 		To       *shared.Peer
+		SendAs   *uuid.UUID
 	}
 
 	SearchThreadDialogRequest struct {

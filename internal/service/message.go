@@ -13,7 +13,6 @@ import (
 	imcontact "github.com/webitel/im-thread-service/infra/webitel/im-contact"
 	"github.com/webitel/im-thread-service/internal/domain/event"
 	"github.com/webitel/im-thread-service/internal/domain/model"
-	"github.com/webitel/im-thread-service/internal/domain/shared"
 	"github.com/webitel/im-thread-service/internal/service/dto"
 	"github.com/webitel/im-thread-service/internal/service/guards"
 	"github.com/webitel/im-thread-service/internal/store"
@@ -66,6 +65,7 @@ func (s *MessageService) SendText(ctx context.Context, in *dto.SendTextRequest) 
 		if in.To.Identity != nil && in.To.Identity.Via != nil {
 			toVia = *in.To.Identity.Via
 		}
+
 		log.Debug("incoming request",
 			slog.String("to_id", in.To.ID.String()),
 			slog.String("to_via", toVia),
@@ -76,6 +76,7 @@ func (s *MessageService) SendText(ctx context.Context, in *dto.SendTextRequest) 
 		From:     &in.From,
 		To:       &in.To,
 		DomainID: int(in.DomainID),
+		SendAs:   in.SendAs,
 	})
 	if err != nil {
 		log.Error(
@@ -94,6 +95,7 @@ func (s *MessageService) SendText(ctx context.Context, in *dto.SendTextRequest) 
 		if m.Via != nil {
 			via = *m.Via
 		}
+
 		log.Debug("thread member after EnsureDirectThread",
 			slog.Int("index", i),
 			slog.String("contact_id", m.ContactID.String()),
@@ -108,11 +110,11 @@ func (s *MessageService) SendText(ctx context.Context, in *dto.SendTextRequest) 
 		Body:     in.Body,
 		To:       t.Members,
 		Type:     model.MessageTypeText,
-		Member: &model.ThreadDialog{
-			BaseModel: shared.BaseModel{ID: findSenderMemberID(t.Members, in.From.ID)},
-		},
 		Metadata: model.BuildMetadata(in.Body),
+		SendAs:   in.SendAs,
 	}
+
+	msg.SetMemberFromSlice(t.Members)
 
 	err = s.uow.WithinTransaction(ctx, func(ctx context.Context, uow store.UnitOfWork) error {
 		saved, err := uow.Messages().SaveMessage(ctx, msg)
@@ -159,6 +161,7 @@ func (s *MessageService) SendImage(ctx context.Context, in *dto.SendImageRequest
 		From:     &in.From,
 		To:       &in.To,
 		DomainID: int(in.DomainID),
+		SendAs:   in.SendAs,
 	})
 	if err != nil {
 		return nil, err
@@ -182,12 +185,14 @@ func (s *MessageService) SendImage(ctx context.Context, in *dto.SendImageRequest
 		ThreadID:   t.ID,
 		DomainID:   int32(in.DomainID),
 		From:       in.From,
-		MemberID:   findSenderMemberID(t.Members, in.From.ID),
 		Recipients: t.Members,
 		Body:       in.Image.Body,
 		SendID:     in.SendID,
 		Images:     s.mapImageInputs(in.Image.Images),
 	})
+
+	msg.SendAs = in.SendAs
+	msg.SetMemberFromSlice(t.Members)
 
 	err = s.uow.WithinTransaction(ctx, func(txCtx context.Context, uow store.UnitOfWork) error {
 		saved, err := uow.Messages().SaveMessage(txCtx, msg)
@@ -234,6 +239,7 @@ func (s *MessageService) SendDocument(ctx context.Context, in *dto.SendDocumentR
 		From:     &in.From,
 		To:       &in.To,
 		DomainID: int(in.DomainID),
+		SendAs:   in.SendAs,
 	})
 	if err != nil {
 		log.Error("resolving thread", "error", err, "from", in.From.ID.String(), "to", in.To.ID.String(), "to_type", in.To.Type.String())
@@ -273,12 +279,13 @@ func (s *MessageService) SendDocument(ctx context.Context, in *dto.SendDocumentR
 		ThreadID:   t.ID,
 		DomainID:   int32(in.DomainID),
 		From:       in.From,
-		MemberID:   findSenderMemberID(t.Members, in.From.ID),
 		Recipients: t.Members,
 		Body:       in.Document.Body,
 		SendID:     in.SendID,
 		Documents:  s.mapDocumentInputs(in.Document.Documents),
 	})
+	msg.SendAs = in.SendAs
+	msg.SetMemberFromSlice(t.Members)
 
 	err = s.uow.WithinTransaction(ctx, func(txCtx context.Context, uow store.UnitOfWork) error {
 		saved, err := uow.Messages().SaveMessage(txCtx, msg)
@@ -541,6 +548,7 @@ func (s *MessageService) prepareMessageForSending(ctx context.Context, msg *mode
 		DomainID: int(msg.DomainID),
 		From:     &msg.From,
 		To:       &msg.SendTo,
+		SendAs:   msg.SendAs,
 	})
 	if err != nil {
 		return err
@@ -548,9 +556,8 @@ func (s *MessageService) prepareMessageForSending(ctx context.Context, msg *mode
 
 	msg.ThreadID = t.ID
 	msg.To = t.Members
-	msg.Member = &model.ThreadDialog{
-		BaseModel: shared.BaseModel{ID: findSenderMemberID(t.Members, msg.From.ID)},
-	}
+
+	msg.SetMemberFromSlice(t.Members)
 
 	return nil
 }
@@ -662,17 +669,4 @@ func enrichAttachmentsLinks(ctx context.Context, attachments []AttachmentProcess
 	}
 
 	return nil
-}
-
-// findSenderMemberID returns the thread_dialog.id for the given contact within
-// the provided member list.  Returns uuid.Nil when the contact is not found
-// (e.g. system-generated messages with no human sender).
-func findSenderMemberID(members []*model.ThreadDialog, contactID uuid.UUID) uuid.UUID {
-	for _, m := range members {
-		if m.ContactID == contactID {
-			return m.ID
-		}
-	}
-
-	return uuid.Nil
 }

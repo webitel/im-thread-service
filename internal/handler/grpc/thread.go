@@ -32,16 +32,14 @@ type ThreadVariablesOperator interface {
 	Flush(ctx context.Context, flushCmd model.FlushVariablesCommand) (*model.ThreadVariables, error)
 }
 
-type (
-	ThreadManagementServer struct {
-		impb.UnimplementedThreadManagementServer
+type ThreadManagementServer struct {
+	impb.UnimplementedThreadManagementServer
 
-		inMapper        *mapper.ThreadInConverter
-		outMapper       *mapper.ThreadOutConverter
-		threadManager   ThreadManagementService
-		threadVariables ThreadVariablesOperator
-	}
-)
+	inMapper        *mapper.ThreadInConverter
+	outMapper       *mapper.ThreadOutConverter
+	threadManager   ThreadManagementService
+	threadVariables ThreadVariablesOperator
+}
 
 func NewThreadService(threadManager ThreadManagementService, threadVariables ThreadVariablesOperator) *ThreadManagementServer {
 	return &ThreadManagementServer{

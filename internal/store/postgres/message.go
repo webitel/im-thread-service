@@ -58,10 +58,10 @@ func (m *messageStore) SaveMessage(ctx context.Context, msg *model.Message) (*mo
 
 	const query = `
 		insert into im_message.messages (
-			domain_id, thread_id, sender_id, member_id, type, body, metadata
+			domain_id, thread_id, sender_id, member_id, type, body, metadata, origin_sender
 		)
 		values (
-			@DomainID, @ThreadID, @SenderID, @MemberID, @Type, @Body, @Metadata
+			@DomainID, @ThreadID, @SenderID, @MemberID, @Type, @Body, @Metadata, @OriginSender
 		)
 		returning
 			id, domain_id, thread_id, member_id, type, body, metadata, created_at, updated_at,
@@ -69,23 +69,24 @@ func (m *messageStore) SaveMessage(ctx context.Context, msg *model.Message) (*mo
 	`
 
 	args := pgx.NamedArgs{
-		"DomainID": msg.DomainID,
-		"ThreadID": msg.ThreadID,
-		"SenderID": msg.From.ID,
-		"MemberID": msg.Member.ID,
-		"Type":     msg.Type,
-		"Body":     msg.Body,
-		"Metadata": msg.Metadata,
+		"DomainID":     msg.DomainID,
+		"ThreadID":     msg.ThreadID,
+		"SenderID":     msg.GetSender(),
+		"MemberID":     msg.Member.ID,
+		"Type":         msg.Type,
+		"Body":         msg.Body,
+		"Metadata":     msg.Metadata,
+		"OriginSender": msg.GetOriginSender(),
 	}
 
 	rows, err := m.db.Query(ctx, query, args)
 	if err != nil {
-		return nil, fmt.Errorf("postgres.save_message: %w", err)
+		return nil, errors.Internal("executing save message query", errors.WithCause(err), errors.WithID("postgres.message.save.query"))
 	}
 
 	savedMessage, err := pgx.CollectExactlyOneRow(rows, pgx.RowToAddrOfStructByNameLax[model.Message])
 	if err != nil {
-		return nil, fmt.Errorf("postgres.save_message: %w", err)
+		return nil, errors.Internal("collecting saved message", errors.WithCause(err), errors.WithID("postgres.message.save.collecting"))
 	}
 
 	return savedMessage, nil

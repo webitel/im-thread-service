@@ -50,7 +50,7 @@ type MessageCreated struct {
 	Documents   []DocumentPayload   `json:"documents,omitempty"`
 	Location    *LocationPayload    `json:"location,omitempty"`
 	Contact     *ContactPayload     `json:"contact,omitempty"`
-	Interactive *InteractivePayload `json:"interactive,omitempty"` // raw interactive payload due to dynamic schema
+	Interactive *InteractivePayload `json:"interactive,omitempty"`
 	System      *SystemPayload      `json:"system,omitempty"`
 }
 

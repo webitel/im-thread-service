@@ -63,7 +63,7 @@ func (s *MessageHistoryService) SearchLeftThreads(ctx context.Context, req *dto.
 		WithFields(fields).
 		WithDomainIDFilter(req.DomainID).
 		WithThreadIDFilter(req.ThreadID).
-		WithSenderIDsFilter(req.SenderIds...).
+		WithSenderIDsFilter(req.SenderIDs...).
 		WithTypesFilter(req.Types...).
 		WithPeriodFilter(req.PeriodFrom, req.PeriodTo).
 		WithLimit(req.Size).

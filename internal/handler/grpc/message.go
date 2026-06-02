@@ -84,6 +84,8 @@ func (m *MessageServer) Read(ctx context.Context, in *impb.ReadMessageRequest) (
 }
 
 func (m *MessageServer) SendLocation(ctx context.Context, in *impb.SendLocationRequest) (*impb.SendMessageResponse, error) {
+	sendAs, _ := uuid.Parse(in.GetSendAs())
+
 	msg := &model.Message{
 		DomainID:       in.GetDomainId(),
 		IdempotencyKey: in.GetSendId(),
@@ -98,6 +100,7 @@ func (m *MessageServer) SendLocation(ctx context.Context, in *impb.SendLocationR
 			Longitude: in.GetLongitude(),
 			Name:      in.Name,
 		},
+		SendAs: &sendAs,
 	}
 
 	saved, err := m.handler.SendLocation(ctx, msg)
@@ -114,6 +117,8 @@ func (m *MessageServer) SendLocation(ctx context.Context, in *impb.SendLocationR
 }
 
 func (m *MessageServer) SendContact(ctx context.Context, in *impb.SendContactRequest) (*impb.SendMessageResponse, error) {
+	sendAs, _ := uuid.Parse(in.GetSendAs())
+
 	msg := &model.Message{
 		IdempotencyKey: in.GetSendId(),
 		DomainID:       in.GetDomainId(),
@@ -126,6 +131,7 @@ func (m *MessageServer) SendContact(ctx context.Context, in *impb.SendContactReq
 			PhoneNumber: in.PhoneNumber,
 			Email:       in.Email,
 		},
+		SendAs: &sendAs,
 	}
 
 	saved, err := m.handler.SendContact(ctx, msg)
@@ -147,6 +153,8 @@ func (m *MessageServer) SendInteractive(ctx context.Context, in *impb.SendIntera
 		return nil, err
 	}
 
+	sendAs, _ := uuid.Parse(in.GetSendAs())
+
 	msg := &model.Message{
 		IdempotencyKey: in.GetSendId(),
 		DomainID:       in.GetDomainId(),
@@ -158,6 +166,7 @@ func (m *MessageServer) SendInteractive(ctx context.Context, in *impb.SendIntera
 		Interactive:    interactive,
 		Images:         mapper.ConvertPbImagesToDomain(in.GetInteractive().GetImages()),
 		Documents:      mapper.ConvertPbDocumentsToDomain(in.GetInteractive().GetDocuments()),
+		SendAs:         &sendAs,
 	}
 
 	processed, err := m.handler.SendInteractive(ctx, msg)

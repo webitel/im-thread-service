@@ -787,7 +787,9 @@ func (t *ThreadManagementService) EnsureDirectThread(ctx context.Context, req *d
 
 	log := t.logger.With("operation", "ensure_direct_thread")
 
-	thread, err := t.searchThread(ctx, req.From, req.To)
+	searchThreadQuery := model.ResolveThreadQuery{From: *req.From, To: *req.To, SendAs: req.SendAs}
+
+	thread, err := t.searchThread(ctx, searchThreadQuery)
 	if err != nil {
 		log.ErrorContext(ctx, "searching thread", "err", err)
 
@@ -805,18 +807,8 @@ func (t *ThreadManagementService) EnsureDirectThread(ctx context.Context, req *d
 	return thread, nil
 }
 
-func (t *ThreadManagementService) searchThread(ctx context.Context, from, to *shared.Peer) (*model.Thread, error) {
-	if from == nil {
-		return nil, errors.InvalidArgument("from peer cannot be nil", errors.WithID("service.thread_manager.search_direct_thread"))
-	}
-
-	if to == nil {
-		return nil, errors.InvalidArgument("recipient peer cannot be nil", errors.WithID("service.thread_manager.search_direct_thread"))
-	}
-
-	resolveThreadQuery := model.ResolveThreadQuery{From: *from, To: *to}
-
-	thread, err := t.uow.ThreadStore().ResolveThread(ctx, resolveThreadQuery)
+func (t *ThreadManagementService) searchThread(ctx context.Context, searchQuery model.ResolveThreadQuery) (*model.Thread, error) {
+	thread, err := t.uow.ThreadStore().ResolveThread(ctx, searchQuery)
 	if err != nil {
 		return nil, err
 	}

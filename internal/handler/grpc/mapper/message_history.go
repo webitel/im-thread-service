@@ -47,7 +47,7 @@ func MapSearchMessageHistoryRequest2HistoryMessageInputDTO(mhr *impb.SearchMessa
 func MapSearchLeftThreadsMessageHistoryRequest2LeftThreadsMessageHistoryInputDTO(mhr *impb.SearchLeftThreadsMessageHistoryRequest) *dto.LeftThreadsMessageHistoryInputDTO {
 	var (
 		threadID  uuid.UUID
-		senderIds = utils.Map(mhr.GetSenderIds(), utils.IDsParser)
+		senderIDs = utils.Map(mhr.GetSenderIds(), utils.IDsParser)
 		types     = utils.Map(mhr.GetTypes(), func(i int32) int { return int(i) })
 		cursor    *dto.HistoryMessageCursor
 	)
@@ -76,7 +76,7 @@ func MapSearchLeftThreadsMessageHistoryRequest2LeftThreadsMessageHistoryInputDTO
 		DomainID:   int(mhr.GetDomainId()),
 		Fields:     mhr.GetFields(),
 		ThreadID:   threadID,
-		SenderIds:  senderIds,
+		SenderIDs:  senderIDs,
 		Types:      types,
 		PeriodFrom: periodFrom,
 		PeriodTo:   periodTo,

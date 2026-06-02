@@ -11,8 +11,9 @@ import (
 
 // #region Queries and Commands
 type ResolveThreadQuery struct {
-	From shared.Peer
-	To   shared.Peer
+	From   shared.Peer
+	To     shared.Peer
+	SendAs *uuid.UUID
 }
 
 // #endregion

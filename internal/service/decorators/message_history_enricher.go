@@ -288,14 +288,18 @@ func processAttachments[T model.MessageAttachment](
 ) error {
 	for _, item := range attachments {
 		fileID := item.GetFileID()
-		if link, ok := linkMap[fileID]; ok {
-			if err := enrichFunc(item, link, useMD); err != nil {
-				return errors.Internal(
-					fmt.Sprintf("failed to enrich file %d", fileID),
-					errors.WithCause(err),
-					errors.WithID("decorators.message_history_enricher.processAttachments"),
-				)
-			}
+
+		link, ok := linkMap[fileID]
+		if !ok {
+			continue
+		}
+
+		if err := enrichFunc(item, link, useMD); err != nil {
+			return errors.Internal(
+				fmt.Sprintf("failed to enrich file %d", fileID),
+				errors.WithCause(err),
+				errors.WithID("decorators.message_history_enricher.processAttachments"),
+			)
 		}
 	}
 
