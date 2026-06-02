@@ -3,6 +3,8 @@ package mapper
 import (
 	"strconv"
 
+	"github.com/google/uuid"
+
 	impb "github.com/webitel/im-thread-service/gen/go/thread/v1"
 	"github.com/webitel/im-thread-service/internal/service/dto"
 )
@@ -27,12 +29,15 @@ func MapToSendImageRequest(in *impb.SendImageRequest) *dto.SendImageRequest {
 		})
 	}
 
+	sendAs, _ := uuid.Parse(in.GetSendAs())
+
 	return &dto.SendImageRequest{
 		From:     MapPeerFromProto(in.GetFrom()),
 		To:       MapPeerFromProto(in.GetTo()),
 		Image:    imgReq,
 		DomainID: in.GetDomainId(),
 		SendID:   in.GetSendId(),
+		SendAs:   &sendAs,
 	}
 }
 

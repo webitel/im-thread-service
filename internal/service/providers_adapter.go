@@ -46,6 +46,7 @@ func (a *baseRPCProvidersAdapter) SendMessage(ctx context.Context, message *mode
 		if member.Via != nil {
 			via = *member.Via
 		}
+
 		log.Debug("recipient",
 			slog.Int("index", i),
 			slog.String("contact_id", member.ContactID.String()),
@@ -119,6 +120,7 @@ func (a *baseRPCProvidersAdapter) SendMessage(ctx context.Context, message *mode
 
 			case model.MessageTypeText:
 				peerLog.Debug("sending text")
+
 				_, err = a.providersClient.SendText(ctx, &provider.ProviderSendTextRequest{
 					GateId:         externalPeer.Via,
 					ExternalUserId: userID,
@@ -144,6 +146,7 @@ func (a *baseRPCProvidersAdapter) SendMessage(ctx context.Context, message *mode
 				)
 
 				errorsMu.Lock()
+
 				errorsArray = append(errorsArray, err)
 				errorsMu.Unlock()
 

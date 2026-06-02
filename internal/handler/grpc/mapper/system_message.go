@@ -1,6 +1,8 @@
 package mapper
 
 import (
+	"github.com/google/uuid"
+
 	impb "github.com/webitel/im-thread-service/gen/go/thread/v1"
 	"github.com/webitel/im-thread-service/internal/domain/model"
 )
@@ -9,6 +11,8 @@ func ConvertPbSystemMessageToDomain(in *impb.SendSystemMessageRequest) *model.Me
 	if in == nil {
 		return nil
 	}
+
+	sendAs, _ := uuid.Parse(in.GetSendAs())
 
 	return &model.Message{
 		DomainID:       in.GetDomainId(),
@@ -22,5 +26,6 @@ func ConvertPbSystemMessageToDomain(in *impb.SendSystemMessageRequest) *model.Me
 			Type:     in.GetType(),
 			Metadata: in.GetMetadata().AsMap(),
 		},
+		SendAs: &sendAs,
 	}
 }

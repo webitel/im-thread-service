@@ -72,7 +72,7 @@ type (
 		DomainID   int
 		Fields     []string
 		ThreadID   uuid.UUID
-		SenderIds  uuid.UUIDs
+		SenderIDs  uuid.UUIDs
 		Types      []int
 		PeriodFrom time.Time
 		PeriodTo   time.Time

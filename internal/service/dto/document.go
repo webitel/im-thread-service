@@ -61,6 +61,7 @@ type SendDocumentRequest struct {
 	Document DocumentRequest
 	DomainID int64  `json:"domain_id"`
 	SendID   string `json:"send_id"`
+	SendAs   *uuid.UUID
 }
 
 func (sendDocumentRequest *SendDocumentRequest) Validate() error {

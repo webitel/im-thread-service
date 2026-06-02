@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
+
 	"github.com/webitel/webitel-go-kit/pkg/errors"
 )
 

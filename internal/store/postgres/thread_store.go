@@ -227,7 +227,7 @@ func prepareResolveThreadQuery(q model.ResolveThreadQuery) (string, pgx.NamedArg
 				and exists (
 					select 1 from im_thread.thread_dialog td_check
 					where td_check.thread_id = t.id
-					  and td_check.member_id = @FromID::uuid
+					  and td_check.member_id = coalesce(@SendAs::uuid, @FromID::uuid)
 					  and td_check.deleted_at is null
 					  and (@FromVia::text is null or td_check.via = @FromVia::text)
 				)
@@ -239,6 +239,7 @@ func prepareResolveThreadQuery(q model.ResolveThreadQuery) (string, pgx.NamedArg
 		"FromVia":    q.From.ResolveVia(),
 		"ToPeerID":   q.To.ResolveContactID(),
 		"ToThreadID": q.To.ResolveThreadID(),
+		"SendAs":     q.SendAs,
 	}
 
 	return query, args

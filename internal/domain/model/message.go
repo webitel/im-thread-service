@@ -25,7 +25,8 @@ const (
 )
 
 type Message struct {
-	ID             uuid.UUID       `json:"id" db:"id"`
+	ID             uuid.UUID `json:"id" db:"id"`
+	SendAs         *uuid.UUID
 	IdempotencyKey string          `json:"idempotency_key" db:"-"`
 	ThreadID       uuid.UUID       `json:"thread_id" db:"thread_id"`
 	DomainID       int32           `json:"domain_id" db:"domain_id"`
@@ -49,6 +50,42 @@ type Message struct {
 	Member      *ThreadDialog       `json:"member,omitempty" db:"member"`
 
 	domainEvents []event.Outboxer
+}
+
+func (m *Message) GetSender() uuid.UUID {
+	if m.SendAs != nil && *m.SendAs != uuid.Nil {
+		return *m.SendAs
+	}
+
+	return m.From.ID
+}
+
+func (m *Message) GetOriginSender() *uuid.UUID {
+	if m.SendAs != nil {
+		originRef := m.From.ID
+
+		return &originRef
+	}
+
+	return nil
+}
+
+func (m *Message) SetMemberFromSlice(members []*ThreadDialog) *Message {
+	senderID := m.GetSender()
+	for _, member := range members {
+		if senderID != member.ContactID {
+			continue
+		}
+
+		m.MemberID = member.ID
+		m.Member = &ThreadDialog{
+			BaseModel: shared.BaseModel{ID: member.ID},
+		}
+
+		break
+	}
+
+	return m
 }
 
 func (m *Message) CreatedAtUnixMillis() int64 {

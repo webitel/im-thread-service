@@ -3,6 +3,8 @@ package mapper
 import (
 	"strconv"
 
+	"github.com/google/uuid"
+
 	impb "github.com/webitel/im-thread-service/gen/go/thread/v1"
 	"github.com/webitel/im-thread-service/internal/service/dto"
 )
@@ -28,12 +30,15 @@ func MapToSendDocumentRequest(in *impb.SendDocumentRequest) *dto.SendDocumentReq
 		})
 	}
 
+	sendAs, _ := uuid.Parse(in.GetSendAs())
+
 	return &dto.SendDocumentRequest{
 		From:     MapPeerFromProto(in.GetFrom()),
 		To:       MapPeerFromProto(in.GetTo()),
 		Document: docReq,
 		DomainID: in.GetDomainId(),
 		SendID:   in.GetSendId(),
+		SendAs:   &sendAs,
 	}
 }
 

@@ -26,6 +26,7 @@ type (
 		Image    ImageRequest `json:"image"`
 		DomainID int64        `json:"domain_id"`
 		SendID   string       `json:"send_id"`
+		SendAs   *uuid.UUID
 	}
 
 	SendImageResponse struct {
