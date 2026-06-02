@@ -7,8 +7,9 @@ import (
 
 	"go.uber.org/fx"
 
-	"github.com/webitel/im-thread-service/config"
 	"github.com/webitel/webitel-go-kit/appconfig"
+
+	"github.com/webitel/im-thread-service/config"
 )
 
 var Module = fx.Module("tls",
