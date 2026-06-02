@@ -169,7 +169,7 @@ func (s *threadStore) ResolveThread(ctx context.Context, q model.ResolveThreadQu
 	thread, err := pgx.CollectOneRow(rows, pgx.RowToAddrOfStructByNameLax[model.Thread])
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			if q.To.Type == shared.PeerContact { // in case of contact thread no rows means that it`s first message for contact
+			if q.To.Type == shared.PeerContact && q.SendAsPtr() == nil { // in case of contact thread no rows means that it`s first message for contact
 				return nil, nil //nolint:nilnil
 			}
 
