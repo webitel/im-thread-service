@@ -61,7 +61,7 @@ func (m *Message) GetSender() uuid.UUID {
 }
 
 func (m *Message) GetOriginSender() *uuid.UUID {
-	if m.SendAs != nil {
+	if m.SendAs != nil && *m.SendAs != uuid.Nil {
 		originRef := m.From.ID
 
 		return &originRef
