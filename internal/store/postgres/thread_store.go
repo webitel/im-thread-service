@@ -239,7 +239,7 @@ func prepareResolveThreadQuery(q model.ResolveThreadQuery) (string, pgx.NamedArg
 		"FromVia":    q.From.ResolveVia(),
 		"ToPeerID":   q.To.ResolveContactID(),
 		"ToThreadID": q.To.ResolveThreadID(),
-		"SendAs":     q.SendAs,
+		"SendAs":     q.SendAsPtr(),
 	}
 
 	return query, args

@@ -16,6 +16,18 @@ type ResolveThreadQuery struct {
 	SendAs *uuid.UUID
 }
 
+func (q *ResolveThreadQuery) SendAsPtr() *uuid.UUID {
+	if q == nil {
+		return nil
+	}
+
+	if q.SendAs != nil && *q.SendAs != uuid.Nil {
+		return q.SendAs
+	}
+
+	return nil
+}
+
 // #endregion
 
 //go:generate stringer -type=ThreadKind
