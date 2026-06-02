@@ -125,4 +125,4 @@ require (
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
 )
 
-require github.com/webitel/webitel-go-kit/appconfig v0.0.0-20260602123706-4e69c07a5ba7
+require github.com/webitel/webitel-go-kit/appconfig v0.0.0-20260602123722-2b5fc7494133
