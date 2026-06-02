@@ -22,7 +22,6 @@ type Config struct {
 }
 
 type ServiceConfig struct {
-	ID         string             `mapstructure:"id"`
 	Addr       string             `mapstructure:"addr"`
 	Connection appconfig.GRPCConn `mapstructure:"conn"`
 }
@@ -96,22 +95,11 @@ func LoadMigrateConfig() (*Config, error) {
 }
 
 func registerServiceFlags() {
-	pflag.String("service.id", "", "Service instance ID (required)")
 	pflag.String("service.addr", "localhost:8080", "gRPC listen address")
-	pflag.Bool("service.conn.verify_certs", true, "Verify TLS certificates on outbound gRPC connections")
-	pflag.String("service.conn.ca", "", "CA certificate path")
-	pflag.String("service.conn.cert", "", "Server certificate path")
-	pflag.String("service.conn.key", "", "Server certificate key path")
-	pflag.String("service.conn.client.ca", "", "Client CA certificate path")
-	pflag.String("service.conn.client.cert", "", "Client certificate path")
-	pflag.String("service.conn.client.key", "", "Client certificate key path")
+	appconfig.RegisterGRPCConnFlags(pflag.CommandLine, "service.conn", true)
 }
 
 func (c *Config) validate() error {
-	if c.Service.ID == "" {
-		return errors.New("config: service.id is required (use --service.id or SERVICE_ID env)")
-	}
-
 	if c.Service.Addr == "" {
 		return errors.New("config: service.addr is required")
 	}
