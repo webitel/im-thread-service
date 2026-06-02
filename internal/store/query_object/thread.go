@@ -2,6 +2,7 @@ package queryobject
 
 import (
 	"fmt"
+	"strings"
 	"unicode/utf8"
 
 	"github.com/Masterminds/squirrel"
@@ -256,6 +257,46 @@ func (q *threadQueryObject) WithContactIDFilter(memberIDs ...uuid.UUID) *threadQ
 
 		q.mustIncludeComputedSubject = true
 	}
+
+	return q
+}
+
+// WithSharedMembersFilter narrows results to threads where selfID is an active member AND every contact in memberIDs is also an active member.
+func (q *threadQueryObject) WithSharedMembersFilter(selfID uuid.UUID, memberIDs ...uuid.UUID) *threadQueryObject {
+	if selfID == uuid.Nil {
+		return q
+	}
+
+	q.EnsureJoins(threadLinkThreadDialog)
+	q.builder = q.builder.Where(squirrel.Eq{threadThreadDialogAlias + ".member_id": selfID})
+	q.builder = q.builder.Where(squirrel.Eq{threadThreadDialogAlias + ".deleted_at": nil})
+	q.mustIncludeComputedSubject = true
+
+	if len(memberIDs) == 0 {
+		return q
+	}
+
+	placeholders := make([]string, len(memberIDs))
+
+	args := make([]any, 0, len(memberIDs)+1)
+	for i, id := range memberIDs {
+		placeholders[i] = "?"
+
+		args = append(args, id)
+	}
+
+	args = append(args, len(memberIDs))
+
+	q.builder = q.builder.Where(
+		fmt.Sprintf(`%s.id IN (
+			SELECT thread_id FROM %s
+			WHERE member_id IN (%s)
+			  AND deleted_at IS NULL
+			GROUP BY thread_id
+			HAVING COUNT(DISTINCT member_id) = ?
+		)`, threadAlias, ThreadDialogTable, strings.Join(placeholders, ", ")),
+		args...,
+	)
 
 	return q
 }

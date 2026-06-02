@@ -86,13 +86,18 @@ func (t *ThreadManagementService) Search(ctx context.Context, searchRequest *dto
 		WithIDFilter(searchRequest.IDs...).
 		WithDomainIDFilter(searchRequest.DomainIDs...).
 		WithKindFilter(searchRequest.Kinds...).
-		WithContactIDFilter(searchRequest.ContactIDs...).
 		WithOwnerFilter(searchRequest.Owners...).
 		WithSubjectFilter(searchRequest.Q).
 		WithLimit(searchRequest.Size).
 		WithSort(searchRequest.Sort).
 		WithoutDeletedAtFilter().
 		WithOffset(searchRequest.Page)
+
+	if len(searchRequest.ContactIDs) > 0 {
+		query = query.WithSharedMembersFilter(searchRequest.SelfID, searchRequest.ContactIDs...)
+	} else {
+		query = query.WithContactIDFilter(searchRequest.SelfID)
+	}
 
 	threads, err := t.uow.ThreadStore().Search(ctx, query)
 	if err != nil {
