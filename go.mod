@@ -18,7 +18,7 @@ require (
 	github.com/jackc/pgx/v5 v5.8.0
 	github.com/sony/gobreaker v1.0.0
 	github.com/spf13/pflag v1.0.10
-	github.com/spf13/viper v1.21.0
+	github.com/spf13/viper v1.21.0 // indirect
 	github.com/stretchr/testify v1.11.1
 	github.com/urfave/cli/v2 v2.27.7
 	github.com/webitel/storage v0.0.0-20260109145042-79404a35fcce
@@ -124,3 +124,5 @@ require (
 	google.golang.org/protobuf v1.36.11
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
 )
+
+require github.com/webitel/webitel-go-kit/appconfig v0.0.0-20260602123706-4e69c07a5ba7

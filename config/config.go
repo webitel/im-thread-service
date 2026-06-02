@@ -1,126 +1,64 @@
 package config
 
 import (
+	"fmt"
 	"log/slog"
 	"strings"
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/spf13/pflag"
-	"github.com/spf13/viper"
-
-	"github.com/webitel/webitel-go-kit/pkg/errors"
+	"github.com/webitel/webitel-go-kit/appconfig"
 )
 
 type Config struct {
-	Service  ServiceConfig  `mapstructure:"service"`
-	Log      LogConfig      `mapstructure:"log"`
-	Postgres PostgresConfig `mapstructure:"postgres"`
-	Redis    RedisConfig    `mapstructure:"redis"`
-	Consul   ConsulConfig   `mapstructure:"consul"`
-	Pubsub   PubsubConfig   `mapstructure:"pubsub"`
-	Profiler ProfilerConfig `mapstructure:"profiler"`
+	Service  ServiceConfig      `mapstructure:"service"`
+	Log      appconfig.Log      `mapstructure:"log"`
+	Postgres appconfig.Postgres `mapstructure:"postgres"`
+	Redis    appconfig.Redis    `mapstructure:"redis"`
+	Consul   appconfig.Consul   `mapstructure:"consul"`
+	Pubsub   appconfig.Pubsub   `mapstructure:"pubsub"`
+	Profiler appconfig.Profiler `mapstructure:"profiler"`
 }
 
 type ServiceConfig struct {
-	ID         string           `mapstructure:"id"`
-	Address    string           `mapstructure:"addr"`
-	Connection ConnectionConfig `mapstructure:"conn"`
+	ID         string             `mapstructure:"id"`
+	Addr       string             `mapstructure:"addr"`
+	Connection appconfig.GRPCConn `mapstructure:"conn"`
 }
 
-type ConnectionConfig struct {
-	TLS         TLSConfig `mapstructure:"tls,squash"`
-	VerifyCerts bool      `mapstructure:"verify_certs"`
-	Client      TLSConfig `mapstructure:"client"`
-}
-
-type TLSConfig struct {
-	CA   string `mapstructure:"ca"`
-	Cert string `mapstructure:"cert"`
-	Key  string `mapstructure:"key"`
-}
-
-type LogConfig struct {
-	Level   string `mapstructure:"level"`
-	JSON    bool   `mapstructure:"json"`
-	Otel    bool   `mapstructure:"otel"`
-	File    string `mapstructure:"file"`
-	Console bool   `mapstructure:"console"`
-}
-
-type PostgresConfig struct {
-	DSN string `mapstructure:"dsn"`
-}
-
-type RedisConfig struct {
-	Addr     string `mapstructure:"addr"`
-	Password string `mapstructure:"password"`
-	DB       int    `mapstructure:"db"`
-}
-
-type ConsulConfig struct {
-	Address string `mapstructure:"addr"`
-}
-
-type PubsubConfig struct {
-	URL    string `mapstructure:"broker_url"`
-	Driver string `mapstructure:"broker_driver"`
-}
-
-type ProfilerConfig struct {
-	Addr          string `mapstructure:"addr"`
-	MutexFraction int    `mapstructure:"mutex_fraction"`
-	BlockRate     int    `mapstructure:"block_rate"`
-}
-
-func LoadConfig() (*Config, error) {
-	defineFlags()
+// LoadServerConfig loads the full configuration required by the gRPC server.
+func LoadServerConfig() (*Config, error) {
+	loader := appconfig.NewLoader(appconfig.Sections{
+		Log:      true,
+		Postgres: true,
+		Redis:    true,
+		Consul:   true,
+		Pubsub:   true,
+		Profiler: true,
+	})
+	loader.RegisterFlags(pflag.CommandLine)
+	registerServiceFlags()
 	pflag.Parse()
 
-	viper.AutomaticEnv()
-
-	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_", "-", "_"))
-
-	if err := viper.BindPFlags(pflag.CommandLine); err != nil {
+	cfg := &Config{}
+	if err := loader.Load(pflag.CommandLine, cfg); err != nil {
 		return nil, err
 	}
 
-	cfg := &Config{}
-
-	configFile := viper.GetString("config_file")
-	if configFile != "" {
-		viper.SetConfigFile(configFile)
-
-		if err := viper.ReadInConfig(); err != nil {
-			return nil, errors.New("failed to read config file", errors.WithCause(err))
+	loader.Watch(func(e fsnotify.Event) {
+		slog.Info("config file changed", "name", e.Name)
+		newCfg := &Config{}
+		if err := loader.Viper().Unmarshal(newCfg); err != nil {
+			slog.Error("config reload: unmarshal failed", "error", err)
+			return
 		}
-
-		viper.OnConfigChange(func(e fsnotify.Event) {
-			slog.Info("config file changed", "name", e.Name)
-
-			newCfg := &Config{}
-			if err := viper.Unmarshal(newCfg); err != nil {
-				slog.Error("reload error: unable to decode", "error", err)
-
-				return
-			}
-
-			if err := newCfg.validate(); err != nil {
-				slog.Error("reload error: invalid config", "error", err)
-
-				return
-			}
-
-			*cfg = *newCfg
-
-			slog.Info("config reloaded successfully")
-		})
-
-		viper.WatchConfig()
-	}
-
-	if err := viper.Unmarshal(cfg); err != nil {
-		return nil, errors.New("unable to decode into struct", errors.WithCause(err))
-	}
+		if err := newCfg.validate(); err != nil {
+			slog.Error("config reload: validation failed", "error", err)
+			return
+		}
+		*cfg = *newCfg
+		slog.Info("config reloaded")
+	})
 
 	if err := cfg.validate(); err != nil {
 		return nil, err
@@ -129,96 +67,66 @@ func LoadConfig() (*Config, error) {
 	return cfg, nil
 }
 
-func defineFlags() {
-	pflag.String("config_file", "", "Configuration file (YAML, JSON, etc.)")
+// LoadMigrateConfig loads the minimal configuration required by the migrate command.
+func LoadMigrateConfig() (*Config, error) {
+	loader := appconfig.NewLoader(appconfig.Sections{
+		Log:      true,
+		Postgres: true,
+	})
+	loader.RegisterFlags(pflag.CommandLine)
+	pflag.Parse()
 
-	pflag.String("service.id", "", "Service ID")
-	pflag.String("service.addr", "localhost:8080", "Service address")
-	pflag.Bool("service.conn.verify_certs", true, "Determine whether to verify certificates")
-	pflag.String("service.conn.ca", "", "Server CA certificate path")
-	pflag.String("service.conn.key", "", "Server certificate key path")
+	cfg := &Config{}
+	if err := loader.Load(pflag.CommandLine, cfg); err != nil {
+		return nil, err
+	}
+
+	if cfg.Postgres.DSN == "" {
+		return nil, fmt.Errorf("config: postgres.dsn is required")
+	}
+
+	return cfg, nil
+}
+
+func registerServiceFlags() {
+	pflag.String("service.id", "", "Service instance ID (required)")
+	pflag.String("service.addr", "localhost:8080", "gRPC listen address")
+	pflag.Bool("service.conn.verify_certs", true, "Verify TLS certificates on outbound gRPC connections")
+	pflag.String("service.conn.ca", "", "CA certificate path")
 	pflag.String("service.conn.cert", "", "Server certificate path")
+	pflag.String("service.conn.key", "", "Server certificate key path")
 	pflag.String("service.conn.client.ca", "", "Client CA certificate path")
-	pflag.String("service.conn.client.key", "", "Client certificate key path")
 	pflag.String("service.conn.client.cert", "", "Client certificate path")
-
-	pflag.String("log.level", "info", "Log level")
-	pflag.Bool("log.json", false, "Log in JSON format")
-	pflag.String("log.file", "", "Log file path")
-	pflag.Bool("log.console", true, "Enable console logging")
-	pflag.Bool("log.otel", false, "Enable OTEL logging")
-
-	pflag.String("postgres.dsn", "", "Postgres DSN")
-
-	pflag.String("redis.addr", "localhost:6379", "Redis address")
-	pflag.String("redis.password", "", "Redis password")
-	pflag.Int("redis.db", 0, "Redis database number")
-
-	pflag.String("consul.addr", "localhost:8500", "Consul address")
-
-	pflag.String("pubsub.broker_url", "", "PubSub broker URL")
-	pflag.String("pubsub.broker_driver", "", "PubSub broker driver")
-
-	pflag.String("profiler.addr", "", "Profiler address")
-	pflag.Int("profiler.mutex_fraction", 1, "Mutex profiler fraction")
-	pflag.Int("profiler.block_rate", 1, "Mutex profiler rate")
+	pflag.String("service.conn.client.key", "", "Client certificate key path")
 }
 
 func (c *Config) validate() error {
 	if c.Service.ID == "" {
-		return errors.New("config: service.id is required (use --service.id or SERVICE_ID env)")
+		return fmt.Errorf("config: service.id is required (use --service.id or SERVICE_ID env)")
 	}
-
-	if c.Service.Address == "" {
-		return errors.New("config: service.addr is required")
+	if c.Service.Addr == "" {
+		return fmt.Errorf("config: service.addr is required")
 	}
-
-	err := validateConnectionConfig(c.Service.Connection)
-	if err != nil {
+	if err := appconfig.ValidateGRPCConn("service.conn", c.Service.Connection); err != nil {
 		return err
 	}
-
 	if c.Log.Level == "" {
 		c.Log.Level = "info"
 	}
-
 	if c.Postgres.DSN == "" {
-		return errors.New("config: postgres.dsn is required (use --postgres.dsn or DATA_SOURCE env)")
+		return fmt.Errorf("config: postgres.dsn is required (use --postgres.dsn or POSTGRES_DSN env)")
 	}
-
 	if c.Redis.Addr == "" {
-		return errors.New("config: redis.addr is required")
+		return fmt.Errorf("config: redis.addr is required")
 	}
-
-	if c.Consul.Address == "" {
-		return errors.New("config: consul.addr is required")
+	if c.Consul.Addr == "" {
+		return fmt.Errorf("config: consul.addr is required")
 	}
-
 	if c.Pubsub.URL == "" {
-		return errors.New("config: pubsub.broker_url is required (use --pubsub.broker_url or PUBSUB env)")
+		return fmt.Errorf("config: pubsub.url is required (use --pubsub.url or PUBSUB_URL env)")
 	}
-
 	if !strings.HasPrefix(c.Pubsub.URL, "amqp://") && !strings.HasPrefix(c.Pubsub.URL, "amqps://") {
-		return errors.New("config: pubsub.broker_url must start with amqp:// or amqps://")
+		return fmt.Errorf("config: pubsub.url must start with amqp:// or amqps://")
 	}
-
-	return nil
-}
-
-func validateConnectionConfig(conn ConnectionConfig) error {
-	if conn.VerifyCerts {
-		if conn.TLS.CA == "" {
-			return errors.New("config: service.conn.ca is required when verify_certs is true")
-		}
-
-		if conn.TLS.Cert == "" {
-			return errors.New("config: service.conn.cert is required when verify_certs is true")
-		}
-
-		if conn.TLS.Key == "" {
-			return errors.New("config: service.conn.key is required when verify_certs is true")
-		}
-	}
-
 	return nil
 }

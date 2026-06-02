@@ -29,7 +29,7 @@ func CMD() *cli.Command {
 			},
 		},
 		Action: func(c *cli.Context) error {
-			cfg, err := config.LoadConfig()
+			cfg, err := config.LoadMigrateConfig()
 			if err != nil {
 				return err
 			}

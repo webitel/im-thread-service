@@ -50,7 +50,7 @@ func NewLeaderElector(consulAddr, nodeID string, log *slog.Logger) (*LeaderElect
 }
 
 func ProvideLeaderElector(cfg *config.Config, log *slog.Logger) (*LeaderElector, error) {
-	return NewLeaderElector(cfg.Consul.Address, cfg.Service.ID, log)
+	return NewLeaderElector(cfg.Consul.Addr, cfg.Service.ID, log)
 }
 
 // Run blocks and continuously tries to acquire leadership
