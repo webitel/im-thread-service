@@ -87,7 +87,6 @@ func NewLeftThreadsMessageHistoryQueryObject() *leftThreadsMessageHistoryQueryOb
 	q.baseQueryObject = newBaseQueryObject(from, q)
 	q.pag = New[MessageHistoryCursor]()
 
-	// Closed-history is meaningful only for messages whose dialog membership is deleted.
 	q.EnsureJoins(leftThreadsMsgLinkThreadDialog)
 
 	return q
@@ -192,10 +191,18 @@ func (q *leftThreadsMessageHistoryQueryObject) linkThreadDialog() {
 	}
 
 	q.join |= leftThreadsMsgLinkThreadDialog
-	q.builder = q.builder.InnerJoin(fmt.Sprintf(
-		"%s %s on %s.id = %s.member_id and %s.deleted_at is not null",
-		ThreadDialogTable, leftThreadsMsgDialogAlias,
-		leftThreadsMsgDialogAlias, leftThreadsMsgAlias,
+	q.builder = q.builder.JoinClause(fmt.Sprintf(
+		`left join lateral (
+			select td_src.*
+			from %s td_src
+			where td_src.member_id = %s.sender_id
+			  and td_src.thread_id = %s.thread_id
+			order by (td_src.deleted_at is null) desc, td_src.id desc
+			limit 1
+		) %s on true`,
+		ThreadDialogTable,
+		leftThreadsMsgAlias,
+		leftThreadsMsgAlias,
 		leftThreadsMsgDialogAlias,
 	))
 }
@@ -232,20 +239,17 @@ func (q *leftThreadsMessageHistoryQueryObject) WithTypesFilter(types ...int) *le
 	return q
 }
 
-// WithPeriodFilter narrows results to dialog-membership windows that overlap the
-// given period: deleted_at >= periodFrom and created_at <= periodTo. A zero
-// time.Time on either side leaves that bound open.
 func (q *leftThreadsMessageHistoryQueryObject) WithPeriodFilter(periodFrom, periodTo time.Time) *leftThreadsMessageHistoryQueryObject {
 	if !periodFrom.IsZero() {
 		q.builder = q.builder.Where(
-			fmt.Sprintf("%s.deleted_at >= ?", leftThreadsMsgDialogAlias),
+			fmt.Sprintf("%s.created_at >= ?", leftThreadsMsgAlias),
 			periodFrom,
 		)
 	}
 
 	if !periodTo.IsZero() {
 		q.builder = q.builder.Where(
-			fmt.Sprintf("%s.created_at <= ?", leftThreadsMsgDialogAlias),
+			fmt.Sprintf("%s.created_at <= ?", leftThreadsMsgAlias),
 			periodTo,
 		)
 	}
