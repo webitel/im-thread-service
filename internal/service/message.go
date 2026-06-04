@@ -204,12 +204,14 @@ func (s *MessageService) SendImage(ctx context.Context, in *dto.SendImageRequest
 			return errors.Internal("save images", errors.WithCause(err), errors.WithID("service.message.send_image"))
 		}
 
-		msg.ID = saved.ID
-		msg.WithCreatedEvent(in.SendID, &in.From)
+		saved.To = t.Members
+		saved.WithCreatedEvent(in.SendID, &in.From)
 
-		if err := s.dispatchMessageEvents(txCtx, uow, msg); err != nil {
+		if err := s.dispatchMessageEvents(txCtx, uow, saved); err != nil {
 			return errors.Internal("dispatch message events", errors.WithCause(err), errors.WithID("service.message.send_image"))
 		}
+
+		msg = saved
 
 		return nil
 	})
@@ -299,6 +301,7 @@ func (s *MessageService) SendDocument(ctx context.Context, in *dto.SendDocumentR
 		}
 
 		msg.ID = saved.ID
+		msg.From = saved.From
 		msg.WithCreatedEvent(in.SendID, &in.From)
 
 		if err := s.dispatchMessageEvents(txCtx, uow, msg); err != nil {
