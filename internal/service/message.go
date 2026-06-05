@@ -205,8 +205,8 @@ func (s *MessageService) SendImage(ctx context.Context, in *dto.SendImageRequest
 		}
 
 		msg.ID = saved.ID
-		msg.WithCreatedEvent(in.SendID, nil)
 		msg.From = saved.From
+		msg.WithCreatedEvent(in.SendID, nil)
 
 		if err := s.dispatchMessageEvents(txCtx, uow, msg); err != nil {
 			return errors.Internal("dispatch message events", errors.WithCause(err), errors.WithID("service.message.send_image"))
