@@ -78,7 +78,8 @@ func prepareInteractiveCallbackQuery(callback *model.InteractiveCallback) (strin
 		select
 			ic.*,
 			m.thread_id as thread_id,
-			m.domain_id as domain_id
+			m.domain_id as domain_id,
+			m.sender_id as receiver
 		from inserted_callback ic
 		inner join im_message.messages m on m.id = ic.in_reply_to;
 	`

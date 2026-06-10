@@ -112,8 +112,9 @@ type InteractiveCallback struct {
 	ReactedAt    time.Time `json:"reacted_at" db:"reacted_at"`
 	ThreadID     uuid.UUID `json:"thread_id" db:"thread_id"`
 	DomainID     int       `json:"domain_id" db:"domain_id"`
+	Receiver     uuid.UUID `json:"receiver" db:"receiver"`
 
-	events []event.Outboxer
+	events []event.Outboxer `json:"-"`
 }
 
 func (c *InteractiveCallback) WithCreatedEvent() *InteractiveCallback {
@@ -130,6 +131,7 @@ func (c *InteractiveCallback) WithCreatedEvent() *InteractiveCallback {
 			ReactedAt:    c.ReactedAt,
 			DomainID:     c.DomainID,
 			ThreadID:     c.ThreadID,
+			Receiver:     c.Receiver,
 		},
 	)
 
