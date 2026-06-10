@@ -19,6 +19,7 @@ type InteractiveCallbackPayload struct {
 	ReactedAt    time.Time   `json:"reacted_at"`
 	DomainID     int         `json:"domain_id"`
 	ThreadID     uuid.UUID   `json:"thread_id"`
+	Receiver     uuid.UUID   `json:"receiver"`
 }
 
 func (i *InteractiveCallbackPayload) EventType() string {
