@@ -110,21 +110,28 @@ type InteractiveCallback struct {
 	ButtonCode   string    `json:"button_code" db:"button_code"`
 	CallbackData string    `json:"callback_data" db:"callback_data"`
 	ReactedAt    time.Time `json:"reacted_at" db:"reacted_at"`
+	ThreadID     uuid.UUID `json:"thread_id" db:"thread_id"`
+	DomainID     int       `json:"domain_id" db:"domain_id"`
 
 	events []event.Outboxer
 }
 
 func (c *InteractiveCallback) WithCreatedEvent() *InteractiveCallback {
-	c.events = append(c.events, &event.InteractiveCallbackPayload{
-		ReactedBy: shared.Peer{
-			ID:   c.ReactedBy,
-			Type: shared.PeerContact,
+	c.events = append(
+		c.events,
+		&event.InteractiveCallbackPayload{
+			ReactedBy: shared.Peer{
+				ID:   c.ReactedBy,
+				Type: shared.PeerContact,
+			},
+			InReplyTo:    c.InReplyTo,
+			ButtonCode:   c.ButtonCode,
+			CallbackData: c.CallbackData,
+			ReactedAt:    c.ReactedAt,
+			DomainID:     c.DomainID,
+			ThreadID:     c.ThreadID,
 		},
-		InReplyTo:    c.InReplyTo,
-		ButtonCode:   c.ButtonCode,
-		CallbackData: c.CallbackData,
-		ReactedAt:    c.ReactedAt,
-	})
+	)
 
 	return c
 }

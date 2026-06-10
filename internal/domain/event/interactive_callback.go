@@ -17,6 +17,8 @@ type InteractiveCallbackPayload struct {
 	ButtonCode   string      `json:"button_code"`
 	CallbackData string      `json:"callback_data"`
 	ReactedAt    time.Time   `json:"reacted_at"`
+	DomainID     int         `json:"domain_id"`
+	ThreadID     uuid.UUID   `json:"thread_id"`
 }
 
 func (i *InteractiveCallbackPayload) EventType() string {
