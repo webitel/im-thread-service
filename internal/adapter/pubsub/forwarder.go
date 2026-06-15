@@ -113,26 +113,26 @@ func RegisterOutboxForwarder(
 			slog.Info("starting webitel outbox forwarder with leadership election")
 
 			// [LEADERSHIP] Only the active Leader node performs outbox relay to prevent DUPLICATE delivery
-			// go elector.Run(mainCtx,
-			// 	func(leaderCtx context.Context) error {
-			// 		slog.Info("node PROMOTED to leader: initializing background workers")
-			//
-			// 		// [CLEANUP] Start periodic purging of processed outbox entries
-			// 		go StartOutboxCleanupJob(leaderCtx, outbox, slog)
-			//
-			// 		// [ROUTER] Run the Watermill message router bound to Leader context
-			// 		go func() {
-			// 			if err := router.Run(leaderCtx); err != nil {
-			// 				slog.Error("watermill router: unexpected stop", "error", err)
-			// 			}
-			// 		}()
-			//
-			// 		return nil
-			// 	},
-			// 	func() {
-			// 		slog.Warn("node DEMOTED to follower: halting leader-specific tasks")
-			// 	},
-			// )
+			go elector.Run(mainCtx,
+				func(leaderCtx context.Context) error {
+					slog.Info("node PROMOTED to leader: initializing background workers")
+			
+					// [CLEANUP] Start periodic purging of processed outbox entries
+					go StartOutboxCleanupJob(leaderCtx, outbox, slog)
+			
+					// [ROUTER] Run the Watermill message router bound to Leader context
+					go func() {
+						if err := router.Run(leaderCtx); err != nil {
+							slog.Error("watermill router: unexpected stop", "error", err)
+						}
+					}()
+			
+					return nil
+				},
+				func() {
+					slog.Warn("node DEMOTED to follower: halting leader-specific tasks")
+				},
+			)
 			go StartOutboxCleanupJob(mainCtx, outbox, slog)
 			go func() {
 				if err := router.Run(mainCtx); err != nil {
