@@ -68,6 +68,9 @@ var grpcClientsBridgeModule = fx.Module(
 		func(c *imcontact.Client) service.ThreadPrivacyChecker {
 			return c
 		},
+		func(c *imcontact.Client) service.ContactInfoProvider {
+			return c
+		},
 	),
 )
 

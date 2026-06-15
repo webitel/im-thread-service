@@ -21,6 +21,7 @@ type fakeUnitOfWork struct {
 	threadDialogStore store.ThreadDialogStore
 	messageStore      store.MessageStore
 	outboxStore       store.OutboxStore
+	botControlStore   store.BotControlStore
 }
 
 func (f fakeUnitOfWork) WithinTransaction(ctx context.Context, fn func(context.Context, store.UnitOfWork) error) error {
@@ -53,6 +54,10 @@ func (f fakeUnitOfWork) Outbox() store.OutboxStore {
 
 func (f fakeUnitOfWork) InteractiveCallback() store.InteractiveCallback {
 	return nil
+}
+
+func (f fakeUnitOfWork) BotControl() store.BotControlStore {
+	return f.botControlStore
 }
 
 type fakeThreadDialogStore struct {

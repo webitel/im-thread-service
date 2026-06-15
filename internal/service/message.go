@@ -53,6 +53,20 @@ func (s *MessageService) sendMessageToExternalProvider(ctx context.Context, mess
 	return s.providersAdapter.SendMessage(ctx, message)
 }
 
+// resolveToIsBot checks whether the target contact is a bot.
+// Returns false on error to remain non-blocking — the thread will be created without bot control.
+func (s *MessageService) resolveToIsBot(ctx context.Context, toID uuid.UUID, domainID int) bool {
+	if s.contactClient == nil {
+		return false
+	}
+	isBot, err := s.contactClient.IsBot(ctx, toID, domainID)
+	if err != nil {
+		s.logger.WarnContext(ctx, "failed to resolve is_bot for to peer, assuming false", "contact_id", toID, "err", err)
+		return false
+	}
+	return isBot
+}
+
 func (s *MessageService) SendText(ctx context.Context, in *dto.SendTextRequest) (*dto.SendTextResponse, error) {
 	if err := guards.SendTextGuard(in); err != nil {
 		return nil, errors.InvalidArgument("validating text message", errors.WithCause(err), errors.WithID("service.message.send_text"))
@@ -77,6 +91,7 @@ func (s *MessageService) SendText(ctx context.Context, in *dto.SendTextRequest) 
 		To:       &in.To,
 		DomainID: int(in.DomainID),
 		SendAs:   in.SendAs,
+		ToIsBot:  func() bool { return s.resolveToIsBot(ctx, in.To.ID, int(in.DomainID)) },
 	})
 	if err != nil {
 		log.Error(
@@ -104,14 +119,15 @@ func (s *MessageService) SendText(ctx context.Context, in *dto.SendTextRequest) 
 	}
 
 	msg := &model.Message{
-		ThreadID: t.ID,
-		DomainID: int32(in.DomainID),
-		From:     in.From,
-		Body:     in.Body,
-		To:       t.Members,
-		Type:     model.MessageTypeText,
-		Metadata: model.BuildMetadata(in.Body),
-		SendAs:   in.SendAs,
+		ThreadID:               t.ID,
+		DomainID:               int32(in.DomainID),
+		From:                   in.From,
+		Body:                   in.Body,
+		To:                     t.Members,
+		Type:                   model.MessageTypeText,
+		Metadata:               model.BuildMetadata(in.Body),
+		SendAs:                 in.SendAs,
+		BotControllerMemberID: t.BotControllerID,
 	}
 
 	msg.SetMemberFromSlice(t.Members)
@@ -162,6 +178,7 @@ func (s *MessageService) SendImage(ctx context.Context, in *dto.SendImageRequest
 		To:       &in.To,
 		DomainID: int(in.DomainID),
 		SendAs:   in.SendAs,
+		ToIsBot:  func() bool { return s.resolveToIsBot(ctx, in.To.ID, int(in.DomainID)) },
 	})
 	if err != nil {
 		return nil, err
@@ -190,6 +207,7 @@ func (s *MessageService) SendImage(ctx context.Context, in *dto.SendImageRequest
 		SendID:     in.SendID,
 		Images:     s.mapImageInputs(in.Image.Images),
 	})
+	msg.BotControllerMemberID = t.BotControllerID
 
 	msg.SendAs = in.SendAs
 	msg.SetMemberFromSlice(t.Members)
@@ -241,6 +259,7 @@ func (s *MessageService) SendDocument(ctx context.Context, in *dto.SendDocumentR
 		To:       &in.To,
 		DomainID: int(in.DomainID),
 		SendAs:   in.SendAs,
+		ToIsBot:  func() bool { return s.resolveToIsBot(ctx, in.To.ID, int(in.DomainID)) },
 	})
 	if err != nil {
 		log.Error("resolving thread", "error", err, "from", in.From.ID.String(), "to", in.To.ID.String(), "to_type", in.To.Type.String())
@@ -285,6 +304,7 @@ func (s *MessageService) SendDocument(ctx context.Context, in *dto.SendDocumentR
 		SendID:     in.SendID,
 		Documents:  s.mapDocumentInputs(in.Document.Documents),
 	})
+	msg.BotControllerMemberID = t.BotControllerID
 	msg.SendAs = in.SendAs
 	msg.SetMemberFromSlice(t.Members)
 
@@ -551,6 +571,7 @@ func (s *MessageService) prepareMessageForSending(ctx context.Context, msg *mode
 		From:     &msg.From,
 		To:       &msg.SendTo,
 		SendAs:   msg.SendAs,
+		ToIsBot:  func() bool { return s.resolveToIsBot(ctx, msg.SendTo.ID, int(msg.DomainID)) },
 	})
 	if err != nil {
 		return err
@@ -558,11 +579,13 @@ func (s *MessageService) prepareMessageForSending(ctx context.Context, msg *mode
 
 	msg.ThreadID = t.ID
 	msg.To = t.Members
+	msg.BotControllerMemberID = t.BotControllerID
 
 	msg.SetMemberFromSlice(t.Members)
 
 	return nil
 }
+
 
 // --- Internal Helpers ---
 func (s *MessageService) dispatchInteractiveCallbackEvents(ctx context.Context, uow store.UnitOfWork, callback *model.InteractiveCallback) error {

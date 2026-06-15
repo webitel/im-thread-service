@@ -18,23 +18,27 @@ import (
 // [D]ata [A]cess [O]bjects
 type (
 	threadRecord struct {
-		ID          uuid.UUID              `json:"id,omitempty" db:"id"`
-		DomainID    int                    `json:"domain_id,omitempty" db:"domain_id"`
-		Subject     string                 `json:"subject,omitempty" db:"subject"`
-		CreatedAt   time.Time              `json:"created_at" db:"created_at"`
-		UpdatedAt   time.Time              `json:"updated_at" db:"updated_at"`
-		Kind        model.ThreadKind       `json:"kind,omitempty" db:"kind"`
-		Owner       uuid.UUID              `json:"owner,omitempty" db:"owner"`
-		Description string                 `json:"description,omitempty" db:"description"`
-		Members     []*threadMemberRecord  `json:"members,omitempty" db:"members"`
-		LastMessage *model.Message         `json:"last_msg,omitempty" db:"last_msg"`
-		Variables   *model.ThreadVariables `json:"variables,omitempty" db:"variables"`
+		ID              uuid.UUID              `json:"id,omitempty" db:"id"`
+		DomainID        int                    `json:"domain_id,omitempty" db:"domain_id"`
+		Subject         string                 `json:"subject,omitempty" db:"subject"`
+		CreatedAt       time.Time              `json:"created_at" db:"created_at"`
+		UpdatedAt       time.Time              `json:"updated_at" db:"updated_at"`
+		Kind            model.ThreadKind       `json:"kind,omitempty" db:"kind"`
+		Owner           uuid.UUID              `json:"owner,omitempty" db:"owner"`
+		Description     string                 `json:"description,omitempty" db:"description"`
+		Members         []*threadMemberRecord  `json:"members,omitempty" db:"members"`
+		LastMessage     *model.Message         `json:"last_msg,omitempty" db:"last_msg"`
+		Variables       *model.ThreadVariables `json:"variables,omitempty" db:"variables"`
+		BotControllerID *uuid.UUID             `json:"bot_controller_id,omitempty" db:"bot_controller_id"`
+		OwnerBotID      *uuid.UUID             `json:"owner_bot_id,omitempty" db:"owner_bot_id"`
 	}
 	threadMemberRecord struct {
-		ID       uuid.UUID `json:"id,omitempty" db:"id"`
-		MemberID uuid.UUID `json:"member_id,omitempty" db:"member_id"`
-		Role     int       `json:"role,omitempty" db:"role"`
-		Via      *string   `json:"via,omitempty" db:"via"`
+		ID          uuid.UUID `json:"id,omitempty" db:"id"`
+		MemberID    uuid.UUID `json:"member_id,omitempty" db:"member_id"`
+		Role        int       `json:"role,omitempty" db:"role"`
+		Via         *string   `json:"via,omitempty" db:"via"`
+		IsBot       bool      `json:"is_bot" db:"is_bot"`
+		AutoLeave   bool      `json:"auto_leave" db:"auto_leave"`
 	}
 )
 
@@ -131,23 +135,27 @@ func mapThreadRecordToModel(record *threadRecord) (*model.Thread, error) {
 			BaseModel: shared.BaseModel{
 				ID: tmr.ID,
 			},
-			ContactID:  tmr.MemberID,
-			ThreadRole: model.ThreadRole(tmr.Role),
-			Via:        tmr.Via,
+			ContactID:   tmr.MemberID,
+			ThreadRole:  model.ThreadRole(tmr.Role),
+			Via:         tmr.Via,
+			IsBot:       tmr.IsBot,
+			AutoLeave:   tmr.AutoLeave,
 		}
 	})
 
 	thread := &model.Thread{
-		ID:          record.ID,
-		DomainID:    record.DomainID,
-		CreatedAt:   record.CreatedAt,
-		UpdatedAt:   record.UpdatedAt,
-		Kind:        record.Kind,
-		Subject:     record.Subject,
-		Description: record.Description,
-		Members:     members,
-		LastMessage: record.LastMessage,
-		Variables:   record.Variables,
+		ID:              record.ID,
+		DomainID:        record.DomainID,
+		CreatedAt:       record.CreatedAt,
+		UpdatedAt:       record.UpdatedAt,
+		Kind:            record.Kind,
+		Subject:         record.Subject,
+		Description:     record.Description,
+		Members:         members,
+		LastMessage:     record.LastMessage,
+		Variables:       record.Variables,
+		BotControllerID: record.BotControllerID,
+		OwnerBotID:      record.OwnerBotID,
 	}
 
 	return thread, nil
@@ -199,6 +207,7 @@ func prepareResolveThreadQuery(q model.ResolveThreadQuery) (string, pgx.NamedArg
 				t.created_at as created_at,
 				t.updated_at as updated_at,
 				t.owner as owner,
+				t.bot_controller_id as bot_controller_id,
 				m.members as members
 			from im_thread.thread t
 			inner join im_thread.thread_dialog td_main on td_main.thread_id = t.id
@@ -208,7 +217,9 @@ func prepareResolveThreadQuery(q model.ResolveThreadQuery) (string, pgx.NamedArg
 						'id', td3.id,
 						'member_role', td3.thread_role,
 						'member_id', td3.member_id,
-						'via', td3.via
+						'via', td3.via,
+						'is_bot', td3.is_bot,
+						'auto_leave', td3.auto_leave
 					)
 				) as members
 				from im_thread.thread_dialog td3

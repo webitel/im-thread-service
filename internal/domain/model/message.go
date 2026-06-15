@@ -49,6 +49,10 @@ type Message struct {
 	System      *MessageSystem      `json:"system,omitempty" db:"system"`
 	Member      *ThreadDialog       `json:"member,omitempty" db:"member"`
 
+	// BotControllerMemberID is the thread_dialog.id of the currently active bot.
+	// Included in MessageCreated events so flow_manager can self-filter.
+	BotControllerMemberID *uuid.UUID `json:"-" db:"-"`
+
 	domainEvents []event.Outboxer
 }
 
@@ -125,6 +129,7 @@ func (m *Message) WithCreatedEvent(sendID string, _ *shared.Peer) *Message {
 			ID:        memberID,
 			ContactID: member.ContactID,
 			Role:      int(member.ThreadRole),
+			IsBot:     member.IsBot,
 		}
 	}
 
@@ -140,21 +145,23 @@ func (m *Message) WithCreatedEvent(sendID string, _ *shared.Peer) *Message {
 				ID:        &member.ID,
 				ContactID: member.ContactID,
 				Role:      int(member.ThreadRole),
+				IsBot:     member.IsBot,
 			}
 		}
 	}
 
 	e := event.MessageCreated{
-		MessageID:  m.ID,
-		ThreadID:   m.ThreadID,
-		DomainID:   m.DomainID,
-		From:       messageFrom,
-		To:         to,
-		SendID:     sendID,
-		Body:       m.Body,
-		Type:       int16(m.Type),
-		OccurredAt: m.CreatedAt,
-		Metadata:   maps.Clone(m.Metadata),
+		MessageID:              m.ID,
+		ThreadID:               m.ThreadID,
+		DomainID:               m.DomainID,
+		From:                   messageFrom,
+		To:                     to,
+		SendID:                 sendID,
+		Body:                   m.Body,
+		Type:                   int16(m.Type),
+		OccurredAt:             m.CreatedAt,
+		Metadata:               maps.Clone(m.Metadata),
+		BotControllerMemberID:  m.BotControllerMemberID,
 	}
 
 	if len(m.Images) > 0 {

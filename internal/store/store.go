@@ -15,6 +15,7 @@ type Store interface {
 	Outbox() OutboxStore
 	ThreadDialog() ThreadDialogStore
 	Thread() ThreadStore
+	BotControl() BotControlStore
 }
 
 type MessageStore interface {
@@ -77,4 +78,23 @@ type ThreadVariablesStore interface {
 	Search(ctx context.Context, query model.GetThreadVariablesQuery) (model.Page[*model.ThreadVariables], error)
 	Locate(ctx context.Context, threadID uuid.UUID) (*model.ThreadVariables, error)
 	Flush(ctx context.Context, flushCmd model.FlushVariablesCommand) (*model.ThreadVariables, error)
+}
+
+type BotControlStore interface {
+	// Push adds a new entry onto the stack and updates thread.bot_controller_id.
+	// Returns the previous top entry and the new control_epoch assigned to this grant.
+	Push(ctx context.Context, transition model.BotControlTransition) (*model.BotControlPushResult, error)
+
+	// Pop removes the stack entry for the given memberID (thread_dialog.id).
+	// If the member was the current top (max position), updates bot_controller_id to the new top.
+	// If the member is marked auto_leave, it is soft-deleted.
+	// Returns the new top entry after removal (nil if stack is now empty and no owner bot).
+	Pop(ctx context.Context, threadID uuid.UUID, memberID uuid.UUID, reason model.BotControlReason, triggeredBy *uuid.UUID) (*model.BotControlStackEntry, error)
+
+	// GetStack returns all entries for a thread ordered by position asc.
+	GetStack(ctx context.Context, threadID uuid.UUID) ([]*model.BotControlStackEntry, error)
+
+	// GetControlEpoch returns the current control_epoch for the thread.
+	// Used in CompleteBotControl to reject stale or duplicate requests.
+	GetControlEpoch(ctx context.Context, threadID uuid.UUID) (int64, error)
 }

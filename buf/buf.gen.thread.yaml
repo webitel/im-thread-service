@@ -10,23 +10,18 @@ managed:
     # Forces all generated files into a single Go package,
     # merging 'internal' and 'shared' protos into one directory.
     - file_option: go_package
-      value: github.com/webitel/protos/gen/go/im/thread/v1;thread
-
+      value: github.com/webitel/im-thread-service/gen/go/thread/v1;thread
 
 plugins:
-  - remote: buf.build/protocolbuffers/go:v1.34.1
+  - local: protoc-gen-go
     out: ../gen/go
     opt:
-      - module=github.com/webitel/protos/gen/go/im
+      - module=github.com/webitel/im-thread-service/gen/go
 
-  - remote: buf.build/grpc/go:v1.5.1
+  - local: protoc-gen-go-grpc
     out: ../gen/go
     opt:
-      - module=github.com/webitel/protos/gen/go/im
+      - module=github.com/webitel/im-thread-service/gen/go
 
 inputs:
-  - git_repo: https://github.com/webitel/protos.git
-    branch: main
-    subdir: im
-    depth: 1
-
+  - directory: ../../protos/im

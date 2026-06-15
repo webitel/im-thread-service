@@ -57,6 +57,9 @@ type Thread struct {
 
 	Variables *ThreadVariables `json:"variables,omitempty" db:"variables"`
 
+	BotControllerID *uuid.UUID `json:"bot_controller_id,omitempty" db:"bot_controller_id"`
+	OwnerBotID      *uuid.UUID `json:"owner_bot_id,omitempty" db:"owner_bot_id"`
+
 	events []event.Base `db:"-"`
 }
 

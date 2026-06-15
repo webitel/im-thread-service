@@ -112,7 +112,9 @@ func (s *ThreadInConverter) ConvertAddMemberRequest(in *impb.AddMemberRequest) (
 		ThreadID:           threadID,
 		NewMemberContactID: newContactID,
 		NewMemberRole:      s.convertMemberRole(in.GetRole()),
+		DomainID:           int(in.GetDomainId()),
 	}
+
 	if in.InitiatorContactId != nil {
 		initiatorContactID, err := uuid.Parse(in.GetInitiatorContactId())
 		if err != nil {
@@ -120,6 +122,11 @@ func (s *ThreadInConverter) ConvertAddMemberRequest(in *impb.AddMemberRequest) (
 		}
 
 		converted.InitiatorContactID = initiatorContactID
+	}
+
+	if in.AutoLeave != nil {
+		v := in.GetAutoLeave()
+		converted.AutoLeave = &v
 	}
 
 	return converted, nil
@@ -146,6 +153,12 @@ func (s *ThreadInConverter) ConvertTransferThreadRequest(in *impb.TransferReques
 		NewMemberContactID: newContactID,
 		NewMemberRole:      s.convertMemberRole(in.GetRole()),
 		InitiatorContactID: initiatorContactID,
+		TargetIsBot:        in.GetTargetIsBot(),
+	}
+
+	if in.AutoLeave != nil {
+		v := in.GetAutoLeave()
+		converted.AutoLeave = &v
 	}
 
 	return converted, nil
@@ -233,7 +246,7 @@ func (s *ThreadOutConverter) ConvertToThread(source *model.Thread) *impb.Thread 
 		vars = MapThreadVariablesToProto(source.Variables)
 	}
 
-	return &impb.Thread{
+	thread := &impb.Thread{
 		Id:          source.ID.String(),
 		DomainId:    int32(source.DomainID),
 		CreatedAt:   source.CreatedAtUnix(),
@@ -241,13 +254,23 @@ func (s *ThreadOutConverter) ConvertToThread(source *model.Thread) *impb.Thread 
 		Kind:        impb.ThreadKind(source.Kind),
 		Subject:     source.Subject,
 		Description: source.Description,
-		Members:     s.convertThreadMembers(source.Members),
+		Members:     s.convertThreadMembers(source.Members, source.BotControllerID),
 		LastMsg:     lastMsg,
 		Variables:   vars,
 	}
+
+	if source.BotControllerID != nil {
+		thread.BotControllerMemberId = source.BotControllerID.String()
+	}
+
+	if source.OwnerBotID != nil {
+		thread.OwnerBotMemberId = source.OwnerBotID.String()
+	}
+
+	return thread
 }
 
-func (s *ThreadOutConverter) convertThreadMembers(members []*model.ThreadDialog) []*impb.ThreadMember {
+func (s *ThreadOutConverter) convertThreadMembers(members []*model.ThreadDialog, botControllerID *uuid.UUID) []*impb.ThreadMember {
 	if members == nil {
 		return nil
 	}
@@ -255,9 +278,12 @@ func (s *ThreadOutConverter) convertThreadMembers(members []*model.ThreadDialog)
 	out := make([]*impb.ThreadMember, len(members))
 	for i, member := range members {
 		out[i] = &impb.ThreadMember{
-			Id:        member.ID.String(),
-			ContactId: member.ContactID.String(),
-			Role:      s.ConvertThreadRole(member.ThreadRole),
+			Id:                 member.ID.String(),
+			ContactId:          member.ContactID.String(),
+			Role:               s.ConvertThreadRole(member.ThreadRole),
+			IsBot:              member.IsBot,
+			AutoLeave:          member.AutoLeave,
+			IsActiveController: botControllerID != nil && member.ID == *botControllerID,
 		}
 	}
 

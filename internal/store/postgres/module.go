@@ -63,6 +63,11 @@ var Module = fx.Module("store",
 			NewThreadVariablesStore,
 			fx.As(new(store.ThreadVariablesStore)),
 		),
+
+		fx.Annotate(
+			NewBotControlStore,
+			fx.As(new(store.BotControlStore)),
+		),
 	),
 )
 

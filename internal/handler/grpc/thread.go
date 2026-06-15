@@ -23,6 +23,7 @@ type ThreadManagementService interface {
 	AddMember(context.Context, *dto.AddMemberRequest) (uuid.UUID, error)
 	RemoveMember(context.Context, *dto.RemoveMemberRequest) error
 	Transfer(context.Context, *dto.TransferThreadRequest) (uuid.UUID, error)
+	CompleteBotControl(context.Context, *dto.CompleteBotControlRequest) error
 }
 
 type ThreadVariablesOperator interface {
@@ -153,6 +154,30 @@ func (ts *ThreadManagementServer) RemoveMember(ctx context.Context, request *imp
 	}
 
 	return &impb.RemoveMemberResponse{}, nil
+}
+
+// CompleteBotControl is called by flow_manager when a bot schema finishes execution.
+func (ts *ThreadManagementServer) CompleteBotControl(ctx context.Context, req *impb.CompleteBotControlRequest) (*impb.CompleteBotControlResponse, error) {
+	tid, err := uuid.Parse(req.GetThreadId())
+	if err != nil {
+		return nil, errors.InvalidArgument("invalid thread_id", errors.WithCause(err))
+	}
+
+	mid, err := uuid.Parse(req.GetMemberId())
+	if err != nil {
+		return nil, errors.InvalidArgument("invalid member_id", errors.WithCause(err))
+	}
+
+	if err = ts.threadManager.CompleteBotControl(ctx, &dto.CompleteBotControlRequest{
+		ThreadID:     tid,
+		MemberID:     mid,
+		DomainID:     int(req.GetDomainId()),
+		ControlEpoch: req.GetControlEpoch(),
+	}); err != nil {
+		return nil, err
+	}
+
+	return &impb.CompleteBotControlResponse{}, nil
 }
 
 func (ts *ThreadManagementServer) SetVariables(ctx context.Context, req *impb.SetVariablesRequest) (*impb.ThreadVariables, error) {

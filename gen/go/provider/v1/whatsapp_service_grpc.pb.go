@@ -30,7 +30,7 @@ const (
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type WhatsAppServiceClient interface {
 	// / CreateWhatsAppGate registers a WhatsApp Business Account (WABA) gateway.
-	CreateWhatsAppGate(ctx context.Context, in *ProviderCreateWhatsAppGateRequest, opts ...grpc.CallOption) (*ProviderCreateWhatsAppGateResponse, error)
+	CreateWhatsAppGate(ctx context.Context, in *CreateGateRequest, opts ...grpc.CallOption) (*GateResponse, error)
 	// / GetWhatsAppGate retrieves configuration and status for a WhatsApp gateway.
 	GetWhatsAppGate(ctx context.Context, in *ProviderGetWhatsAppGateRequest, opts ...grpc.CallOption) (*ProviderGetWhatsAppGateResponse, error)
 	// / UpdateWhatsAppGate updates WhatsApp-specific gateway configurations.
@@ -47,9 +47,9 @@ func NewWhatsAppServiceClient(cc grpc.ClientConnInterface) WhatsAppServiceClient
 	return &whatsAppServiceClient{cc}
 }
 
-func (c *whatsAppServiceClient) CreateWhatsAppGate(ctx context.Context, in *ProviderCreateWhatsAppGateRequest, opts ...grpc.CallOption) (*ProviderCreateWhatsAppGateResponse, error) {
+func (c *whatsAppServiceClient) CreateWhatsAppGate(ctx context.Context, in *CreateGateRequest, opts ...grpc.CallOption) (*GateResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(ProviderCreateWhatsAppGateResponse)
+	out := new(GateResponse)
 	err := c.cc.Invoke(ctx, WhatsAppService_CreateWhatsAppGate_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
@@ -92,7 +92,7 @@ func (c *whatsAppServiceClient) DeleteWhatsAppGate(ctx context.Context, in *Prov
 // for forward compatibility.
 type WhatsAppServiceServer interface {
 	// / CreateWhatsAppGate registers a WhatsApp Business Account (WABA) gateway.
-	CreateWhatsAppGate(context.Context, *ProviderCreateWhatsAppGateRequest) (*ProviderCreateWhatsAppGateResponse, error)
+	CreateWhatsAppGate(context.Context, *CreateGateRequest) (*GateResponse, error)
 	// / GetWhatsAppGate retrieves configuration and status for a WhatsApp gateway.
 	GetWhatsAppGate(context.Context, *ProviderGetWhatsAppGateRequest) (*ProviderGetWhatsAppGateResponse, error)
 	// / UpdateWhatsAppGate updates WhatsApp-specific gateway configurations.
@@ -109,7 +109,7 @@ type WhatsAppServiceServer interface {
 // pointer dereference when methods are called.
 type UnimplementedWhatsAppServiceServer struct{}
 
-func (UnimplementedWhatsAppServiceServer) CreateWhatsAppGate(context.Context, *ProviderCreateWhatsAppGateRequest) (*ProviderCreateWhatsAppGateResponse, error) {
+func (UnimplementedWhatsAppServiceServer) CreateWhatsAppGate(context.Context, *CreateGateRequest) (*GateResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CreateWhatsAppGate not implemented")
 }
 func (UnimplementedWhatsAppServiceServer) GetWhatsAppGate(context.Context, *ProviderGetWhatsAppGateRequest) (*ProviderGetWhatsAppGateResponse, error) {
@@ -143,7 +143,7 @@ func RegisterWhatsAppServiceServer(s grpc.ServiceRegistrar, srv WhatsAppServiceS
 }
 
 func _WhatsAppService_CreateWhatsAppGate_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ProviderCreateWhatsAppGateRequest)
+	in := new(CreateGateRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -155,7 +155,7 @@ func _WhatsAppService_CreateWhatsAppGate_Handler(srv interface{}, ctx context.Co
 		FullMethod: WhatsAppService_CreateWhatsAppGate_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(WhatsAppServiceServer).CreateWhatsAppGate(ctx, req.(*ProviderCreateWhatsAppGateRequest))
+		return srv.(WhatsAppServiceServer).CreateWhatsAppGate(ctx, req.(*CreateGateRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
