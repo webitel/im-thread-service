@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/webitel/webitel-go-kit/pkg/errors"
+	"github.com/webitel/webitel-go-kit/pkg/semconv"
 
 	imcontact "github.com/webitel/im-thread-service/infra/webitel/im-contact"
 	"github.com/webitel/im-thread-service/internal/domain/event"
@@ -80,10 +81,10 @@ func (s *MessageService) SendText(ctx context.Context, in *dto.SendTextRequest) 
 	})
 	if err != nil {
 		log.Error(
-			"failed to ensure direct thread", "err", err,
+			"failed to ensure direct thread", semconv.ErrorKey, err,
 			slog.Any("from", in.From),
 			slog.Any("to", in.To),
-			slog.Any("domain_id", in.DomainID),
+			slog.Any(semconv.DomainIDKey, in.DomainID),
 			slog.String("member_id", in.From.ID.String()),
 		)
 
@@ -137,7 +138,7 @@ func (s *MessageService) SendText(ctx context.Context, in *dto.SendTextRequest) 
 		log.ErrorContext(
 			ctx,
 			"error saving text message",
-			slog.Any("error", err),
+			slog.Any(semconv.ErrorKey, err),
 			slog.String("thread_id", t.ID.String()),
 			slog.String("from", msg.From.ID.String()),
 		)
@@ -146,7 +147,7 @@ func (s *MessageService) SendText(ctx context.Context, in *dto.SendTextRequest) 
 	}
 
 	if err = s.sendMessageToExternalProvider(ctx, msg); err != nil {
-		log.Error("sending text message to external providers", "error", err)
+		log.Error("sending text message to external providers", semconv.ErrorKey, err)
 	}
 
 	return &dto.SendTextResponse{ID: msg.ID, To: in.To}, nil
@@ -178,7 +179,7 @@ func (s *MessageService) SendImage(ctx context.Context, in *dto.SendImageRequest
 
 	fileLinksChan := s.mediaProcessor.FetchFileLinks(ctx, in.DomainID, attachments)
 	if err := enrichAttachmentsLinks(ctx, attachments, fileLinksChan); err != nil {
-		s.logger.ErrorContext(ctx, "enriching attachments links", "err", err)
+		s.logger.ErrorContext(ctx, "enriching attachments links", semconv.ErrorKey, err)
 	}
 
 	msg := model.NewImageMessage(model.MessageCreate{
@@ -215,13 +216,13 @@ func (s *MessageService) SendImage(ctx context.Context, in *dto.SendImageRequest
 		return nil
 	})
 	if err != nil {
-		s.logger.ErrorContext(ctx, "send image failed", "err", err)
+		s.logger.ErrorContext(ctx, "send image failed", semconv.ErrorKey, err)
 
 		return nil, err
 	}
 
 	if err = s.sendMessageToExternalProvider(ctx, msg); err != nil {
-		s.logger.Error("sending image message to external providers", "error", err)
+		s.logger.Error("sending image message to external providers", semconv.ErrorKey, err)
 	}
 
 	return &dto.SendImageResponse{ID: msg.ID, To: in.To}, nil
@@ -231,7 +232,7 @@ func (s *MessageService) SendDocument(ctx context.Context, in *dto.SendDocumentR
 	log := s.logger.With("operation", "send_document")
 
 	if err := in.Validate(); err != nil {
-		log.Warn("send document request validation", "error", err)
+		log.Warn("send document request validation", semconv.ErrorKey, err)
 
 		return nil, errors.InvalidArgument("send document request validation", errors.WithCause(err), errors.WithID("service.message.send_document"))
 	}
@@ -243,7 +244,7 @@ func (s *MessageService) SendDocument(ctx context.Context, in *dto.SendDocumentR
 		SendAs:   in.SendAs,
 	})
 	if err != nil {
-		log.Error("resolving thread", "error", err, "from", in.From.ID.String(), "to", in.To.ID.String(), "to_type", in.To.Type.String())
+		log.Error("resolving thread", semconv.ErrorKey, err, "from", in.From.ID.String(), "to", in.To.ID.String(), "to_type", in.To.Type.String())
 
 		return nil, err
 	}
@@ -254,7 +255,7 @@ func (s *MessageService) SendDocument(ctx context.Context, in *dto.SendDocumentR
 	}
 
 	if err := s.mediaProcessor.Process(ctx, in.DomainID, attachments); err != nil {
-		log.Error("processing input media", "error", err)
+		log.Error("processing input media", semconv.ErrorKey, err)
 
 		return nil, err
 	}
@@ -310,13 +311,13 @@ func (s *MessageService) SendDocument(ctx context.Context, in *dto.SendDocumentR
 		return nil
 	})
 	if err != nil {
-		s.logger.ErrorContext(ctx, "send document failed", "err", err)
+		s.logger.ErrorContext(ctx, "send document failed", semconv.ErrorKey, err)
 
 		return nil, err
 	}
 
 	if err = s.sendMessageToExternalProvider(ctx, msg); err != nil {
-		log.Error("sending document message to external providers", "error", err)
+		log.Error("sending document message to external providers", semconv.ErrorKey, err)
 	}
 
 	return &dto.SendDocumentResponse{ID: msg.ID, To: in.To}, nil
@@ -355,7 +356,7 @@ func (s *MessageService) SendLocation(ctx context.Context, msg *model.Message) (
 	log := s.logger.With("operation", "send_location")
 
 	if err := s.prepareMessageForSending(ctx, msg); err != nil {
-		log.ErrorContext(ctx, "prepare_message_failed", "err", err)
+		log.ErrorContext(ctx, "prepare_message_failed", semconv.ErrorKey, err)
 
 		return nil, err
 	}
@@ -376,13 +377,13 @@ func (s *MessageService) SendLocation(ctx context.Context, msg *model.Message) (
 		return s.dispatchMessageEvents(txCtx, uow, savedMsg)
 	})
 	if err != nil {
-		log.ErrorContext(ctx, "location_transaction_failed", "err", err)
+		log.ErrorContext(ctx, "location_transaction_failed", semconv.ErrorKey, err)
 
 		return nil, err
 	}
 
 	if err = s.sendMessageToExternalProvider(ctx, msg); err != nil {
-		log.Error("sending location message to external providers", "error", err)
+		log.Error("sending location message to external providers", semconv.ErrorKey, err)
 	}
 
 	return savedMsg, err
@@ -392,7 +393,7 @@ func (s *MessageService) SendContact(ctx context.Context, msg *model.Message) (*
 	log := s.logger.With("operation", "send_contact")
 
 	if err := s.prepareMessageForSending(ctx, msg); err != nil {
-		log.ErrorContext(ctx, "prepare_message_failed", "err", err)
+		log.ErrorContext(ctx, "prepare_message_failed", semconv.ErrorKey, err)
 
 		return nil, err
 	}
@@ -413,13 +414,13 @@ func (s *MessageService) SendContact(ctx context.Context, msg *model.Message) (*
 		return s.dispatchMessageEvents(txCtx, uow, savedMsg)
 	})
 	if err != nil {
-		log.ErrorContext(ctx, "contact_transaction_failed", "err", err)
+		log.ErrorContext(ctx, "contact_transaction_failed", semconv.ErrorKey, err)
 
 		return nil, err
 	}
 
 	if err = s.sendMessageToExternalProvider(ctx, msg); err != nil {
-		log.Error("sending contact message to external providers", "error", err)
+		log.Error("sending contact message to external providers", semconv.ErrorKey, err)
 	}
 
 	return savedMsg, err
@@ -429,7 +430,7 @@ func (s *MessageService) SendInteractive(ctx context.Context, msg *model.Message
 	log := s.logger.With("operation", "send_interactive")
 
 	if err := s.prepareMessageForSending(ctx, msg); err != nil {
-		log.ErrorContext(ctx, "prepare_message_failed", "err", err)
+		log.ErrorContext(ctx, "prepare_message_failed", semconv.ErrorKey, err)
 
 		return nil, err
 	}
@@ -445,7 +446,7 @@ func (s *MessageService) SendInteractive(ctx context.Context, msg *model.Message
 		}
 
 		if err := s.mediaProcessor.Process(ctx, int64(msg.DomainID), attachments); err != nil {
-			log.ErrorContext(ctx, "media_process_failed", "err", err)
+			log.ErrorContext(ctx, "media_process_failed", semconv.ErrorKey, err)
 
 			return nil, errors.Internal(
 				"media_process_failed",
@@ -469,13 +470,13 @@ func (s *MessageService) SendInteractive(ctx context.Context, msg *model.Message
 		return s.dispatchMessageEvents(ctx, uow, savedMsg)
 	})
 	if err != nil {
-		log.ErrorContext(ctx, "transaction_failed", "err", err)
+		log.ErrorContext(ctx, "transaction_failed", semconv.ErrorKey, err)
 
 		return nil, err
 	}
 
 	if err = s.sendMessageToExternalProvider(ctx, msg); err != nil {
-		log.Error("sending interactive message to external providers", "error", err)
+		log.Error("sending interactive message to external providers", semconv.ErrorKey, err)
 	}
 
 	return savedMsg, nil
@@ -500,7 +501,7 @@ func (s *MessageService) SendInteractiveCallback(ctx context.Context, callback *
 		log.ErrorContext(
 			ctx,
 			"save_failed",
-			"err", err,
+			semconv.ErrorKey, err,
 			"reacted_by", callback.ReactedBy,
 			"in_reply_to", callback.InReplyTo,
 			"button_code", callback.ButtonCode,
@@ -516,7 +517,7 @@ func (s *MessageService) SendSystemMessage(ctx context.Context, msg *model.Messa
 	log := s.logger.With("operation", "send_system_message")
 
 	if err := s.prepareMessageForSending(ctx, msg); err != nil {
-		log.ErrorContext(ctx, "prepare_message_failed", "err", err)
+		log.ErrorContext(ctx, "prepare_message_failed", semconv.ErrorKey, err)
 
 		return nil, err
 	}
@@ -537,7 +538,7 @@ func (s *MessageService) SendSystemMessage(ctx context.Context, msg *model.Messa
 		return s.dispatchMessageEvents(txCtx, uow, savedMsg)
 	})
 	if err != nil {
-		log.ErrorContext(ctx, "transaction_failed", "err", err)
+		log.ErrorContext(ctx, "transaction_failed", semconv.ErrorKey, err)
 
 		return nil, err
 	}

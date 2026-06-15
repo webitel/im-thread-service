@@ -9,6 +9,7 @@ import (
 	"google.golang.org/grpc/codes"
 
 	"github.com/webitel/webitel-go-kit/pkg/errors"
+	"github.com/webitel/webitel-go-kit/pkg/semconv"
 
 	"github.com/webitel/im-thread-service/internal/domain/event"
 	"github.com/webitel/im-thread-service/internal/domain/model"
@@ -50,7 +51,7 @@ type (
 
 // NewThreadService returns a new thread manager, given a unit of work.
 func NewThreadService(logger *slog.Logger, uow store.UnitOfWork, privacyChecker ThreadPrivacyChecker) *ThreadManagementService {
-	log := logger.With(slog.String("component", "thread"))
+	log := logger.With(slog.String(semconv.ComponentKey, "thread"))
 
 	return &ThreadManagementService{
 		uow:            uow,
@@ -67,7 +68,7 @@ func (t *ThreadManagementService) Get(ctx context.Context, req *dto.ThreadGetReq
 
 	thread, err := t.uow.ThreadStore().Get(ctx, query)
 	if err != nil {
-		t.logger.Error("getting thread", "operation", "service.thread_manager.get", "id", req.ID, "err", err)
+		t.logger.Error("getting thread", "operation", "service.thread_manager.get", "id", req.ID, semconv.ErrorKey, err)
 
 		return nil, err
 	}
@@ -101,7 +102,7 @@ func (t *ThreadManagementService) Search(ctx context.Context, searchRequest *dto
 
 	threads, err := t.uow.ThreadStore().Search(ctx, query)
 	if err != nil {
-		t.logger.Error("searching threads", "operation", "service.thread_manager.search", "err", err)
+		t.logger.Error("searching threads", "operation", "service.thread_manager.search", semconv.ErrorKey, err)
 
 		return nil, err
 	}
@@ -791,14 +792,14 @@ func (t *ThreadManagementService) EnsureDirectThread(ctx context.Context, req *d
 
 	thread, err := t.searchThread(ctx, searchThreadQuery)
 	if err != nil {
-		log.ErrorContext(ctx, "searching thread", "err", err)
+		log.ErrorContext(ctx, "searching thread", semconv.ErrorKey, err)
 
 		return nil, err
 	}
 
 	if thread == nil {
 		if thread, err = t.orchestrateDirectThreadCreation(ctx, req); err != nil {
-			log.ErrorContext(ctx, "creating thread", "err", err)
+			log.ErrorContext(ctx, "creating thread", semconv.ErrorKey, err)
 
 			return nil, err
 		}

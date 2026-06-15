@@ -9,6 +9,8 @@ import (
 	"github.com/ThreeDotsLabs/watermill/message"
 	"go.uber.org/fx"
 
+	"github.com/webitel/webitel-go-kit/pkg/semconv"
+
 	"github.com/webitel/im-thread-service/config"
 	"github.com/webitel/im-thread-service/infra/pubsub/factory"
 	"github.com/webitel/im-thread-service/infra/pubsub/factory/amqp"
@@ -57,7 +59,7 @@ func ProvidePubSub(cfg *config.Config, l *slog.Logger, lc fx.Lifecycle) (Provide
 		OnStart: func(ctx context.Context) error {
 			go func() {
 				if err := router.Run(ctx); err != nil {
-					slog.Error("[BROKER] running router", "error", err)
+					slog.Error("[BROKER] running router", semconv.ErrorKey, err)
 				}
 			}()
 

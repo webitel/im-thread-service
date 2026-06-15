@@ -9,6 +9,7 @@ import (
 	"github.com/hashicorp/consul/api"
 
 	"github.com/webitel/webitel-go-kit/infra/discovery"
+	"github.com/webitel/webitel-go-kit/pkg/semconv"
 
 	"github.com/webitel/im-thread-service/config"
 )
@@ -45,7 +46,7 @@ func NewLeaderElector(consulAddr, nodeID string, log *slog.Logger) (*LeaderElect
 
 	return &LeaderElector{
 		client: client,
-		log:    log.With("component", "leader-elector", "key", leaderElectionKey),
+		log:    log.With(semconv.ComponentKey, "leader-elector", "key", leaderElectionKey),
 		key:    leaderElectionKey,
 		nodeID: nodeID,
 	}, nil
@@ -76,7 +77,7 @@ func (le *LeaderElector) attemptLeadership(ctx context.Context, onStart func(ctx
 	// Create a volatile session in Consul tied to TTL
 	sessionID, err := le.createSession()
 	if err != nil {
-		le.log.Error("failed to create session", "err", err)
+		le.log.Error("failed to create session", semconv.ErrorKey, err)
 		le.wait(ctx, errCooldown)
 
 		return
@@ -88,7 +89,7 @@ func (le *LeaderElector) attemptLeadership(ctx context.Context, onStart func(ctx
 	// Try to write our NodeID to the leader key using our Session
 	acquired, err := le.acquireLock(sessionID)
 	if err != nil {
-		le.log.Error("error during lock acquisition", "err", err)
+		le.log.Error("error during lock acquisition", semconv.ErrorKey, err)
 		le.wait(ctx, errCooldown)
 
 		return
@@ -111,7 +112,7 @@ func (le *LeaderElector) attemptLeadership(ctx context.Context, onStart func(ctx
 	// Keep session alive via background heartbeat
 	go func() {
 		if err := le.client.Session().RenewPeriodic(renewInterval, sessionID, nil, leaderCtx.Done()); err != nil {
-			le.log.Error("consul session renewal failed, stepping down", "err", err)
+			le.log.Error("consul session renewal failed, stepping down", semconv.ErrorKey, err)
 			cancelLeader()
 		}
 	}()
@@ -120,7 +121,7 @@ func (le *LeaderElector) attemptLeadership(ctx context.Context, onStart func(ctx
 	// Execute leader-only tasks (e.g., Outbox Forwarder)
 	go func() {
 		if err := onStart(leaderCtx); err != nil {
-			le.log.Error("leader task execution failed", "err", err)
+			le.log.Error("leader task execution failed", semconv.ErrorKey, err)
 			cancelLeader()
 		}
 	}()

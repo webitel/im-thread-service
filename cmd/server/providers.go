@@ -4,7 +4,6 @@ import (
 	"context"
 	"log/slog"
 	"net/url"
-	"os"
 	"time"
 
 	"github.com/ThreeDotsLabs/watermill"
@@ -16,6 +15,7 @@ import (
 	"github.com/webitel/webitel-go-kit/infra/discovery"
 	otelsdk "github.com/webitel/webitel-go-kit/infra/otel/sdk"
 	"github.com/webitel/webitel-go-kit/infra/profiler"
+	"github.com/webitel/webitel-go-kit/pkg/depenlog"
 	"github.com/webitel/webitel-go-kit/pkg/logger"
 
 	"github.com/webitel/im-thread-service/config"
@@ -34,53 +34,27 @@ func ProvideWatermillLogger(l *slog.Logger) watermill.LoggerAdapter {
 	return watermill.NewSlogLogger(l)
 }
 
-func ProvideLogger(cfg *config.Config, lc fx.Lifecycle) (*slog.Logger, error) {
+// ProvideLogger builds the process-wide logger on top of depenlog. It returns
+// both the kit logger.Logger (consumed by the fx/profiler adapters) and the
+// *slog.Logger (consumed by the many components that inject slog directly).
+// depenlog.New installs the logger as slog's default and wires grpc-go's global
+// logger, so slog.Default() returns the same configured logger after New.
+func ProvideLogger(cfg *config.Config, lc fx.Lifecycle) (logger.Logger, *slog.Logger, error) {
 	logSettings := cfg.Log
 
+	dcfg := depenlog.Config{
+		Level:   logSettings.Level,
+		JSON:    logSettings.JSON,
+		File:    logSettings.File,
+		Console: logSettings.Console,
+	}
+
+	// Default to console when no sink is selected, matching prior behaviour.
 	if !logSettings.Console && !logSettings.Otel && logSettings.File == "" {
-		logSettings.Console = true
+		dcfg.Console = true
 	}
 
-	level := parseLevel(logSettings.Level)
-	opts := &slog.HandlerOptions{
-		Level: level,
-	}
-
-	var handlers []slog.Handler
-
-	if logSettings.Console {
-		var h slog.Handler
-		if logSettings.JSON {
-			h = slog.NewJSONHandler(os.Stdout, opts)
-		} else {
-			h = slog.NewTextHandler(os.Stdout, opts)
-		}
-
-		handlers = append(handlers, h)
-	}
-
-	// File Handler
-	if logSettings.File != "" {
-		f, err := os.OpenFile(logSettings.File, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
-		if err != nil {
-			return nil, err
-		}
-
-		lc.Append(fx.Hook{
-			OnStop: func(_ context.Context) error {
-				return f.Close()
-			},
-		})
-
-		var h slog.Handler
-		if logSettings.JSON {
-			h = slog.NewJSONHandler(f, opts)
-		} else {
-			h = slog.NewTextHandler(f, opts)
-		}
-
-		handlers = append(handlers, h)
-	}
+	var opts []depenlog.Option
 
 	if logSettings.Otel {
 		service := resource.NewSchemaless(
@@ -91,15 +65,18 @@ func ProvideLogger(cfg *config.Config, lc fx.Lifecycle) (*slog.Logger, error) {
 		)
 		otelHandler := otelslog.NewHandler("slog")
 
+		// WithLogBridge's callback runs synchronously inside Configure, and only
+		// when an OTel log exporter is actually active.
+		bridged := false
 		shutdown, err := otelsdk.Configure(context.Background(), otelsdk.WithResource(service),
 			otelsdk.WithLogBridge(
 				func() {
-					handlers = append(handlers, otelHandler)
+					bridged = true
 				},
 			),
 		)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 
 		lc.Append(fx.Hook{
@@ -107,84 +84,21 @@ func ProvideLogger(cfg *config.Config, lc fx.Lifecycle) (*slog.Logger, error) {
 				return shutdown(ctx)
 			},
 		})
-	}
 
-	var finalHandler slog.Handler
-
-	switch len(handlers) {
-	case 0:
-		finalHandler = slog.NewTextHandler(os.Stdout, opts)
-	case 1:
-		finalHandler = handlers[0]
-	default:
-		finalHandler = MultiHandler(handlers...)
-	}
-
-	logger := slog.New(finalHandler)
-	slog.SetDefault(logger)
-
-	return logger, nil
-}
-
-func parseLevel(lvl string) slog.Level {
-	switch lvl {
-	case "debug":
-		return slog.LevelDebug
-	case "info":
-		return slog.LevelInfo
-	case "warn":
-		return slog.LevelWarn
-	case "error":
-		return slog.LevelError
-	default:
-		return slog.LevelInfo
-	}
-}
-
-type multiHandler struct {
-	handlers []slog.Handler
-}
-
-func MultiHandler(handlers ...slog.Handler) slog.Handler {
-	return &multiHandler{handlers: handlers}
-}
-
-func (h *multiHandler) Enabled(ctx context.Context, level slog.Level) bool {
-	for _, hh := range h.handlers {
-		if hh.Enabled(ctx, level) {
-			return true
+		// When the bridge is active, let the OTel LoggerProvider own the handler
+		// so it controls schema and trace correlation. Console/file are bypassed
+		// in this mode. Otherwise fall back to the Config-built handler.
+		if bridged {
+			opts = append(opts, depenlog.WithHandler(otelHandler))
 		}
 	}
 
-	return false
-}
-
-func (h *multiHandler) Handle(ctx context.Context, r slog.Record) error {
-	for _, hh := range h.handlers {
-		if hh.Enabled(ctx, r.Level) {
-			_ = hh.Handle(ctx, r)
-		}
+	l, err := depenlog.New(dcfg, opts...)
+	if err != nil {
+		return nil, nil, err
 	}
 
-	return nil
-}
-
-func (h *multiHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
-	newHandlers := make([]slog.Handler, len(h.handlers))
-	for i, hh := range h.handlers {
-		newHandlers[i] = hh.WithAttrs(attrs)
-	}
-
-	return &multiHandler{handlers: newHandlers}
-}
-
-func (h *multiHandler) WithGroup(name string) slog.Handler {
-	newHandlers := make([]slog.Handler, len(h.handlers))
-	for i, hh := range h.handlers {
-		newHandlers[i] = hh.WithGroup(name)
-	}
-
-	return &multiHandler{handlers: newHandlers}
+	return l, slog.Default(), nil
 }
 
 func ProvideSD(cfg *config.Config, log *slog.Logger, lc fx.Lifecycle) (discovery.DiscoveryProvider, error) {
@@ -233,10 +147,12 @@ func ProvideSD(cfg *config.Config, log *slog.Logger, lc fx.Lifecycle) (discovery
 	return provider, nil
 }
 
-func ProvideProfiler(cfg *config.Config, l *slog.Logger) (profiler.Config, logger.Logger) {
+// ProvideProfiler provides only the profiler config; the profiler module
+// consumes the logger.Logger provided by ProvideLogger.
+func ProvideProfiler(cfg *config.Config) profiler.Config {
 	return profiler.Config{
 		Addr:                 cfg.Profiler.Addr,
 		MutexProfileFraction: cfg.Profiler.MutexFraction,
 		BlockProfileRate:     cfg.Profiler.BlockRate,
-	}, logger.NewSlog(l)
+	}
 }

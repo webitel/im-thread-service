@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/webitel/webitel-go-kit/pkg/errors"
+	"github.com/webitel/webitel-go-kit/pkg/semconv"
 
 	"github.com/webitel/im-thread-service/internal/adapter/pubsub"
 	"github.com/webitel/im-thread-service/internal/domain/model"
@@ -29,20 +30,20 @@ func (tv *threadVariables) Set(ctx context.Context, variables *model.SetThreadVa
 
 	result, err := tv.store.Set(ctx, variables)
 	if err != nil {
-		log.Error("failed to set thread variables", "error", err)
+		log.Error("failed to set thread variables", semconv.ErrorKey, err)
 
 		return nil, err
 	}
 
 	brokerMessage, err := prepareVariablesMessage(ctx, result)
 	if err != nil {
-		log.Error("prepare set variables broker message", "error", err)
+		log.Error("prepare set variables broker message", semconv.ErrorKey, err)
 
 		return nil, err
 	}
 
 	if err := tv.publisher.Publish(result.PrepareSetTopic(variables.Member), brokerMessage); err != nil {
-		log.Error("failed to publish thread variables", "error", err)
+		log.Error("failed to publish thread variables", semconv.ErrorKey, err)
 
 		return nil, errors.Internal(
 			"publish set variables",
@@ -60,7 +61,7 @@ func (tv *threadVariables) Search(ctx context.Context, query model.GetThreadVari
 
 	result, err := tv.store.Search(ctx, query)
 	if err != nil {
-		log.Error("search thread variables", "error", err)
+		log.Error("search thread variables", semconv.ErrorKey, err)
 
 		return model.Page[*model.ThreadVariables]{}, err
 	}
@@ -73,7 +74,7 @@ func (tv *threadVariables) Locate(ctx context.Context, threadID uuid.UUID) (*mod
 
 	result, err := tv.store.Locate(ctx, threadID)
 	if err != nil {
-		log.Error("sql store locate", "error", err)
+		log.Error("sql store locate", semconv.ErrorKey, err)
 
 		return nil, err
 	}
@@ -86,20 +87,20 @@ func (tv *threadVariables) Flush(ctx context.Context, flushCmd model.FlushVariab
 
 	result, err := tv.store.Flush(ctx, flushCmd)
 	if err != nil {
-		log.Error("sql store flush", "error", err)
+		log.Error("sql store flush", semconv.ErrorKey, err)
 
 		return nil, err
 	}
 
 	brokerMessage, err := prepareVariablesMessage(ctx, result)
 	if err != nil {
-		log.Error("prepare flush variables broker message", "error", err)
+		log.Error("prepare flush variables broker message", semconv.ErrorKey, err)
 
 		return nil, err
 	}
 
 	if err := tv.publisher.Publish(result.PrepareFlushTopic(flushCmd.Member), brokerMessage); err != nil {
-		log.Error("publish thread variables", "error", err)
+		log.Error("publish thread variables", semconv.ErrorKey, err)
 
 		return nil, errors.Internal(
 			"publish flush variable event",

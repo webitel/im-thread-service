@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/webitel/webitel-go-kit/pkg/semconv"
 )
 
 type PgxDB struct {
@@ -47,7 +49,7 @@ func New(ctx context.Context, logger *slog.Logger, dsn string) (*PgxDB, error) {
 			logger.Warn("Failed to ping database, retrying...",
 				slog.Int("attempt", attempt),
 				slog.Int("max_attempts", maxAttempts),
-				slog.String("error", err.Error()),
+				slog.String(semconv.ErrorKey, err.Error()),
 			)
 		}
 
