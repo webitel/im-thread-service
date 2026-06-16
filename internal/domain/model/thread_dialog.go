@@ -29,6 +29,9 @@ type ThreadDialogExtended struct {
 	LeaveReason *string    `json:"leave_reason" db:"leave_reason"`
 	Via         *string    `json:"via,omitempty" db:"via"`
 
+	IsBot       bool `json:"is_bot" db:"is_bot"`
+	AutoLeave bool `json:"auto_leave" db:"auto_leave"`
+
 	Permissions ThreadPermissions `json:"permissions" db:"permissions"`
 	Settings    BaseThreadSetting `json:"settings" db:"settings"`
 }
@@ -43,6 +46,9 @@ type ThreadDialog struct {
 	InvitedBy   *uuid.UUID `json:"invited_by" db:"invited_by"`
 	LeaveReason *string    `json:"leave_reason" db:"leave_reason"`
 	Via         *string    `json:"via,omitempty" db:"via"`
+
+	IsBot       bool `json:"is_bot" db:"is_bot"`
+	AutoLeave bool `json:"auto_leave" db:"auto_leave"`
 }
 
 type ThreadDialogs []*ThreadDialog

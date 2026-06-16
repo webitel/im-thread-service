@@ -5,6 +5,8 @@ ALTER TABLE im_thread.thread_dialog
     ADD COLUMN IF NOT EXISTS leave_reason TEXT;
 
 ALTER TABLE im_thread.thread_dialog
+    DROP CONSTRAINT IF EXISTS thread_dialog_invited_by_fkey;
+ALTER TABLE im_thread.thread_dialog
     ADD CONSTRAINT thread_dialog_invited_by_fkey
     FOREIGN KEY (invited_by)
     REFERENCES im_thread.thread_dialog(id);

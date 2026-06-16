@@ -25,6 +25,7 @@ const (
 	Contacts_DeleteContact_FullMethodName = "/webitel.im.service.contact.v1.Contacts/DeleteContact"
 	Contacts_Patch_FullMethodName         = "/webitel.im.service.contact.v1.Contacts/Patch"
 	Contacts_Upsert_FullMethodName        = "/webitel.im.service.contact.v1.Contacts/Upsert"
+	Contacts_Locate_FullMethodName        = "/webitel.im.service.contact.v1.Contacts/Locate"
 )
 
 // ContactsClient is the client API for Contacts service.
@@ -37,6 +38,7 @@ type ContactsClient interface {
 	DeleteContact(ctx context.Context, in *DeleteContactRequest, opts ...grpc.CallOption) (*Contact, error)
 	Patch(ctx context.Context, in *PatchContactRequest, opts ...grpc.CallOption) (*Contact, error)
 	Upsert(ctx context.Context, in *CreateContactRequest, opts ...grpc.CallOption) (*Contact, error)
+	Locate(ctx context.Context, in *LocateContactRequest, opts ...grpc.CallOption) (*LocateContactResponse, error)
 }
 
 type contactsClient struct {
@@ -107,6 +109,16 @@ func (c *contactsClient) Upsert(ctx context.Context, in *CreateContactRequest, o
 	return out, nil
 }
 
+func (c *contactsClient) Locate(ctx context.Context, in *LocateContactRequest, opts ...grpc.CallOption) (*LocateContactResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(LocateContactResponse)
+	err := c.cc.Invoke(ctx, Contacts_Locate_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // ContactsServer is the server API for Contacts service.
 // All implementations must embed UnimplementedContactsServer
 // for forward compatibility.
@@ -117,6 +129,7 @@ type ContactsServer interface {
 	DeleteContact(context.Context, *DeleteContactRequest) (*Contact, error)
 	Patch(context.Context, *PatchContactRequest) (*Contact, error)
 	Upsert(context.Context, *CreateContactRequest) (*Contact, error)
+	Locate(context.Context, *LocateContactRequest) (*LocateContactResponse, error)
 	mustEmbedUnimplementedContactsServer()
 }
 
@@ -144,6 +157,9 @@ func (UnimplementedContactsServer) Patch(context.Context, *PatchContactRequest) 
 }
 func (UnimplementedContactsServer) Upsert(context.Context, *CreateContactRequest) (*Contact, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Upsert not implemented")
+}
+func (UnimplementedContactsServer) Locate(context.Context, *LocateContactRequest) (*LocateContactResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Locate not implemented")
 }
 func (UnimplementedContactsServer) mustEmbedUnimplementedContactsServer() {}
 func (UnimplementedContactsServer) testEmbeddedByValue()                  {}
@@ -274,6 +290,24 @@ func _Contacts_Upsert_Handler(srv interface{}, ctx context.Context, dec func(int
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Contacts_Locate_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(LocateContactRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ContactsServer).Locate(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Contacts_Locate_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ContactsServer).Locate(ctx, req.(*LocateContactRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // Contacts_ServiceDesc is the grpc.ServiceDesc for Contacts service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -304,6 +338,10 @@ var Contacts_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Upsert",
 			Handler:    _Contacts_Upsert_Handler,
+		},
+		{
+			MethodName: "Locate",
+			Handler:    _Contacts_Locate_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

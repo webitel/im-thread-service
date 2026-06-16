@@ -36,10 +36,12 @@ func MapPeerFromProto(pb *impb.Peer) shared.Peer {
 	case *impb.Peer_ContactId:
 		p.ID, _ = uuid.Parse(kind.ContactId)
 		p.Type = shared.PeerContact
-		p.Identity = &shared.Identity{
-			Issuer: pb.GetIdentity().GetIssuer(),
-			Name:   pb.GetIdentity().GetName(),
-			Via:    pb.GetIdentity().Via,
+		if id := pb.GetIdentity(); id != nil {
+			p.Identity = &shared.Identity{
+				Issuer: id.GetIssuer(),
+				Name:   id.GetName(),
+				Via:    id.Via,
+			}
 		}
 	case *impb.Peer_GroupId:
 		p.ID, _ = uuid.Parse(kind.GroupId)

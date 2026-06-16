@@ -24,6 +24,7 @@ type unitOfWork struct {
 	messageHistoryStore             store.MessageHistory
 	directThreadDialogOrchestration store.DirectThreadDialogOrchestration
 	interactiveCallbackStore        store.InteractiveCallback
+	botControlStore                 store.BotControlStore
 }
 
 // NewPgxUnitOfWork returns a new unit of work, given a pgx pool.
@@ -99,6 +100,14 @@ func (u *unitOfWork) MessageHistory() store.MessageHistory {
 	}
 
 	return u.messageHistoryStore
+}
+
+func (u *unitOfWork) BotControl() store.BotControlStore {
+	if u.botControlStore == nil {
+		u.botControlStore = NewBotControlStore(u.querier)
+	}
+
+	return u.botControlStore
 }
 
 func (u *unitOfWork) DirectThreadDialogOrchestration() store.DirectThreadDialogOrchestration {

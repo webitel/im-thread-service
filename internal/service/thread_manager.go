@@ -34,11 +34,16 @@ type (
 		uow            store.UnitOfWork
 		logger         *slog.Logger
 		privacyChecker ThreadPrivacyChecker
+		contactInfo    ContactInfoProvider
 	}
 
 	ThreadPrivacyChecker interface {
 		CanInvite(ctx context.Context, initiatorID, targetID uuid.UUID) error
 		CanSend(ctx context.Context, senderID, recipientID uuid.UUID) error
+	}
+
+	ContactInfoProvider interface {
+		IsBot(ctx context.Context, contactID uuid.UUID, domainID int) (bool, error)
 	}
 
 	ThreadEvent interface {
@@ -49,13 +54,14 @@ type (
 )
 
 // NewThreadService returns a new thread manager, given a unit of work.
-func NewThreadService(logger *slog.Logger, uow store.UnitOfWork, privacyChecker ThreadPrivacyChecker) *ThreadManagementService {
+func NewThreadService(logger *slog.Logger, uow store.UnitOfWork, privacyChecker ThreadPrivacyChecker, contactInfo ContactInfoProvider) *ThreadManagementService {
 	log := logger.With(slog.String("component", "thread"))
 
 	return &ThreadManagementService{
 		uow:            uow,
 		logger:         log,
 		privacyChecker: privacyChecker,
+		contactInfo:    contactInfo,
 	}
 }
 
@@ -173,7 +179,7 @@ func (t *ThreadManagementService) AddMember(ctx context.Context, req *dto.AddMem
 	var (
 		titleForTarget = "New thread"
 		invitedBy      *uuid.UUID
-		domainID       int
+		domainID       = req.DomainID
 	)
 	if initiator != nil {
 		domainID = initiator.DomainID
@@ -188,6 +194,17 @@ func (t *ThreadManagementService) AddMember(ctx context.Context, req *dto.AddMem
 		if initiator != nil {
 			titleForTarget = initiator.Settings.Title
 			invitedBy = &initiator.ID
+		}
+	}
+
+	if t.contactInfo != nil && !req.IsBot {
+		t.logger.InfoContext(ctx, "checking is_bot for contact", "contact_id", req.NewMemberContactID, "domain_id", domainID)
+		isBot, err := t.contactInfo.IsBot(ctx, req.NewMemberContactID, domainID)
+		if err != nil {
+			t.logger.WarnContext(ctx, "failed to check is_bot for contact, assuming false", "contact_id", req.NewMemberContactID, "err", err)
+		} else {
+			t.logger.InfoContext(ctx, "is_bot check result", "contact_id", req.NewMemberContactID, "is_bot", isBot)
+			req.IsBot = isBot
 		}
 	}
 
@@ -210,6 +227,8 @@ func (t *ThreadManagementService) AddMember(ctx context.Context, req *dto.AddMem
 			ThreadRole:  req.NewMemberRole,
 			InvitedBy:   invitedBy,
 			Permissions: *rolePermissions,
+			IsBot:       req.IsBot,
+			AutoLeave:   req.IsBot && resolveAutoLeave(req.AutoLeave),
 			Settings: model.BaseThreadSetting{
 				Title: titleForTarget,
 			},
@@ -234,6 +253,31 @@ func (t *ThreadManagementService) AddMember(ctx context.Context, req *dto.AddMem
 		})
 		if err != nil {
 			return errors.Internal("failed to send system message", errors.WithCause(err))
+		}
+
+		if req.IsBot {
+			pushResult, pushErr := uow.BotControl().Push(ctx, model.BotControlTransition{
+				ThreadID:    req.ThreadID,
+				NewMemberID: newMember.ID,
+				Reason:      model.BotControlReasonTransfer,
+				TriggeredBy: invitedBy,
+			})
+			if pushErr != nil {
+				return errors.Internal("failed to push bot control", errors.WithCause(pushErr))
+			}
+
+			prev := pushResult.Prev
+			newPos := positionAfterPush(prev)
+
+			if prev != nil && prev.MemberID != nil {
+				if err = t.publishBotControlReleased(ctx, uow, newMember.ThreadID, *prev.MemberID, prev.Position, domainID, &newMember.ID, model.BotControlReasonTransfer); err != nil {
+					return err
+				}
+			}
+
+			if err = t.publishBotControlGranted(ctx, uow, newMember, prev, newPos, model.BotControlReasonTransfer, false, pushResult.ControlEpoch); err != nil {
+				return err
+			}
 		}
 
 		return nil
@@ -297,6 +341,8 @@ func (t *ThreadManagementService) Transfer(ctx context.Context, req *dto.Transfe
 			ThreadRole:  req.NewMemberRole,
 			InvitedBy:   &initiator.ID,
 			Permissions: *rolePermissions,
+			IsBot:       req.TargetIsBot,
+			AutoLeave: req.TargetIsBot && resolveAutoLeave(req.AutoLeave),
 			Settings: model.BaseThreadSetting{
 				Title: initiator.Settings.Title,
 			},
@@ -305,8 +351,8 @@ func (t *ThreadManagementService) Transfer(ctx context.Context, req *dto.Transfe
 			return err
 		}
 
-		reason := memberTransferedLeaveReason
-		if err = uow.ThreadDialogStore().Delete(ctx, initiator.ID, &reason); err != nil {
+		transferReason := memberTransferedLeaveReason
+		if err = uow.ThreadDialogStore().Delete(ctx, initiator.ID, &transferReason); err != nil {
 			return err
 		}
 
@@ -327,6 +373,31 @@ func (t *ThreadManagementService) Transfer(ctx context.Context, req *dto.Transfe
 		})
 		if err != nil {
 			return errors.Internal("failed to send system message", errors.WithCause(err))
+		}
+
+		if req.TargetIsBot {
+			pushResult, pushErr := uow.BotControl().Push(ctx, model.BotControlTransition{
+				ThreadID:    req.ThreadID,
+				NewMemberID: newMember.ID,
+				Reason:      model.BotControlReasonTransfer,
+				TriggeredBy: &initiator.ID,
+			})
+			if pushErr != nil {
+				return errors.Internal("failed to push bot control", errors.WithCause(pushErr))
+			}
+
+			prev := pushResult.Prev
+			newPos := positionAfterPush(prev)
+
+			if prev != nil && prev.MemberID != nil {
+				if err = t.publishBotControlReleased(ctx, uow, newMember.ThreadID, *prev.MemberID, prev.Position, initiator.DomainID, &newMember.ID, model.BotControlReasonTransfer); err != nil {
+					return err
+				}
+			}
+
+			if err = t.publishBotControlGranted(ctx, uow, newMember, prev, newPos, model.BotControlReasonTransfer, false, pushResult.ControlEpoch); err != nil {
+				return err
+			}
 		}
 
 		newMemberID = newMember.ID
@@ -551,14 +622,51 @@ func (t *ThreadManagementService) RemoveMember(ctx context.Context, req *dto.Rem
 			return err
 		}
 
-		err = uow.ThreadDialogStore().Delete(ctx, target.ID, req.Reason)
-		if err != nil {
-			return err
-		}
-
 		domainID := target.DomainID
 		if domainID <= 0 && initiator != nil {
 			domainID = initiator.DomainID
+		}
+
+		if target.IsBot {
+			var triggeredBy *uuid.UUID
+			if initiator != nil {
+				triggeredBy = &initiator.ID
+			}
+
+			newTop, popErr := uow.BotControl().Pop(ctx, target.ThreadID, target.ID, model.BotControlReasonRemoved, triggeredBy)
+			if popErr != nil {
+				return errors.Internal("failed to pop bot control", errors.WithCause(popErr))
+			}
+
+			var nextMemberID *uuid.UUID
+			if newTop != nil {
+				nextMemberID = newTop.MemberID
+			}
+
+			if err = t.publishBotControlReleased(ctx, uow, target.ThreadID, target.ID, 0, domainID, nextMemberID, model.BotControlReasonRemoved); err != nil {
+				return err
+			}
+
+			if newTop != nil && newTop.MemberID != nil {
+				newTopDialog := botControlStackEntryToDialog(newTop)
+				if err = t.publishBotControlGranted(ctx, uow, newTopDialog, &model.BotControlStackEntry{
+					MemberID: &target.ID,
+					Position: newTop.Position + 1,
+				}, newTop.Position, model.BotControlReasonRemoved, true, newTop.ControlEpoch); err != nil {
+					return err
+				}
+			}
+
+			// Pop already soft-deletes auto_leave dialogs; only delete permanent ones manually
+			if !target.AutoLeave {
+				if err = uow.ThreadDialogStore().Delete(ctx, target.ID, req.Reason); err != nil {
+					return err
+				}
+			}
+		} else {
+			if err = uow.ThreadDialogStore().Delete(ctx, target.ID, req.Reason); err != nil {
+				return err
+			}
 		}
 
 		err = t.sendRemoveMemberSystemMessage(ctx, uow, &removeMemberEventArgs{
@@ -780,6 +888,71 @@ func (t *ThreadManagementService) verifyRemoveMemberInitiatorPermissions(initiat
 	return nil
 }
 
+// CompleteBotControl is called by flow_manager when a bot schema finishes execution.
+// It pops the bot from the control stack and returns control to the previous controller.
+// Unlike RemoveMember, this is a voluntary release — reason logged as "completed".
+func (t *ThreadManagementService) CompleteBotControl(ctx context.Context, req *dto.CompleteBotControlRequest) error {
+	if req == nil {
+		return errors.InvalidArgument("request cannot be nil", errors.WithID("service.thread_manager.complete_bot_control"))
+	}
+
+	if req.ThreadID == uuid.Nil {
+		return errors.InvalidArgument("thread_id is required", errors.WithID("service.thread_manager.complete_bot_control"))
+	}
+
+	if req.MemberID == uuid.Nil {
+		return errors.InvalidArgument("member_id is required", errors.WithID("service.thread_manager.complete_bot_control"))
+	}
+
+	return t.uow.WithinTransaction(ctx, func(ctx context.Context, uow store.UnitOfWork) error {
+		stack, err := uow.BotControl().GetStack(ctx, req.ThreadID)
+		if err != nil {
+			return err
+		}
+
+		// Only the active controller (top of stack) may complete bot control.
+		if len(stack) == 0 || stack[len(stack)-1].MemberID == nil || *stack[len(stack)-1].MemberID != req.MemberID {
+			return errors.InvalidArgument("member is not the active bot controller",
+				errors.WithID("service.thread_manager.complete_bot_control"))
+		}
+
+		// Reject stale requests: epoch must match the value delivered in bot.control.granted.v1.
+		currentEpoch, err := uow.BotControl().GetControlEpoch(ctx, req.ThreadID)
+		if err != nil {
+			return err
+		}
+		if req.ControlEpoch != currentEpoch {
+			return errors.InvalidArgument("control_epoch mismatch — request is stale or already processed",
+				errors.WithID("service.thread_manager.complete_bot_control"))
+		}
+
+		completedPosition := stack[len(stack)-1].Position
+
+		newTop, err := uow.BotControl().Pop(ctx, req.ThreadID, req.MemberID, model.BotControlReasonCompleted, nil)
+		if err != nil {
+			return err
+		}
+
+		var nextMemberID *uuid.UUID
+		if newTop != nil {
+			nextMemberID = newTop.MemberID
+		}
+
+		if err = t.publishBotControlReleased(ctx, uow, req.ThreadID, req.MemberID, completedPosition, req.DomainID, nextMemberID, model.BotControlReasonCompleted); err != nil {
+			return err
+		}
+
+		if newTop == nil || newTop.MemberID == nil {
+			return nil
+		}
+
+		return t.publishBotControlGranted(ctx, uow, botControlStackEntryToDialog(newTop), &model.BotControlStackEntry{
+			MemberID: &req.MemberID,
+			Position: completedPosition,
+		}, newTop.Position, model.BotControlReasonCompleted, true, newTop.ControlEpoch)
+	})
+}
+
 func (t *ThreadManagementService) EnsureDirectThread(ctx context.Context, req *dto.EnsureDirectThreadRequest) (*model.Thread, error) {
 	if req == nil {
 		return nil, errors.InvalidArgument("request cannot be nil", errors.WithID("service.thread_manager.ensure_direct_thread"))
@@ -836,7 +1009,12 @@ func (t *ThreadManagementService) orchestrateDirectThreadCreation(ctx context.Co
 
 		createdThread = savedThread
 
-		members, err := t.initializeDirectThreadDialogs(ctx, uow, createdThread.ID, req.DomainID, req.From, req.To)
+		var toIsBot bool
+		if req.ToIsBot != nil {
+			toIsBot = req.ToIsBot()
+		}
+
+		members, err := t.initializeDirectThreadDialogs(ctx, uow, createdThread.ID, req.DomainID, req.From, req.To, toIsBot)
 		if err != nil {
 			return err
 		}
@@ -900,7 +1078,7 @@ func extendedThreadDialogToSimpleMapper(tde *model.ThreadDialogExtended) *model.
 	}
 }
 
-func (t *ThreadManagementService) initializeDirectThreadDialogs(ctx context.Context, uow store.UnitOfWork, threadID uuid.UUID, domainID int, from, to *shared.Peer) ([]*model.ThreadDialogExtended, error) {
+func (t *ThreadManagementService) initializeDirectThreadDialogs(ctx context.Context, uow store.UnitOfWork, threadID uuid.UUID, domainID int, from, to *shared.Peer, toIsBot bool) ([]*model.ThreadDialogExtended, error) {
 	if from == nil || to == nil {
 		return nil, errors.InvalidArgument("from and to peers is required", errors.WithID("service.thread_manager.initialize_direct_thread_dialogs"))
 	}
@@ -930,43 +1108,49 @@ func (t *ThreadManagementService) initializeDirectThreadDialogs(ctx context.Cont
 		return nil, err
 	}
 
-	var (
-		baseModel = shared.BaseModel{
-			DomainID: domainID,
-		}
+	baseModel := shared.BaseModel{DomainID: domainID}
 
-		initiatorThreadDialog = &model.ThreadDialogExtended{
-			BaseModel:   baseModel,
-			ThreadID:    threadID,
-			ContactID:   from.ID,
-			ThreadRole:  initiatorRole,
-			Permissions: *initiatorPermissions,
-			Via:         from.ResolveVia(),
-			Settings: model.BaseThreadSetting{
-				Title: to.Identity.Name,
-			},
-		}
-		targerPermissions = &model.ThreadDialogExtended{
-			BaseModel:   baseModel,
-			ThreadID:    threadID,
-			ContactID:   to.ID,
-			Via:         to.ResolveVia(),
-			ThreadRole:  peerRole,
-			Permissions: *targetPermissions,
-			Settings: model.BaseThreadSetting{
-				Title: from.Identity.Name,
-			},
-		}
-	)
-
-	initiatorCreatedThreadDialog, err := uow.ThreadDialogStore().Create(ctx, initiatorThreadDialog)
+	initiatorCreatedThreadDialog, err := uow.ThreadDialogStore().Create(ctx, &model.ThreadDialogExtended{
+		BaseModel:   baseModel,
+		ThreadID:    threadID,
+		ContactID:   from.ID,
+		ThreadRole:  initiatorRole,
+		Permissions: *initiatorPermissions,
+		Via:         from.ResolveVia(),
+		Settings:    model.BaseThreadSetting{Title: to.Identity.Name},
+	})
 	if err != nil {
 		return nil, err
 	}
 
-	targetCreatedThreadDialog, err := uow.ThreadDialogStore().Create(ctx, targerPermissions)
+	targetCreatedThreadDialog, err := uow.ThreadDialogStore().Create(ctx, &model.ThreadDialogExtended{
+		BaseModel:   baseModel,
+		ThreadID:    threadID,
+		ContactID:   to.ID,
+		Via:         to.ResolveVia(),
+		ThreadRole:  peerRole,
+		Permissions: *targetPermissions,
+		IsBot:       toIsBot,
+		AutoLeave: false,
+		Settings:    model.BaseThreadSetting{Title: from.Identity.Name},
+	})
 	if err != nil {
 		return nil, err
+	}
+
+	if toIsBot {
+		pushResult, pushErr := uow.BotControl().Push(ctx, model.BotControlTransition{
+			ThreadID:    threadID,
+			NewMemberID: targetCreatedThreadDialog.ID,
+			Reason:      model.BotControlReasonInitial,
+		})
+		if pushErr != nil {
+			return nil, errors.Internal("failed to init bot control", errors.WithCause(pushErr))
+		}
+
+		if err = t.publishBotControlGranted(ctx, uow, targetCreatedThreadDialog, nil, 0, model.BotControlReasonInitial, false, pushResult.ControlEpoch); err != nil {
+			return nil, err
+		}
 	}
 
 	return []*model.ThreadDialogExtended{initiatorCreatedThreadDialog, targetCreatedThreadDialog}, nil
@@ -1028,5 +1212,89 @@ func (t *ThreadManagementService) publishThreadCreatedEvents(ctx context.Context
 }
 
 func (t *ThreadManagementService) publishMemberEvent(ctx context.Context, uow store.UnitOfWork, e ThreadEvent) error {
+	return uow.Outbox().Publish(ctx, e.Topic(), e)
+}
+
+// positionAfterPush returns the stack position that was just pushed.
+// prev is the entry that was top before the push (nil if stack was empty).
+// botControlStackEntryToDialog builds a minimal ThreadDialogExtended from a BotControlStackEntry.
+// Used after Pop to avoid an extra GetFullView round-trip when publishing granted events.
+func botControlStackEntryToDialog(e *model.BotControlStackEntry) *model.ThreadDialogExtended {
+	d := &model.ThreadDialogExtended{}
+	d.ID = *e.MemberID
+	d.DomainID = e.DomainID
+	d.ThreadID = e.ThreadID
+	d.ContactID = e.ContactID
+	d.AutoLeave = e.AutoLeave
+	return d
+}
+
+func positionAfterPush(prev *model.BotControlStackEntry) int {
+	if prev == nil {
+		return 0
+	}
+
+	return prev.Position + 1
+}
+
+// resolveAutoLeave returns true by default for bots unless explicitly overridden.
+func resolveAutoLeave(override *bool) bool {
+	if override != nil {
+		return *override
+	}
+
+	return true
+}
+
+// publishBotControlGranted publishes a BotControlGranted event to the outbox.
+// prev is the stack entry that was previously controlling (nil on initial activation).
+// position is the new entry's stack position.
+// isResume=true when returning control to a bot that was previously paused (Pop path).
+// isResume=false when activating a newly added bot for the first time (Push path).
+func (t *ThreadManagementService) publishBotControlGranted(ctx context.Context, uow store.UnitOfWork, dialog *model.ThreadDialogExtended, prev *model.BotControlStackEntry, position int, reason model.BotControlReason, isResume bool, controlEpoch int64) error {
+	var (
+		prevMemberID *uuid.UUID
+		prevPosition *int
+	)
+
+	if prev != nil {
+		prevMemberID = prev.MemberID
+		prevPosition = &prev.Position
+	}
+
+	e := &event.BotControlGranted{
+		ThreadID:         dialog.ThreadID,
+		DomainID:         int32(dialog.DomainID),
+		MemberID:         dialog.ID,
+		ContactID:        dialog.ContactID,
+		Position:         position,
+		AutoLeave:        dialog.AutoLeave,
+		Reason:           string(reason),
+		IsResume:         isResume,
+		PreviousPosition: prevPosition,
+		PreviousMemberID: prevMemberID,
+		ControlEpoch:     controlEpoch,
+		OccurredAt:       time.Now().UTC(),
+	}
+
+	return uow.Outbox().Publish(ctx, e.Topic(), e)
+}
+
+// publishBotControlReleased publishes a BotControlReleased event to the outbox.
+func (t *ThreadManagementService) publishBotControlReleased(ctx context.Context, uow store.UnitOfWork, threadID uuid.UUID, memberID uuid.UUID, position int, domainID int, nextMemberID *uuid.UUID, reason model.BotControlReason) error {
+	if memberID == uuid.Nil {
+		return nil
+	}
+
+	e := &event.BotControlReleased{
+		ThreadID:     threadID,
+		DomainID:     int32(domainID),
+		MemberID:     memberID,
+		Position:     position,
+		Reason:       string(reason),
+		NextMemberID: nextMemberID,
+		OccurredAt:   time.Now().UTC(),
+	}
+
 	return uow.Outbox().Publish(ctx, e.Topic(), e)
 }

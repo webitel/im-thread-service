@@ -13,6 +13,9 @@ type (
 		From     *shared.Peer
 		To       *shared.Peer
 		SendAs   *uuid.UUID
+		// ToIsBot is evaluated lazily — called only when creating a new thread.
+		// Pass nil to treat the peer as non-bot.
+		ToIsBot func() bool
 	}
 
 	SearchThreadDialogRequest struct {
@@ -68,17 +71,34 @@ type AddMemberRequest struct {
 	NewMemberContactID uuid.UUID
 	InitiatorContactID uuid.UUID
 	NewMemberRole      model.ThreadRole
+	DomainID           int
+	IsBot              bool
+	AutoLeave          *bool
 }
+
 type RemoveMemberRequest struct {
 	TargetMemberID     uuid.UUID
 	InitiatorContactID uuid.UUID
 	Reason             *string
 }
+
+// CompleteBotControlRequest is sent by flow_manager when a bot schema finishes execution.
+// It signals that the bot voluntarily releases control (reason: completed).
+// ControlEpoch must match the epoch received in bot.control.granted.v1; stale requests are rejected.
+type CompleteBotControlRequest struct {
+	ThreadID     uuid.UUID
+	MemberID     uuid.UUID
+	DomainID     int
+	ControlEpoch int64
+}
+
 type TransferThreadRequest struct {
 	ThreadID           uuid.UUID
 	NewMemberContactID uuid.UUID
 	InitiatorContactID uuid.UUID
 	NewMemberRole      model.ThreadRole
+	TargetIsBot        bool
+	AutoLeave          *bool
 }
 
 func NewSearchThreadRequest(domainID int, kind model.ThreadKind, from, to *shared.Peer) *SearchThreadDialogRequest {

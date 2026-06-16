@@ -53,7 +53,7 @@ func NewThreadQueryObject() *threadQueryObject {
 func (q *threadQueryObject) DefaultFields() []string {
 	return []string{
 		"id", "domain_id", "created_at", "updated_at",
-		"kind", "owner", "subject", "description", "members",
+		"kind", "owner", "subject", "description", "members", "bot_controller_id", "owner_bot_id",
 	}
 }
 
@@ -165,6 +165,20 @@ func (q *threadQueryObject) FieldsMetadata() map[string]fieldMetadata {
 			requiresJoin: threadLinkVariables,
 			sortable:     false,
 			filterExpr:   "v.variables",
+		},
+		"bot_controller_id": {
+			sqlExpr:      "t.bot_controller_id",
+			aliasedExpr:  "t.bot_controller_id as bot_controller_id",
+			requiresJoin: 0,
+			sortable:     false,
+			filterExpr:   "t.bot_controller_id",
+		},
+		"owner_bot_id": {
+			sqlExpr:      "t.owner_bot_id",
+			aliasedExpr:  "t.owner_bot_id as owner_bot_id",
+			requiresJoin: 0,
+			sortable:     false,
+			filterExpr:   "t.owner_bot_id",
 		},
 	}
 }
@@ -357,7 +371,9 @@ func (q *threadQueryObject) linkFullMembersLateral() {
 					'member_id', %[1]s.member_id,
 					'created_at', %[1]s.created_at,
 					'updated_at', %[1]s.updated_at,
-					'role', %[1]s.thread_role
+					'role', %[1]s.thread_role,
+					'is_bot', %[1]s.is_bot,
+					'auto_leave', %[1]s.auto_leave
 				)
 			) as members_data
 			from %[4]s %[1]s
