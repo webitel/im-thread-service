@@ -93,10 +93,7 @@ func ProvideLogger(cfg *config.Config, lc fx.Lifecycle) (logger.Logger, *slog.Lo
 		}
 	}
 
-	l, err := depenlog.New(dcfg, opts...)
-	if err != nil {
-		return nil, nil, err
-	}
+	l := depenlog.New(dcfg, opts...)
 
 	return l, slog.Default(), nil
 }
