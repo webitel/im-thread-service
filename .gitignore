@@ -177,3 +177,5 @@ pids
 .data
 data/.idea
 drafts/
+cmd/eventtail
+.eventtail
