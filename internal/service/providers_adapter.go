@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"github.com/webitel/webitel-go-kit/pkg/errors"
+	"github.com/webitel/webitel-go-kit/pkg/semconv"
 
 	"github.com/webitel/im-thread-service/gen/go/provider/v1"
 	improviders "github.com/webitel/im-thread-service/infra/webitel/im-providers"
@@ -24,7 +25,7 @@ type baseRPCProvidersAdapter struct {
 }
 
 func newBaseRPCProvidersAdapter(logger *slog.Logger, providersClient *improviders.Client) *baseRPCProvidersAdapter {
-	log := logger.With("component", "base_rpc_providers_adapter")
+	log := logger.With(semconv.ComponentKey, "base_rpc_providers_adapter")
 
 	return &baseRPCProvidersAdapter{
 		logger:          log,
@@ -142,7 +143,7 @@ func (a *baseRPCProvidersAdapter) SendMessage(ctx context.Context, message *mode
 
 			if err != nil {
 				peerLog.Error("provider RPC failed",
-					slog.String("error", err.Error()),
+					slog.String(semconv.ErrorKey, err.Error()),
 				)
 
 				errorsMu.Lock()

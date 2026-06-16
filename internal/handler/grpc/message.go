@@ -6,6 +6,8 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/webitel/webitel-go-kit/pkg/semconv"
+
 	impb "github.com/webitel/im-thread-service/gen/go/thread/v1"
 	"github.com/webitel/im-thread-service/internal/domain/model"
 	"github.com/webitel/im-thread-service/internal/domain/shared"
@@ -53,7 +55,7 @@ func (m *MessageServer) SendText(ctx context.Context, in *impb.SendTextRequest) 
 func (m *MessageServer) SendImage(ctx context.Context, in *impb.SendImageRequest) (*impb.SendImageResponse, error) {
 	out, err := m.handler.SendImage(ctx, mapper.MapToSendImageRequest(in))
 	if err != nil {
-		m.logger.Error("failed to send image", "error", err)
+		m.logger.Error("failed to send image", semconv.ErrorKey, err)
 
 		return nil, err
 	}
@@ -64,7 +66,7 @@ func (m *MessageServer) SendImage(ctx context.Context, in *impb.SendImageRequest
 func (m *MessageServer) SendDocument(ctx context.Context, in *impb.SendDocumentRequest) (*impb.SendDocumentResponse, error) {
 	out, err := m.handler.SendDocument(ctx, mapper.MapToSendDocumentRequest(in))
 	if err != nil {
-		m.logger.Error("failed to send document", "error", err)
+		m.logger.Error("failed to send document", semconv.ErrorKey, err)
 
 		return nil, err
 	}
@@ -75,7 +77,7 @@ func (m *MessageServer) SendDocument(ctx context.Context, in *impb.SendDocumentR
 func (m *MessageServer) Read(ctx context.Context, in *impb.ReadMessageRequest) (*impb.ReadMessageResponse, error) {
 	err := m.handler.Read(ctx, mapper.MapToReadMessageRequest(in))
 	if err != nil {
-		m.logger.Error("failed to read message", "error", err)
+		m.logger.Error("failed to read message", semconv.ErrorKey, err)
 
 		return nil, err
 	}

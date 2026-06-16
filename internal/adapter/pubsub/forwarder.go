@@ -22,6 +22,8 @@ import (
 	"github.com/ThreeDotsLabs/watermill/message/router/middleware"
 	"go.uber.org/fx"
 
+	"github.com/webitel/webitel-go-kit/pkg/semconv"
+
 	leader "github.com/webitel/im-thread-service/infra/discovery/consul"
 	"github.com/webitel/im-thread-service/internal/domain/model"
 	"github.com/webitel/im-thread-service/internal/store"
@@ -123,7 +125,7 @@ func RegisterOutboxForwarder(
 					// [ROUTER] Run the Watermill message router bound to Leader context
 					go func() {
 						if err := router.Run(leaderCtx); err != nil {
-							slog.Error("watermill router: unexpected stop", "error", err)
+							slog.Error("watermill router: unexpected stop", semconv.ErrorKey, err)
 						}
 					}()
 
@@ -179,7 +181,7 @@ func doCleanup(ctx context.Context, outbox store.OutboxStore, logger *slog.Logge
 		Topic:         OutboxTopic,
 	})
 	if err != nil {
-		logger.Error("outbox cleanup failed", "error", err)
+		logger.Error("outbox cleanup failed", semconv.ErrorKey, err)
 
 		return
 	}

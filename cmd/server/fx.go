@@ -2,9 +2,12 @@ package server
 
 import (
 	"go.uber.org/fx"
+	"go.uber.org/fx/fxevent"
 
 	"github.com/webitel/webitel-go-kit/infra/discovery"
 	"github.com/webitel/webitel-go-kit/infra/profiler"
+	"github.com/webitel/webitel-go-kit/pkg/depenlog"
+	"github.com/webitel/webitel-go-kit/pkg/logger"
 
 	"github.com/webitel/im-thread-service/config"
 	leader "github.com/webitel/im-thread-service/infra/discovery/consul"
@@ -26,6 +29,9 @@ func NewApp(cfg *config.Config) *fx.App {
 
 func MainModule(cfg *config.Config) fx.Option {
 	return fx.Options(
+		fx.WithLogger(func(l logger.Logger) fxevent.Logger {
+			return depenlog.FxLogger(l)
+		}),
 		fx.Provide(
 			func() *config.Config { return cfg },
 			ProvideLogger,

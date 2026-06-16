@@ -12,6 +12,8 @@ import (
 	"github.com/urfave/cli/v2"
 	"go.uber.org/fx"
 
+	"github.com/webitel/webitel-go-kit/pkg/semconv"
+
 	"github.com/webitel/im-thread-service/cmd/server"
 	"github.com/webitel/im-thread-service/config"
 	"github.com/webitel/im-thread-service/migrations"
@@ -98,7 +100,7 @@ func (m *migrator) Run(ctx context.Context) error {
 
 	for _, r := range res {
 		if r.Error != nil {
-			m.log.Error("unable to apply migration", "err", r.Error)
+			m.log.Error("unable to apply migration", semconv.ErrorKey, r.Error)
 		} else {
 			m.log.Info("applied migration")
 		}
