@@ -1,6 +1,7 @@
 package model
 
 import (
+	"context"
 	"maps"
 	"time"
 
@@ -113,7 +114,7 @@ func (m *Message) Events() []event.Outboxer {
 	return e
 }
 
-func (m *Message) WithCreatedEvent(sendID string, _ *shared.Peer) *Message {
+func (m *Message) WithCreatedEvent(ctx context.Context, sendID string) *Message {
 	if m == nil {
 		return m
 	}
@@ -151,17 +152,17 @@ func (m *Message) WithCreatedEvent(sendID string, _ *shared.Peer) *Message {
 	}
 
 	e := event.MessageCreated{
-		MessageID:              m.ID,
-		ThreadID:               m.ThreadID,
-		DomainID:               m.DomainID,
-		From:                   messageFrom,
-		To:                     to,
-		SendID:                 sendID,
-		Body:                   m.Body,
-		Type:                   int16(m.Type),
-		OccurredAt:             m.CreatedAt,
-		Metadata:               maps.Clone(m.Metadata),
-		BotControllerMemberID:  m.BotControllerMemberID,
+		MessageID:             m.ID,
+		ThreadID:              m.ThreadID,
+		DomainID:              m.DomainID,
+		From:                  messageFrom,
+		To:                    to,
+		SendID:                sendID,
+		Body:                  m.Body,
+		Type:                  int16(m.Type),
+		OccurredAt:            m.CreatedAt,
+		Metadata:              maps.Clone(m.Metadata),
+		BotControllerMemberID: m.BotControllerMemberID,
 	}
 
 	if len(m.Images) > 0 {
@@ -188,7 +189,11 @@ func (m *Message) WithCreatedEvent(sendID string, _ *shared.Peer) *Message {
 		e.Interactive = m.Interactive.AsEvent()
 	}
 
-	m.AddEvent(e)
+	if payload, ok := TryGetPayloadFromContext(ctx); ok {
+		e.AddMetadata(XJWTPayload, payload)
+	}
+
+	m.AddEvent(&e)
 
 	return m
 }
@@ -210,8 +215,6 @@ func (m *MessageInteractive) AsEvent() *event.InteractivePayload {
 
 	return payload
 }
-
-// Внутрішні хелпери для мапінгу
 
 func mapMarkupToEvent(markup *KeyboardButtonMarkup) *event.KeyboardMarkup {
 	if markup == nil {
@@ -269,7 +272,6 @@ func mapButtonsToEvent(btns []*KeyboardButton) []*event.KeyboardButton {
 			Type:     b.Type,
 		}
 
-		// Мапінг поліморфних полів залежно від типу
 		switch b.Type {
 		case ActionTypeURL:
 			if b.URL != nil {

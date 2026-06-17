@@ -7,8 +7,8 @@ import (
 	"log/slog"
 	"time"
 
-	lru "github.com/hashicorp/golang-lru"
 	"github.com/google/uuid"
+	lru "github.com/hashicorp/golang-lru"
 	"google.golang.org/grpc"
 
 	"github.com/webitel/webitel-go-kit/infra/discovery"
@@ -116,7 +116,7 @@ func (c *Client) IsBot(ctx context.Context, contactID uuid.UUID, domainID int) (
 	key := contactID.String()
 
 	if v, ok := c.isBotCache.Get(key); ok {
-		if entry := v.(isBotCacheEntry); time.Now().Before(entry.expiresAt) {
+		if entry, ok := v.(isBotCacheEntry); time.Now().Before(entry.expiresAt) && ok {
 			return entry.isBot, nil
 		}
 	}
@@ -132,6 +132,7 @@ func (c *Client) IsBot(ctx context.Context, contactID uuid.UUID, domainID int) (
 		})
 		if err != nil {
 			c.logger.Debug("locate contact failed", slog.String("contact_id", key), slog.Any("err", err))
+
 			return err
 		}
 
@@ -140,6 +141,7 @@ func (c *Client) IsBot(ctx context.Context, contactID uuid.UUID, domainID int) (
 		}
 
 		c.logger.Debug("locate contact result", slog.String("contact_id", key), slog.Bool("is_bot", isBot))
+
 		return nil
 	})
 	if err != nil {

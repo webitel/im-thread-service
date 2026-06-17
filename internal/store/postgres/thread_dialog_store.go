@@ -45,8 +45,6 @@ type threadDialog struct {
 	AutoLeave                   bool             `db:"auto_leave"`
 }
 
-
-
 func (t *threadDialogStore) Create(ctx context.Context, member *model.ThreadDialogExtended) (*model.ThreadDialogExtended, error) {
 	if member == nil {
 		return nil, errors.InvalidArgument("new member required", errors.WithID("postgres.thread_dialog_store.create"))
@@ -168,8 +166,6 @@ func mapToThreadDialogExtendedModel(dialog *threadDialog) (*model.ThreadDialogEx
 		AutoLeave: dialog.AutoLeave,
 	}, nil
 }
-
-
 
 func mapToThreadDialogModel(dialog *threadDialog) (*model.ThreadDialog, error) {
 	if dialog == nil {

@@ -29,7 +29,7 @@ type ThreadDialogExtended struct {
 	LeaveReason *string    `json:"leave_reason" db:"leave_reason"`
 	Via         *string    `json:"via,omitempty" db:"via"`
 
-	IsBot       bool `json:"is_bot" db:"is_bot"`
+	IsBot     bool `json:"is_bot" db:"is_bot"`
 	AutoLeave bool `json:"auto_leave" db:"auto_leave"`
 
 	Permissions ThreadPermissions `json:"permissions" db:"permissions"`
@@ -47,7 +47,7 @@ type ThreadDialog struct {
 	LeaveReason *string    `json:"leave_reason" db:"leave_reason"`
 	Via         *string    `json:"via,omitempty" db:"via"`
 
-	IsBot       bool `json:"is_bot" db:"is_bot"`
+	IsBot     bool `json:"is_bot" db:"is_bot"`
 	AutoLeave bool `json:"auto_leave" db:"auto_leave"`
 }
 

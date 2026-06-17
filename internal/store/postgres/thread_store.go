@@ -33,12 +33,12 @@ type (
 		OwnerBotID      *uuid.UUID             `json:"owner_bot_id,omitempty" db:"owner_bot_id"`
 	}
 	threadMemberRecord struct {
-		ID          uuid.UUID `json:"id,omitempty" db:"id"`
-		MemberID    uuid.UUID `json:"member_id,omitempty" db:"member_id"`
-		Role        int       `json:"role,omitempty" db:"role"`
-		Via         *string   `json:"via,omitempty" db:"via"`
-		IsBot       bool      `json:"is_bot" db:"is_bot"`
-		AutoLeave   bool      `json:"auto_leave" db:"auto_leave"`
+		ID        uuid.UUID `json:"id,omitempty" db:"id"`
+		MemberID  uuid.UUID `json:"member_id,omitempty" db:"member_id"`
+		Role      int       `json:"role,omitempty" db:"role"`
+		Via       *string   `json:"via,omitempty" db:"via"`
+		IsBot     bool      `json:"is_bot" db:"is_bot"`
+		AutoLeave bool      `json:"auto_leave" db:"auto_leave"`
 	}
 )
 
@@ -135,11 +135,11 @@ func mapThreadRecordToModel(record *threadRecord) (*model.Thread, error) {
 			BaseModel: shared.BaseModel{
 				ID: tmr.ID,
 			},
-			ContactID:   tmr.MemberID,
-			ThreadRole:  model.ThreadRole(tmr.Role),
-			Via:         tmr.Via,
-			IsBot:       tmr.IsBot,
-			AutoLeave:   tmr.AutoLeave,
+			ContactID:  tmr.MemberID,
+			ThreadRole: model.ThreadRole(tmr.Role),
+			Via:        tmr.Via,
+			IsBot:      tmr.IsBot,
+			AutoLeave:  tmr.AutoLeave,
 		}
 	})
 

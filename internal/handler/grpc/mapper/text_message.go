@@ -35,6 +35,7 @@ func MapPeerFromProto(pb *impb.Peer) shared.Peer {
 	switch kind := pb.GetKind().(type) {
 	case *impb.Peer_ContactId:
 		p.ID, _ = uuid.Parse(kind.ContactId)
+
 		p.Type = shared.PeerContact
 		if id := pb.GetIdentity(); id != nil {
 			p.Identity = &shared.Identity{

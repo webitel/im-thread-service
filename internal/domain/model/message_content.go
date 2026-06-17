@@ -1,6 +1,7 @@
 package model
 
 import (
+	"context"
 	"database/sql/driver"
 	"encoding/json"
 	"slices"
@@ -117,29 +118,29 @@ type InteractiveCallback struct {
 	events []event.Outboxer `json:"-"`
 }
 
-func (c *InteractiveCallback) WithCreatedEvent() *InteractiveCallback {
-	c.events = append(
-		c.events,
-		&event.InteractiveCallbackPayload{
-			ReactedBy: shared.Peer{
-				ID:   c.ReactedBy,
-				Type: shared.PeerContact,
-			},
-			InReplyTo:    c.InReplyTo,
-			ButtonCode:   c.ButtonCode,
-			CallbackData: c.CallbackData,
-			ReactedAt:    c.ReactedAt,
-			DomainID:     c.DomainID,
-			ThreadID:     c.ThreadID,
-			Receiver:     c.Receiver,
+func (c *InteractiveCallback) WithCreatedEvent(ctx context.Context) *InteractiveCallback {
+	e := &event.InteractiveCallbackPayload{
+		ReactedBy: shared.Peer{
+			ID:   c.ReactedBy,
+			Type: shared.PeerContact,
 		},
-	)
+		InReplyTo:    c.InReplyTo,
+		ButtonCode:   c.ButtonCode,
+		CallbackData: c.CallbackData,
+		ReactedAt:    c.ReactedAt,
+		DomainID:     c.DomainID,
+		ThreadID:     c.ThreadID,
+		Receiver:     c.Receiver,
+	}
+
+	if payload, ok := TryGetPayloadFromContext(ctx); ok {
+		e.AddMetadata(XJWTPayload, payload)
+	}
+
+	c.events = append(c.events, e)
 
 	return c
 }
 
 func (c *InteractiveCallback) Events() []event.Outboxer { return slices.Clone(c.events) }
-
-func (c *InteractiveCallback) ReactedAtUnix() int64 {
-	return c.ReactedAt.UTC().UnixMilli()
-}
+func (c *InteractiveCallback) ReactedAtUnix() int64     { return c.ReactedAt.UTC().UnixMilli() }
