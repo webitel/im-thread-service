@@ -199,6 +199,7 @@ func (t *ThreadManagementService) AddMember(ctx context.Context, req *dto.AddMem
 
 	if t.contactInfo != nil && !req.IsBot {
 		t.logger.InfoContext(ctx, "checking is_bot for contact", "contact_id", req.NewMemberContactID, "domain_id", domainID)
+
 		isBot, err := t.contactInfo.IsBot(ctx, req.NewMemberContactID, domainID)
 		if err != nil {
 			t.logger.WarnContext(ctx, "failed to check is_bot for contact, assuming false", "contact_id", req.NewMemberContactID, "err", err)
@@ -342,7 +343,7 @@ func (t *ThreadManagementService) Transfer(ctx context.Context, req *dto.Transfe
 			InvitedBy:   &initiator.ID,
 			Permissions: *rolePermissions,
 			IsBot:       req.TargetIsBot,
-			AutoLeave: req.TargetIsBot && resolveAutoLeave(req.AutoLeave),
+			AutoLeave:   req.TargetIsBot && resolveAutoLeave(req.AutoLeave),
 			Settings: model.BaseThreadSetting{
 				Title: initiator.Settings.Title,
 			},
@@ -580,7 +581,7 @@ func (t *ThreadManagementService) sendThreadSystemMessage(ctx context.Context, u
 
 	savedMsg.To = msg.To
 	savedMsg.From = msg.From
-	savedMsg.WithCreatedEvent(uuid.NewString(), &msg.From)
+	savedMsg.WithCreatedEvent(ctx, uuid.NewString())
 	events := savedMsg.Events()
 
 	for _, e := range events {
@@ -921,6 +922,7 @@ func (t *ThreadManagementService) CompleteBotControl(ctx context.Context, req *d
 		if err != nil {
 			return err
 		}
+
 		if req.ControlEpoch != currentEpoch {
 			return errors.InvalidArgument("control_epoch mismatch — request is stale or already processed",
 				errors.WithID("service.thread_manager.complete_bot_control"))
@@ -1131,7 +1133,7 @@ func (t *ThreadManagementService) initializeDirectThreadDialogs(ctx context.Cont
 		ThreadRole:  peerRole,
 		Permissions: *targetPermissions,
 		IsBot:       toIsBot,
-		AutoLeave: false,
+		AutoLeave:   false,
 		Settings:    model.BaseThreadSetting{Title: from.Identity.Name},
 	})
 	if err != nil {
@@ -1226,6 +1228,7 @@ func botControlStackEntryToDialog(e *model.BotControlStackEntry) *model.ThreadDi
 	d.ThreadID = e.ThreadID
 	d.ContactID = e.ContactID
 	d.AutoLeave = e.AutoLeave
+
 	return d
 }
 
@@ -1281,7 +1284,7 @@ func (t *ThreadManagementService) publishBotControlGranted(ctx context.Context, 
 }
 
 // publishBotControlReleased publishes a BotControlReleased event to the outbox.
-func (t *ThreadManagementService) publishBotControlReleased(ctx context.Context, uow store.UnitOfWork, threadID uuid.UUID, memberID uuid.UUID, position int, domainID int, nextMemberID *uuid.UUID, reason model.BotControlReason) error {
+func (t *ThreadManagementService) publishBotControlReleased(ctx context.Context, uow store.UnitOfWork, threadID, memberID uuid.UUID, position, domainID int, nextMemberID *uuid.UUID, reason model.BotControlReason) error {
 	if memberID == uuid.Nil {
 		return nil
 	}

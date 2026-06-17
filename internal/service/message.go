@@ -59,11 +59,14 @@ func (s *MessageService) resolveToIsBot(ctx context.Context, toID uuid.UUID, dom
 	if s.contactClient == nil {
 		return false
 	}
+
 	isBot, err := s.contactClient.IsBot(ctx, toID, domainID)
 	if err != nil {
 		s.logger.WarnContext(ctx, "failed to resolve is_bot for to peer, assuming false", "contact_id", toID, "err", err)
+
 		return false
 	}
+
 	return isBot
 }
 
@@ -119,14 +122,14 @@ func (s *MessageService) SendText(ctx context.Context, in *dto.SendTextRequest) 
 	}
 
 	msg := &model.Message{
-		ThreadID:               t.ID,
-		DomainID:               int32(in.DomainID),
-		From:                   in.From,
-		Body:                   in.Body,
-		To:                     t.Members,
-		Type:                   model.MessageTypeText,
-		Metadata:               model.BuildMetadata(in.Body),
-		SendAs:                 in.SendAs,
+		ThreadID:              t.ID,
+		DomainID:              int32(in.DomainID),
+		From:                  in.From,
+		Body:                  in.Body,
+		To:                    t.Members,
+		Type:                  model.MessageTypeText,
+		Metadata:              model.BuildMetadata(in.Body),
+		SendAs:                in.SendAs,
 		BotControllerMemberID: t.BotControllerID,
 	}
 
@@ -139,7 +142,7 @@ func (s *MessageService) SendText(ctx context.Context, in *dto.SendTextRequest) 
 		}
 
 		saved.To = t.Members
-		saved.WithCreatedEvent(in.SendID, &in.From)
+		saved.WithCreatedEvent(ctx, in.SendID)
 
 		if err = s.dispatchMessageEvents(ctx, uow, saved); err != nil {
 			return err
@@ -224,7 +227,7 @@ func (s *MessageService) SendImage(ctx context.Context, in *dto.SendImageRequest
 
 		msg.ID = saved.ID
 		msg.From = saved.From
-		msg.WithCreatedEvent(in.SendID, nil)
+		msg.WithCreatedEvent(ctx, in.SendID)
 
 		if err := s.dispatchMessageEvents(txCtx, uow, msg); err != nil {
 			return errors.Internal("dispatch message events", errors.WithCause(err), errors.WithID("service.message.send_image"))
@@ -321,7 +324,7 @@ func (s *MessageService) SendDocument(ctx context.Context, in *dto.SendDocumentR
 
 		msg.ID = saved.ID
 		msg.From = saved.From
-		msg.WithCreatedEvent(in.SendID, &in.From)
+		msg.WithCreatedEvent(ctx, in.SendID)
 
 		if err := s.dispatchMessageEvents(txCtx, uow, msg); err != nil {
 			return errors.Internal("dispatch message events", errors.WithCause(err), errors.WithID("service.message.send_document"))
@@ -391,7 +394,7 @@ func (s *MessageService) SendLocation(ctx context.Context, msg *model.Message) (
 		savedMsg.To = msg.To
 		savedMsg.IdempotencyKey = msg.IdempotencyKey
 
-		savedMsg.WithCreatedEvent(msg.IdempotencyKey, &msg.From)
+		savedMsg.WithCreatedEvent(ctx, msg.IdempotencyKey)
 
 		return s.dispatchMessageEvents(txCtx, uow, savedMsg)
 	})
@@ -428,7 +431,7 @@ func (s *MessageService) SendContact(ctx context.Context, msg *model.Message) (*
 		savedMsg.To = msg.To
 		savedMsg.IdempotencyKey = msg.IdempotencyKey
 
-		savedMsg.WithCreatedEvent(msg.IdempotencyKey, &msg.From)
+		savedMsg.WithCreatedEvent(ctx, msg.IdempotencyKey)
 
 		return s.dispatchMessageEvents(txCtx, uow, savedMsg)
 	})
@@ -484,12 +487,12 @@ func (s *MessageService) SendInteractive(ctx context.Context, msg *model.Message
 		}
 
 		savedMsg.To = msg.To
-		savedMsg.WithCreatedEvent(msg.IdempotencyKey, &msg.From)
+		savedMsg.WithCreatedEvent(ctx, msg.IdempotencyKey)
 
 		return s.dispatchMessageEvents(ctx, uow, savedMsg)
 	})
 	if err != nil {
-		log.ErrorContext(ctx, "transaction_failed", "err", err)
+		log.ErrorContext(ctx, "transaction failed", "err", err)
 
 		return nil, err
 	}
@@ -512,7 +515,7 @@ func (s *MessageService) SendInteractiveCallback(ctx context.Context, callback *
 			return err
 		}
 
-		savedCallback.WithCreatedEvent()
+		savedCallback.WithCreatedEvent(ctx)
 
 		return s.dispatchInteractiveCallbackEvents(ctx, uow, savedCallback)
 	})
@@ -552,7 +555,7 @@ func (s *MessageService) SendSystemMessage(ctx context.Context, msg *model.Messa
 		savedMsg.To = msg.To
 		savedMsg.IdempotencyKey = msg.IdempotencyKey
 
-		savedMsg.WithCreatedEvent(msg.IdempotencyKey, &msg.From)
+		savedMsg.WithCreatedEvent(ctx, msg.IdempotencyKey)
 
 		return s.dispatchMessageEvents(txCtx, uow, savedMsg)
 	})
@@ -585,7 +588,6 @@ func (s *MessageService) prepareMessageForSending(ctx context.Context, msg *mode
 
 	return nil
 }
-
 
 // --- Internal Helpers ---
 func (s *MessageService) dispatchInteractiveCallbackEvents(ctx context.Context, uow store.UnitOfWork, callback *model.InteractiveCallback) error {

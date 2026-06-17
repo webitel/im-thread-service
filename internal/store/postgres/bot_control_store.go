@@ -32,6 +32,7 @@ type botControlStackRecord struct {
 func (s *botControlStore) Push(ctx context.Context, transition model.BotControlTransition) (*model.BotControlPushResult, error) {
 	type pushResult struct {
 		botControlStackRecord
+
 		ControlEpoch int64 `db:"control_epoch"`
 	}
 
@@ -104,7 +105,7 @@ func (s *botControlStore) Push(ctx context.Context, transition model.BotControlT
 // If the member was the current top, updates bot_controller_id to the new top (or owner_bot_id if stack is now empty).
 // If the member's dialog is marked auto_leave, it is soft-deleted.
 // Returns the new top entry after removal (nil if stack is now empty and no owner bot).
-func (s *botControlStore) Pop(ctx context.Context, threadID uuid.UUID, memberID uuid.UUID, reason model.BotControlReason, triggeredBy *uuid.UUID) (*model.BotControlStackEntry, error) {
+func (s *botControlStore) Pop(ctx context.Context, threadID, memberID uuid.UUID, reason model.BotControlReason, _ *uuid.UUID) (*model.BotControlStackEntry, error) {
 	// Step 1: fetch entry, delete it, and conditionally soft-delete its dialog — all in one CTE.
 	// soft_del uses a NULL-safe trick: if auto_leave=false the subquery returns NULL,
 	// so "WHERE id = NULL" matches nothing (no-op update without branching in Go).
@@ -112,6 +113,7 @@ func (s *botControlStore) Pop(ctx context.Context, threadID uuid.UUID, memberID 
 	// a SELECT within the same statement would still see the deleted row.
 	type popRecord struct {
 		botControlStackRecord
+
 		AutoLeave bool `db:"auto_leave"`
 		IsTop     bool `db:"is_top"`
 	}
@@ -244,7 +246,7 @@ func (s *botControlStore) Pop(ctx context.Context, threadID uuid.UUID, memberID 
 		}, nil
 	}
 
-	return nil, nil
+	return nil, nil //nolint:nilnil
 }
 
 // GetStack returns all stack entries for a thread ordered by position ascending.

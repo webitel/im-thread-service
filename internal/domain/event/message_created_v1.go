@@ -2,6 +2,7 @@ package event
 
 import (
 	"encoding/json"
+	"maps"
 	"time"
 
 	"github.com/google/uuid"
@@ -36,26 +37,35 @@ type OutboxEvent struct {
 var _ Outboxer = (*MessageCreated)(nil)
 
 type MessageCreated struct {
-	MessageID              uuid.UUID           `json:"message_id"`
-	ThreadID               uuid.UUID           `json:"thread_id"`
-	DomainID               int32               `json:"domain_id"`
-	From                   *ThreadMember       `json:"from"`
-	To                     []*ThreadMember     `json:"to"`
-	SendID                 string              `json:"send_id"`
-	Body                   string              `json:"body"`
-	Type                   int16               `json:"type"` // 1:TEXT, 2:FILE, 3:IMAGE, 4:SYSTEM
-	OccurredAt             time.Time           `json:"occurred_at"`
-	Metadata               map[string]any      `json:"metadata,omitempty"`
-	Images                 []ImagePayload      `json:"images,omitempty"`
-	Documents              []DocumentPayload   `json:"documents,omitempty"`
-	Location               *LocationPayload    `json:"location,omitempty"`
-	Contact                *ContactPayload     `json:"contact,omitempty"`
-	Interactive            *InteractivePayload `json:"interactive,omitempty"`
-	System                 *SystemPayload      `json:"system,omitempty"`
+	MessageID   uuid.UUID           `json:"message_id"`
+	ThreadID    uuid.UUID           `json:"thread_id"`
+	DomainID    int32               `json:"domain_id"`
+	From        *ThreadMember       `json:"from"`
+	To          []*ThreadMember     `json:"to"`
+	SendID      string              `json:"send_id"`
+	Body        string              `json:"body"`
+	Type        int16               `json:"type"` // 1:TEXT, 2:FILE, 3:IMAGE, 4:SYSTEM
+	OccurredAt  time.Time           `json:"occurred_at"`
+	Metadata    map[string]any      `json:"metadata,omitempty"`
+	Images      []ImagePayload      `json:"images,omitempty"`
+	Documents   []DocumentPayload   `json:"documents,omitempty"`
+	Location    *LocationPayload    `json:"location,omitempty"`
+	Contact     *ContactPayload     `json:"contact,omitempty"`
+	Interactive *InteractivePayload `json:"interactive,omitempty"`
+	System      *SystemPayload      `json:"system,omitempty"`
 	// BotControllerMemberID is the members[].id (thread membership record ID) of the active bot controller.
 	// Matches the member_id field in bot.control.granted.v1 events.
 	// flow_manager compares this against its own member_id to decide whether to process the message.
-	BotControllerMemberID *uuid.UUID          `json:"bot_controller_member_id,omitempty"`
+	BotControllerMemberID *uuid.UUID        `json:"bot_controller_member_id,omitempty"`
+	ExternalMetadata      map[string]string `json:"-"`
+}
+
+func (m *MessageCreated) AddMetadata(key, value string) {
+	if m.ExternalMetadata == nil {
+		m.ExternalMetadata = make(map[string]string)
+	}
+
+	m.ExternalMetadata[key] = value
 }
 
 type ThreadMember struct {
@@ -65,26 +75,28 @@ type ThreadMember struct {
 	IsBot     bool       `json:"is_bot"`
 }
 
-func (MessageCreated) EventType() string        { return MessageCreatedEvent }
-func (m MessageCreated) Version() string        { return MessageVersionV1 }
-func (m MessageCreated) RecipientID() uuid.UUID { return m.ThreadID }
-func (m MessageCreated) ToOutbox() (OutboxEvent, error) {
-	return m.serialize(m, m.Version())
-}
+func (*MessageCreated) EventType() string                { return MessageCreatedEvent }
+func (m *MessageCreated) Version() string                { return MessageVersionV1 }
+func (m *MessageCreated) RecipientID() uuid.UUID         { return m.ThreadID }
+func (m *MessageCreated) ToOutbox() (OutboxEvent, error) { return m.serialize(m, m.Version()) }
 
-func (m MessageCreated) serialize(data any, version string) (OutboxEvent, error) {
+func (m *MessageCreated) serialize(data any, version string) (OutboxEvent, error) {
 	payload, err := json.Marshal(data)
 	if err != nil {
 		return OutboxEvent{}, err
 	}
 
+	outboxMetadata := map[string]string{
+		"event_type": MessageCreatedEvent,
+		"version":    version,
+	}
+
+	maps.Copy(outboxMetadata, m.ExternalMetadata)
+
 	return OutboxEvent{
-		ID:      uuid.Must(uuid.NewV7()),
-		Payload: payload,
-		Metadata: map[string]string{
-			"event_type": MessageCreatedEvent,
-			"version":    version,
-		},
+		ID:       uuid.Must(uuid.NewV7()),
+		Payload:  payload,
+		Metadata: outboxMetadata,
 	}, nil
 }
 

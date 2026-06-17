@@ -89,7 +89,7 @@ type BotControlStore interface {
 	// If the member was the current top (max position), updates bot_controller_id to the new top.
 	// If the member is marked auto_leave, it is soft-deleted.
 	// Returns the new top entry after removal (nil if stack is now empty and no owner bot).
-	Pop(ctx context.Context, threadID uuid.UUID, memberID uuid.UUID, reason model.BotControlReason, triggeredBy *uuid.UUID) (*model.BotControlStackEntry, error)
+	Pop(ctx context.Context, threadID, memberID uuid.UUID, reason model.BotControlReason, triggeredBy *uuid.UUID) (*model.BotControlStackEntry, error)
 
 	// GetStack returns all entries for a thread ordered by position asc.
 	GetStack(ctx context.Context, threadID uuid.UUID) ([]*model.BotControlStackEntry, error)

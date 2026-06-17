@@ -17,10 +17,10 @@ import (
 // fakeBotControlStore captures Push/Pop calls and returns configurable results.
 type fakeBotControlStore struct {
 	prevEntry    *model.BotControlStackEntry   // Prev field of BotControlPushResult
-	pushEpoch    int64                          // ControlEpoch field of BotControlPushResult
+	pushEpoch    int64                         // ControlEpoch field of BotControlPushResult
 	newTopEntry  *model.BotControlStackEntry   // returned by Pop (new top after removal)
 	stackResult  []*model.BotControlStackEntry // returned by GetStack
-	controlEpoch int64                          // returned by GetControlEpoch
+	controlEpoch int64                         // returned by GetControlEpoch
 
 	lastPushTransition model.BotControlTransition
 	lastPopMemberID    uuid.UUID
@@ -29,12 +29,14 @@ type fakeBotControlStore struct {
 
 func (f *fakeBotControlStore) Push(_ context.Context, transition model.BotControlTransition) (*model.BotControlPushResult, error) {
 	f.lastPushTransition = transition
+
 	return &model.BotControlPushResult{Prev: f.prevEntry, ControlEpoch: f.pushEpoch}, nil
 }
 
-func (f *fakeBotControlStore) Pop(_ context.Context, _ uuid.UUID, memberID uuid.UUID, reason model.BotControlReason, _ *uuid.UUID) (*model.BotControlStackEntry, error) {
+func (f *fakeBotControlStore) Pop(_ context.Context, _, memberID uuid.UUID, reason model.BotControlReason, _ *uuid.UUID) (*model.BotControlStackEntry, error) {
 	f.lastPopMemberID = memberID
 	f.lastPopReason = reason
+
 	return f.newTopEntry, nil
 }
 
@@ -55,6 +57,7 @@ func findGrantedEvent(outbox *fakeOutboxStore) *event.BotControlGranted {
 			return e
 		}
 	}
+
 	return nil
 }
 
@@ -65,6 +68,7 @@ func findReleasedEvent(outbox *fakeOutboxStore) *event.BotControlReleased {
 			return e
 		}
 	}
+
 	return nil
 }
 
@@ -261,12 +265,12 @@ func TestRemoveMember_ActiveBot_PopsStackAndPublishesBotControlGrantedWithIsResu
 
 	threadDialogStore := &fakeThreadDialogStore{
 		targetPair: &model.ThreadDialogExtended{
-			BaseModel: shared.BaseModel{ID: botMemberID, DomainID: 1},
-			ContactID: botContactID,
-			ThreadID:  threadID,
+			BaseModel:  shared.BaseModel{ID: botMemberID, DomainID: 1},
+			ContactID:  botContactID,
+			ThreadID:   threadID,
 			ThreadRole: model.RoleMember,
 			IsBot:      true,
-			AutoLeave: true,
+			AutoLeave:  true,
 		},
 		quickViewResult: []*model.ThreadDialog{},
 		// GetFullView returns new top dialog for BotControlGranted
