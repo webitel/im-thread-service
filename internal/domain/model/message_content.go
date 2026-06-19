@@ -133,11 +133,7 @@ func (c *InteractiveCallback) WithCreatedEvent(ctx context.Context) *Interactive
 		Receiver:     c.Receiver,
 	}
 
-	if payload, ok := TryGetPayloadFromContext(ctx); ok {
-		e.AddMetadata(XJWTPayload, payload)
-	}
-
-	c.events = append(c.events, e)
+	WithContextPropogatedMetadata(ctx, e)
 
 	return c
 }
