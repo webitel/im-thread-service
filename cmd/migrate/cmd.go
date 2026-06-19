@@ -70,14 +70,13 @@ func NewMigrator(cfg *config.Config, log *slog.Logger) *migrator {
 func (m *migrator) Run(ctx context.Context) error {
 	conf, err := pgxpool.ParseConfig(m.cfg.Postgres.DSN)
 	if err != nil {
-		return err
+		return fmt.Errorf("postgres DSN: invalid format")
 	}
 
 	db := stdlib.OpenDB(*conf.ConnConfig)
 	defer db.Close()
 
 	goose.SetLogger(newLogger(m.log))
-	goose.SetVerbose(true)
 
 	store, err := database.NewStore(database.DialectPostgres, "im_thread_schema_version")
 	if err != nil {

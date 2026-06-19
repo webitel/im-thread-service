@@ -17,7 +17,7 @@ type PgxDB struct {
 func New(ctx context.Context, logger *slog.Logger, dsn string) (*PgxDB, error) {
 	cfg, err := pgxpool.ParseConfig(dsn)
 	if err != nil {
-		return nil, fmt.Errorf("parse dsn: %v", err)
+		return nil, fmt.Errorf("parse DB DSN: invalid format")
 	}
 
 	dbpool, err := pgxpool.NewWithConfig(ctx, cfg)
@@ -58,7 +58,7 @@ func New(ctx context.Context, logger *slog.Logger, dsn string) (*PgxDB, error) {
 		}
 	}
 
-	return nil, fmt.Errorf("database unreachable after %d attempts: %v", maxAttempts, lastErr)
+	return nil, fmt.Errorf("database unreachable after %d attempts", maxAttempts)
 }
 
 func (d *PgxDB) Master() *pgxpool.Pool {
