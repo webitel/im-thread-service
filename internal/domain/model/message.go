@@ -193,6 +193,8 @@ func (m *Message) WithCreatedEvent(ctx context.Context, sendID string) *Message 
 		e.AddMetadata(XJWTPayload, payload)
 	}
 
+	WithContextPropogatedMetadata(ctx, &e)
+
 	m.AddEvent(&e)
 
 	return m

@@ -119,6 +119,7 @@ func New(addr string, opts ...Option) (*Server, error) {
 		grpc.Creds(grpcTLS),
 		grpc.StatsHandler(otelgrpc.NewServerHandler()),
 		grpc.ChainUnaryInterceptor(
+			interceptors.DeviceInterceptor(),
 			interceptors.NewUnaryJWTInterceptor(),
 			intrcp.UnaryServerErrorInterceptor(),
 			validatemiddleware.UnaryServerInterceptor(validator),
