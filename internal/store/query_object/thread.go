@@ -245,10 +245,9 @@ func (q *threadQueryObject) WithOwnerFilter(owners ...uuid.UUID) *threadQueryObj
 
 func (q *threadQueryObject) WithSubjectFilter(subject string) *threadQueryObject {
 	if subject != "" && utf8.ValidString(subject) {
-		escapedSubject := "%" + q.escapeLikePattern(subject) + "%"
 		q.mustIncludeComputedSubject = true
 		q.builder = q.builder.Where(
-			fmt.Sprintf("(%s.subject ilike ? or %s.title ilike ?)", threadAlias, threadDirectSettingsAlias), escapedSubject, escapedSubject,
+			fmt.Sprintf("(%s.subject ~* ? or %s.title ~* ?)", threadAlias, threadDirectSettingsAlias), subject, subject,
 		)
 	}
 
@@ -257,8 +256,7 @@ func (q *threadQueryObject) WithSubjectFilter(subject string) *threadQueryObject
 
 func (q *threadQueryObject) WithDescriptionFilter(description string) *threadQueryObject {
 	if description != "" && utf8.ValidString(description) {
-		escapedDescription := "%" + q.escapeLikePattern(description) + "%"
-		q.builder = q.builder.Where(fmt.Sprintf("%s.description ilike ?", threadAlias), escapedDescription)
+		q.builder = q.builder.Where(fmt.Sprintf("%s.description ~* ?", threadAlias), description)
 	}
 
 	return q
