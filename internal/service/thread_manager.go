@@ -47,9 +47,10 @@ type (
 	}
 
 	ThreadEvent interface {
+		event.Outboxer
+
 		Topic() string
 		MustBeThreadEvent()
-		event.Outboxer
 	}
 )
 
@@ -971,12 +972,14 @@ func (t *ThreadManagementService) EnsureDirectThread(ctx context.Context, req *d
 		return nil, err
 	}
 
-	if thread == nil {
-		if thread, err = t.orchestrateDirectThreadCreation(ctx, req); err != nil {
-			log.ErrorContext(ctx, "creating thread", "err", err)
+	if thread != nil {
+		return thread, nil
+	}
 
-			return nil, err
-		}
+	if thread, err = t.orchestrateDirectThreadCreation(ctx, req); err != nil {
+		log.ErrorContext(ctx, "creating thread", "err", err)
+
+		return nil, err
 	}
 
 	return thread, nil
