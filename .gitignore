@@ -8,7 +8,7 @@ Thumbs.db
 .env.*
 *.env
 !.env.example
-!.env.otel.example
+!.env.*.example
 !.env.sample
 !example.env
 env
@@ -177,5 +177,3 @@ pids
 .data
 data/.idea
 drafts/
-cmd/eventtail
-.eventtail
