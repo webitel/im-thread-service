@@ -2,6 +2,7 @@ package grpc
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/google/uuid"
 
@@ -10,6 +11,7 @@ import (
 	impb "github.com/webitel/im-thread-service/gen/go/thread/v1"
 	"github.com/webitel/im-thread-service/internal/domain/model"
 	"github.com/webitel/im-thread-service/internal/handler/grpc/mapper"
+	"github.com/webitel/im-thread-service/internal/service"
 	"github.com/webitel/im-thread-service/internal/service/dto"
 	"github.com/webitel/im-thread-service/internal/utils"
 )
@@ -36,19 +38,43 @@ type ThreadVariablesOperator interface {
 type ThreadManagementServer struct {
 	impb.UnimplementedThreadManagementServer
 
-	inMapper        *mapper.ThreadInConverter
-	outMapper       *mapper.ThreadOutConverter
-	threadManager   ThreadManagementService
-	threadVariables ThreadVariablesOperator
+	inMapper              *mapper.ThreadInConverter
+	outMapper             *mapper.ThreadOutConverter
+	threadManager         ThreadManagementService
+	threadVariables       ThreadVariablesOperator
+	threadCreatorsFactory service.ThreadCreatorsFactoryProvider
 }
 
-func NewThreadService(threadManager ThreadManagementService, threadVariables ThreadVariablesOperator) *ThreadManagementServer {
+func NewThreadService(threadManager ThreadManagementService, threadVariables ThreadVariablesOperator, threadCreatorsFactory service.ThreadCreatorsFactoryProvider) *ThreadManagementServer {
 	return &ThreadManagementServer{
-		threadManager:   threadManager,
-		inMapper:        &mapper.ThreadInConverter{},
-		outMapper:       &mapper.ThreadOutConverter{},
-		threadVariables: threadVariables,
+		threadManager:         threadManager,
+		inMapper:              &mapper.ThreadInConverter{},
+		outMapper:             &mapper.ThreadOutConverter{},
+		threadVariables:       threadVariables,
+		threadCreatorsFactory: threadCreatorsFactory,
 	}
+}
+
+func (ts *ThreadManagementServer) Create(ctx context.Context, req *impb.ThreadManagementCreateRequest) (*impb.ThreadManagementCreateResponse, error) {
+	initOptions := make([]func(*service.CreateThreadRequest), 0)
+
+	switch r := req.GetType().(type) {
+	case *impb.ThreadManagementCreateRequest_Direct:
+		initOptions = append(initOptions, service.WithKind(model.ThreadDirect), service.WithDirectConfig(mapper.MapPeerFromProto(r.Direct.GetMember())))
+	default:
+		return nil, errors.InvalidArgument("received unknown create thread request type", errors.WithID("grpc.thread.create.unknown_type"), errors.WithValue("type", fmt.Sprintf("%T", r)))
+	}
+
+	createRequest := service.NewCreateThreadRequest(req.GetDomainId(), mapper.MapPeerFromProto(req.GetInitiator()), initOptions...)
+
+	thread, err := ts.threadCreatorsFactory.Create(ctx, createRequest)
+	if err != nil {
+		return nil, err
+	}
+
+	pbThread := ts.outMapper.ConvertToThread(thread)
+
+	return &impb.ThreadManagementCreateResponse{Thread: pbThread}, nil
 }
 
 func (ts *ThreadManagementServer) Get(ctx context.Context, req *impb.GetThreadRequest) (*impb.Thread, error) {
