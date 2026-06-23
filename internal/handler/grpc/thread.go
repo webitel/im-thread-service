@@ -195,10 +195,9 @@ func (ts *ThreadManagementServer) CompleteBotControl(ctx context.Context, req *i
 	}
 
 	if err = ts.threadManager.CompleteBotControl(ctx, &dto.CompleteBotControlRequest{
-		ThreadID:     tid,
-		MemberID:     mid,
-		DomainID:     int(req.GetDomainId()),
-		ControlEpoch: req.GetControlEpoch(),
+		ThreadID: tid,
+		MemberID: mid,
+		DomainID: int(req.GetDomainId()),
 	}); err != nil {
 		return nil, err
 	}

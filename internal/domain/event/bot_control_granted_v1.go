@@ -21,11 +21,7 @@ type BotControlGranted struct {
 	IsResume         bool       `json:"is_resume"`
 	PreviousPosition *int       `json:"previous_position,omitempty"`
 	PreviousMemberID *uuid.UUID `json:"previous_member_id,omitempty"`
-	// ControlEpoch is a monotonic per-thread counter incremented on every grant.
-	// flow_manager must pass this value back in CompleteBotControl to prevent
-	// stale or duplicate requests from being accepted (ABA protection).
-	ControlEpoch int64     `json:"control_epoch"`
-	OccurredAt   time.Time `json:"occurred_at"`
+	OccurredAt       time.Time  `json:"occurred_at"`
 }
 
 var _ Base = (*BotControlGranted)(nil)

@@ -26,16 +26,10 @@ type botControlStackRecord struct {
 	Position int        `db:"position"`
 }
 
-// Push adds a new entry onto the stack, increments thread.control_epoch, and updates
-// thread.bot_controller_id and thread.owner_bot_id — all in a single CTE round-trip.
-// Returns the previous top entry and the newly assigned control_epoch.
+// Push adds a new entry onto the stack and updates thread.bot_controller_id and
+// thread.owner_bot_id — all in a single CTE round-trip.
+// Returns the previous top entry.
 func (s *botControlStore) Push(ctx context.Context, transition model.BotControlTransition) (*model.BotControlPushResult, error) {
-	type pushResult struct {
-		botControlStackRecord
-
-		ControlEpoch int64 `db:"control_epoch"`
-	}
-
 	// The owner_bot_id subquery runs against the pre-insert snapshot, so it correctly
 	// identifies the earliest bot in thread_dialog not yet on the stack.
 	// For the initial push this is the bot being added; for subsequent transfers
@@ -59,7 +53,6 @@ func (s *botControlStore) Push(ctx context.Context, transition model.BotControlT
 		upd AS (
 			UPDATE im_thread.thread
 			SET bot_controller_id = @MemberID,
-			    control_epoch      = control_epoch + 1,
 			    owner_bot_id = COALESCE(owner_bot_id, (
 			        SELECT d.id
 			        FROM im_thread.thread_dialog d
@@ -75,9 +68,9 @@ func (s *botControlStore) Push(ctx context.Context, transition model.BotControlT
 			        LIMIT 1
 			    ))
 			WHERE id = @ThreadID
-			RETURNING control_epoch
+			RETURNING id
 		)
-		SELECT p.id, p.thread_id, p.member_id, COALESCE(p.position, 0) AS position, u.control_epoch
+		SELECT p.id, p.thread_id, p.member_id, COALESCE(p.position, 0) AS position
 		FROM upd u
 		LEFT JOIN prev_top p ON true
 	`, pgx.NamedArgs{
@@ -88,14 +81,14 @@ func (s *botControlStore) Push(ctx context.Context, transition model.BotControlT
 		return nil, errors.Internal("push bot control", errors.WithCause(err), errors.WithID("bot_control_store.push"))
 	}
 
-	row, err := pgx.CollectOneRow(rows, pgx.RowToAddrOfStructByNameLax[pushResult])
+	row, err := pgx.CollectOneRow(rows, pgx.RowToAddrOfStructByNameLax[botControlStackRecord])
 	if err != nil {
 		return nil, errors.Internal("scanning push result", errors.WithCause(err), errors.WithID("bot_control_store.push"))
 	}
 
-	result := &model.BotControlPushResult{ControlEpoch: row.ControlEpoch}
+	result := &model.BotControlPushResult{}
 	if row.MemberID != nil {
-		result.Prev = mapBotControlStackEntry(&row.botControlStackRecord)
+		result.Prev = mapBotControlStackEntry(row)
 	}
 
 	return result, nil
@@ -160,13 +153,12 @@ func (s *botControlStore) Pop(ctx context.Context, threadID, memberID uuid.UUID,
 	// new_top JOINs thread_dialog to get contact_id/auto_leave/domain_id.
 	// owner_info does the same for the owner bot fallback (stack empty + isTop case).
 	type newTopResult struct {
-		MemberID     *uuid.UUID `db:"member_id"`
-		Position     int        `db:"position"`
-		OwnerBotID   *uuid.UUID `db:"owner_bot_id"`
-		ContactID    *uuid.UUID `db:"contact_id"`
-		AutoLeave    bool       `db:"auto_leave"`
-		DomainID     int        `db:"domain_id"`
-		ControlEpoch int64      `db:"control_epoch"`
+		MemberID   *uuid.UUID `db:"member_id"`
+		Position   int        `db:"position"`
+		OwnerBotID *uuid.UUID `db:"owner_bot_id"`
+		ContactID  *uuid.UUID `db:"contact_id"`
+		AutoLeave  bool       `db:"auto_leave"`
+		DomainID   int        `db:"domain_id"`
 	}
 
 	newTopRows, err := s.db.Query(ctx, `
@@ -184,10 +176,9 @@ func (s *botControlStore) Pop(ctx context.Context, threadID, memberID uuid.UUID,
 			SET bot_controller_id = COALESCE(
 				(SELECT member_id FROM new_top),
 				CASE WHEN @IsTop THEN owner_bot_id ELSE bot_controller_id END
-			),
-			control_epoch = control_epoch + 1
+			)
 			WHERE id = @ThreadID
-			RETURNING owner_bot_id, control_epoch
+			RETURNING owner_bot_id
 		),
 		owner_info AS (
 			SELECT d.member_id AS contact_id, d.auto_leave, d.domain_id
@@ -201,8 +192,7 @@ func (s *botControlStore) Pop(ctx context.Context, threadID, memberID uuid.UUID,
 			u.owner_bot_id,
 			COALESCE(n.contact_id,  oi.contact_id)              AS contact_id,
 			COALESCE(n.auto_leave,  oi.auto_leave,  false)       AS auto_leave,
-			COALESCE(n.domain_id,   oi.domain_id,   0)::int      AS domain_id,
-			u.control_epoch
+			COALESCE(n.domain_id,   oi.domain_id,   0)::int      AS domain_id
 		FROM upd u
 		LEFT JOIN new_top n ON true
 		LEFT JOIN owner_info oi ON true
@@ -223,26 +213,24 @@ func (s *botControlStore) Pop(ctx context.Context, threadID, memberID uuid.UUID,
 
 	if result.MemberID != nil {
 		return &model.BotControlStackEntry{
-			ThreadID:     threadID,
-			MemberID:     result.MemberID,
-			Position:     result.Position,
-			ContactID:    contactID,
-			AutoLeave:    result.AutoLeave,
-			DomainID:     result.DomainID,
-			ControlEpoch: result.ControlEpoch,
+			ThreadID:  threadID,
+			MemberID:  result.MemberID,
+			Position:  result.Position,
+			ContactID: contactID,
+			AutoLeave: result.AutoLeave,
+			DomainID:  result.DomainID,
 		}, nil
 	}
 
 	// Stack is empty — synthesize owner bot entry so the service fires a granted event.
 	if isTop && result.OwnerBotID != nil {
 		return &model.BotControlStackEntry{
-			ThreadID:     threadID,
-			MemberID:     result.OwnerBotID,
-			Position:     0,
-			ContactID:    contactID,
-			AutoLeave:    result.AutoLeave,
-			DomainID:     result.DomainID,
-			ControlEpoch: result.ControlEpoch,
+			ThreadID:  threadID,
+			MemberID:  result.OwnerBotID,
+			Position:  0,
+			ContactID: contactID,
+			AutoLeave: result.AutoLeave,
+			DomainID:  result.DomainID,
 		}, nil
 	}
 
@@ -274,17 +262,6 @@ func (s *botControlStore) GetStack(ctx context.Context, threadID uuid.UUID) ([]*
 	return entries, nil
 }
 
-// GetControlEpoch returns the current control_epoch for the thread.
-func (s *botControlStore) GetControlEpoch(ctx context.Context, threadID uuid.UUID) (int64, error) {
-	var epoch int64
-	if err := s.db.QueryRow(ctx, `
-		SELECT control_epoch FROM im_thread.thread WHERE id = @ThreadID
-	`, pgx.NamedArgs{"ThreadID": threadID}).Scan(&epoch); err != nil {
-		return 0, errors.Internal("fetching control epoch", errors.WithCause(err), errors.WithID("bot_control_store.get_control_epoch"))
-	}
-
-	return epoch, nil
-}
 
 func mapBotControlStackEntry(r *botControlStackRecord) *model.BotControlStackEntry {
 	return &model.BotControlStackEntry{

@@ -84,12 +84,10 @@ type RemoveMemberRequest struct {
 
 // CompleteBotControlRequest is sent by flow_manager when a bot schema finishes execution.
 // It signals that the bot voluntarily releases control (reason: completed).
-// ControlEpoch must match the epoch received in bot.control.granted.v1; stale requests are rejected.
 type CompleteBotControlRequest struct {
-	ThreadID     uuid.UUID
-	MemberID     uuid.UUID
-	DomainID     int
-	ControlEpoch int64
+	ThreadID uuid.UUID
+	MemberID uuid.UUID
+	DomainID int
 }
 
 type TransferThreadRequest struct {
