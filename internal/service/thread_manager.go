@@ -258,6 +258,12 @@ func (t *ThreadManagementService) AddMember(ctx context.Context, req *dto.AddMem
 		}
 
 		if req.IsBot {
+			t.logger.DebugContext(ctx, "bot member added: pushing bot control stack",
+				"thread_id", req.ThreadID,
+				"member_id", newMember.ID,
+				"reason", model.BotControlReasonTransfer,
+			)
+
 			pushResult, pushErr := uow.BotControl().Push(ctx, model.BotControlTransition{
 				ThreadID:    req.ThreadID,
 				NewMemberID: newMember.ID,
@@ -265,8 +271,20 @@ func (t *ThreadManagementService) AddMember(ctx context.Context, req *dto.AddMem
 				TriggeredBy: invitedBy,
 			})
 			if pushErr != nil {
+				t.logger.ErrorContext(ctx, "failed to push bot control stack",
+					"thread_id", req.ThreadID,
+					"member_id", newMember.ID,
+					"err", pushErr,
+				)
 				return errors.Internal("failed to push bot control", errors.WithCause(pushErr))
 			}
+
+			t.logger.DebugContext(ctx, "bot control stack pushed",
+				"thread_id", req.ThreadID,
+				"member_id", newMember.ID,
+				"control_epoch", pushResult.ControlEpoch,
+				"prev_member_id", pushResult.Prev,
+			)
 
 			prev := pushResult.Prev
 			newPos := positionAfterPush(prev)
@@ -378,6 +396,11 @@ func (t *ThreadManagementService) Transfer(ctx context.Context, req *dto.Transfe
 		}
 
 		if req.TargetIsBot {
+			t.logger.DebugContext(ctx, "transfer: target is bot, pushing bot control stack",
+				"thread_id", req.ThreadID,
+				"member_id", newMember.ID,
+			)
+
 			pushResult, pushErr := uow.BotControl().Push(ctx, model.BotControlTransition{
 				ThreadID:    req.ThreadID,
 				NewMemberID: newMember.ID,
@@ -385,8 +408,19 @@ func (t *ThreadManagementService) Transfer(ctx context.Context, req *dto.Transfe
 				TriggeredBy: &initiator.ID,
 			})
 			if pushErr != nil {
+				t.logger.ErrorContext(ctx, "transfer: failed to push bot control stack",
+					"thread_id", req.ThreadID,
+					"member_id", newMember.ID,
+					"err", pushErr,
+				)
 				return errors.Internal("failed to push bot control", errors.WithCause(pushErr))
 			}
+
+			t.logger.DebugContext(ctx, "transfer: bot control stack pushed",
+				"thread_id", req.ThreadID,
+				"member_id", newMember.ID,
+				"control_epoch", pushResult.ControlEpoch,
+			)
 
 			prev := pushResult.Prev
 			newPos := positionAfterPush(prev)
@@ -1144,14 +1178,30 @@ func (t *ThreadManagementService) initializeDirectThreadDialogs(ctx context.Cont
 	}
 
 	if toIsBot {
+		t.logger.DebugContext(ctx, "create thread: target is bot, pushing bot control stack",
+			"thread_id", threadID,
+			"member_id", targetCreatedThreadDialog.ID,
+		)
+
 		pushResult, pushErr := uow.BotControl().Push(ctx, model.BotControlTransition{
 			ThreadID:    threadID,
 			NewMemberID: targetCreatedThreadDialog.ID,
 			Reason:      model.BotControlReasonInitial,
 		})
 		if pushErr != nil {
+			t.logger.ErrorContext(ctx, "create thread: failed to push bot control stack",
+				"thread_id", threadID,
+				"member_id", targetCreatedThreadDialog.ID,
+				"err", pushErr,
+			)
 			return nil, errors.Internal("failed to init bot control", errors.WithCause(pushErr))
 		}
+
+		t.logger.DebugContext(ctx, "create thread: bot control stack pushed",
+			"thread_id", threadID,
+			"member_id", targetCreatedThreadDialog.ID,
+			"control_epoch", pushResult.ControlEpoch,
+		)
 
 		if err = t.publishBotControlGranted(ctx, uow, targetCreatedThreadDialog, nil, 0, model.BotControlReasonInitial, false, pushResult.ControlEpoch); err != nil {
 			return nil, err
@@ -1283,7 +1333,33 @@ func (t *ThreadManagementService) publishBotControlGranted(ctx context.Context, 
 		OccurredAt:       time.Now().UTC(),
 	}
 
-	return uow.Outbox().Publish(ctx, e.Topic(), e)
+	t.logger.DebugContext(ctx, "publishing bot.control.granted to outbox",
+		"topic", e.Topic(),
+		"thread_id", e.ThreadID,
+		"member_id", e.MemberID,
+		"control_epoch", e.ControlEpoch,
+		"reason", e.Reason,
+		"is_resume", e.IsResume,
+	)
+
+	if err := uow.Outbox().Publish(ctx, e.Topic(), e); err != nil {
+		t.logger.ErrorContext(ctx, "failed to publish bot.control.granted to outbox",
+			"topic", e.Topic(),
+			"thread_id", e.ThreadID,
+			"member_id", e.MemberID,
+			"err", err,
+		)
+		return err
+	}
+
+	t.logger.DebugContext(ctx, "bot.control.granted published to outbox",
+		"topic", e.Topic(),
+		"thread_id", e.ThreadID,
+		"member_id", e.MemberID,
+		"control_epoch", e.ControlEpoch,
+	)
+
+	return nil
 }
 
 // publishBotControlReleased publishes a BotControlReleased event to the outbox.
@@ -1302,5 +1378,29 @@ func (t *ThreadManagementService) publishBotControlReleased(ctx context.Context,
 		OccurredAt:   time.Now().UTC(),
 	}
 
-	return uow.Outbox().Publish(ctx, e.Topic(), e)
+	t.logger.DebugContext(ctx, "publishing bot.control.released to outbox",
+		"topic", e.Topic(),
+		"thread_id", e.ThreadID,
+		"member_id", e.MemberID,
+		"reason", e.Reason,
+		"next_member_id", e.NextMemberID,
+	)
+
+	if err := uow.Outbox().Publish(ctx, e.Topic(), e); err != nil {
+		t.logger.ErrorContext(ctx, "failed to publish bot.control.released to outbox",
+			"topic", e.Topic(),
+			"thread_id", e.ThreadID,
+			"member_id", e.MemberID,
+			"err", err,
+		)
+		return err
+	}
+
+	t.logger.DebugContext(ctx, "bot.control.released published to outbox",
+		"topic", e.Topic(),
+		"thread_id", e.ThreadID,
+		"member_id", e.MemberID,
+	)
+
+	return nil
 }
