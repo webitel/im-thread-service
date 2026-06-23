@@ -6,13 +6,14 @@ import (
 
 	"github.com/ThreeDotsLabs/watermill"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/webitel/webitel-go-kit/infra/pgw"
 
 	"github.com/webitel/im-thread-service/internal/store"
 )
 
 type unitOfWork struct {
-	pool     *pgxpool.Pool
+	pool     *pgw.PoolManager
 	querier  Querier
 	wmlogger watermill.LoggerAdapter
 
@@ -27,15 +28,20 @@ type unitOfWork struct {
 	botControlStore                 store.BotControlStore
 }
 
-// NewPgxUnitOfWork returns a new unit of work, given a pgx pool.
+// NewPgxUnitOfWork returns a new unit of work, given a pgw pool manager.
 // The unit of work contains the pool and a querier which is used to execute queries.
 // The thread store and thread dialog store are lazily initialized on first call to ThreadStore or ThreadDialogStore.
-func NewPgxUnitOfWork(pool *pgxpool.Pool, wmlogger watermill.LoggerAdapter) *unitOfWork {
+func NewPgxUnitOfWork(pool *pgw.PoolManager, wmlogger watermill.LoggerAdapter) (*unitOfWork, error) {
+	primary, err := pool.Primary()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get primary pool: %w", err)
+	}
+
 	return &unitOfWork{
 		pool:     pool,
-		querier:  pool,
+		querier:  primary,
 		wmlogger: wmlogger,
-	}
+	}, nil
 }
 
 // ThreadStore returns the thread store for the given unit of work.
@@ -132,7 +138,11 @@ func (u *unitOfWork) WithinTransaction(ctx context.Context, fn func(ctx context.
 	}
 
 	// [BEGIN]
-	tx, err := u.pool.Begin(ctx)
+	primaryPool, err := u.pool.Primary()
+	if err != nil {
+		return fmt.Errorf("failed to get primary pool: %w", err)
+	}
+	tx, err := primaryPool.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to start transaction: %w", err)
 	}

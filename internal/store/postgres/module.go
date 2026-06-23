@@ -2,23 +2,21 @@ package postgres
 
 import (
 	"context"
-	"log/slog"
 
-	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/fx"
 
 	"github.com/webitel/im-thread-service/config"
 	"github.com/webitel/im-thread-service/infra/db/pg"
 	"github.com/webitel/im-thread-service/internal/store"
+	"github.com/webitel/webitel-go-kit/infra/pgw"
 )
 
 var Module = fx.Module("store",
 	fx.Provide(
 		ProvideNewDBConnection,
-		pg.ProvidePgxPool,
 		fx.Annotate(
-			func(p *pgxpool.Pool) Querier {
-				return p
+			func(p *pgw.PoolManager) (Querier, error) {
+				return p.Primary()
 			},
 			fx.As(new(Querier)),
 		),
@@ -71,16 +69,15 @@ var Module = fx.Module("store",
 	),
 )
 
-func ProvideNewDBConnection(cfg *config.Config, l *slog.Logger, lc fx.Lifecycle) (*pg.PgxDB, error) {
-	db, err := pg.New(context.Background(), l, cfg.Postgres.DSN)
+func ProvideNewDBConnection(cfg *config.Config, lc fx.Lifecycle) (*pgw.PoolManager, error) {
+	db, err := pg.New(context.Background(), cfg)
 	if err != nil {
 		return nil, err
 	}
 
 	lc.Append(fx.Hook{
 		OnStop: func(_ context.Context) error {
-			db.Master().Close()
-
+			db.Close()
 			return nil
 		},
 	})

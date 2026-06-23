@@ -2,12 +2,16 @@ package server
 
 import (
 	"context"
+	"log"
 	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
 
 	"github.com/urfave/cli/v2"
+
+	"net/http"
+	_ "net/http/pprof"
 
 	"github.com/webitel/im-thread-service/config"
 )
@@ -28,6 +32,10 @@ func CMD() *cli.Command {
 			if err != nil {
 				return err
 			}
+
+			go func() {
+				log.Println(http.ListenAndServe("localhost:6060", nil))
+			}()
 
 			app := NewApp(cfg)
 

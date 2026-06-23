@@ -15,7 +15,7 @@ require (
 	github.com/grpc-ecosystem/go-grpc-middleware/v2 v2.3.3
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.27.7
 	github.com/huandu/go-sqlbuilder v1.40.1
-	github.com/jackc/pgx/v5 v5.8.0
+	github.com/jackc/pgx/v5 v5.10.0
 	github.com/sony/gobreaker v1.0.0
 	github.com/spf13/pflag v1.0.10
 	github.com/spf13/viper v1.21.0 // indirect
@@ -35,7 +35,7 @@ require (
 	go.opentelemetry.io/otel/sdk v1.39.0
 	go.uber.org/fx v1.24.0
 	go.uber.org/goleak v1.3.0
-	golang.org/x/sync v0.19.0
+	golang.org/x/sync v0.21.0
 	google.golang.org/genproto/googleapis/api v0.0.0-20260128011058-8636f8732409
 	google.golang.org/grpc v1.80.0
 )
@@ -57,6 +57,8 @@ require (
 	github.com/mfridman/interpolate v0.0.2 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/sethvargo/go-retry v0.3.0 // indirect
+	github.com/webitel/webitel-go-kit/infra/pgw v0.0.0-20260623172426-4b0c49398f48 // indirect
+	github.com/webitel/webitel-go-kit/pkg/safemap v0.1.1-0.20260617101709-72b6b829c7ef // indirect
 	github.com/webitel/wlog v0.0.0-20250325101442-de4f125c1ec7 // indirect
 	go.opentelemetry.io/contrib/bridges/otelzap v0.11.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploggrpc v0.12.2 // indirect
@@ -119,7 +121,7 @@ require (
 	golang.org/x/exp v0.0.0-20251209150349-8475f28825e9 // indirect
 	golang.org/x/net v0.49.0 // indirect
 	golang.org/x/sys v0.42.0 // indirect
-	golang.org/x/text v0.33.0
+	golang.org/x/text v0.38.0
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260401024825-9d38bb4040a9 // indirect
 	google.golang.org/protobuf v1.36.11
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect

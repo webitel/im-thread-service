@@ -4,7 +4,6 @@ service:
   conn:
     verify_certs: false
 
-
 log:
   level: "info"
   otel: false
@@ -18,11 +17,9 @@ redis:
   password: ""
   db: 0
 
-
 consul:
   addr: "localhost:8500"
 
-
 pubsub:
-  broker_url: "amqp://webitel:webitel@localhost:5673"
-  broker_driver: "amqp"
+  url: "amqp://webitel:webitel@localhost:5673"
+  driver: "amqp"
