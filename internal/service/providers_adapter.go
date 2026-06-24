@@ -133,9 +133,12 @@ func (a *baseRPCProvidersAdapter) SendMessage(ctx context.Context, message *mode
 			case model.MessageTypeInteractive:
 				if message.Interactive == nil {
 					peerLog.Warn("interactive message has nil interactive payload, skipping")
+
 					return
 				}
+
 				peerLog.Debug("sending interactive")
+
 				body := message.Body
 				sendID := message.ID.String()
 				_, err = a.providersClient.SendInteractive(ctx, &provider.ProviderSendInteractiveRequest{
@@ -199,9 +202,11 @@ func mapInteractive(m *model.MessageInteractive) *provider.ProviderInteractive {
 		for _, r := range m.Kind.Markup.Rows {
 			rows = append(rows, &provider.ProviderKeyboardRow{Buttons: mapButtons(r.Buttons)})
 		}
+
 		out.Kind = &provider.ProviderInteractive_Markup{
 			Markup: &provider.ProviderKeyboardMarkup{Rows: rows},
 		}
+
 		return out
 	}
 
@@ -213,6 +218,7 @@ func mapInteractive(m *model.MessageInteractive) *provider.ProviderInteractive {
 				Buttons: mapButtons(s.Buttons),
 			})
 		}
+
 		out.Kind = &provider.ProviderInteractive_ListReply{
 			ListReply: &provider.ProviderKeyboardListReply{
 				MainButtonTitle: m.Kind.ListReply.Title,
@@ -234,6 +240,7 @@ func mapButtons(buttons []*model.KeyboardButton) []*provider.ProviderKeyboardBut
 			if b.URL != nil {
 				url = *b.URL
 			}
+
 			pb.Kind = &provider.ProviderKeyboardButton_Url{
 				Url: &provider.ProviderKeyboardButtonURL{Url: url},
 			}
@@ -242,6 +249,7 @@ func mapButtons(buttons []*model.KeyboardButton) []*provider.ProviderKeyboardBut
 			if b.Data != nil {
 				data = *b.Data
 			}
+
 			pb.Kind = &provider.ProviderKeyboardButton_Callback{
 				Callback: &provider.ProviderKeyboardButtonCallback{Data: data},
 			}
@@ -250,12 +258,15 @@ func mapButtons(buttons []*model.KeyboardButton) []*provider.ProviderKeyboardBut
 			if b.Action != nil {
 				action = *b.Action
 			}
+
 			pb.Kind = &provider.ProviderKeyboardButton_Request{
 				Request: &provider.ProviderKeyboardButtonRequest{Action: action},
 			}
 		}
+
 		out = append(out, pb)
 	}
+
 	return out
 }
 

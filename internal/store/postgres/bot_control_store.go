@@ -262,7 +262,6 @@ func (s *botControlStore) GetStack(ctx context.Context, threadID uuid.UUID) ([]*
 	return entries, nil
 }
 
-
 func mapBotControlStackEntry(r *botControlStackRecord) *model.BotControlStackEntry {
 	return &model.BotControlStackEntry{
 		ID:       r.ID,
