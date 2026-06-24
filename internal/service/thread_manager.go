@@ -44,6 +44,7 @@ type (
 
 	ContactInfoProvider interface {
 		IsBot(ctx context.Context, contactID uuid.UUID, domainID int) (bool, error)
+		GetSub(ctx context.Context, contactID uuid.UUID, domainID int) (*int64, error)
 	}
 
 	ThreadEvent interface {
@@ -300,7 +301,7 @@ func (t *ThreadManagementService) AddMember(ctx context.Context, req *dto.AddMem
 			newPos := positionAfterPush(prev)
 
 			if prev != nil && prev.MemberID != nil {
-				if err = t.publishBotControlReleased(ctx, uow, newMember.ThreadID, *prev.MemberID, prev.Position, domainID, &newMember.ID, model.BotControlReasonTransfer); err != nil {
+				if err = t.publishBotControlReleased(ctx, uow, newMember.ThreadID, *prev.MemberID, prev.ContactID, prev.Position, domainID, &newMember.ID, model.BotControlReasonTransfer); err != nil {
 					return err
 				}
 			}
@@ -436,7 +437,7 @@ func (t *ThreadManagementService) Transfer(ctx context.Context, req *dto.Transfe
 			newPos := positionAfterPush(prev)
 
 			if prev != nil && prev.MemberID != nil {
-				if err = t.publishBotControlReleased(ctx, uow, newMember.ThreadID, *prev.MemberID, prev.Position, initiator.DomainID, &newMember.ID, model.BotControlReasonTransfer); err != nil {
+				if err = t.publishBotControlReleased(ctx, uow, newMember.ThreadID, *prev.MemberID, prev.ContactID, prev.Position, initiator.DomainID, &newMember.ID, model.BotControlReasonTransfer); err != nil {
 					return err
 				}
 			}
@@ -689,7 +690,7 @@ func (t *ThreadManagementService) RemoveMember(ctx context.Context, req *dto.Rem
 				nextMemberID = newTop.MemberID
 			}
 
-			if err = t.publishBotControlReleased(ctx, uow, target.ThreadID, target.ID, 0, domainID, nextMemberID, model.BotControlReasonRemoved); err != nil {
+			if err = t.publishBotControlReleased(ctx, uow, target.ThreadID, target.ID, target.ContactID, 0, domainID, nextMemberID, model.BotControlReasonRemoved); err != nil {
 				return err
 			}
 
@@ -974,7 +975,7 @@ func (t *ThreadManagementService) CompleteBotControl(ctx context.Context, req *d
 			nextMemberID = newTop.MemberID
 		}
 
-		if err = t.publishBotControlReleased(ctx, uow, req.ThreadID, req.MemberID, completedPosition, req.DomainID, nextMemberID, model.BotControlReasonCompleted); err != nil {
+		if err = t.publishBotControlReleased(ctx, uow, req.ThreadID, req.MemberID, stack[len(stack)-1].ContactID, completedPosition, req.DomainID, nextMemberID, model.BotControlReasonCompleted); err != nil {
 			return err
 		}
 
@@ -1310,11 +1311,20 @@ func (t *ThreadManagementService) publishBotControlGranted(ctx context.Context, 
 	var (
 		prevMemberID *uuid.UUID
 		prevPosition *int
+		schemeID     *int64
 	)
 
 	if prev != nil {
 		prevMemberID = prev.MemberID
 		prevPosition = &prev.Position
+	}
+
+	if t.contactInfo != nil && dialog.ContactID != uuid.Nil {
+		if id, err := t.contactInfo.GetSub(ctx, dialog.ContactID, dialog.DomainID); err != nil {
+			t.log().WarnContext(ctx, "failed to get sub for bot control granted, skipping", "contact_id", dialog.ContactID, "err", err)
+		} else {
+			schemeID = id
+		}
 	}
 
 	e := &event.BotControlGranted{
@@ -1328,6 +1338,7 @@ func (t *ThreadManagementService) publishBotControlGranted(ctx context.Context, 
 		IsResume:         isResume,
 		PreviousPosition: prevPosition,
 		PreviousMemberID: prevMemberID,
+		Sub:              schemeID,
 		OccurredAt:       time.Now().UTC(),
 	}
 
@@ -1360,9 +1371,18 @@ func (t *ThreadManagementService) publishBotControlGranted(ctx context.Context, 
 }
 
 // publishBotControlReleased publishes a BotControlReleased event to the outbox.
-func (t *ThreadManagementService) publishBotControlReleased(ctx context.Context, uow store.UnitOfWork, threadID, memberID uuid.UUID, position, domainID int, nextMemberID *uuid.UUID, reason model.BotControlReason) error {
+func (t *ThreadManagementService) publishBotControlReleased(ctx context.Context, uow store.UnitOfWork, threadID, memberID, contactID uuid.UUID, position, domainID int, nextMemberID *uuid.UUID, reason model.BotControlReason) error {
 	if memberID == uuid.Nil {
 		return nil
+	}
+
+	var sub *int64
+	if t.contactInfo != nil && contactID != uuid.Nil {
+		if id, err := t.contactInfo.GetSub(ctx, contactID, domainID); err != nil {
+			t.log().WarnContext(ctx, "failed to get sub for bot control released, skipping", "contact_id", contactID, "err", err)
+		} else {
+			sub = id
+		}
 	}
 
 	e := &event.BotControlReleased{
@@ -1372,6 +1392,7 @@ func (t *ThreadManagementService) publishBotControlReleased(ctx context.Context,
 		Position:     position,
 		Reason:       string(reason),
 		NextMemberID: nextMemberID,
+		Sub:          sub,
 		OccurredAt:   time.Now().UTC(),
 	}
 

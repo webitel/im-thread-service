@@ -21,6 +21,7 @@ type BotControlGranted struct {
 	IsResume         bool       `json:"is_resume"`
 	PreviousPosition *int       `json:"previous_position,omitempty"`
 	PreviousMemberID *uuid.UUID `json:"previous_member_id,omitempty"`
+	Sub              *int64     `json:"sub,omitempty"`
 	OccurredAt       time.Time  `json:"occurred_at"`
 }
 
