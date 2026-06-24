@@ -286,6 +286,7 @@ func (t *ThreadManagementService) AddMember(ctx context.Context, req *dto.AddMem
 					"member_id", newMember.ID,
 					"err", pushErr,
 				)
+
 				return errors.Internal("failed to push bot control", errors.WithCause(pushErr))
 			}
 
@@ -422,6 +423,7 @@ func (t *ThreadManagementService) Transfer(ctx context.Context, req *dto.Transfe
 					"member_id", newMember.ID,
 					"err", pushErr,
 				)
+
 				return errors.Internal("failed to push bot control", errors.WithCause(pushErr))
 			}
 
@@ -1191,6 +1193,7 @@ func (t *ThreadManagementService) initializeDirectThreadDialogs(ctx context.Cont
 				"member_id", targetCreatedThreadDialog.ID,
 				"err", pushErr,
 			)
+
 			return nil, errors.Internal("failed to init bot control", errors.WithCause(pushErr))
 		}
 
@@ -1343,6 +1346,7 @@ func (t *ThreadManagementService) publishBotControlGranted(ctx context.Context, 
 			"member_id", e.MemberID,
 			"err", err,
 		)
+
 		return err
 	}
 
@@ -1386,6 +1390,7 @@ func (t *ThreadManagementService) publishBotControlReleased(ctx context.Context,
 			"member_id", e.MemberID,
 			"err", err,
 		)
+
 		return err
 	}
 

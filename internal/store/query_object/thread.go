@@ -390,7 +390,7 @@ func (q *threadQueryObject) linkLastMessageLateral() {
 
 	q.join |= threadLinkLastMessageLateral
 
-	q.builder = q.builder.CrossJoin(`
+	q.builder = q.builder.LeftJoin(`
 		lateral (
 			select
 				m.id,
@@ -457,7 +457,7 @@ func (q *threadQueryObject) linkLastMessageLateral() {
 			where m.thread_id = t.id
 			order by m.id desc
 			limit 1
-		) as msg
+		) as msg on true
 	`)
 }
 
