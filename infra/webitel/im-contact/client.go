@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strconv"
 	"time"
 
 	"github.com/google/uuid"
@@ -22,10 +23,17 @@ import (
 const (
 	isBotCacheTTL  = 5 * time.Minute
 	isBotCacheSize = 2048
+	subCacheTTL    = 5 * time.Minute
+	subCacheSize   = 2048
 )
 
 type isBotCacheEntry struct {
 	isBot     bool
+	expiresAt time.Time
+}
+
+type subCacheEntry struct {
+	sub       *int64
 	expiresAt time.Time
 }
 
@@ -36,6 +44,7 @@ type Client struct {
 	privacyService *rpc.Client[contactv1.ContactPrivacyClient]
 	contactService *rpc.Client[contactv1.ContactsClient]
 	isBotCache     *lru.Cache
+	subCache       *lru.Cache
 }
 
 func New(logger *slog.Logger, discovery discovery.DiscoveryProvider, tlsConf *infratls.Config) (*Client, error) {
@@ -49,16 +58,22 @@ func New(logger *slog.Logger, discovery discovery.DiscoveryProvider, tlsConf *in
 		return nil, fmt.Errorf("[im-contact-client] initialization failed: %w", err)
 	}
 
-	cache, err := lru.New(isBotCacheSize)
+	isBotCache, err := lru.New(isBotCacheSize)
 	if err != nil {
 		return nil, fmt.Errorf("[im-contact-client] failed to create is_bot cache: %w", err)
+	}
+
+	subCache, err := lru.New(subCacheSize)
+	if err != nil {
+		return nil, fmt.Errorf("[im-contact-client] failed to create sub cache: %w", err)
 	}
 
 	return &Client{
 		logger:         logger,
 		privacyService: privacyClient,
 		contactService: contactClient,
-		isBotCache:     cache,
+		isBotCache:     isBotCache,
+		subCache:       subCache,
 	}, nil
 }
 
@@ -151,6 +166,41 @@ func (c *Client) IsBot(ctx context.Context, contactID uuid.UUID, domainID int) (
 	c.isBotCache.Add(key, isBotCacheEntry{isBot: isBot, expiresAt: time.Now().Add(isBotCacheTTL)})
 
 	return isBot, nil
+}
+
+func (c *Client) GetSub(ctx context.Context, contactID uuid.UUID, domainID int) (*int64, error) {
+	key := contactID.String()
+
+	if v, ok := c.subCache.Get(key); ok {
+		if entry, ok := v.(subCacheEntry); time.Now().Before(entry.expiresAt) && ok {
+			return entry.sub, nil
+		}
+	}
+
+	resp, err := c.SearchContact(ctx, &contactv1.SearchContactRequest{
+		Ids:      []string{key},
+		DomainId: int32(domainID),
+		Size:     1,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	var sub *int64
+
+	items := resp.GetContacts()
+	if len(items) > 0 && items[0].GetSubject() != "" {
+		id, err := strconv.ParseInt(items[0].GetSubject(), 10, 64)
+		if err != nil {
+			c.logger.Warn("contact subject is not a valid sub id", slog.String("contact_id", key), slog.String("subject", items[0].GetSubject()))
+		} else {
+			sub = &id
+		}
+	}
+
+	c.subCache.Add(key, subCacheEntry{sub: sub, expiresAt: time.Now().Add(subCacheTTL)})
+
+	return sub, nil
 }
 
 func (c *Client) Close() error {

@@ -19,10 +19,14 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	FacebookService_CreateFacebookGate_FullMethodName = "/webitel.im.provider.v1.FacebookService/CreateFacebookGate"
-	FacebookService_GetFacebookGate_FullMethodName    = "/webitel.im.provider.v1.FacebookService/GetFacebookGate"
-	FacebookService_UpdateFacebookGate_FullMethodName = "/webitel.im.provider.v1.FacebookService/UpdateFacebookGate"
-	FacebookService_DeleteFacebookGate_FullMethodName = "/webitel.im.provider.v1.FacebookService/DeleteFacebookGate"
+	FacebookService_CreateFacebookGate_FullMethodName   = "/webitel.im.provider.v1.FacebookService/CreateFacebookGate"
+	FacebookService_GetFacebookGate_FullMethodName      = "/webitel.im.provider.v1.FacebookService/GetFacebookGate"
+	FacebookService_UpdateFacebookGate_FullMethodName   = "/webitel.im.provider.v1.FacebookService/UpdateFacebookGate"
+	FacebookService_DeleteFacebookGate_FullMethodName   = "/webitel.im.provider.v1.FacebookService/DeleteFacebookGate"
+	FacebookService_SetPersistentMenu_FullMethodName    = "/webitel.im.provider.v1.FacebookService/SetPersistentMenu"
+	FacebookService_DeletePersistentMenu_FullMethodName = "/webitel.im.provider.v1.FacebookService/DeletePersistentMenu"
+	FacebookService_SetGetStarted_FullMethodName        = "/webitel.im.provider.v1.FacebookService/SetGetStarted"
+	FacebookService_DeleteGetStarted_FullMethodName     = "/webitel.im.provider.v1.FacebookService/DeleteGetStarted"
 )
 
 // FacebookServiceClient is the client API for FacebookService service.
@@ -39,6 +43,14 @@ type FacebookServiceClient interface {
 	UpdateFacebookGate(ctx context.Context, in *ProviderUpdateFacebookGateRequest, opts ...grpc.CallOption) (*ProviderUpdateFacebookGateResponse, error)
 	// / DeleteFacebookGate deactivates the gateway.
 	DeleteFacebookGate(ctx context.Context, in *ProviderDeleteFacebookGateRequest, opts ...grpc.CallOption) (*ProviderDeleteFacebookGateResponse, error)
+	// / SetPersistentMenu sets the Messenger persistent menu for a Facebook gate.
+	SetPersistentMenu(ctx context.Context, in *ProviderSetPersistentMenuRequest, opts ...grpc.CallOption) (*ProviderSetPersistentMenuResponse, error)
+	// / DeletePersistentMenu removes the Messenger persistent menu for a Facebook gate.
+	DeletePersistentMenu(ctx context.Context, in *ProviderDeletePersistentMenuRequest, opts ...grpc.CallOption) (*ProviderDeletePersistentMenuResponse, error)
+	// / SetGetStarted sets the Get Started button payload for a Facebook gate.
+	SetGetStarted(ctx context.Context, in *ProviderSetGetStartedRequest, opts ...grpc.CallOption) (*ProviderSetGetStartedResponse, error)
+	// / DeleteGetStarted removes the Get Started button for a Facebook gate.
+	DeleteGetStarted(ctx context.Context, in *ProviderDeleteGetStartedRequest, opts ...grpc.CallOption) (*ProviderDeleteGetStartedResponse, error)
 }
 
 type facebookServiceClient struct {
@@ -89,6 +101,46 @@ func (c *facebookServiceClient) DeleteFacebookGate(ctx context.Context, in *Prov
 	return out, nil
 }
 
+func (c *facebookServiceClient) SetPersistentMenu(ctx context.Context, in *ProviderSetPersistentMenuRequest, opts ...grpc.CallOption) (*ProviderSetPersistentMenuResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ProviderSetPersistentMenuResponse)
+	err := c.cc.Invoke(ctx, FacebookService_SetPersistentMenu_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *facebookServiceClient) DeletePersistentMenu(ctx context.Context, in *ProviderDeletePersistentMenuRequest, opts ...grpc.CallOption) (*ProviderDeletePersistentMenuResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ProviderDeletePersistentMenuResponse)
+	err := c.cc.Invoke(ctx, FacebookService_DeletePersistentMenu_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *facebookServiceClient) SetGetStarted(ctx context.Context, in *ProviderSetGetStartedRequest, opts ...grpc.CallOption) (*ProviderSetGetStartedResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ProviderSetGetStartedResponse)
+	err := c.cc.Invoke(ctx, FacebookService_SetGetStarted_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *facebookServiceClient) DeleteGetStarted(ctx context.Context, in *ProviderDeleteGetStartedRequest, opts ...grpc.CallOption) (*ProviderDeleteGetStartedResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ProviderDeleteGetStartedResponse)
+	err := c.cc.Invoke(ctx, FacebookService_DeleteGetStarted_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // FacebookServiceServer is the server API for FacebookService service.
 // All implementations must embed UnimplementedFacebookServiceServer
 // for forward compatibility.
@@ -103,6 +155,14 @@ type FacebookServiceServer interface {
 	UpdateFacebookGate(context.Context, *ProviderUpdateFacebookGateRequest) (*ProviderUpdateFacebookGateResponse, error)
 	// / DeleteFacebookGate deactivates the gateway.
 	DeleteFacebookGate(context.Context, *ProviderDeleteFacebookGateRequest) (*ProviderDeleteFacebookGateResponse, error)
+	// / SetPersistentMenu sets the Messenger persistent menu for a Facebook gate.
+	SetPersistentMenu(context.Context, *ProviderSetPersistentMenuRequest) (*ProviderSetPersistentMenuResponse, error)
+	// / DeletePersistentMenu removes the Messenger persistent menu for a Facebook gate.
+	DeletePersistentMenu(context.Context, *ProviderDeletePersistentMenuRequest) (*ProviderDeletePersistentMenuResponse, error)
+	// / SetGetStarted sets the Get Started button payload for a Facebook gate.
+	SetGetStarted(context.Context, *ProviderSetGetStartedRequest) (*ProviderSetGetStartedResponse, error)
+	// / DeleteGetStarted removes the Get Started button for a Facebook gate.
+	DeleteGetStarted(context.Context, *ProviderDeleteGetStartedRequest) (*ProviderDeleteGetStartedResponse, error)
 	mustEmbedUnimplementedFacebookServiceServer()
 }
 
@@ -124,6 +184,18 @@ func (UnimplementedFacebookServiceServer) UpdateFacebookGate(context.Context, *P
 }
 func (UnimplementedFacebookServiceServer) DeleteFacebookGate(context.Context, *ProviderDeleteFacebookGateRequest) (*ProviderDeleteFacebookGateResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method DeleteFacebookGate not implemented")
+}
+func (UnimplementedFacebookServiceServer) SetPersistentMenu(context.Context, *ProviderSetPersistentMenuRequest) (*ProviderSetPersistentMenuResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SetPersistentMenu not implemented")
+}
+func (UnimplementedFacebookServiceServer) DeletePersistentMenu(context.Context, *ProviderDeletePersistentMenuRequest) (*ProviderDeletePersistentMenuResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method DeletePersistentMenu not implemented")
+}
+func (UnimplementedFacebookServiceServer) SetGetStarted(context.Context, *ProviderSetGetStartedRequest) (*ProviderSetGetStartedResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SetGetStarted not implemented")
+}
+func (UnimplementedFacebookServiceServer) DeleteGetStarted(context.Context, *ProviderDeleteGetStartedRequest) (*ProviderDeleteGetStartedResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method DeleteGetStarted not implemented")
 }
 func (UnimplementedFacebookServiceServer) mustEmbedUnimplementedFacebookServiceServer() {}
 func (UnimplementedFacebookServiceServer) testEmbeddedByValue()                         {}
@@ -218,6 +290,78 @@ func _FacebookService_DeleteFacebookGate_Handler(srv interface{}, ctx context.Co
 	return interceptor(ctx, in, info, handler)
 }
 
+func _FacebookService_SetPersistentMenu_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ProviderSetPersistentMenuRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(FacebookServiceServer).SetPersistentMenu(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: FacebookService_SetPersistentMenu_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(FacebookServiceServer).SetPersistentMenu(ctx, req.(*ProviderSetPersistentMenuRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _FacebookService_DeletePersistentMenu_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ProviderDeletePersistentMenuRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(FacebookServiceServer).DeletePersistentMenu(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: FacebookService_DeletePersistentMenu_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(FacebookServiceServer).DeletePersistentMenu(ctx, req.(*ProviderDeletePersistentMenuRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _FacebookService_SetGetStarted_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ProviderSetGetStartedRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(FacebookServiceServer).SetGetStarted(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: FacebookService_SetGetStarted_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(FacebookServiceServer).SetGetStarted(ctx, req.(*ProviderSetGetStartedRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _FacebookService_DeleteGetStarted_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ProviderDeleteGetStartedRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(FacebookServiceServer).DeleteGetStarted(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: FacebookService_DeleteGetStarted_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(FacebookServiceServer).DeleteGetStarted(ctx, req.(*ProviderDeleteGetStartedRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // FacebookService_ServiceDesc is the grpc.ServiceDesc for FacebookService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -240,6 +384,22 @@ var FacebookService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "DeleteFacebookGate",
 			Handler:    _FacebookService_DeleteFacebookGate_Handler,
+		},
+		{
+			MethodName: "SetPersistentMenu",
+			Handler:    _FacebookService_SetPersistentMenu_Handler,
+		},
+		{
+			MethodName: "DeletePersistentMenu",
+			Handler:    _FacebookService_DeletePersistentMenu_Handler,
+		},
+		{
+			MethodName: "SetGetStarted",
+			Handler:    _FacebookService_SetGetStarted_Handler,
+		},
+		{
+			MethodName: "DeleteGetStarted",
+			Handler:    _FacebookService_DeleteGetStarted_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

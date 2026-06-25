@@ -16,11 +16,9 @@ import (
 
 // fakeBotControlStore captures Push/Pop calls and returns configurable results.
 type fakeBotControlStore struct {
-	prevEntry    *model.BotControlStackEntry   // Prev field of BotControlPushResult
-	pushEpoch    int64                         // ControlEpoch field of BotControlPushResult
-	newTopEntry  *model.BotControlStackEntry   // returned by Pop (new top after removal)
-	stackResult  []*model.BotControlStackEntry // returned by GetStack
-	controlEpoch int64                         // returned by GetControlEpoch
+	prevEntry   *model.BotControlStackEntry   // Prev field of BotControlPushResult
+	newTopEntry *model.BotControlStackEntry   // returned by Pop (new top after removal)
+	stackResult []*model.BotControlStackEntry // returned by GetStack
 
 	lastPushTransition model.BotControlTransition
 	lastPopMemberID    uuid.UUID
@@ -30,7 +28,7 @@ type fakeBotControlStore struct {
 func (f *fakeBotControlStore) Push(_ context.Context, transition model.BotControlTransition) (*model.BotControlPushResult, error) {
 	f.lastPushTransition = transition
 
-	return &model.BotControlPushResult{Prev: f.prevEntry, ControlEpoch: f.pushEpoch}, nil
+	return &model.BotControlPushResult{Prev: f.prevEntry}, nil
 }
 
 func (f *fakeBotControlStore) Pop(_ context.Context, _, memberID uuid.UUID, reason model.BotControlReason, _ *uuid.UUID) (*model.BotControlStackEntry, error) {
@@ -42,10 +40,6 @@ func (f *fakeBotControlStore) Pop(_ context.Context, _, memberID uuid.UUID, reas
 
 func (f *fakeBotControlStore) GetStack(_ context.Context, _ uuid.UUID) ([]*model.BotControlStackEntry, error) {
 	return f.stackResult, nil
-}
-
-func (f *fakeBotControlStore) GetControlEpoch(_ context.Context, _ uuid.UUID) (int64, error) {
-	return f.controlEpoch, nil
 }
 
 var _ store.BotControlStore = (*fakeBotControlStore)(nil)
@@ -326,7 +320,6 @@ func TestCompleteBotControl_PopsStackAndPublishesGrantedWithIsResume(t *testing.
 		stackResult: []*model.BotControlStackEntry{
 			{MemberID: &botMemberID, Position: 1},
 		},
-		// controlEpoch 0 matches ControlEpoch default in request below.
 	}
 	outboxStore := &fakeOutboxStore{}
 

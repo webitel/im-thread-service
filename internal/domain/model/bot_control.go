@@ -30,16 +30,10 @@ type BotControlStackEntry struct {
 	ContactID uuid.UUID `db:"contact_id"`
 	DomainID  int       `db:"domain_id"`
 	AutoLeave bool      `db:"auto_leave"`
-
-	// ControlEpoch is the epoch assigned when this bot was granted control.
-	// Populated by Pop; see BotControlPushResult for Push.
-	ControlEpoch int64 `db:"control_epoch"`
 }
 
 // BotControlPushResult is returned by Push.
 // Prev is the stack entry that was top before the push (nil if stack was empty).
-// ControlEpoch is the epoch assigned to the new grant — must be included in bot.control.granted.v1.
 type BotControlPushResult struct {
-	Prev         *BotControlStackEntry
-	ControlEpoch int64
+	Prev *BotControlStackEntry
 }

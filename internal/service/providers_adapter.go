@@ -121,7 +121,24 @@ func (a *baseRPCProvidersAdapter) SendMessage(ctx context.Context, message *mode
 			case model.MessageTypeContact:
 				peerLog.Debug("message type contact: not implemented, skipping")
 			case model.MessageTypeInteractive:
-				peerLog.Debug("message type interactive: not implemented, skipping")
+				if message.Interactive == nil {
+					peerLog.Warn("interactive message has nil interactive payload, skipping")
+
+					return
+				}
+
+				peerLog.Debug("sending interactive")
+
+				body := message.Body
+				sendID := message.ID.String()
+				_, err = a.providersClient.SendInteractive(ctx, &provider.ProviderSendInteractiveRequest{
+					GateId:         externalPeer.Via,
+					ExternalUserId: userID,
+					DomainId:       message.DomainID,
+					Body:           &body,
+					SendId:         &sendID,
+					Interactive:    mapInteractive(message.Interactive),
+				})
 			case model.MessageTypeLocation:
 				peerLog.Debug("message type location: not implemented, skipping")
 			case model.MessageTypeSystem:
@@ -165,6 +182,82 @@ func (a *baseRPCProvidersAdapter) SendMessage(ctx context.Context, message *mode
 	)
 
 	return nil
+}
+
+func mapInteractive(m *model.MessageInteractive) *provider.ProviderInteractive {
+	out := &provider.ProviderInteractive{SingleUse: m.SingleUse}
+
+	if m.Kind.Markup != nil {
+		rows := make([]*provider.ProviderKeyboardRow, 0, len(m.Kind.Markup.Rows))
+		for _, r := range m.Kind.Markup.Rows {
+			rows = append(rows, &provider.ProviderKeyboardRow{Buttons: mapButtons(r.Buttons)})
+		}
+
+		out.Kind = &provider.ProviderInteractive_Markup{
+			Markup: &provider.ProviderKeyboardMarkup{Rows: rows},
+		}
+
+		return out
+	}
+
+	if m.Kind.ListReply != nil {
+		sections := make([]*provider.ProviderKeyboardRowWithSection, 0, len(m.Kind.ListReply.Sections))
+		for _, s := range m.Kind.ListReply.Sections {
+			sections = append(sections, &provider.ProviderKeyboardRowWithSection{
+				Section: s.Section,
+				Buttons: mapButtons(s.Buttons),
+			})
+		}
+
+		out.Kind = &provider.ProviderInteractive_ListReply{
+			ListReply: &provider.ProviderKeyboardListReply{
+				MainButtonTitle: m.Kind.ListReply.Title,
+				Sections:        sections,
+			},
+		}
+	}
+
+	return out
+}
+
+func mapButtons(buttons []*model.KeyboardButton) []*provider.ProviderKeyboardButton {
+	out := make([]*provider.ProviderKeyboardButton, 0, len(buttons))
+	for _, b := range buttons {
+		pb := &provider.ProviderKeyboardButton{Id: b.ID, Label: b.Label}
+		switch b.Type {
+		case model.ActionTypeURL:
+			url := ""
+			if b.URL != nil {
+				url = *b.URL
+			}
+
+			pb.Kind = &provider.ProviderKeyboardButton_Url{
+				Url: &provider.ProviderKeyboardButtonURL{Url: url},
+			}
+		case model.ActionTypeCallback:
+			data := ""
+			if b.Data != nil {
+				data = *b.Data
+			}
+
+			pb.Kind = &provider.ProviderKeyboardButton_Callback{
+				Callback: &provider.ProviderKeyboardButtonCallback{Data: data},
+			}
+		case model.ActionTypeRequest:
+			action := ""
+			if b.Action != nil {
+				action = *b.Action
+			}
+
+			pb.Kind = &provider.ProviderKeyboardButton_Request{
+				Request: &provider.ProviderKeyboardButtonRequest{Action: action},
+			}
+		}
+
+		out = append(out, pb)
+	}
+
+	return out
 }
 
 func extratcFiles[T AttachmentProcessor](files []T) []*provider.ProviderFile {

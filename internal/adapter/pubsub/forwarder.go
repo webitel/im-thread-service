@@ -102,7 +102,22 @@ func RegisterOutboxForwarder(
 				"msg_uuid", msg.UUID,
 				"correlation_id", middleware.MessageCorrelationID(msg))
 
-			return rabbitPub.Publish(topic, msg)
+			if err := rabbitPub.Publish(topic, msg); err != nil {
+				slog.Error("failed to publish outbox event to rabbitmq",
+					"topic", topic,
+					"msg_uuid", msg.UUID,
+					"err", err,
+				)
+
+				return err
+			}
+
+			slog.Debug("outbox event published to rabbitmq",
+				"topic", topic,
+				"msg_uuid", msg.UUID,
+			)
+
+			return nil
 		},
 	)
 

@@ -91,6 +91,23 @@ func (client *Client) SendImage(ctx context.Context, in *provider.ProviderSendIm
 	return response, err
 }
 
+func (client *Client) SendInteractive(ctx context.Context, in *provider.ProviderSendInteractiveRequest) (*provider.ProviderSendMessageResponse, error) {
+	var response *provider.ProviderSendMessageResponse
+
+	err := client.providerMessageServiceClient.Execute(ctx, func(pmsc provider.ProviderMessageServiceClient) error {
+		r, err := pmsc.SendInteractive(ctx, in)
+		if err != nil {
+			return err
+		}
+
+		response = r
+
+		return nil
+	})
+
+	return response, err
+}
+
 func (client *Client) Close() error {
 	if client.providerMessageServiceClient != nil {
 		return client.providerMessageServiceClient.Close()

@@ -82,7 +82,7 @@ type ThreadVariablesStore interface {
 
 type BotControlStore interface {
 	// Push adds a new entry onto the stack and updates thread.bot_controller_id.
-	// Returns the previous top entry and the new control_epoch assigned to this grant.
+	// Returns the previous top entry.
 	Push(ctx context.Context, transition model.BotControlTransition) (*model.BotControlPushResult, error)
 
 	// Pop removes the stack entry for the given memberID (thread_dialog.id).
@@ -93,8 +93,4 @@ type BotControlStore interface {
 
 	// GetStack returns all entries for a thread ordered by position asc.
 	GetStack(ctx context.Context, threadID uuid.UUID) ([]*model.BotControlStackEntry, error)
-
-	// GetControlEpoch returns the current control_epoch for the thread.
-	// Used in CompleteBotControl to reject stale or duplicate requests.
-	GetControlEpoch(ctx context.Context, threadID uuid.UUID) (int64, error)
 }

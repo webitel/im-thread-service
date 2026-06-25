@@ -19,9 +19,10 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	ProviderMessageService_SendText_FullMethodName     = "/webitel.im.provider.v1.ProviderMessageService/SendText"
-	ProviderMessageService_SendDocument_FullMethodName = "/webitel.im.provider.v1.ProviderMessageService/SendDocument"
-	ProviderMessageService_SendImage_FullMethodName    = "/webitel.im.provider.v1.ProviderMessageService/SendImage"
+	ProviderMessageService_SendText_FullMethodName        = "/webitel.im.provider.v1.ProviderMessageService/SendText"
+	ProviderMessageService_SendDocument_FullMethodName    = "/webitel.im.provider.v1.ProviderMessageService/SendDocument"
+	ProviderMessageService_SendImage_FullMethodName       = "/webitel.im.provider.v1.ProviderMessageService/SendImage"
+	ProviderMessageService_SendInteractive_FullMethodName = "/webitel.im.provider.v1.ProviderMessageService/SendInteractive"
 )
 
 // ProviderMessageServiceClient is the client API for ProviderMessageService service.
@@ -36,6 +37,8 @@ type ProviderMessageServiceClient interface {
 	SendDocument(ctx context.Context, in *ProviderSendDocumentRequest, opts ...grpc.CallOption) (*ProviderSendMessageResponse, error)
 	// SendImage delivers images to the external chat partner.
 	SendImage(ctx context.Context, in *ProviderSendImageRequest, opts ...grpc.CallOption) (*ProviderSendMessageResponse, error)
+	// SendInteractive delivers a message with interactive UI elements (buttons, menus).
+	SendInteractive(ctx context.Context, in *ProviderSendInteractiveRequest, opts ...grpc.CallOption) (*ProviderSendMessageResponse, error)
 }
 
 type providerMessageServiceClient struct {
@@ -76,6 +79,16 @@ func (c *providerMessageServiceClient) SendImage(ctx context.Context, in *Provid
 	return out, nil
 }
 
+func (c *providerMessageServiceClient) SendInteractive(ctx context.Context, in *ProviderSendInteractiveRequest, opts ...grpc.CallOption) (*ProviderSendMessageResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ProviderSendMessageResponse)
+	err := c.cc.Invoke(ctx, ProviderMessageService_SendInteractive_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // ProviderMessageServiceServer is the server API for ProviderMessageService service.
 // All implementations must embed UnimplementedProviderMessageServiceServer
 // for forward compatibility.
@@ -88,6 +101,8 @@ type ProviderMessageServiceServer interface {
 	SendDocument(context.Context, *ProviderSendDocumentRequest) (*ProviderSendMessageResponse, error)
 	// SendImage delivers images to the external chat partner.
 	SendImage(context.Context, *ProviderSendImageRequest) (*ProviderSendMessageResponse, error)
+	// SendInteractive delivers a message with interactive UI elements (buttons, menus).
+	SendInteractive(context.Context, *ProviderSendInteractiveRequest) (*ProviderSendMessageResponse, error)
 	mustEmbedUnimplementedProviderMessageServiceServer()
 }
 
@@ -106,6 +121,9 @@ func (UnimplementedProviderMessageServiceServer) SendDocument(context.Context, *
 }
 func (UnimplementedProviderMessageServiceServer) SendImage(context.Context, *ProviderSendImageRequest) (*ProviderSendMessageResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SendImage not implemented")
+}
+func (UnimplementedProviderMessageServiceServer) SendInteractive(context.Context, *ProviderSendInteractiveRequest) (*ProviderSendMessageResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SendInteractive not implemented")
 }
 func (UnimplementedProviderMessageServiceServer) mustEmbedUnimplementedProviderMessageServiceServer() {
 }
@@ -183,6 +201,24 @@ func _ProviderMessageService_SendImage_Handler(srv interface{}, ctx context.Cont
 	return interceptor(ctx, in, info, handler)
 }
 
+func _ProviderMessageService_SendInteractive_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ProviderSendInteractiveRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ProviderMessageServiceServer).SendInteractive(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ProviderMessageService_SendInteractive_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ProviderMessageServiceServer).SendInteractive(ctx, req.(*ProviderSendInteractiveRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // ProviderMessageService_ServiceDesc is the grpc.ServiceDesc for ProviderMessageService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -201,6 +237,10 @@ var ProviderMessageService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "SendImage",
 			Handler:    _ProviderMessageService_SendImage_Handler,
+		},
+		{
+			MethodName: "SendInteractive",
+			Handler:    _ProviderMessageService_SendInteractive_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
