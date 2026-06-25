@@ -205,6 +205,7 @@ type KeyboardMarkup struct {
 }
 
 type InteractivePayload struct {
+	SingleUse bool               `json:"single_use"`
 	Markup    *KeyboardMarkup    `json:"markup,omitempty"`
 	ListReply *KeyboardListReply `json:"list_reply,omitempty"`
 }

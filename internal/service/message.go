@@ -575,34 +575,3 @@ func (s *MessageService) mapDocumentInputs(dtoDocs []*dto.Document) []model.Docu
 
 	return inputs
 }
-
-func enrichAttachmentsLinks(ctx context.Context, attachments []AttachmentProcessor, fileLinksChan <-chan fetchLinksResult) error {
-	if len(attachments) == 0 {
-		return nil
-	}
-
-	select {
-	case result, ok := <-fileLinksChan:
-		if !ok {
-			return errors.Aborted("accessing closed links chan", errors.WithID("service.message.enrich_attachments_links"))
-		}
-
-		if result.Err != nil {
-			return result.Err
-		}
-
-		for id, url := range result.FileLinks {
-			for i := range attachments {
-				if attachments[i].GetID() == id {
-					attachments[i].SetURL(url)
-
-					break
-				}
-			}
-		}
-	case <-ctx.Done():
-		return errors.Aborted("context canceled", errors.WithID("service.message.enrich_attachments_links"), errors.WithCause(ctx.Err()))
-	}
-
-	return nil
-}
