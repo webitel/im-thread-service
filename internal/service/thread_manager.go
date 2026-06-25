@@ -675,6 +675,7 @@ func (t *ThreadManagementService) RemoveMember(ctx context.Context, req *dto.Rem
 		}
 
 		if target.IsBot {
+
 			var triggeredBy *uuid.UUID
 			if initiator != nil {
 				triggeredBy = &initiator.ID
@@ -958,12 +959,43 @@ func (t *ThreadManagementService) CompleteBotControl(ctx context.Context, req *d
 		}
 
 		// Only the active controller (top of stack) may complete bot control.
-		if len(stack) == 0 || stack[len(stack)-1].MemberID == nil || *stack[len(stack)-1].MemberID != req.MemberID {
+		if len(stack) == 0 {
+			t.log().WarnContext(ctx, "CompleteBotControl rejected: stack is empty — thread has no active bot controller",
+				"thread_id", req.ThreadID, "requested_member_id", req.MemberID)
+
+			return errors.InvalidArgument("bot control stack is empty for this thread",
+				errors.WithID("service.thread_manager.complete_bot_control"))
+		}
+
+		top := stack[len(stack)-1]
+
+		if top.MemberID == nil || *top.MemberID != req.MemberID {
+			t.log().WarnContext(ctx, "CompleteBotControl rejected: member is not the active controller",
+				"thread_id", req.ThreadID,
+				"requested_member_id", req.MemberID,
+				"active_member_id", top.MemberID,
+				"active_position", top.Position,
+				"stack_depth", len(stack),
+			)
+
 			return errors.InvalidArgument("member is not the active bot controller",
 				errors.WithID("service.thread_manager.complete_bot_control"))
 		}
 
-		completedPosition := stack[len(stack)-1].Position
+		thread, threadErr := uow.ThreadStore().Get(ctx, queryobject.NewThreadQueryObject().WithIDFilter(req.ThreadID).WithDomainIDFilter(req.DomainID))
+		if threadErr != nil {
+			return threadErr
+		}
+
+		if thread.OwnerBotID != nil && *thread.OwnerBotID == req.MemberID {
+			t.log().WarnContext(ctx, "CompleteBotControl rejected: cannot complete owner bot",
+				"thread_id", req.ThreadID, "member_id", req.MemberID, "owner_bot_id", thread.OwnerBotID)
+
+			return errors.InvalidArgument("owner bot cannot be completed",
+				errors.WithID("service.thread_manager.complete_bot_control"))
+		}
+
+		completedPosition := top.Position
 
 		newTop, err := uow.BotControl().Pop(ctx, req.ThreadID, req.MemberID, model.BotControlReasonCompleted, nil)
 		if err != nil {
@@ -975,7 +1007,7 @@ func (t *ThreadManagementService) CompleteBotControl(ctx context.Context, req *d
 			nextMemberID = newTop.MemberID
 		}
 
-		if err = t.publishBotControlReleased(ctx, uow, req.ThreadID, req.MemberID, stack[len(stack)-1].ContactID, completedPosition, req.DomainID, nextMemberID, model.BotControlReasonCompleted); err != nil {
+		if err = t.publishBotControlReleased(ctx, uow, req.ThreadID, req.MemberID, top.ContactID, completedPosition, req.DomainID, nextMemberID, model.BotControlReasonCompleted); err != nil {
 			return err
 		}
 

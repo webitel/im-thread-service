@@ -57,6 +57,8 @@ func (s *MessageService) sendMessageToExternalProvider(ctx context.Context, mess
 // Returns false on error to remain non-blocking — the thread will be created without bot control.
 func (s *MessageService) resolveToIsBot(ctx context.Context, toID uuid.UUID, domainID int) bool {
 	if s.contactClient == nil {
+		s.logger.WarnContext(ctx, "resolveToIsBot: contactClient is nil, assuming false", "contact_id", toID)
+
 		return false
 	}
 
@@ -66,6 +68,8 @@ func (s *MessageService) resolveToIsBot(ctx context.Context, toID uuid.UUID, dom
 
 		return false
 	}
+
+	s.logger.DebugContext(ctx, "resolveToIsBot result", "contact_id", toID, "domain_id", domainID, "is_bot", isBot)
 
 	return isBot
 }
