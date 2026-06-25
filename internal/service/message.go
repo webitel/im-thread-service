@@ -171,83 +171,6 @@ func (s *MessageService) SendText(ctx context.Context, in *dto.SendTextRequest) 
 	return &dto.SendTextResponse{ID: msg.ID, To: in.To}, nil
 }
 
-func (s *MessageService) SendImage(ctx context.Context, in *dto.SendImageRequest) (*dto.SendImageResponse, error) {
-	if err := guards.SendImageGuard(in); err != nil {
-		return nil, fmt.Errorf("validation: %w", err)
-	}
-
-	t, err := s.threader.EnsureDirectThread(ctx, &dto.EnsureDirectThreadRequest{
-		From:     &in.From,
-		To:       &in.To,
-		DomainID: int(in.DomainID),
-		SendAs:   in.SendAs,
-		ToIsBot:  func() bool { return s.resolveToIsBot(ctx, in.To.ID, int(in.DomainID)) },
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	attachments := make([]AttachmentProcessor, len(in.Image.Images))
-	for i, img := range in.Image.Images {
-		attachments[i] = img
-	}
-
-	if err := s.mediaProcessor.Process(ctx, in.DomainID, attachments); err != nil {
-		return nil, err
-	}
-
-	fileLinksChan := s.mediaProcessor.FetchFileLinks(ctx, in.DomainID, attachments)
-	if err := enrichAttachmentsLinks(ctx, attachments, fileLinksChan); err != nil {
-		s.logger.ErrorContext(ctx, "enriching attachments links", "err", err)
-	}
-
-	msg := model.NewImageMessage(model.MessageCreate{
-		ThreadID:   t.ID,
-		DomainID:   int32(in.DomainID),
-		From:       in.From,
-		Recipients: t.Members,
-		Body:       in.Image.Body,
-		SendID:     in.SendID,
-		Images:     s.mapImageInputs(in.Image.Images),
-	})
-	msg.BotControllerMemberID = t.BotControllerID
-
-	msg.SendAs = in.SendAs
-	msg.SetMemberFromSlice(t.Members)
-
-	err = s.uow.WithinTransaction(ctx, func(txCtx context.Context, uow store.UnitOfWork) error {
-		saved, err := uow.Messages().SaveMessage(txCtx, msg)
-		if err != nil {
-			return errors.Internal("save message", errors.WithCause(err), errors.WithID("service.message.send_image"))
-		}
-
-		if _, err := uow.Messages().SaveImages(txCtx, saved.ID, msg.Images); err != nil {
-			return errors.Internal("save images", errors.WithCause(err), errors.WithID("service.message.send_image"))
-		}
-
-		msg.ID = saved.ID
-		msg.From = saved.From
-		msg.WithCreatedEvent(ctx, in.SendID)
-
-		if err := s.dispatchMessageEvents(txCtx, uow, msg); err != nil {
-			return errors.Internal("dispatch message events", errors.WithCause(err), errors.WithID("service.message.send_image"))
-		}
-
-		return nil
-	})
-	if err != nil {
-		s.logger.ErrorContext(ctx, "send image failed", "err", err)
-
-		return nil, err
-	}
-
-	if err = s.sendMessageToExternalProvider(ctx, msg); err != nil {
-		s.logger.Error("sending image message to external providers", "error", err)
-	}
-
-	return &dto.SendImageResponse{ID: msg.ID, To: in.To}, nil
-}
-
 func (s *MessageService) SendDocument(ctx context.Context, in *dto.SendDocumentRequest) (*dto.SendDocumentResponse, error) {
 	log := s.logger.With("operation", "send_document")
 
@@ -636,20 +559,6 @@ func (s *MessageService) dispatchEvents(ctx context.Context, uow store.UnitOfWor
 	}
 
 	return nil
-}
-
-func (s *MessageService) mapImageInputs(dtoImages []*dto.Image) []model.ImageInput {
-	inputs := make([]model.ImageInput, 0, len(dtoImages))
-	for _, img := range dtoImages {
-		inputs = append(inputs, model.ImageInput{
-			FileID:   strconv.FormatInt(img.ID, 10),
-			Name:     img.Name,
-			URL:      img.URL,
-			MimeType: img.MimeType,
-		})
-	}
-
-	return inputs
 }
 
 func (s *MessageService) mapDocumentInputs(dtoDocs []*dto.Document) []model.DocumentInput {

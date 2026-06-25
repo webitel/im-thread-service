@@ -108,16 +108,6 @@ func (a *baseRPCProvidersAdapter) SendMessage(ctx context.Context, message *mode
 					DomainId:       message.DomainID,
 				})
 
-			case model.MessageTypeImage:
-				peerLog.Debug("sending image", slog.Int("images_count", len(message.Images)))
-				_, err = a.providersClient.SendImage(ctx, &provider.ProviderSendImageRequest{
-					GateId:         externalPeer.Via,
-					ExternalUserId: userID,
-					Images:         extratcFiles(message.Images),
-					Caption:        message.Body,
-					DomainId:       message.DomainID,
-				})
-
 			case model.MessageTypeText:
 				peerLog.Debug("sending text")
 
