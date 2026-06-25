@@ -275,5 +275,6 @@ func mapBotControlStackEntry(r *botControlStackRecord) *model.BotControlStackEnt
 	if r.ContactID != nil {
 		e.ContactID = *r.ContactID
 	}
+
 	return e
 }

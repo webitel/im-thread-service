@@ -145,6 +145,8 @@ func (a *baseRPCProvidersAdapter) SendMessage(ctx context.Context, message *mode
 				peerLog.Debug("message type system: not implemented, skipping")
 			case model.MessageTypeUnknown:
 				peerLog.Warn("message type unknown: skipping")
+			case model.MessageTypeImage:
+				peerLog.Warn("message image type unsupported now")
 			}
 
 			if err != nil {
