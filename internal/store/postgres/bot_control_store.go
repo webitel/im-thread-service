@@ -20,10 +20,11 @@ func NewBotControlStore(db Querier) *botControlStore {
 }
 
 type botControlStackRecord struct {
-	ID       uuid.UUID  `db:"id"`
-	ThreadID uuid.UUID  `db:"thread_id"`
-	MemberID *uuid.UUID `db:"member_id"`
-	Position int        `db:"position"`
+	ID        uuid.UUID  `db:"id"`
+	ThreadID  uuid.UUID  `db:"thread_id"`
+	MemberID  *uuid.UUID `db:"member_id"`
+	Position  int        `db:"position"`
+	ContactID *uuid.UUID `db:"contact_id"`
 }
 
 // Push adds a new entry onto the stack and updates thread.bot_controller_id and
@@ -70,9 +71,10 @@ func (s *botControlStore) Push(ctx context.Context, transition model.BotControlT
 			WHERE id = @ThreadID
 			RETURNING id
 		)
-		SELECT p.id, p.thread_id, p.member_id, COALESCE(p.position, 0) AS position
+		SELECT p.id, p.thread_id, p.member_id, COALESCE(p.position, 0) AS position, d.member_id AS contact_id
 		FROM upd u
 		LEFT JOIN prev_top p ON true
+		LEFT JOIN im_thread.thread_dialog d ON d.id = p.member_id
 	`, pgx.NamedArgs{
 		"ThreadID": transition.ThreadID,
 		"MemberID": transition.NewMemberID,
@@ -240,10 +242,11 @@ func (s *botControlStore) Pop(ctx context.Context, threadID, memberID uuid.UUID,
 // GetStack returns all stack entries for a thread ordered by position ascending.
 func (s *botControlStore) GetStack(ctx context.Context, threadID uuid.UUID) ([]*model.BotControlStackEntry, error) {
 	rows, err := s.db.Query(ctx, `
-		SELECT id, thread_id, member_id, position
-		FROM im_thread.bot_control_stack
-		WHERE thread_id = @ThreadID
-		ORDER BY position ASC
+		SELECT s.id, s.thread_id, s.member_id, s.position, d.member_id AS contact_id
+		FROM im_thread.bot_control_stack s
+		LEFT JOIN im_thread.thread_dialog d ON d.id = s.member_id
+		WHERE s.thread_id = @ThreadID
+		ORDER BY s.position ASC
 	`, pgx.NamedArgs{"ThreadID": threadID})
 	if err != nil {
 		return nil, errors.Internal("querying stack", errors.WithCause(err), errors.WithID("bot_control_store.get_stack"))
@@ -262,12 +265,16 @@ func (s *botControlStore) GetStack(ctx context.Context, threadID uuid.UUID) ([]*
 	return entries, nil
 }
 
-
 func mapBotControlStackEntry(r *botControlStackRecord) *model.BotControlStackEntry {
-	return &model.BotControlStackEntry{
+	e := &model.BotControlStackEntry{
 		ID:       r.ID,
 		ThreadID: r.ThreadID,
 		MemberID: r.MemberID,
 		Position: r.Position,
 	}
+	if r.ContactID != nil {
+		e.ContactID = *r.ContactID
+	}
+
+	return e
 }

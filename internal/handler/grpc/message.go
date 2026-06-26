@@ -17,7 +17,6 @@ var _ impb.MessageServer = (*MessageServer)(nil)
 
 type MessageService interface {
 	SendText(ctx context.Context, in *dto.SendTextRequest) (*dto.SendTextResponse, error)
-	SendImage(ctx context.Context, in *dto.SendImageRequest) (*dto.SendImageResponse, error)
 	SendDocument(ctx context.Context, in *dto.SendDocumentRequest) (*dto.SendDocumentResponse, error)
 	Read(ctx context.Context, in *dto.ReadMessageRequest) error
 	SendLocation(ctx context.Context, msg *model.Message) (*model.Message, error)
@@ -48,17 +47,6 @@ func (m *MessageServer) SendText(ctx context.Context, in *impb.SendTextRequest) 
 	}
 
 	return mapper.MapToSendTextResponse(out), nil
-}
-
-func (m *MessageServer) SendImage(ctx context.Context, in *impb.SendImageRequest) (*impb.SendImageResponse, error) {
-	out, err := m.handler.SendImage(ctx, mapper.MapToSendImageRequest(in))
-	if err != nil {
-		m.logger.Error("failed to send image", "error", err)
-
-		return nil, err
-	}
-
-	return mapper.MapToSendImageResponse(out), nil
 }
 
 func (m *MessageServer) SendDocument(ctx context.Context, in *impb.SendDocumentRequest) (*impb.SendDocumentResponse, error) {

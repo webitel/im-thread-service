@@ -39,40 +39,6 @@ type MessageCreate struct {
 	Documents  []DocumentInput // Data for file attachments.
 }
 
-// NewImageMessage initializes a message with image attachments and stages events.
-func NewImageMessage(in MessageCreate) *Message {
-	cleanText := prepareText(in.Body)
-
-	domainImages := make([]*MessageImage, 0, len(in.Images))
-	for _, img := range in.Images {
-		fID, _ := strconv.ParseInt(img.FileID, 10, 64)
-		domainImages = append(domainImages, &MessageImage{
-			FileID: fID,
-			Name:   img.Name,
-			Mime:   img.MimeType,
-			URL:    img.URL,
-		})
-	}
-
-	msg := &Message{
-		ID:       uuid.New(),
-		ThreadID: in.ThreadID,
-		DomainID: in.DomainID,
-		From:     in.From,
-		Member: &ThreadDialog{
-			BaseModel: shared.BaseModel{ID: in.MemberID},
-		},
-		To:        in.Recipients,
-		Body:      cleanText,
-		Type:      MessageTypeImage,
-		Images:    domainImages,
-		Metadata:  BuildMetadata(cleanText),
-		CreatedAt: time.Now().UTC(),
-	}
-
-	return msg
-}
-
 // NewDocumentMessage initializes a message with document attachments and stages events.
 func NewDocumentMessage(in MessageCreate) *Message {
 	cleanText := prepareText(in.Body)

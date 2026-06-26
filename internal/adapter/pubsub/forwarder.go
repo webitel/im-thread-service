@@ -108,6 +108,7 @@ func RegisterOutboxForwarder(
 					"msg_uuid", msg.UUID,
 					"err", err,
 				)
+
 				return err
 			}
 

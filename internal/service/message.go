@@ -57,6 +57,8 @@ func (s *MessageService) sendMessageToExternalProvider(ctx context.Context, mess
 // Returns false on error to remain non-blocking — the thread will be created without bot control.
 func (s *MessageService) resolveToIsBot(ctx context.Context, toID uuid.UUID, domainID int) bool {
 	if s.contactClient == nil {
+		s.logger.WarnContext(ctx, "resolveToIsBot: contactClient is nil, assuming false", "contact_id", toID)
+
 		return false
 	}
 
@@ -66,6 +68,8 @@ func (s *MessageService) resolveToIsBot(ctx context.Context, toID uuid.UUID, dom
 
 		return false
 	}
+
+	s.logger.DebugContext(ctx, "resolveToIsBot result", "contact_id", toID, "domain_id", domainID, "is_bot", isBot)
 
 	return isBot
 }
@@ -174,88 +178,6 @@ func (s *MessageService) SendText(ctx context.Context, in *dto.SendTextRequest) 
 	}
 
 	return &dto.SendTextResponse{ID: msg.ID, To: in.To}, nil
-}
-
-func (s *MessageService) SendImage(ctx context.Context, in *dto.SendImageRequest) (*dto.SendImageResponse, error) {
-	if err := guards.SendImageGuard(in); err != nil {
-		return nil, fmt.Errorf("validation: %w", err)
-	}
-
-	t, err := s.threader.EnsureDirectThread(ctx, &dto.EnsureDirectThreadRequest{
-		From:     &in.From,
-		To:       &in.To,
-		DomainID: int(in.DomainID),
-		SendAs:   in.SendAs,
-		ToIsBot:  func() bool { return s.resolveToIsBot(ctx, in.To.ID, int(in.DomainID)) },
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	attachments := make([]AttachmentProcessor, len(in.Image.Images))
-	for i, img := range in.Image.Images {
-		attachments[i] = img
-	}
-
-	if err := s.mediaProcessor.Process(ctx, in.DomainID, attachments); err != nil {
-		return nil, err
-	}
-
-	fileLinksChan := s.mediaProcessor.FetchFileLinks(ctx, in.DomainID, attachments)
-	if err := enrichAttachmentsLinks(ctx, attachments, fileLinksChan); err != nil {
-		s.logger.ErrorContext(ctx, "enriching attachments links", "err", err)
-	}
-
-	msg := model.NewImageMessage(model.MessageCreate{
-		ThreadID:   t.ID,
-		DomainID:   int32(in.DomainID),
-		From:       in.From,
-		Recipients: t.Members,
-		Body:       in.Image.Body,
-		SendID:     in.SendID,
-		Images:     s.mapImageInputs(in.Image.Images),
-	})
-	msg.BotControllerMemberID = t.BotControllerID
-
-	msg.SendAs = in.SendAs
-	msg.SetMemberFromSlice(t.Members)
-
-	uow, err := s.uow.NewUnitOfWork(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	err = uow.WithinTransaction(ctx, func(txCtx context.Context, db store.UnitOfWorkStore) error {
-		saved, err := db.Messages().SaveMessage(txCtx, msg)
-		if err != nil {
-			return errors.Internal("save message", errors.WithCause(err), errors.WithID("service.message.send_image"))
-		}
-
-		if _, err := db.Messages().SaveImages(txCtx, saved.ID, msg.Images); err != nil {
-			return errors.Internal("save images", errors.WithCause(err), errors.WithID("service.message.send_image"))
-		}
-
-		msg.ID = saved.ID
-		msg.From = saved.From
-		msg.WithCreatedEvent(ctx, in.SendID)
-
-		if err := s.dispatchMessageEvents(txCtx, db, msg); err != nil {
-			return errors.Internal("dispatch message events", errors.WithCause(err), errors.WithID("service.message.send_image"))
-		}
-
-		return nil
-	})
-	if err != nil {
-		s.logger.ErrorContext(ctx, "send image failed", "err", err)
-
-		return nil, err
-	}
-
-	if err = s.sendMessageToExternalProvider(ctx, msg); err != nil {
-		s.logger.Error("sending image message to external providers", "error", err)
-	}
-
-	return &dto.SendImageResponse{ID: msg.ID, To: in.To}, nil
 }
 
 func (s *MessageService) SendDocument(ctx context.Context, in *dto.SendDocumentRequest) (*dto.SendDocumentResponse, error) {
@@ -678,20 +600,6 @@ func (s *MessageService) dispatchEvents(ctx context.Context, uow store.UnitOfWor
 	return nil
 }
 
-func (s *MessageService) mapImageInputs(dtoImages []*dto.Image) []model.ImageInput {
-	inputs := make([]model.ImageInput, 0, len(dtoImages))
-	for _, img := range dtoImages {
-		inputs = append(inputs, model.ImageInput{
-			FileID:   strconv.FormatInt(img.ID, 10),
-			Name:     img.Name,
-			URL:      img.URL,
-			MimeType: img.MimeType,
-		})
-	}
-
-	return inputs
-}
-
 func (s *MessageService) mapDocumentInputs(dtoDocs []*dto.Document) []model.DocumentInput {
 	inputs := make([]model.DocumentInput, 0, len(dtoDocs))
 	for _, doc := range dtoDocs {
@@ -705,35 +613,4 @@ func (s *MessageService) mapDocumentInputs(dtoDocs []*dto.Document) []model.Docu
 	}
 
 	return inputs
-}
-
-func enrichAttachmentsLinks(ctx context.Context, attachments []AttachmentProcessor, fileLinksChan <-chan fetchLinksResult) error {
-	if len(attachments) == 0 {
-		return nil
-	}
-
-	select {
-	case result, ok := <-fileLinksChan:
-		if !ok {
-			return errors.Aborted("accessing closed links chan", errors.WithID("service.message.enrich_attachments_links"))
-		}
-
-		if result.Err != nil {
-			return result.Err
-		}
-
-		for id, url := range result.FileLinks {
-			for i := range attachments {
-				if attachments[i].GetID() == id {
-					attachments[i].SetURL(url)
-
-					break
-				}
-			}
-		}
-	case <-ctx.Done():
-		return errors.Aborted("context canceled", errors.WithID("service.message.enrich_attachments_links"), errors.WithCause(ctx.Err()))
-	}
-
-	return nil
 }

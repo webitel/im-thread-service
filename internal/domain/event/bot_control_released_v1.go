@@ -17,6 +17,7 @@ type BotControlReleased struct {
 	Position     int        `json:"position"`
 	Reason       string     `json:"reason"`
 	NextMemberID *uuid.UUID `json:"next_member_id,omitempty"`
+	Sub          *int64     `json:"sub,omitempty"`
 	OccurredAt   time.Time  `json:"occurred_at"`
 }
 

@@ -205,7 +205,7 @@ func (m *MessageInteractive) AsEvent() *event.InteractivePayload {
 		return nil
 	}
 
-	payload := &event.InteractivePayload{}
+	payload := &event.InteractivePayload{SingleUse: m.SingleUse}
 
 	if m.Kind.Markup != nil {
 		payload.Markup = mapMarkupToEvent(m.Kind.Markup)
