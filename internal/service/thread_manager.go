@@ -445,6 +445,58 @@ func (t *ThreadManagementService) Transfer(ctx context.Context, req *dto.Transfe
 			if err = t.publishBotControlGranted(ctx, uow, newMember, prev, newPos, model.BotControlReasonTransfer, false); err != nil {
 				return err
 			}
+
+			// If the initiator was also a bot, their stack entry is now orphaned
+			// (dialog deleted, but stack row remains after Push). Pop it to keep
+			// the stack consistent — Push already published Released/Granted for
+			// the relevant members, so no additional events are needed here.
+			if initiator.IsBot {
+				if _, cleanupErr := uow.BotControl().Pop(ctx, req.ThreadID, initiator.ID, model.BotControlReasonTransfer, nil); cleanupErr != nil {
+					t.log().WarnContext(ctx, "transfer: failed to clean up initiator bot stack entry after push",
+						"thread_id", req.ThreadID,
+						"member_id", initiator.ID,
+						"err", cleanupErr,
+					)
+				}
+			}
+		} else if initiator.IsBot {
+			// Initiator is a bot being transferred out to a non-bot agent.
+			// Pop the initiator from the stack and publish bot control events,
+			// mirroring the RemoveMember bot control flow.
+			t.log().DebugContext(ctx, "transfer: initiator is bot, popping bot control stack",
+				"thread_id", req.ThreadID,
+				"member_id", initiator.ID,
+			)
+
+			newTop, popErr := uow.BotControl().Pop(ctx, req.ThreadID, initiator.ID, model.BotControlReasonTransfer, nil)
+			if popErr != nil {
+				t.log().ErrorContext(ctx, "transfer: failed to pop initiator bot control stack",
+					"thread_id", req.ThreadID,
+					"member_id", initiator.ID,
+					"err", popErr,
+				)
+
+				return errors.Internal("failed to pop bot control", errors.WithCause(popErr))
+			}
+
+			var nextMemberID *uuid.UUID
+			if newTop != nil {
+				nextMemberID = newTop.MemberID
+			}
+
+			if err = t.publishBotControlReleased(ctx, uow, req.ThreadID, initiator.ID, initiator.ContactID, 0, initiator.DomainID, nextMemberID, model.BotControlReasonTransfer); err != nil {
+				return err
+			}
+
+			if newTop != nil && newTop.MemberID != nil {
+				newTopDialog := botControlStackEntryToDialog(newTop)
+				if err = t.publishBotControlGranted(ctx, uow, newTopDialog, &model.BotControlStackEntry{
+					MemberID: &initiator.ID,
+					Position: newTop.Position + 1,
+				}, newTop.Position, model.BotControlReasonTransfer, true); err != nil {
+					return err
+				}
+			}
 		}
 
 		newMemberID = newMember.ID
