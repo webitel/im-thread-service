@@ -333,12 +333,20 @@ func TestCompleteBotControl_PopsStackAndPublishesGrantedWithIsResume(t *testing.
 		},
 	}
 
+	mockThreadStore := &fakeThreadStore{
+		getResult: &model.Thread{
+			ID:         threadID,
+			OwnerBotID: nil, // Перевірка ownerBotID != req.MemberID пройде успішно
+		},
+	}
+
 	svc := &ThreadManagementService{
 		uow: fakeUnitOfWork{
 			threadDialogStore: threadDialogStore,
 			messageStore:      &fakeMessageStore{},
 			outboxStore:       outboxStore,
 			botControlStore:   botControl,
+			threadStore:       mockThreadStore,
 		},
 	}
 
@@ -382,12 +390,20 @@ func TestCompleteBotControl_EmptyStack_OnlyPublishesReleased(t *testing.T) {
 	}
 	outboxStore := &fakeOutboxStore{}
 
+	mockThreadStore := &fakeThreadStore{
+		getResult: &model.Thread{
+			ID:         threadID,
+			OwnerBotID: nil,
+		},
+	}
+
 	svc := &ThreadManagementService{
 		uow: fakeUnitOfWork{
 			threadDialogStore: &fakeThreadDialogStore{},
 			messageStore:      &fakeMessageStore{},
 			outboxStore:       outboxStore,
 			botControlStore:   botControl,
+			threadStore:       mockThreadStore,
 		},
 	}
 

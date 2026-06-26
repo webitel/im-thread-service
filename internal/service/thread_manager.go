@@ -675,7 +675,6 @@ func (t *ThreadManagementService) RemoveMember(ctx context.Context, req *dto.Rem
 		}
 
 		if target.IsBot {
-
 			var triggeredBy *uuid.UUID
 			if initiator != nil {
 				triggeredBy = &initiator.ID
@@ -960,11 +959,16 @@ func (t *ThreadManagementService) CompleteBotControl(ctx context.Context, req *d
 
 		// Only the active controller (top of stack) may complete bot control.
 		if len(stack) == 0 {
-			t.log().WarnContext(ctx, "CompleteBotControl rejected: stack is empty — thread has no active bot controller",
-				"thread_id", req.ThreadID, "requested_member_id", req.MemberID)
+			t.log().WarnContext(
+				ctx,
+				"CompleteBotControl rejected: stack is empty — thread has no active bot controller",
+				"thread_id",
+				req.ThreadID,
+				"requested_member_id",
+				req.MemberID,
+			)
 
-			return errors.InvalidArgument("bot control stack is empty for this thread",
-				errors.WithID("service.thread_manager.complete_bot_control"))
+			return errors.InvalidArgument("bot control stack is empty for this thread", errors.WithID("service.thread_manager.complete_bot_control"))
 		}
 
 		top := stack[len(stack)-1]

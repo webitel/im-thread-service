@@ -15,6 +15,7 @@ import (
 	"github.com/webitel/im-thread-service/internal/domain/shared"
 	"github.com/webitel/im-thread-service/internal/service/dto"
 	"github.com/webitel/im-thread-service/internal/store"
+	queryobject "github.com/webitel/im-thread-service/internal/store/query_object"
 )
 
 type fakeUnitOfWork struct {
@@ -22,6 +23,7 @@ type fakeUnitOfWork struct {
 	messageStore      store.MessageStore
 	outboxStore       store.OutboxStore
 	botControlStore   store.BotControlStore
+	threadStore       store.ThreadStore
 }
 
 func (f fakeUnitOfWork) WithinTransaction(ctx context.Context, fn func(context.Context, store.UnitOfWork) error) error {
@@ -32,9 +34,7 @@ func (f fakeUnitOfWork) ThreadDialogStore() store.ThreadDialogStore {
 	return f.threadDialogStore
 }
 
-func (f fakeUnitOfWork) ThreadStore() store.ThreadStore {
-	return nil
-}
+func (f fakeUnitOfWork) ThreadStore() store.ThreadStore { return f.threadStore }
 
 func (f fakeUnitOfWork) ThreadPermissionStore() store.ThreadPermissionStore {
 	return nil
@@ -110,6 +110,43 @@ func (f *fakeThreadDialogStore) FindActorsPair(ctx context.Context, initiatorsCo
 type publishedOutboxEvent struct {
 	topic string
 	event event.Outboxer
+}
+
+var _ store.ThreadStore = (*fakeThreadStore)(nil)
+
+type fakeThreadStore struct {
+	getResult       *model.Thread
+	getError        error
+	lastQueryObject queryobject.QueryObject
+}
+
+func (f *fakeThreadStore) ResolveThread(ctx context.Context, q model.ResolveThreadQuery) (*model.Thread, error) {
+	panic("unimplemented")
+}
+
+func (f *fakeThreadStore) Search(ctx context.Context, query queryobject.QueryObject) ([]*model.Thread, error) {
+	panic("unimplemented")
+}
+
+func (f *fakeThreadStore) SearchLeft(ctx context.Context, query queryobject.QueryObject) ([]*model.Thread, error) {
+	panic("unimplemented")
+}
+
+func (f *fakeThreadStore) Get(ctx context.Context, qo queryobject.QueryObject) (*model.Thread, error) {
+	f.lastQueryObject = qo
+	if f.getError != nil {
+		return nil, f.getError
+	}
+
+	return f.getResult, nil
+}
+
+func (f *fakeThreadStore) Create(ctx context.Context, thread *model.Thread) (*model.Thread, error) {
+	return nil, errors.Unavailable("method unimplemented")
+}
+
+func (f *fakeThreadStore) Update(ctx context.Context, thread *model.Thread) error {
+	return nil
 }
 
 type fakeOutboxStore struct {
