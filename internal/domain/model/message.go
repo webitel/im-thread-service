@@ -42,13 +42,14 @@ type Message struct {
 	SenderID       uuid.UUID       `json:"sender_id" db:"sender_id"`
 	MemberID       uuid.UUID       `json:"member_id" db:"member_id"`
 
-	Images      []*MessageImage     `json:"images,omitempty" db:"images"`
-	Documents   []*MessageDocument  `json:"documents,omitempty" db:"documents"`
-	Location    *MessageLocation    `json:"location,omitempty" db:"location"`
-	Contact     *MessageContact     `json:"contact,omitempty" db:"contact"`
-	Interactive *MessageInteractive `json:"interactive,omitempty" db:"interactive"`
-	System      *MessageSystem      `json:"system,omitempty" db:"system"`
-	Member      *ThreadDialog       `json:"member,omitempty" db:"member"`
+	Images          []*MessageImage      `json:"images,omitempty" db:"images"`
+	Documents       []*MessageDocument   `json:"documents,omitempty" db:"documents"`
+	Location        *MessageLocation     `json:"location,omitempty" db:"location"`
+	Contact         *MessageContact      `json:"contact,omitempty" db:"contact"`
+	Interactive     *MessageInteractive  `json:"interactive,omitempty" db:"interactive"`
+	ReactedMetadata *InteractiveCallback `json:"reacted_metadata"`
+	System          *MessageSystem       `json:"system,omitempty" db:"system"`
+	Member          *ThreadDialog        `json:"member,omitempty" db:"member"`
 
 	// BotControllerMemberID is the thread_dialog.id of the currently active bot.
 	// Included in MessageCreated events so flow_manager can self-filter.

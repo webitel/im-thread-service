@@ -98,25 +98,39 @@ func MapMessage2SearchMessageHistoryResponse(messages []*model.Message) *impb.Se
 		}
 
 		return &impb.HistoryMessage{
-			Id:          m.ID.String(),
-			ThreadId:    m.ThreadID.String(),
-			SenderId:    m.SenderID.String(),
-			Body:        m.Body,
-			Type:        int32(m.Type),
-			Metadata:    md,
-			CreatedAt:   max(m.CreatedAt.UnixMilli(), 0),
-			UpdatedAt:   max(m.UpdatedAt.UnixMilli(), 0),
-			Documents:   docs,
-			Images:      images,
-			Location:    mapLocation(m.Location),
-			Contact:     mapContact(m.Contact),
-			System:      mapSystem(m.System),
-			Interactive: mapInteractive(m.Interactive),
+			Id:              m.ID.String(),
+			ThreadId:        m.ThreadID.String(),
+			SenderId:        m.SenderID.String(),
+			Body:            m.Body,
+			Type:            int32(m.Type),
+			Metadata:        md,
+			CreatedAt:       max(m.CreatedAt.UnixMilli(), 0),
+			UpdatedAt:       max(m.UpdatedAt.UnixMilli(), 0),
+			Documents:       docs,
+			Images:          images,
+			Location:        mapLocation(m.Location),
+			Contact:         mapContact(m.Contact),
+			System:          mapSystem(m.System),
+			Interactive:     mapInteractive(m.Interactive),
+			ReactedMetadata: mapReactedMetadata(m.ReactedMetadata),
 		}
 	})
 
 	return &impb.SearchMessageHistoryResponse{
 		Items: responseMessages,
+	}
+}
+
+func mapReactedMetadata(in *model.InteractiveCallback) *impb.InteractiveCallback {
+	if in == nil {
+		return nil
+	}
+
+	return &impb.InteractiveCallback{
+		ReactedBy:    in.ReactedBy.String(),
+		ButtonCode:   in.ButtonCode,
+		CallbackData: in.CallbackData,
+		ReactedAt:    in.ReactedAtUnix(),
 	}
 }
 

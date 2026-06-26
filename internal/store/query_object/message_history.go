@@ -12,27 +12,28 @@ import (
 
 var (
 	availableFields = map[string]bool{
-		"id":          true,
-		"thread_id":   true,
-		"sender_id":   true,
-		"type":        true,
-		"body":        true,
-		"metadata":    true,
-		"created_at":  true,
-		"updated_at":  true,
-		"documents":   true,
-		"images":      true,
-		"member":      true,
-		"interactive": true,
-		"location":    true,
-		"contact":     true,
-		"system":      true,
+		"id":               true,
+		"thread_id":        true,
+		"sender_id":        true,
+		"type":             true,
+		"body":             true,
+		"metadata":         true,
+		"created_at":       true,
+		"updated_at":       true,
+		"documents":        true,
+		"images":           true,
+		"member":           true,
+		"interactive":      true,
+		"location":         true,
+		"contact":          true,
+		"system":           true,
+		"reacted_metadata": true,
 	}
 	defaultFields = []string{
 		"id", "thread_id", "sender_id",
 		"type", "body", "metadata",
 		"created_at", "updated_at", "images", "documents",
-		"member", "interactive", "location", "contact", "system",
+		"member", "interactive", "location", "contact", "system", "reacted_metadata",
 	}
 )
 
