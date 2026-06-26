@@ -145,8 +145,10 @@ func (a *baseRPCProvidersAdapter) SendMessage(ctx context.Context, message *mode
 			case model.MessageTypeSystem:
 				if message.System == nil {
 					peerLog.Warn("system message has nil system payload, skipping")
+
 					return
 				}
+
 				peerLog.Debug("sending system message", slog.String("event_type", message.System.Type))
 				_, err = a.providersClient.SendSystemMessage(ctx, &provider.ProviderSendSystemMessageRequest{
 					GateId:         externalPeer.Via,
@@ -280,10 +282,12 @@ func metadataToStringMap(m map[string]any) map[string]string {
 	if len(m) == 0 {
 		return nil
 	}
+
 	out := make(map[string]string, len(m))
 	for k, v := range m {
 		out[k] = fmt.Sprint(v)
 	}
+
 	return out
 }
 
