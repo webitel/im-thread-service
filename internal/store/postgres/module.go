@@ -2,85 +2,66 @@ package postgres
 
 import (
 	"context"
-	"log/slog"
 
-	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/fx"
 
 	"github.com/webitel/im-thread-service/config"
 	"github.com/webitel/im-thread-service/infra/db/pg"
 	"github.com/webitel/im-thread-service/internal/store"
+	"github.com/webitel/webitel-go-kit/infra/pgw"
 )
 
 var Module = fx.Module("store",
 	fx.Provide(
-		ProvideNewDBConnection,
-		pg.ProvidePgxPool,
+		ProvidePoolManager,
 		fx.Annotate(
-			func(p *pgxpool.Pool) Querier {
-				return p
-			},
-			fx.As(new(Querier)),
-		),
-
-		fx.Annotate(
-			NewMessageStore,
-			fx.As(new(store.MessageStore)),
-		),
-
-		fx.Annotate(
-			NewOutboxStore,
-			fx.As(new(store.OutboxStore)),
-		),
-
-		fx.Annotate(
-			NewStore,
-			fx.As(new(store.Store)),
-		),
-
-		fx.Annotate(
-			NewMessageHistoryStore,
-			fx.As(new(store.MessageHistory)),
+			NewMessageStoreFactory,
+			fx.As(new(store.MessageStoreFactory)),
 		),
 		fx.Annotate(
-			NewDirectThreadDialogOrchestration,
-			fx.As(new(store.DirectThreadDialogOrchestration)),
+			NewMessageHistoryStoreFactory,
+			fx.As(new(store.MessageHistoryStoreFactory)),
 		),
 		fx.Annotate(
-			NewThreadStore,
-			fx.As(new(store.ThreadStore)),
+			NewThreadVariablesStoreFactory,
+			fx.As(new(store.ThreadVariablesStoreFactory)),
 		),
 		fx.Annotate(
-			NewThreadPermissionStore,
-			fx.As(new(store.ThreadPermissionStore)),
+			NewThreadDialogStoreFactory,
+			fx.As(new(store.ThreadDialogStoreFactory)),
 		),
 		fx.Annotate(
-			NewPgxUnitOfWork,
-			fx.As(new(store.UnitOfWork)),
+			NewThreadStoreFactory,
+			fx.As(new(store.ThreadStoreFactory)),
 		),
-
 		fx.Annotate(
-			NewThreadVariablesStore,
-			fx.As(new(store.ThreadVariablesStore)),
+			NewThreadPermissionStoreFactory,
+			fx.As(new(store.ThreadPermissionStoreFactory)),
 		),
-
 		fx.Annotate(
-			NewBotControlStore,
-			fx.As(new(store.BotControlStore)),
+			NewBotControlStoreFactory,
+			fx.As(new(store.BotControlStoreFactory)),
+		),
+		fx.Annotate(
+			NewOutboxStoreFactory,
+			fx.As(new(store.OutboxStoreFactory)),
+		),
+		fx.Annotate(
+			NewUnitOfWorkFactory,
+			fx.As(new(store.UnitOfWorkFactory)),
 		),
 	),
 )
 
-func ProvideNewDBConnection(cfg *config.Config, l *slog.Logger, lc fx.Lifecycle) (*pg.PgxDB, error) {
-	db, err := pg.New(context.Background(), l, cfg.Postgres.DSN)
+func ProvidePoolManager(cfg *config.Config, lc fx.Lifecycle) (*pgw.PoolManager, error) {
+	db, err := pg.New(context.Background(), cfg)
 	if err != nil {
 		return nil, err
 	}
 
 	lc.Append(fx.Hook{
 		OnStop: func(_ context.Context) error {
-			db.Master().Close()
-
+			db.Close()
 			return nil
 		},
 	})

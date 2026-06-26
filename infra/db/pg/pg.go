@@ -3,68 +3,27 @@ package pg
 import (
 	"context"
 	"fmt"
-	"log/slog"
-	"time"
 
-	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/webitel/im-thread-service/config"
+	"github.com/webitel/webitel-go-kit/infra/pgw"
+	"github.com/webitel/webitel-go-kit/infra/pgw/verifier/goose"
 )
 
-type PgxDB struct {
-	master *pgxpool.Pool
-	logger *slog.Logger
-}
+const (
+	defaultMigrationTableName = "im_thread_schema_version"
+	requiredMigrationVersion  = "20260603120007"
+)
 
-func New(ctx context.Context, logger *slog.Logger, dsn string) (*PgxDB, error) {
-	cfg, err := pgxpool.ParseConfig(dsn)
+func New(ctx context.Context, conf *config.Config) (*pgw.PoolManager, error) {
+	migrationVerifier, err := goose.NewGooseMigrationVerifier(defaultMigrationTableName, requiredMigrationVersion)
 	if err != nil {
-		return nil, fmt.Errorf("parse dsn: %v", err)
+		return nil, fmt.Errorf("create migration verifier: %v", err)
 	}
 
-	dbpool, err := pgxpool.NewWithConfig(ctx, cfg)
-	if err != nil {
-		return nil, fmt.Errorf("create connection pool: %v", err)
-	}
-
-	const (
-		maxAttempts = 5
-		delay       = 2 * time.Second
+	return pgw.NewPoolManager(
+		ctx,
+		pgw.WithMigrationVerifier(migrationVerifier),
+		pgw.WithPrimaryConfig(pgw.PrimaryConfig{DSN: conf.Postgres.DSN, MaxConns: conf.Postgres.MaxOpenConns}),
 	)
 
-	var lastErr error
-
-	for attempt := 1; attempt <= maxAttempts; attempt++ {
-		if err := dbpool.Ping(ctx); err == nil {
-			if attempt > 1 {
-				logger.Info("Database connection established", slog.Int("attempts", attempt))
-			}
-
-			return &PgxDB{
-				master: dbpool,
-				logger: logger,
-			}, nil
-		} else {
-			lastErr = err
-			logger.Warn("Failed to ping database, retrying...",
-				slog.Int("attempt", attempt),
-				slog.Int("max_attempts", maxAttempts),
-				slog.String("error", err.Error()),
-			)
-		}
-
-		select {
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		case <-time.After(delay):
-		}
-	}
-
-	return nil, fmt.Errorf("database unreachable after %d attempts: %v", maxAttempts, lastErr)
-}
-
-func (d *PgxDB) Master() *pgxpool.Pool {
-	return d.master
-}
-
-func ProvidePgxPool(db *PgxDB) *pgxpool.Pool {
-	return db.Master()
 }

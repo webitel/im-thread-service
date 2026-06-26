@@ -10,15 +10,11 @@ import (
 	queryobject "github.com/webitel/im-thread-service/internal/store/query_object"
 )
 
-type MessageHistoryStore interface {
-	Search(ctx context.Context, query queryobject.QueryObject) ([]*model.Message, error)
-}
-
 type MessageHistoryService struct {
-	messageHistoryStore MessageHistoryStore
+	messageHistoryStore store.MessageHistoryStoreFactory
 }
 
-func NewMessageHistory(messageHistoryStore store.MessageHistory) *MessageHistoryService {
+func NewMessageHistory(messageHistoryStore store.MessageHistoryStoreFactory) *MessageHistoryService {
 	return &MessageHistoryService{
 		messageHistoryStore: messageHistoryStore,
 	}
@@ -36,7 +32,11 @@ func (s *MessageHistoryService) Search(ctx context.Context, hmiDTO *dto.HistoryM
 		WithLimit(hmiDTO.Size).
 		WithTypeFilter(hmiDTO.Types...)
 
-	historyMessages, err := s.messageHistoryStore.Search(ctx, query)
+	store, err := s.messageHistoryStore.NewMessageHistoryStore(ctx)
+	if err != nil {
+		return nil, queryobject.PageInfo[queryobject.MessageHistoryCursor]{}, err
+	}
+	historyMessages, err := store.Search(ctx, query)
 	if err != nil {
 		return nil, queryobject.PageInfo[queryobject.MessageHistoryCursor]{}, err
 	}
@@ -69,7 +69,12 @@ func (s *MessageHistoryService) SearchLeftThreads(ctx context.Context, req *dto.
 		WithLimit(req.Size).
 		WithCursor(req.Cursor)
 
-	historyMessages, err := s.messageHistoryStore.Search(ctx, query)
+	store, err := s.messageHistoryStore.NewMessageHistoryStore(ctx)
+	if err != nil {
+		return nil, queryobject.PageInfo[queryobject.MessageHistoryCursor]{}, err
+	}
+
+	historyMessages, err := store.Search(ctx, query)
 	if err != nil {
 		return nil, queryobject.PageInfo[queryobject.MessageHistoryCursor]{}, err
 	}

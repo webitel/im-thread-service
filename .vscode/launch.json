@@ -7,8 +7,10 @@
       "request": "launch",
       "mode": "debug",
       "program": "${workspaceFolder}/main.go",
-      "args": ["server"],
-      "envFile": "${workspaceFolder}/.env"
+      "args": [
+        "server",
+        "--config_file=${workspaceFolder}/config/config.yml"
+      ],
     },
     {
       "name": "IM: Migrate",
@@ -16,7 +18,9 @@
       "request": "launch",
       "mode": "debug",
       "program": "${workspaceFolder}/main.go",
-      "args": ["migrate"],
+      "args": [
+        "migrate"
+      ],
       "envFile": "${workspaceFolder}/.env"
     }
   ]

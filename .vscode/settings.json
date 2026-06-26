@@ -3,14 +3,14 @@
   "go.lintFlags": [
     "--path-mode=abs"
   ],
-  "go.formatTool": "custom",
+  "go.formatTool": "default",
   "go.alternateTools": {
     "customFormatter": "golangci-lint"
   },
-  "go.formatFlags": [
-    "fmt",
-    "--stdin"
-  ],
+  // "go.formatFlags": [
+  //   "fmt",
+  //   "--stdin"
+  // ],
   "editor.formatOnSave": true,
   "[go]": {
     "editor.formatOnSave": true,

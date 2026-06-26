@@ -16,7 +16,6 @@ import (
 	grpchandler "github.com/webitel/im-thread-service/internal/handler/grpc"
 	"github.com/webitel/im-thread-service/internal/service"
 	"github.com/webitel/im-thread-service/internal/service/decorators"
-	"github.com/webitel/im-thread-service/internal/store"
 	"github.com/webitel/im-thread-service/internal/store/postgres"
 )
 
@@ -39,7 +38,6 @@ func MainModule(cfg *config.Config) fx.Option {
 
 		postgres.Module,
 		leader.Module,
-		storeBridgeModule,
 
 		webiteldi.Module,
 		grpcClientsBridgeModule,
@@ -52,15 +50,6 @@ func MainModule(cfg *config.Config) fx.Option {
 		profiler.Module,
 	)
 }
-
-var storeBridgeModule = fx.Module(
-	"storeToServiceBridge",
-	fx.Provide(
-		func(s store.MessageHistory) service.MessageHistoryStore {
-			return s
-		},
-	),
-)
 
 var grpcClientsBridgeModule = fx.Module(
 	"clientsToServiceBridge",

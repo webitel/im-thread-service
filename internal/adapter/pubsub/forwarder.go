@@ -43,7 +43,7 @@ func RegisterOutboxForwarder(
 	rabbitPub EventPublisher,
 	logger watermill.LoggerAdapter,
 	elector leader.LeadershipElector,
-	outbox store.OutboxStore,
+	outbox store.OutboxStoreFactory,
 	slog *slog.Logger,
 ) error {
 	router, err := message.NewRouter(message.RouterConfig{}, logger)
@@ -163,7 +163,7 @@ func RegisterOutboxForwarder(
 }
 
 // StartOutboxCleanupJob handles the scheduling of processed message removal.
-func StartOutboxCleanupJob(ctx context.Context, outbox store.OutboxStore, logger *slog.Logger) {
+func StartOutboxCleanupJob(ctx context.Context, outbox store.OutboxStoreFactory, logger *slog.Logger) {
 	const cleanupInterval = 24 * time.Hour
 
 	// [INITIAL_PURGE] Execute cleanup immediately upon leader promotion
@@ -185,9 +185,16 @@ func StartOutboxCleanupJob(ctx context.Context, outbox store.OutboxStore, logger
 }
 
 // doCleanup triggers the physical deletion of acknowledged outbox records.
-func doCleanup(ctx context.Context, outbox store.OutboxStore, logger *slog.Logger) {
+func doCleanup(ctx context.Context, outbox store.OutboxStoreFactory, logger *slog.Logger) {
+	outboxStore, err := outbox.NewOutboxStore(ctx)
+	if err != nil {
+		logger.Error("failed to get outbox store", "error", err)
+
+		return
+	}
+
 	// [STRATEGY] Batch remove messages older than 3 days acknowledged by ConsumerGroupName
-	n, err := outbox.Cleanup(ctx, &model.OutboxCleanupOptions{
+	n, err := outboxStore.Cleanup(ctx, &model.OutboxCleanupOptions{
 		RetentionDays: 3,
 		BatchSize:     5000,
 		ConsumerGroup: ConsumerGroupName,

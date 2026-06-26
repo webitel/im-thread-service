@@ -4,7 +4,7 @@ import (
 	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill-sql/v4/pkg/sql"
 	"github.com/ThreeDotsLabs/watermill/message"
-	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/webitel/webitel-go-kit/infra/pgw"
 )
 
 type OutboxSubscriber interface {
@@ -12,14 +12,18 @@ type OutboxSubscriber interface {
 }
 
 func NewOutboxSubscriber(
-	pool *pgxpool.Pool,
+	pool *pgw.PoolManager,
 	logger watermill.LoggerAdapter,
 ) (OutboxSubscriber, error) {
 	// [SQL_SUBSCRIBER_SETUP]
 	// Configure subscriber to poll events from the Postgres outbox table.
 	// Uses pgxpool for connection management.
+	primarydb, err := pool.Primary()
+	if err != nil {
+		return nil, err
+	}
 	return sql.NewSubscriber(
-		sql.BeginnerFromPgx(pool),
+		sql.BeginnerFromPgx(primarydb),
 		sql.SubscriberConfig{
 			// [CONSUMER_GROUP]
 			// Identifies this instance in messages_offsets table to track progress

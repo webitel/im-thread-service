@@ -9,6 +9,8 @@ import (
 
 	"github.com/urfave/cli/v2"
 
+	_ "net/http/pprof"
+
 	"github.com/webitel/im-thread-service/config"
 )
 

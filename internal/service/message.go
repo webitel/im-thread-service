@@ -23,7 +23,7 @@ type ThreadManager interface {
 }
 
 type MessageService struct {
-	uow              store.UnitOfWork
+	uow              store.UnitOfWorkFactory
 	logger           *slog.Logger
 	threader         ThreadManager
 	contactClient    *imcontact.Client
@@ -32,7 +32,7 @@ type MessageService struct {
 }
 
 func NewMessageService(
-	uow store.UnitOfWork,
+	uow store.UnitOfWorkFactory,
 	logger *slog.Logger,
 	threader ThreadManager,
 	contactClient *imcontact.Client,
@@ -139,8 +139,13 @@ func (s *MessageService) SendText(ctx context.Context, in *dto.SendTextRequest) 
 
 	msg.SetMemberFromSlice(t.Members)
 
-	err = s.uow.WithinTransaction(ctx, func(ctx context.Context, uow store.UnitOfWork) error {
-		saved, err := uow.Messages().SaveMessage(ctx, msg)
+	uow, err := s.uow.NewUnitOfWork(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	err = uow.WithinTransaction(ctx, func(ctx context.Context, db store.UnitOfWorkStore) error {
+		saved, err := db.Messages().SaveMessage(ctx, msg)
 		if err != nil {
 			return err
 		}
@@ -148,7 +153,7 @@ func (s *MessageService) SendText(ctx context.Context, in *dto.SendTextRequest) 
 		saved.To = t.Members
 		saved.WithCreatedEvent(ctx, in.SendID)
 
-		if err = s.dispatchMessageEvents(ctx, uow, saved); err != nil {
+		if err = s.dispatchMessageEvents(ctx, db, saved); err != nil {
 			return err
 		}
 
@@ -238,13 +243,18 @@ func (s *MessageService) SendDocument(ctx context.Context, in *dto.SendDocumentR
 	msg.SendAs = in.SendAs
 	msg.SetMemberFromSlice(t.Members)
 
-	err = s.uow.WithinTransaction(ctx, func(txCtx context.Context, uow store.UnitOfWork) error {
-		saved, err := uow.Messages().SaveMessage(txCtx, msg)
+	uow, err := s.uow.NewUnitOfWork(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	err = uow.WithinTransaction(ctx, func(txCtx context.Context, db store.UnitOfWorkStore) error {
+		saved, err := db.Messages().SaveMessage(txCtx, msg)
 		if err != nil {
 			return errors.Internal("save message", errors.WithCause(err), errors.WithID("service.message.send_document"))
 		}
 
-		_, err = uow.Messages().SaveDocuments(txCtx, saved.ID, msg.Documents)
+		_, err = db.Messages().SaveDocuments(txCtx, saved.ID, msg.Documents)
 		if err != nil {
 			return errors.Internal("save documents", errors.WithCause(err), errors.WithID("service.message.send_document"))
 		}
@@ -253,7 +263,7 @@ func (s *MessageService) SendDocument(ctx context.Context, in *dto.SendDocumentR
 		msg.From = saved.From
 		msg.WithCreatedEvent(ctx, in.SendID)
 
-		if err := s.dispatchMessageEvents(txCtx, uow, msg); err != nil {
+		if err := s.dispatchMessageEvents(txCtx, db, msg); err != nil {
 			return errors.Internal("dispatch message events", errors.WithCause(err), errors.WithID("service.message.send_document"))
 		}
 
@@ -281,8 +291,13 @@ func (s *MessageService) Read(ctx context.Context, in *dto.ReadMessageRequest) e
 	mID, _ := uuid.Parse(in.MessageID)
 	uID, _ := uuid.Parse(in.UserID)
 
-	return s.uow.WithinTransaction(ctx, func(txCtx context.Context, uow store.UnitOfWork) error {
-		err := uow.Messages().ReadMessage(txCtx, struct {
+	uow, err := s.uow.NewUnitOfWork(ctx)
+	if err != nil {
+		return err
+	}
+
+	return uow.WithinTransaction(ctx, func(txCtx context.Context, db store.UnitOfWorkStore) error {
+		err := db.Messages().ReadMessage(txCtx, struct {
 			DomainID  int32
 			ThreadID  uuid.UUID
 			MessageID uuid.UUID
@@ -311,10 +326,14 @@ func (s *MessageService) SendLocation(ctx context.Context, msg *model.Message) (
 	}
 
 	var savedMsg *model.Message
+	uow, err := s.uow.NewUnitOfWork(ctx)
+	if err != nil {
+		return nil, err
+	}
 
-	err := s.uow.WithinTransaction(ctx, func(txCtx context.Context, uow store.UnitOfWork) error {
+	err = uow.WithinTransaction(ctx, func(txCtx context.Context, db store.UnitOfWorkStore) error {
 		var err error
-		if savedMsg, err = uow.Messages().SaveMessageLocation(txCtx, msg); err != nil {
+		if savedMsg, err = db.Messages().SaveMessageLocation(txCtx, msg); err != nil {
 			return err
 		}
 
@@ -323,7 +342,7 @@ func (s *MessageService) SendLocation(ctx context.Context, msg *model.Message) (
 
 		savedMsg.WithCreatedEvent(ctx, msg.IdempotencyKey)
 
-		return s.dispatchMessageEvents(txCtx, uow, savedMsg)
+		return s.dispatchMessageEvents(txCtx, db, savedMsg)
 	})
 	if err != nil {
 		log.ErrorContext(ctx, "location_transaction_failed", "err", err)
@@ -348,10 +367,14 @@ func (s *MessageService) SendContact(ctx context.Context, msg *model.Message) (*
 	}
 
 	var savedMsg *model.Message
+	uow, err := s.uow.NewUnitOfWork(ctx)
+	if err != nil {
+		return nil, err
+	}
 
-	err := s.uow.WithinTransaction(ctx, func(txCtx context.Context, uow store.UnitOfWork) error {
+	err = uow.WithinTransaction(ctx, func(txCtx context.Context, db store.UnitOfWorkStore) error {
 		var err error
-		if savedMsg, err = uow.Messages().SaveMessageContact(txCtx, msg); err != nil {
+		if savedMsg, err = db.Messages().SaveMessageContact(txCtx, msg); err != nil {
 			return err
 		}
 
@@ -360,7 +383,7 @@ func (s *MessageService) SendContact(ctx context.Context, msg *model.Message) (*
 
 		savedMsg.WithCreatedEvent(ctx, msg.IdempotencyKey)
 
-		return s.dispatchMessageEvents(txCtx, uow, savedMsg)
+		return s.dispatchMessageEvents(txCtx, db, savedMsg)
 	})
 	if err != nil {
 		log.ErrorContext(ctx, "contact_transaction_failed", "err", err)
@@ -406,17 +429,21 @@ func (s *MessageService) SendInteractive(ctx context.Context, msg *model.Message
 	}
 
 	var savedMsg *model.Message
+	uow, err := s.uow.NewUnitOfWork(ctx)
+	if err != nil {
+		return nil, err
+	}
 
-	err := s.uow.WithinTransaction(ctx, func(ctx context.Context, uow store.UnitOfWork) error {
+	err = uow.WithinTransaction(ctx, func(ctx context.Context, db store.UnitOfWorkStore) error {
 		var err error
-		if savedMsg, err = uow.Messages().SaveInteractiveMessage(ctx, msg); err != nil {
+		if savedMsg, err = db.Messages().SaveInteractiveMessage(ctx, msg); err != nil {
 			return err
 		}
 
 		savedMsg.To = msg.To
 		savedMsg.WithCreatedEvent(ctx, msg.IdempotencyKey)
 
-		return s.dispatchMessageEvents(ctx, uow, savedMsg)
+		return s.dispatchMessageEvents(ctx, db, savedMsg)
 	})
 	if err != nil {
 		log.ErrorContext(ctx, "transaction failed", "err", err)
@@ -435,16 +462,20 @@ func (s *MessageService) SendInteractiveCallback(ctx context.Context, callback *
 	log := s.logger.With("operation", "send_interactive_callback")
 
 	var savedCallback *model.InteractiveCallback
+	uow, err := s.uow.NewUnitOfWork(ctx)
+	if err != nil {
+		return nil, err
+	}
 
-	err := s.uow.WithinTransaction(ctx, func(ctx context.Context, uow store.UnitOfWork) error {
+	err = uow.WithinTransaction(ctx, func(ctx context.Context, db store.UnitOfWorkStore) error {
 		var err error
-		if savedCallback, err = uow.InteractiveCallback().Save(ctx, callback); err != nil {
+		if savedCallback, err = db.InteractiveCallback().Save(ctx, callback); err != nil {
 			return err
 		}
 
 		savedCallback.WithCreatedEvent(ctx)
 
-		return s.dispatchInteractiveCallbackEvents(ctx, uow, savedCallback)
+		return s.dispatchInteractiveCallbackEvents(ctx, db, savedCallback)
 	})
 	if err != nil {
 		log.ErrorContext(
@@ -472,10 +503,14 @@ func (s *MessageService) SendSystemMessage(ctx context.Context, msg *model.Messa
 	}
 
 	var savedMsg *model.Message
+	uow, err := s.uow.NewUnitOfWork(ctx)
+	if err != nil {
+		return nil, err
+	}
 
-	err := s.uow.WithinTransaction(ctx, func(txCtx context.Context, uow store.UnitOfWork) error {
+	err = uow.WithinTransaction(ctx, func(txCtx context.Context, db store.UnitOfWorkStore) error {
 		var err error
-		if savedMsg, err = uow.Messages().SaveSystemMessage(txCtx, msg); err != nil {
+		if savedMsg, err = db.Messages().SaveSystemMessage(txCtx, msg); err != nil {
 			return err
 		}
 
@@ -484,7 +519,7 @@ func (s *MessageService) SendSystemMessage(ctx context.Context, msg *model.Messa
 
 		savedMsg.WithCreatedEvent(ctx, msg.IdempotencyKey)
 
-		return s.dispatchMessageEvents(txCtx, uow, savedMsg)
+		return s.dispatchMessageEvents(txCtx, db, savedMsg)
 	})
 	if err != nil {
 		log.ErrorContext(ctx, "transaction_failed", "err", err)
@@ -517,7 +552,7 @@ func (s *MessageService) prepareMessageForSending(ctx context.Context, msg *mode
 }
 
 // --- Internal Helpers ---
-func (s *MessageService) dispatchInteractiveCallbackEvents(ctx context.Context, uow store.UnitOfWork, callback *model.InteractiveCallback) error {
+func (s *MessageService) dispatchInteractiveCallbackEvents(ctx context.Context, uow store.UnitOfWorkStore, callback *model.InteractiveCallback) error {
 	evs := callback.Events()
 	if len(evs) == 0 {
 		s.logger.Warn("service.message.dispatchInteractiveCallbackEvents: no events to dispatch")
@@ -534,7 +569,7 @@ func (s *MessageService) dispatchInteractiveCallbackEvents(ctx context.Context, 
 	})
 }
 
-func (s *MessageService) dispatchMessageEvents(ctx context.Context, uow store.UnitOfWork, msg *model.Message) error {
+func (s *MessageService) dispatchMessageEvents(ctx context.Context, uow store.UnitOfWorkStore, msg *model.Message) error {
 	evs := msg.Events()
 	if len(evs) == 0 {
 		return errors.New("domain events queue is empty: transaction aborted")
@@ -553,7 +588,7 @@ func buildMessageCreatedTopic(recipientID uuid.UUID, version string) string {
 	return fmt.Sprintf("im_message.%s.message.created.%s", recipientID, version)
 }
 
-func (s *MessageService) dispatchEvents(ctx context.Context, uow store.UnitOfWork, eventss []event.Outboxer, topicCallback func(event.Outboxer) string) error {
+func (s *MessageService) dispatchEvents(ctx context.Context, uow store.UnitOfWorkStore, eventss []event.Outboxer, topicCallback func(event.Outboxer) string) error {
 	for _, event := range eventss {
 		topic := topicCallback(event)
 
