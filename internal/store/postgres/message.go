@@ -163,17 +163,17 @@ func (m *messageStore) SaveDocuments(ctx context.Context, messageID uuid.UUID, d
 	}
 
 	var (
-		fileIDs   = make([]int, docsLen)
+		fileIDs   = make([]int64, docsLen)
 		fileNames = make([]string, docsLen)
 		mimes     = make([]string, docsLen)
-		sizes     = make([]int, docsLen)
+		sizes     = make([]int64, docsLen)
 	)
 
 	for i, doc := range docs {
-		fileIDs[i] = int(doc.FileID)
+		fileIDs[i] = doc.FileID
 		fileNames[i] = doc.Name
 		mimes[i] = doc.Mime
-		sizes[i] = int(doc.Size)
+		sizes[i] = doc.Size
 	}
 
 	const query = `
