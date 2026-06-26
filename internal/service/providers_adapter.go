@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	stderrs "errors"
+	"fmt"
 	"log/slog"
 	"strconv"
 	"sync"
@@ -142,7 +143,18 @@ func (a *baseRPCProvidersAdapter) SendMessage(ctx context.Context, message *mode
 			case model.MessageTypeLocation:
 				peerLog.Debug("message type location: not implemented, skipping")
 			case model.MessageTypeSystem:
-				peerLog.Debug("message type system: not implemented, skipping")
+				if message.System == nil {
+					peerLog.Warn("system message has nil system payload, skipping")
+					return
+				}
+				peerLog.Debug("sending system message", slog.String("event_type", message.System.Type))
+				_, err = a.providersClient.SendSystemMessage(ctx, &provider.ProviderSendSystemMessageRequest{
+					GateId:         externalPeer.Via,
+					ExternalUserId: userID,
+					DomainId:       message.DomainID,
+					EventType:      message.System.Type,
+					Vars:           metadataToStringMap(message.System.Metadata),
+				})
 			case model.MessageTypeUnknown:
 				peerLog.Warn("message type unknown: skipping")
 			case model.MessageTypeImage:
@@ -259,6 +271,19 @@ func mapButtons(buttons []*model.KeyboardButton) []*provider.ProviderKeyboardBut
 		out = append(out, pb)
 	}
 
+	return out
+}
+
+// metadataToStringMap converts map[string]any to map[string]string by calling
+// fmt.Sprint on each value. Non-string types (UUIDs, roles) stringify naturally.
+func metadataToStringMap(m map[string]any) map[string]string {
+	if len(m) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(m))
+	for k, v := range m {
+		out[k] = fmt.Sprint(v)
+	}
 	return out
 }
 
