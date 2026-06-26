@@ -21,7 +21,7 @@ func NewMessageHistoryStoreFactory(pm *pgw.PoolManager, wmlogger watermill.Logge
 }
 
 func (sf *MessageHistoryStoreFactory) NewMessageHistoryStore(ctx context.Context) (store.MessageHistoryStore, error) {
-	pool, err := sf.poolManager.Primary()
+	pool, err := sf.poolManager.StandbyPreferred()
 	if err != nil {
 		return nil, err
 	}
