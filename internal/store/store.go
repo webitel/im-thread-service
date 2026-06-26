@@ -10,12 +10,10 @@ import (
 	queryobject "github.com/webitel/im-thread-service/internal/store/query_object"
 )
 
-type Store interface {
-	Messages() MessageStore
-	Outbox() OutboxStore
-	ThreadDialog() ThreadDialogStore
-	Thread() ThreadStore
-	BotControl() BotControlStore
+//go:generate mockgen -destination=./mocks/mocks.go . 
+
+type MessageStoreFactory interface {
+	NewMessageStore(ctx context.Context) (MessageStore, error)
 }
 
 type MessageStore interface {
@@ -34,9 +32,17 @@ type MessageStore interface {
 	SaveSystemMessage(ctx context.Context, msg *model.Message) (*model.Message, error)
 }
 
+type OutboxStoreFactory interface {
+	NewOutboxStore(ctx context.Context) (OutboxStore, error)
+}
+
 type OutboxStore interface {
 	Publish(ctx context.Context, topic string, event event.Outboxer) error
 	Cleanup(ctx context.Context, opt *model.OutboxCleanupOptions) (int64, error)
+}
+
+type ThreadDialogStoreFactory interface {
+	NewThreadDialogStore(ctx context.Context) (ThreadDialogStore, error)
 }
 
 type ThreadDialogStore interface {
@@ -47,6 +53,10 @@ type ThreadDialogStore interface {
 	FindActorsPair(ctx context.Context, initiatorsContact, targetMember uuid.UUID) (*model.ThreadDialogExtended, *model.ThreadDialogExtended, error)
 }
 
+type ThreadStoreFactory interface {
+	NewThreadStore(ctx context.Context) (ThreadStore, error)
+}
+
 type ThreadStore interface {
 	Create(ctx context.Context, req *model.Thread) (*model.Thread, error)
 	Get(ctx context.Context, query queryobject.QueryObject) (*model.Thread, error)
@@ -55,22 +65,34 @@ type ThreadStore interface {
 	SearchLeft(ctx context.Context, query queryobject.QueryObject) ([]*model.Thread, error)
 }
 
+type ThreadPermissionStoreFactory interface {
+	NewThreadPermissionStore(ctx context.Context) (ThreadPermissionStore, error)
+}
+
 type ThreadPermissionStore interface {
 	Create(ctx context.Context, in *model.ThreadPermission) (*model.ThreadPermission, error)
 	Get(ctx context.Context, in *model.ThreadPermissionStoreFilters) ([]*model.ThreadPermission, error)
 	Update(ctx context.Context, in *model.UpdateThreadPermissionRequest) (*model.ThreadPermission, error)
 }
 
-type MessageHistory interface {
+type MessageHistoryStoreFactory interface {
+	NewMessageHistoryStore(ctx context.Context) (MessageHistoryStore, error)
+}
+
+type MessageHistoryStore interface {
 	Search(ctx context.Context, query queryobject.QueryObject) ([]*model.Message, error)
 }
 
-type DirectThreadDialogOrchestration interface {
-	InitializeFullDirectThread(ctx context.Context, req *model.CreateDirectThreadDialogRequest) ([]*model.DirectThreadDialog, error)
+type InteractiveCallbackStoreFactory interface {
+	NewInteractiveCallbackStore(ctx context.Context) (InteractiveCallback, error)
 }
 
 type InteractiveCallback interface {
 	Save(ctx context.Context, callback *model.InteractiveCallback) (*model.InteractiveCallback, error)
+}
+
+type ThreadVariablesStoreFactory interface {
+	NewThreadVariablesStore(ctx context.Context) (ThreadVariablesStore, error)
 }
 
 type ThreadVariablesStore interface {
@@ -78,6 +100,10 @@ type ThreadVariablesStore interface {
 	Search(ctx context.Context, query model.GetThreadVariablesQuery) (model.Page[*model.ThreadVariables], error)
 	Locate(ctx context.Context, threadID uuid.UUID) (*model.ThreadVariables, error)
 	Flush(ctx context.Context, flushCmd model.FlushVariablesCommand) (*model.ThreadVariables, error)
+}
+
+type BotControlStoreFactory interface {
+	NewBotControlStore(ctx context.Context) (BotControlStore, error)
 }
 
 type BotControlStore interface {

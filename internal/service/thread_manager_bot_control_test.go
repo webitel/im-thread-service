@@ -97,7 +97,7 @@ func TestAddMember_BotContact_PushesStackAndPublishesBotControlEvents(t *testing
 	}
 
 	svc := &ThreadManagementService{
-		uow: fakeUnitOfWork{
+		uowFactory: fakeUnitOfWork{
 			threadDialogStore: threadDialogStore,
 			messageStore:      &fakeMessageStore{},
 			outboxStore:       outboxStore,
@@ -160,7 +160,7 @@ func TestAddMember_BotContact_AutoLeaveFalse_WhenExplicitlySet(t *testing.T) {
 	}
 
 	svc := &ThreadManagementService{
-		uow: fakeUnitOfWork{
+		uowFactory: fakeUnitOfWork{
 			threadDialogStore: threadDialogStore,
 			messageStore:      &fakeMessageStore{},
 			outboxStore:       &fakeOutboxStore{},
@@ -212,7 +212,7 @@ func TestTransfer_BotContact_PushesStackAndPublishesBotControlEvents(t *testing.
 	}
 
 	svc := &ThreadManagementService{
-		uow: fakeUnitOfWork{
+		uowFactory: fakeUnitOfWork{
 			threadDialogStore: threadDialogStore,
 			messageStore:      &fakeMessageStore{},
 			outboxStore:       outboxStore,
@@ -278,7 +278,7 @@ func TestRemoveMember_ActiveBot_PopsStackAndPublishesBotControlGrantedWithIsResu
 	}
 
 	svc := &ThreadManagementService{
-		uow: fakeUnitOfWork{
+		uowFactory: fakeUnitOfWork{
 			threadDialogStore: threadDialogStore,
 			messageStore:      &fakeMessageStore{},
 			outboxStore:       outboxStore,
@@ -334,7 +334,7 @@ func TestCompleteBotControl_PopsStackAndPublishesGrantedWithIsResume(t *testing.
 	}
 
 	svc := &ThreadManagementService{
-		uow: fakeUnitOfWork{
+		uowFactory: fakeUnitOfWork{
 			threadDialogStore: threadDialogStore,
 			messageStore:      &fakeMessageStore{},
 			outboxStore:       outboxStore,
@@ -383,7 +383,7 @@ func TestCompleteBotControl_EmptyStack_OnlyPublishesReleased(t *testing.T) {
 	outboxStore := &fakeOutboxStore{}
 
 	svc := &ThreadManagementService{
-		uow: fakeUnitOfWork{
+		uowFactory: fakeUnitOfWork{
 			threadDialogStore: &fakeThreadDialogStore{},
 			messageStore:      &fakeMessageStore{},
 			outboxStore:       outboxStore,

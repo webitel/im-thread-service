@@ -76,14 +76,19 @@ var (
 )
 
 type ThreadPermissionService struct {
-	store  store.UnitOfWork
+	uowFactory                   store.UnitOfWorkFactory
+	threadPermissionStoreFactory store.ThreadPermissionStoreFactory
+	threadDialogStoreFactory     store.ThreadDialogStoreFactory
+
 	logger *slog.Logger
 }
 
-func NewThreadPermissionService(store store.UnitOfWork, logger *slog.Logger) (*ThreadPermissionService, error) {
+func NewThreadPermissionService(uowFactory store.UnitOfWorkFactory, threadPermissionStoreFactory store.ThreadPermissionStoreFactory, threadDialogStoreFactory store.ThreadDialogStoreFactory, logger *slog.Logger) (*ThreadPermissionService, error) {
 	return &ThreadPermissionService{
-		store:  store,
-		logger: logger,
+		uowFactory:                   uowFactory,
+		threadPermissionStoreFactory: threadPermissionStoreFactory,
+		threadDialogStoreFactory:     threadDialogStoreFactory,
+		logger:                       logger,
 	}, nil
 }
 
@@ -93,17 +98,9 @@ func (s *ThreadPermissionService) Get(ctx context.Context, req *model.GetThreadP
 	}
 
 	if req.RequestInitiatorID != nil {
-		initiator, target, err := s.store.ThreadDialogStore().FindActorsPair(ctx, *req.RequestInitiatorID, req.MemberID)
+		initiator, target, err := s.findActorsPair(ctx, *req.RequestInitiatorID, req.MemberID)
 		if err != nil {
 			return nil, err
-		}
-
-		if initiator == nil {
-			return nil, errors.New("request initiator is not a member of the thread")
-		}
-
-		if target == nil {
-			return nil, errors.New("target member is not a member of the thread")
 		}
 
 		if initiator.ThreadRole < target.ThreadRole {
@@ -111,7 +108,12 @@ func (s *ThreadPermissionService) Get(ctx context.Context, req *model.GetThreadP
 		}
 	}
 
-	return s.store.ThreadPermissionStore().Get(ctx, &model.ThreadPermissionStoreFilters{
+	threadPermissionStore, err := s.threadPermissionStoreFactory.NewThreadPermissionStore(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return threadPermissionStore.Get(ctx, &model.ThreadPermissionStoreFilters{
 		MemberIDs: []uuid.UUID{req.MemberID},
 	})
 }
@@ -122,17 +124,9 @@ func (s *ThreadPermissionService) Update(ctx context.Context, req *model.UpdateT
 	}
 
 	if req.InitiatorContactID != nil {
-		initiator, target, err := s.store.ThreadDialogStore().FindActorsPair(ctx, *req.InitiatorContactID, req.TargetMemberID)
+		initiator, target, err := s.findActorsPair(ctx, *req.InitiatorContactID, req.TargetMemberID)
 		if err != nil {
 			return nil, err
-		}
-
-		if initiator == nil {
-			return nil, errors.New("request initiator is not a member of the thread")
-		}
-
-		if target == nil {
-			return nil, errors.New("target member is not a member of the thread")
 		}
 
 		validationStruct := &permissionChangeValidationStruct{
@@ -146,7 +140,33 @@ func (s *ThreadPermissionService) Update(ctx context.Context, req *model.UpdateT
 		}
 	}
 
-	return s.store.ThreadPermissionStore().Update(ctx, req)
+	threadPermissionStore, err := s.threadPermissionStoreFactory.NewThreadPermissionStore(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return threadPermissionStore.Update(ctx, req)
+}
+
+func (s *ThreadPermissionService) findActorsPair(ctx context.Context, initiatorContactID, targetMemberID uuid.UUID) (*model.ThreadDialogExtended, *model.ThreadDialogExtended, error) {
+	threadDialogStore, err := s.threadDialogStoreFactory.NewThreadDialogStore(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	initiator, target, err := threadDialogStore.FindActorsPair(ctx, initiatorContactID, targetMemberID)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	if initiator == nil {
+		return nil, nil, errors.New("request initiator is not a member of the thread")
+	}
+
+	if target == nil {
+		return nil, nil, errors.New("target member is not a member of the thread")
+	}
+	return initiator, target, nil
 }
 
 type permissionChangeValidationStruct struct {

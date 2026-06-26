@@ -31,10 +31,12 @@ const (
 
 type (
 	ThreadManagementService struct {
-		uow            store.UnitOfWork
-		logger         *slog.Logger
-		privacyChecker ThreadPrivacyChecker
-		contactInfo    ContactInfoProvider
+		uowFactory               store.UnitOfWorkFactory
+		threadStoreFactory       store.ThreadStoreFactory
+		threadDialogStoreFactory store.ThreadDialogStoreFactory
+		logger                   *slog.Logger
+		privacyChecker           ThreadPrivacyChecker
+		contactInfo              ContactInfoProvider
 	}
 
 	ThreadPrivacyChecker interface {
@@ -55,16 +57,25 @@ type (
 )
 
 // NewThreadService returns a new thread manager, given a unit of work.
-func NewThreadService(logger *slog.Logger, uow store.UnitOfWork, privacyChecker ThreadPrivacyChecker, contactInfo ContactInfoProvider) *ThreadManagementService {
+func NewThreadService(
+	logger *slog.Logger,
+	uow store.UnitOfWorkFactory,
+	threadStoreFactory store.ThreadStoreFactory,
+	threadDialogStoreFactory store.ThreadDialogStoreFactory,
+	privacyChecker ThreadPrivacyChecker,
+	contactInfo ContactInfoProvider,
+) *ThreadManagementService {
 	if logger == nil {
 		logger = slog.Default()
 	}
 
 	return &ThreadManagementService{
-		uow:            uow,
-		logger:         logger.With(slog.String("component", "thread")),
-		privacyChecker: privacyChecker,
-		contactInfo:    contactInfo,
+		uowFactory:               uow,
+		threadStoreFactory:       threadStoreFactory,
+		threadDialogStoreFactory: threadDialogStoreFactory,
+		logger:                   logger.With(slog.String("component", "thread")),
+		privacyChecker:           privacyChecker,
+		contactInfo:              contactInfo,
 	}
 }
 
@@ -82,7 +93,12 @@ func (t *ThreadManagementService) Get(ctx context.Context, req *dto.ThreadGetReq
 		WithDomainIDFilter(req.DomainID).
 		WithFields(req.Fields)
 
-	thread, err := t.uow.ThreadStore().Get(ctx, query)
+	store, err := t.threadStoreFactory.NewThreadStore(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	thread, err := store.Get(ctx, query)
 	if err != nil {
 		t.log().Error("getting thread", "operation", "service.thread_manager.get", "id", req.ID, "err", err)
 
@@ -116,10 +132,14 @@ func (t *ThreadManagementService) Search(ctx context.Context, searchRequest *dto
 		query = query.WithContactIDFilter(searchRequest.SelfID)
 	}
 
-	threads, err := t.uow.ThreadStore().Search(ctx, query)
+	var threads []*model.Thread
+	store, err := t.threadStoreFactory.NewThreadStore(ctx)
+	if err != nil {
+		return nil, err
+	}
+	threads, err = store.Search(ctx, query)
 	if err != nil {
 		t.log().Error("searching threads", "operation", "service.thread_manager.search", "err", err)
-
 		return nil, err
 	}
 
@@ -143,11 +163,21 @@ func (t *ThreadManagementService) SearchLeft(ctx context.Context, req *dto.Searc
 		WithSort(req.Sort).
 		WithOffset(req.Page)
 
-	return t.uow.ThreadStore().SearchLeft(ctx, query)
+	store, err := t.threadStoreFactory.NewThreadStore(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return store.SearchLeft(ctx, query)
 }
 
 func (t *ThreadManagementService) findAddMemberActors(ctx context.Context, threadID, initiatorContactID, targetContactID uuid.UUID) (*model.ThreadDialogExtended, *model.ThreadDialogExtended, error) {
-	actionActors, err := t.uow.ThreadDialogStore().GetFullView(ctx, &model.ThreadDialogStoreFilter{
+	store, err := t.threadDialogStoreFactory.NewThreadDialogStore(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	actionActors, err := store.GetFullView(ctx, &model.ThreadDialogStoreFilter{
 		ThreadIDs:  []uuid.UUID{threadID},
 		ContactIDs: []uuid.UUID{initiatorContactID, targetContactID},
 	})
@@ -227,8 +257,13 @@ func (t *ThreadManagementService) AddMember(ctx context.Context, req *dto.AddMem
 
 	var newMember *model.ThreadDialogExtended
 
-	err = t.uow.WithinTransaction(ctx, func(ctx context.Context, uow store.UnitOfWork) error {
-		newMember, err = uow.ThreadDialogStore().Create(ctx, &model.ThreadDialogExtended{
+	uow, err := t.uowFactory.NewUnitOfWork(ctx)
+	if err != nil {
+		return uuid.Nil, err
+	}
+
+	err = uow.WithinTransaction(ctx, func(ctx context.Context, db store.UnitOfWorkStore) error {
+		newMember, err = db.ThreadDialog().Create(ctx, &model.ThreadDialogExtended{
 			BaseModel: shared.BaseModel{
 				DomainID:  domainID,
 				CreatedAt: time.Now().UTC(),
@@ -249,14 +284,14 @@ func (t *ThreadManagementService) AddMember(ctx context.Context, req *dto.AddMem
 			return err
 		}
 
-		eventReceivers, err := uow.ThreadDialogStore().GetQuickView(ctx, &model.ThreadDialogStoreFilter{
+		eventReceivers, err := db.ThreadDialog().GetQuickView(ctx, &model.ThreadDialogStoreFilter{
 			ThreadIDs: []uuid.UUID{req.ThreadID},
 		})
 		if err != nil {
 			return errors.Internal("search of members failed", errors.WithCause(err))
 		}
 
-		err = t.sendAddMemberSystemMessage(ctx, uow, &addMemberEventArgs{
+		err = t.sendAddMemberSystemMessage(ctx, db, &addMemberEventArgs{
 			initiator: initiator,
 			newMember: newMember,
 			receivers: eventReceivers,
@@ -274,7 +309,7 @@ func (t *ThreadManagementService) AddMember(ctx context.Context, req *dto.AddMem
 				"reason", model.BotControlReasonTransfer,
 			)
 
-			pushResult, pushErr := uow.BotControl().Push(ctx, model.BotControlTransition{
+			pushResult, pushErr := db.BotControl().Push(ctx, model.BotControlTransition{
 				ThreadID:    req.ThreadID,
 				NewMemberID: newMember.ID,
 				Reason:      model.BotControlReasonTransfer,
@@ -299,12 +334,12 @@ func (t *ThreadManagementService) AddMember(ctx context.Context, req *dto.AddMem
 			newPos := positionAfterPush(prev)
 
 			if prev != nil && prev.MemberID != nil {
-				if err = t.publishBotControlReleased(ctx, uow, newMember.ThreadID, *prev.MemberID, prev.Position, domainID, &newMember.ID, model.BotControlReasonTransfer); err != nil {
+				if err = t.publishBotControlReleased(ctx, db, newMember.ThreadID, *prev.MemberID, prev.Position, domainID, &newMember.ID, model.BotControlReasonTransfer); err != nil {
 					return err
 				}
 			}
 
-			if err = t.publishBotControlGranted(ctx, uow, newMember, prev, newPos, model.BotControlReasonTransfer, false); err != nil {
+			if err = t.publishBotControlGranted(ctx, db, newMember, prev, newPos, model.BotControlReasonTransfer, false); err != nil {
 				return err
 			}
 		}
@@ -356,10 +391,15 @@ func (t *ThreadManagementService) Transfer(ctx context.Context, req *dto.Transfe
 
 	var newMemberID uuid.UUID
 
-	err = t.uow.WithinTransaction(ctx, func(ctx context.Context, uow store.UnitOfWork) error {
+	uow, err := t.uowFactory.NewUnitOfWork(ctx)
+	if err != nil {
+		return uuid.Nil, err
+	}
+
+	err = uow.WithinTransaction(ctx, func(ctx context.Context, db store.UnitOfWorkStore) error {
 		now := time.Now().UTC()
 
-		newMember, err := uow.ThreadDialogStore().Create(ctx, &model.ThreadDialogExtended{
+		newMember, err := db.ThreadDialog().Create(ctx, &model.ThreadDialogExtended{
 			BaseModel: shared.BaseModel{
 				DomainID:  initiator.DomainID,
 				CreatedAt: now,
@@ -381,11 +421,11 @@ func (t *ThreadManagementService) Transfer(ctx context.Context, req *dto.Transfe
 		}
 
 		transferReason := memberTransferedLeaveReason
-		if err = uow.ThreadDialogStore().Delete(ctx, initiator.ID, &transferReason); err != nil {
+		if err = db.ThreadDialog().Delete(ctx, initiator.ID, &transferReason); err != nil {
 			return err
 		}
 
-		eventReceivers, err := uow.ThreadDialogStore().GetQuickView(ctx, &model.ThreadDialogStoreFilter{
+		eventReceivers, err := db.ThreadDialog().GetQuickView(ctx, &model.ThreadDialogStoreFilter{
 			ThreadIDs:      []uuid.UUID{req.ThreadID},
 			IncludeDeleted: false,
 		})
@@ -393,7 +433,7 @@ func (t *ThreadManagementService) Transfer(ctx context.Context, req *dto.Transfe
 			return errors.Internal("search of members failed", errors.WithCause(err))
 		}
 
-		err = t.sendTransferSystemMessage(ctx, uow, &transferMemberEventArgs{
+		err = t.sendTransferSystemMessage(ctx, db, &transferMemberEventArgs{
 			initiator: initiator,
 			newMember: newMember,
 			receivers: eventReceivers,
@@ -410,7 +450,7 @@ func (t *ThreadManagementService) Transfer(ctx context.Context, req *dto.Transfe
 				"member_id", newMember.ID,
 			)
 
-			pushResult, pushErr := uow.BotControl().Push(ctx, model.BotControlTransition{
+			pushResult, pushErr := db.BotControl().Push(ctx, model.BotControlTransition{
 				ThreadID:    req.ThreadID,
 				NewMemberID: newMember.ID,
 				Reason:      model.BotControlReasonTransfer,
@@ -434,12 +474,12 @@ func (t *ThreadManagementService) Transfer(ctx context.Context, req *dto.Transfe
 			newPos := positionAfterPush(prev)
 
 			if prev != nil && prev.MemberID != nil {
-				if err = t.publishBotControlReleased(ctx, uow, newMember.ThreadID, *prev.MemberID, prev.Position, initiator.DomainID, &newMember.ID, model.BotControlReasonTransfer); err != nil {
+				if err = t.publishBotControlReleased(ctx, db, newMember.ThreadID, *prev.MemberID, prev.Position, initiator.DomainID, &newMember.ID, model.BotControlReasonTransfer); err != nil {
 					return err
 				}
 			}
 
-			if err = t.publishBotControlGranted(ctx, uow, newMember, prev, newPos, model.BotControlReasonTransfer, false); err != nil {
+			if err = t.publishBotControlGranted(ctx, db, newMember, prev, newPos, model.BotControlReasonTransfer, false); err != nil {
 				return err
 			}
 		}
@@ -526,7 +566,7 @@ type transferMemberEventArgs struct {
 	domainID  int
 }
 
-func (t *ThreadManagementService) sendAddMemberSystemMessage(ctx context.Context, uow store.UnitOfWork, args *addMemberEventArgs) error {
+func (t *ThreadManagementService) sendAddMemberSystemMessage(ctx context.Context, uow store.UnitOfWorkStore, args *addMemberEventArgs) error {
 	if args == nil {
 		return errors.New("add member event args cannot be nil")
 	}
@@ -604,7 +644,7 @@ func (t *ThreadManagementService) sendAddMemberSystemMessage(ctx context.Context
 	return t.publishMemberEvent(ctx, uow, joinedEvent)
 }
 
-func (t *ThreadManagementService) sendThreadSystemMessage(ctx context.Context, uow store.UnitOfWork, msg *model.Message) (*model.Message, error) {
+func (t *ThreadManagementService) sendThreadSystemMessage(ctx context.Context, uow store.UnitOfWorkStore, msg *model.Message) (*model.Message, error) {
 	if msg.ThreadID == uuid.Nil {
 		return nil, errors.New("thread id cannot be nil")
 	}
@@ -641,7 +681,12 @@ func (t *ThreadManagementService) RemoveMember(ctx context.Context, req *dto.Rem
 		return errors.New("remove member request cannot be nil")
 	}
 
-	initiator, target, err := t.uow.ThreadDialogStore().FindActorsPair(ctx, req.InitiatorContactID, req.TargetMemberID)
+	threadDialogStore, err := t.threadDialogStoreFactory.NewThreadDialogStore(ctx)
+	if err != nil {
+		return err
+	}
+
+	initiator, target, err := threadDialogStore.FindActorsPair(ctx, req.InitiatorContactID, req.TargetMemberID)
 	if err != nil {
 		return err
 	}
@@ -657,8 +702,13 @@ func (t *ThreadManagementService) RemoveMember(ctx context.Context, req *dto.Rem
 		}
 	}
 
-	err = t.uow.WithinTransaction(ctx, func(ctx context.Context, uow store.UnitOfWork) error {
-		eventReceivers, err := uow.ThreadDialogStore().GetQuickView(ctx, &model.ThreadDialogStoreFilter{
+	uow, err := t.uowFactory.NewUnitOfWork(ctx)
+	if err != nil {
+		return err
+	}
+
+	err = uow.WithinTransaction(ctx, func(ctx context.Context, db store.UnitOfWorkStore) error {
+		eventReceivers, err := db.ThreadDialog().GetQuickView(ctx, &model.ThreadDialogStoreFilter{
 			ThreadIDs:      []uuid.UUID{target.ThreadID},
 			IncludeDeleted: false,
 		})
@@ -677,7 +727,7 @@ func (t *ThreadManagementService) RemoveMember(ctx context.Context, req *dto.Rem
 				triggeredBy = &initiator.ID
 			}
 
-			newTop, popErr := uow.BotControl().Pop(ctx, target.ThreadID, target.ID, model.BotControlReasonRemoved, triggeredBy)
+			newTop, popErr := db.BotControl().Pop(ctx, target.ThreadID, target.ID, model.BotControlReasonRemoved, triggeredBy)
 			if popErr != nil {
 				return errors.Internal("failed to pop bot control", errors.WithCause(popErr))
 			}
@@ -687,13 +737,13 @@ func (t *ThreadManagementService) RemoveMember(ctx context.Context, req *dto.Rem
 				nextMemberID = newTop.MemberID
 			}
 
-			if err = t.publishBotControlReleased(ctx, uow, target.ThreadID, target.ID, 0, domainID, nextMemberID, model.BotControlReasonRemoved); err != nil {
+			if err = t.publishBotControlReleased(ctx, db, target.ThreadID, target.ID, 0, domainID, nextMemberID, model.BotControlReasonRemoved); err != nil {
 				return err
 			}
 
 			if newTop != nil && newTop.MemberID != nil {
 				newTopDialog := botControlStackEntryToDialog(newTop)
-				if err = t.publishBotControlGranted(ctx, uow, newTopDialog, &model.BotControlStackEntry{
+				if err = t.publishBotControlGranted(ctx, db, newTopDialog, &model.BotControlStackEntry{
 					MemberID: &target.ID,
 					Position: newTop.Position + 1,
 				}, newTop.Position, model.BotControlReasonRemoved, true); err != nil {
@@ -703,17 +753,17 @@ func (t *ThreadManagementService) RemoveMember(ctx context.Context, req *dto.Rem
 
 			// Pop already soft-deletes auto_leave dialogs; only delete permanent ones manually
 			if !target.AutoLeave {
-				if err = uow.ThreadDialogStore().Delete(ctx, target.ID, req.Reason); err != nil {
+				if err = db.ThreadDialog().Delete(ctx, target.ID, req.Reason); err != nil {
 					return err
 				}
 			}
 		} else {
-			if err = uow.ThreadDialogStore().Delete(ctx, target.ID, req.Reason); err != nil {
+			if err = db.ThreadDialog().Delete(ctx, target.ID, req.Reason); err != nil {
 				return err
 			}
 		}
 
-		err = t.sendRemoveMemberSystemMessage(ctx, uow, &removeMemberEventArgs{
+		err = t.sendRemoveMemberSystemMessage(ctx, db, &removeMemberEventArgs{
 			initiator: initiator,
 			member:    target,
 			receivers: eventReceivers,
@@ -733,7 +783,7 @@ func (t *ThreadManagementService) RemoveMember(ctx context.Context, req *dto.Rem
 	return nil
 }
 
-func (t *ThreadManagementService) sendRemoveMemberSystemMessage(ctx context.Context, uow store.UnitOfWork, args *removeMemberEventArgs) error {
+func (t *ThreadManagementService) sendRemoveMemberSystemMessage(ctx context.Context, uow store.UnitOfWorkStore, args *removeMemberEventArgs) error {
 	if args == nil {
 		return errors.New("remove member event args cannot be nil")
 	}
@@ -813,7 +863,7 @@ func (t *ThreadManagementService) sendRemoveMemberSystemMessage(ctx context.Cont
 	return t.publishMemberEvent(ctx, uow, leftEvent)
 }
 
-func (t *ThreadManagementService) sendTransferSystemMessage(ctx context.Context, uow store.UnitOfWork, args *transferMemberEventArgs) error {
+func (t *ThreadManagementService) sendTransferSystemMessage(ctx context.Context, uow store.UnitOfWorkStore, args *transferMemberEventArgs) error {
 	if args == nil {
 		return errors.New("transfer member event args cannot be nil")
 	}
@@ -948,8 +998,13 @@ func (t *ThreadManagementService) CompleteBotControl(ctx context.Context, req *d
 		return errors.InvalidArgument("member_id is required", errors.WithID("service.thread_manager.complete_bot_control"))
 	}
 
-	return t.uow.WithinTransaction(ctx, func(ctx context.Context, uow store.UnitOfWork) error {
-		stack, err := uow.BotControl().GetStack(ctx, req.ThreadID)
+	uow, err := t.uowFactory.NewUnitOfWork(ctx)
+	if err != nil {
+		return err
+	}
+
+	return uow.WithinTransaction(ctx, func(ctx context.Context, db store.UnitOfWorkStore) error {
+		stack, err := db.BotControl().GetStack(ctx, req.ThreadID)
 		if err != nil {
 			return err
 		}
@@ -962,7 +1017,7 @@ func (t *ThreadManagementService) CompleteBotControl(ctx context.Context, req *d
 
 		completedPosition := stack[len(stack)-1].Position
 
-		newTop, err := uow.BotControl().Pop(ctx, req.ThreadID, req.MemberID, model.BotControlReasonCompleted, nil)
+		newTop, err := db.BotControl().Pop(ctx, req.ThreadID, req.MemberID, model.BotControlReasonCompleted, nil)
 		if err != nil {
 			return err
 		}
@@ -972,7 +1027,7 @@ func (t *ThreadManagementService) CompleteBotControl(ctx context.Context, req *d
 			nextMemberID = newTop.MemberID
 		}
 
-		if err = t.publishBotControlReleased(ctx, uow, req.ThreadID, req.MemberID, completedPosition, req.DomainID, nextMemberID, model.BotControlReasonCompleted); err != nil {
+		if err = t.publishBotControlReleased(ctx, db, req.ThreadID, req.MemberID, completedPosition, req.DomainID, nextMemberID, model.BotControlReasonCompleted); err != nil {
 			return err
 		}
 
@@ -980,7 +1035,7 @@ func (t *ThreadManagementService) CompleteBotControl(ctx context.Context, req *d
 			return nil
 		}
 
-		return t.publishBotControlGranted(ctx, uow, botControlStackEntryToDialog(newTop), &model.BotControlStackEntry{
+		return t.publishBotControlGranted(ctx, db, botControlStackEntryToDialog(newTop), &model.BotControlStackEntry{
 			MemberID: &req.MemberID,
 			Position: completedPosition,
 		}, newTop.Position, model.BotControlReasonCompleted, true)
@@ -1017,7 +1072,11 @@ func (t *ThreadManagementService) EnsureDirectThread(ctx context.Context, req *d
 }
 
 func (t *ThreadManagementService) searchThread(ctx context.Context, searchQuery model.ResolveThreadQuery) (*model.Thread, error) {
-	thread, err := t.uow.ThreadStore().ResolveThread(ctx, searchQuery)
+	store, err := t.threadStoreFactory.NewThreadStore(ctx)
+	if err != nil {
+		return nil, err
+	}
+	thread, err := store.ResolveThread(ctx, searchQuery)
 	if err != nil {
 		return nil, err
 	}
@@ -1036,9 +1095,13 @@ func (t *ThreadManagementService) orchestrateDirectThreadCreation(ctx context.Co
 	}
 
 	var createdThread *model.Thread
+	uow, err := t.uowFactory.NewUnitOfWork(ctx)
+	if err != nil {
+		return nil, err
+	}
 
-	err = t.uow.WithinTransaction(ctx, func(ctx context.Context, uow store.UnitOfWork) error {
-		savedThread, err := t.createDirectThread(ctx, uow, req.DomainID, req.From, req.To)
+	err = uow.WithinTransaction(ctx, func(ctx context.Context, db store.UnitOfWorkStore) error {
+		savedThread, err := t.createDirectThread(ctx, db, req.DomainID, req.From, req.To)
 		if err != nil {
 			return err
 		}
@@ -1050,7 +1113,7 @@ func (t *ThreadManagementService) orchestrateDirectThreadCreation(ctx context.Co
 			toIsBot = req.ToIsBot()
 		}
 
-		members, err := t.initializeDirectThreadDialogs(ctx, uow, createdThread.ID, req.DomainID, req.From, req.To, toIsBot)
+		members, err := t.initializeDirectThreadDialogs(ctx, db, createdThread.ID, req.DomainID, req.From, req.To, toIsBot)
 		if err != nil {
 			return err
 		}
@@ -1064,7 +1127,7 @@ func (t *ThreadManagementService) orchestrateDirectThreadCreation(ctx context.Co
 			return err
 		}
 
-		if err = t.publishThreadCreatedEvents(ctx, uow, events...); err != nil {
+		if err = t.publishThreadCreatedEvents(ctx, db, events...); err != nil {
 			return err
 		}
 
@@ -1077,7 +1140,7 @@ func (t *ThreadManagementService) orchestrateDirectThreadCreation(ctx context.Co
 	return createdThread, nil
 }
 
-func (t *ThreadManagementService) createDirectThread(ctx context.Context, uow store.UnitOfWork, domainID int, from, to *shared.Peer) (*model.Thread, error) {
+func (t *ThreadManagementService) createDirectThread(ctx context.Context, uow store.UnitOfWorkStore, domainID int, from, to *shared.Peer) (*model.Thread, error) {
 	if from == nil || to == nil {
 		return nil, errors.New("from and to peers cannot be nil")
 	}
@@ -1096,7 +1159,7 @@ func (t *ThreadManagementService) createDirectThread(ctx context.Context, uow st
 		}
 	)
 
-	createdThread, err := uow.ThreadStore().Create(ctx, directThread)
+	createdThread, err := uow.Thread().Create(ctx, directThread)
 	if err != nil {
 		return nil, err
 	}
@@ -1114,7 +1177,7 @@ func extendedThreadDialogToSimpleMapper(tde *model.ThreadDialogExtended) *model.
 	}
 }
 
-func (t *ThreadManagementService) initializeDirectThreadDialogs(ctx context.Context, uow store.UnitOfWork, threadID uuid.UUID, domainID int, from, to *shared.Peer, toIsBot bool) ([]*model.ThreadDialogExtended, error) {
+func (t *ThreadManagementService) initializeDirectThreadDialogs(ctx context.Context, uow store.UnitOfWorkStore, threadID uuid.UUID, domainID int, from, to *shared.Peer, toIsBot bool) ([]*model.ThreadDialogExtended, error) {
 	if from == nil || to == nil {
 		return nil, errors.InvalidArgument("from and to peers is required", errors.WithID("service.thread_manager.initialize_direct_thread_dialogs"))
 	}
@@ -1146,7 +1209,7 @@ func (t *ThreadManagementService) initializeDirectThreadDialogs(ctx context.Cont
 
 	baseModel := shared.BaseModel{DomainID: domainID}
 
-	initiatorCreatedThreadDialog, err := uow.ThreadDialogStore().Create(ctx, &model.ThreadDialogExtended{
+	initiatorCreatedThreadDialog, err := uow.ThreadDialog().Create(ctx, &model.ThreadDialogExtended{
 		BaseModel:   baseModel,
 		ThreadID:    threadID,
 		ContactID:   from.ID,
@@ -1159,7 +1222,7 @@ func (t *ThreadManagementService) initializeDirectThreadDialogs(ctx context.Cont
 		return nil, err
 	}
 
-	targetCreatedThreadDialog, err := uow.ThreadDialogStore().Create(ctx, &model.ThreadDialogExtended{
+	targetCreatedThreadDialog, err := uow.ThreadDialog().Create(ctx, &model.ThreadDialogExtended{
 		BaseModel:   baseModel,
 		ThreadID:    threadID,
 		ContactID:   to.ID,
@@ -1252,7 +1315,7 @@ func (t *ThreadManagementService) buildDirectThreadCreatedEvents(thread *model.T
 	return events, nil
 }
 
-func (t *ThreadManagementService) publishThreadCreatedEvents(ctx context.Context, uow store.UnitOfWork, events ...ThreadEvent) error {
+func (t *ThreadManagementService) publishThreadCreatedEvents(ctx context.Context, uow store.UnitOfWorkStore, events ...ThreadEvent) error {
 	for _, e := range events {
 		if err := uow.Outbox().Publish(ctx, e.Topic(), e); err != nil {
 			return err
@@ -1262,7 +1325,7 @@ func (t *ThreadManagementService) publishThreadCreatedEvents(ctx context.Context
 	return nil
 }
 
-func (t *ThreadManagementService) publishMemberEvent(ctx context.Context, uow store.UnitOfWork, e ThreadEvent) error {
+func (t *ThreadManagementService) publishMemberEvent(ctx context.Context, uow store.UnitOfWorkStore, e ThreadEvent) error {
 	return uow.Outbox().Publish(ctx, e.Topic(), e)
 }
 
@@ -1303,7 +1366,7 @@ func resolveAutoLeave(override *bool) bool {
 // position is the new entry's stack position.
 // isResume=true when returning control to a bot that was previously paused (Pop path).
 // isResume=false when activating a newly added bot for the first time (Push path).
-func (t *ThreadManagementService) publishBotControlGranted(ctx context.Context, uow store.UnitOfWork, dialog *model.ThreadDialogExtended, prev *model.BotControlStackEntry, position int, reason model.BotControlReason, isResume bool) error {
+func (t *ThreadManagementService) publishBotControlGranted(ctx context.Context, uow store.UnitOfWorkStore, dialog *model.ThreadDialogExtended, prev *model.BotControlStackEntry, position int, reason model.BotControlReason, isResume bool) error {
 	var (
 		prevMemberID *uuid.UUID
 		prevPosition *int
@@ -1356,7 +1419,7 @@ func (t *ThreadManagementService) publishBotControlGranted(ctx context.Context, 
 }
 
 // publishBotControlReleased publishes a BotControlReleased event to the outbox.
-func (t *ThreadManagementService) publishBotControlReleased(ctx context.Context, uow store.UnitOfWork, threadID, memberID uuid.UUID, position, domainID int, nextMemberID *uuid.UUID, reason model.BotControlReason) error {
+func (t *ThreadManagementService) publishBotControlReleased(ctx context.Context, uow store.UnitOfWorkStore, threadID, memberID uuid.UUID, position, domainID int, nextMemberID *uuid.UUID, reason model.BotControlReason) error {
 	if memberID == uuid.Nil {
 		return nil
 	}

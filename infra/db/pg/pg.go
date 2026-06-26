@@ -11,11 +11,11 @@ import (
 
 const (
 	defaultMigrationTableName = "im_thread_schema_version"
-	lastMigrationVersion      = "20260603120007"
+	requiredMigrationVersion  = "20260603120007"
 )
 
 func New(ctx context.Context, conf *config.Config) (*pgw.PoolManager, error) {
-	migrationVerifier, err := goose.NewGooseMigrationVerifier(defaultMigrationTableName, lastMigrationVersion)
+	migrationVerifier, err := goose.NewGooseMigrationVerifier(defaultMigrationTableName, requiredMigrationVersion)
 	if err != nil {
 		return nil, fmt.Errorf("create migration verifier: %v", err)
 	}
@@ -23,7 +23,7 @@ func New(ctx context.Context, conf *config.Config) (*pgw.PoolManager, error) {
 	return pgw.NewPoolManager(
 		ctx,
 		pgw.WithMigrationVerifier(migrationVerifier),
-		pgw.WithPrimaryConfig(pgw.PrimaryConfig{DSN: conf.Postgres.DSN}),
+		pgw.WithPrimaryConfig(pgw.PrimaryConfig{DSN: conf.Postgres.DSN, MaxConns: conf.Postgres.MaxOpenConns}),
 	)
 
 }

@@ -13,63 +13,47 @@ import (
 
 var Module = fx.Module("store",
 	fx.Provide(
-		ProvideNewDBConnection,
+		ProvidePoolManager,
 		fx.Annotate(
-			func(p *pgw.PoolManager) (Querier, error) {
-				return p.Primary()
-			},
-			fx.As(new(Querier)),
-		),
-
-		fx.Annotate(
-			NewMessageStore,
-			fx.As(new(store.MessageStore)),
-		),
-
-		fx.Annotate(
-			NewOutboxStore,
-			fx.As(new(store.OutboxStore)),
-		),
-
-		fx.Annotate(
-			NewStore,
-			fx.As(new(store.Store)),
-		),
-
-		fx.Annotate(
-			NewMessageHistoryStore,
-			fx.As(new(store.MessageHistory)),
+			NewMessageStoreFactory,
+			fx.As(new(store.MessageStoreFactory)),
 		),
 		fx.Annotate(
-			NewDirectThreadDialogOrchestration,
-			fx.As(new(store.DirectThreadDialogOrchestration)),
+			NewMessageHistoryStoreFactory,
+			fx.As(new(store.MessageHistoryStoreFactory)),
 		),
 		fx.Annotate(
-			NewThreadStore,
-			fx.As(new(store.ThreadStore)),
+			NewThreadVariablesStoreFactory,
+			fx.As(new(store.ThreadVariablesStoreFactory)),
 		),
 		fx.Annotate(
-			NewThreadPermissionStore,
-			fx.As(new(store.ThreadPermissionStore)),
+			NewThreadDialogStoreFactory,
+			fx.As(new(store.ThreadDialogStoreFactory)),
 		),
 		fx.Annotate(
-			NewPgxUnitOfWork,
-			fx.As(new(store.UnitOfWork)),
+			NewThreadStoreFactory,
+			fx.As(new(store.ThreadStoreFactory)),
 		),
-
 		fx.Annotate(
-			NewThreadVariablesStore,
-			fx.As(new(store.ThreadVariablesStore)),
+			NewThreadPermissionStoreFactory,
+			fx.As(new(store.ThreadPermissionStoreFactory)),
 		),
-
 		fx.Annotate(
-			NewBotControlStore,
-			fx.As(new(store.BotControlStore)),
+			NewBotControlStoreFactory,
+			fx.As(new(store.BotControlStoreFactory)),
+		),
+		fx.Annotate(
+			NewOutboxStoreFactory,
+			fx.As(new(store.OutboxStoreFactory)),
+		),
+		fx.Annotate(
+			NewUnitOfWorkFactory,
+			fx.As(new(store.UnitOfWorkFactory)),
 		),
 	),
 )
 
-func ProvideNewDBConnection(cfg *config.Config, lc fx.Lifecycle) (*pgw.PoolManager, error) {
+func ProvidePoolManager(cfg *config.Config, lc fx.Lifecycle) (*pgw.PoolManager, error) {
 	db, err := pg.New(context.Background(), cfg)
 	if err != nil {
 		return nil, err
