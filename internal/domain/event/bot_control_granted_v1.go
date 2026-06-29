@@ -22,6 +22,7 @@ type BotControlGranted struct {
 	PreviousPosition *int       `json:"previous_position,omitempty"`
 	PreviousMemberID *uuid.UUID `json:"previous_member_id,omitempty"`
 	Sub              *int64     `json:"sub,omitempty"`
+	ReleasedSub      *int64     `json:"released_sub,omitempty"`
 	OccurredAt       time.Time  `json:"occurred_at"`
 }
 
