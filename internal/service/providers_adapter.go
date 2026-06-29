@@ -63,12 +63,14 @@ func (a *baseRPCProvidersAdapter) SendMessage(ctx context.Context, message *mode
 	)
 
 	allExternal := model.ThreadDialogs.ExtractExternalPeers(message.To)
+
 	externalPairs := make([]*model.ExternalPeerPair, 0, len(allExternal))
 	for _, p := range allExternal {
 		if p.ContactID != message.From.ID {
 			externalPairs = append(externalPairs, p)
 		}
 	}
+
 	if len(externalPairs) == 0 {
 		log.Debug("no external peers found, skipping provider send",
 			slog.String("message_id", message.ID.String()),
