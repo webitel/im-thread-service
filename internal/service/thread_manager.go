@@ -1400,11 +1400,20 @@ func (t *ThreadManagementService) publishBotControlGranted(ctx context.Context, 
 		prevMemberID *uuid.UUID
 		prevPosition *int
 		schemeID     *int64
+		prevSchemeID *int64
 	)
 
 	if prev != nil {
 		prevMemberID = prev.MemberID
 		prevPosition = &prev.Position
+
+		if t.contactInfo != nil && prev.ContactID != uuid.Nil {
+			if id, err := t.contactInfo.GetSub(ctx, prev.ContactID, dialog.DomainID); err != nil {
+				t.log().WarnContext(ctx, "failed to get sub for previous bot in granted event, skipping", "contact_id", prev.ContactID, "err", err)
+			} else {
+				prevSchemeID = id
+			}
+		}
 	}
 
 	if t.contactInfo != nil && dialog.ContactID != uuid.Nil {
@@ -1427,6 +1436,7 @@ func (t *ThreadManagementService) publishBotControlGranted(ctx context.Context, 
 		PreviousPosition: prevPosition,
 		PreviousMemberID: prevMemberID,
 		Sub:              schemeID,
+		ReleasedSub:      prevSchemeID,
 		OccurredAt:       time.Now().UTC(),
 	}
 
