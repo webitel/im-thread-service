@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strconv"
+	"strings"
 
 	"github.com/google/uuid"
 
@@ -20,6 +21,13 @@ import (
 
 type ThreadManager interface {
 	EnsureDirectThread(ctx context.Context, req *dto.EnsureDirectThreadRequest) (*model.Thread, error)
+	ReleaseBotControl(ctx context.Context, req *dto.ReleaseBotControlRequest) error
+}
+
+const botStopCommand = "/close"
+
+func isStopCommand(body string) bool {
+	return strings.TrimSpace(body) == botStopCommand
 }
 
 type MessageService struct {
@@ -121,6 +129,10 @@ func (s *MessageService) SendText(ctx context.Context, in *dto.SendTextRequest) 
 		)
 	}
 
+	if isStopCommand(in.Body) && s.shouldStopBot(t, in.From.ID) {
+		return s.handleBotStopCommand(ctx, in, t)
+	}
+
 	msg := &model.Message{
 		ThreadID:              t.ID,
 		DomainID:              int32(in.DomainID),
@@ -169,6 +181,77 @@ func (s *MessageService) SendText(ctx context.Context, in *dto.SendTextRequest) 
 	}
 
 	return &dto.SendTextResponse{ID: msg.ID, To: in.To}, nil
+}
+
+const botStoppedSystemType = "bot_stopped"
+
+func (s *MessageService) shouldStopBot(t *model.Thread, fromContactID uuid.UUID) bool {
+	if t == nil || t.BotControllerID == nil {
+		return false
+	}
+
+	if sender := memberByContactID(t.Members, fromContactID); sender != nil {
+		if sender.IsBot || sender.ID == *t.BotControllerID {
+			return false
+		}
+	}
+
+	return true
+}
+
+func (s *MessageService) handleBotStopCommand(ctx context.Context, in *dto.SendTextRequest, t *model.Thread) (*dto.SendTextResponse, error) {
+	log := s.logger.With("operation", "message.handleBotStopCommand", slog.String("thread_id", t.ID.String()))
+
+	var initiatorMemberID uuid.UUID
+	if sender := memberByContactID(t.Members, in.From.ID); sender != nil {
+		initiatorMemberID = sender.ID
+	}
+
+	if err := s.threader.ReleaseBotControl(ctx, &dto.ReleaseBotControlRequest{
+		ThreadID:          t.ID,
+		InitiatorMemberID: initiatorMemberID,
+		DomainID:          int(in.DomainID),
+	}); err != nil {
+		log.ErrorContext(ctx, "failed to release bot control on /close", "err", err)
+
+		return nil, err
+	}
+
+	// The bot is already stopped; the confirmation is best-effort.
+	sysMsg, err := s.SendSystemMessage(ctx, s.buildBotStoppedMessage(in))
+	if err != nil {
+		log.ErrorContext(ctx, "failed to send bot stopped system message", "err", err)
+
+		return &dto.SendTextResponse{To: in.To}, nil
+	}
+
+	log.InfoContext(ctx, "bot stopped via /close", slog.String("system_message_id", sysMsg.ID.String()))
+
+	return &dto.SendTextResponse{ID: sysMsg.ID, To: in.To}, nil
+}
+
+func (s *MessageService) buildBotStoppedMessage(in *dto.SendTextRequest) *model.Message {
+	return &model.Message{
+		DomainID:       int32(in.DomainID),
+		From:           in.From,
+		SendTo:         in.To,
+		SendAs:         in.SendAs,
+		Type:           model.MessageTypeSystem,
+		IdempotencyKey: in.SendID,
+		System: &model.MessageSystem{
+			Type: botStoppedSystemType,
+		},
+	}
+}
+
+func memberByContactID(members []*model.ThreadDialog, contactID uuid.UUID) *model.ThreadDialog {
+	for _, m := range members {
+		if m != nil && m.ContactID == contactID {
+			return m
+		}
+	}
+
+	return nil
 }
 
 func (s *MessageService) SendDocument(ctx context.Context, in *dto.SendDocumentRequest) (*dto.SendDocumentResponse, error) {

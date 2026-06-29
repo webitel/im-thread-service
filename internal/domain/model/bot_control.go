@@ -5,10 +5,11 @@ import "github.com/google/uuid"
 type BotControlReason string
 
 const (
-	BotControlReasonInitial   BotControlReason = "initial"
-	BotControlReasonTransfer  BotControlReason = "transfer"
-	BotControlReasonCompleted BotControlReason = "completed"
-	BotControlReasonRemoved   BotControlReason = "removed"
+	BotControlReasonInitial     BotControlReason = "initial"
+	BotControlReasonTransfer    BotControlReason = "transfer"
+	BotControlReasonCompleted   BotControlReason = "completed"
+	BotControlReasonRemoved     BotControlReason = "removed"
+	BotControlReasonClientLeave BotControlReason = "client_leave"
 )
 
 type BotControlTransition struct {
