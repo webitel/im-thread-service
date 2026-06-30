@@ -1080,9 +1080,11 @@ func (t *ThreadManagementService) EnsureDirectThread(ctx context.Context, req *d
 // Called when a thread was created without bot control but the To peer is a bot.
 func (t *ThreadManagementService) ensureBotControl(ctx context.Context, thread *model.Thread, domainID int) error {
 	var botDialog *model.ThreadDialog
+
 	for _, m := range thread.Members {
 		if m != nil && m.IsBot {
 			botDialog = m
+
 			break
 		}
 	}
