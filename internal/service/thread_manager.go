@@ -1479,4 +1479,3 @@ func (t *ThreadManagementService) publishBotControlGranted(ctx context.Context, 
 
 	return nil
 }
-
