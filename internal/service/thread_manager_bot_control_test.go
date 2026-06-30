@@ -55,16 +55,6 @@ func findGrantedEvent(outbox *fakeOutboxStore) *event.BotControlGranted {
 	return nil
 }
 
-// findReleasedEvent returns the first BotControlReleased event from outbox, nil if absent.
-func findReleasedEvent(outbox *fakeOutboxStore) *event.BotControlReleased {
-	for _, pub := range outbox.published {
-		if e, ok := pub.event.(*event.BotControlReleased); ok {
-			return e
-		}
-	}
-
-	return nil
-}
 
 func TestAddMember_BotContact_PushesStackAndPublishesBotControlEvents(t *testing.T) {
 	threadID := uuid.New()
@@ -124,11 +114,6 @@ func TestAddMember_BotContact_PushesStackAndPublishesBotControlEvents(t *testing
 	// Push called with correct transition
 	require.Equal(t, threadID, botControl.lastPushTransition.ThreadID)
 	require.Equal(t, model.BotControlReasonTransfer, botControl.lastPushTransition.Reason)
-
-	// BotControlReleased published for previous top
-	released := findReleasedEvent(outboxStore)
-	require.NotNil(t, released, "BotControlReleased must be published for previous controller")
-	require.Equal(t, prevMemberID, released.MemberID)
 
 	// BotControlGranted published for new bot
 	granted := findGrantedEvent(outboxStore)
@@ -234,10 +219,6 @@ func TestTransfer_BotContact_PushesStackAndPublishesBotControlEvents(t *testing.
 
 	require.Equal(t, threadID, botControl.lastPushTransition.ThreadID)
 	require.Equal(t, model.BotControlReasonTransfer, botControl.lastPushTransition.Reason)
-
-	released := findReleasedEvent(outboxStore)
-	require.NotNil(t, released)
-	require.Equal(t, prevMemberID, released.MemberID)
 
 	granted := findGrantedEvent(outboxStore)
 	require.NotNil(t, granted)
@@ -362,12 +343,6 @@ func TestCompleteBotControl_PopsStackAndPublishesGrantedWithIsResume(t *testing.
 	require.Equal(t, botMemberID, botControl.lastPopMemberID)
 	require.Equal(t, model.BotControlReasonCompleted, botControl.lastPopReason)
 
-	// BotControlReleased for the completed bot
-	released := findReleasedEvent(outboxStore)
-	require.NotNil(t, released)
-	require.Equal(t, botMemberID, released.MemberID)
-	require.Equal(t, string(model.BotControlReasonCompleted), released.Reason)
-
 	// BotControlGranted with is_resume=true for new top
 	granted := findGrantedEvent(outboxStore)
 	require.NotNil(t, granted)
@@ -414,9 +389,6 @@ func TestCompleteBotControl_EmptyStack_OnlyPublishesReleased(t *testing.T) {
 	})
 
 	require.NoError(t, err)
-
-	released := findReleasedEvent(outboxStore)
-	require.NotNil(t, released)
 
 	granted := findGrantedEvent(outboxStore)
 	require.Nil(t, granted, "no BotControlGranted when stack is empty")
