@@ -55,7 +55,6 @@ func findGrantedEvent(outbox *fakeOutboxStore) *event.BotControlGranted {
 	return nil
 }
 
-
 func TestAddMember_BotContact_PushesStackAndPublishesBotControlEvents(t *testing.T) {
 	threadID := uuid.New()
 	initiatorContactID := uuid.New()
