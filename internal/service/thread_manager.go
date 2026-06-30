@@ -491,8 +491,9 @@ func (t *ThreadManagementService) Transfer(ctx context.Context, req *dto.Transfe
 			if newTop != nil && newTop.MemberID != nil {
 				newTopDialog := botControlStackEntryToDialog(newTop)
 				if err = t.publishBotControlGranted(ctx, uow, newTopDialog, &model.BotControlStackEntry{
-					MemberID: &initiator.ID,
-					Position: newTop.Position + 1,
+					MemberID:  &initiator.ID,
+					Position:  newTop.Position + 1,
+					ContactID: initiator.ContactID,
 				}, newTop.Position, model.BotControlReasonTransfer, true); err != nil {
 					return err
 				}
@@ -1072,8 +1073,9 @@ func (t *ThreadManagementService) CompleteBotControl(ctx context.Context, req *d
 		}
 
 		return t.publishBotControlGranted(ctx, uow, botControlStackEntryToDialog(newTop), &model.BotControlStackEntry{
-			MemberID: &req.MemberID,
-			Position: completedPosition,
+			MemberID:  &req.MemberID,
+			Position:  completedPosition,
+			ContactID: top.ContactID,
 		}, newTop.Position, model.BotControlReasonCompleted, true)
 	})
 }
