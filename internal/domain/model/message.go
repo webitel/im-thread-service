@@ -58,6 +58,16 @@ type Message struct {
 	domainEvents []event.Outboxer
 }
 
+func (m *Message) FirstViaOrDefault() string {
+	for _, member := range m.To {
+		if via := member.Via; via != nil && *via != "" {
+			return *via
+		}
+	}
+
+	return ""
+}
+
 func (m *Message) GetSender() uuid.UUID {
 	if m.SendAs != nil && *m.SendAs != uuid.Nil {
 		return *m.SendAs
@@ -195,6 +205,10 @@ func (m *Message) WithCreatedEvent(ctx context.Context, sendID string) *Message 
 	}
 
 	WithContextPropogatedMetadata(ctx, &e)
+
+	if via := m.FirstViaOrDefault(); via != "" && uuid.Validate(via) == nil {
+		e.AddMetadata(XWebitelVia, via)
+	}
 
 	m.AddEvent(&e)
 
