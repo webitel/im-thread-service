@@ -11,7 +11,6 @@ import (
 	"github.com/webitel/im-thread-service/internal/domain/shared"
 )
 
-//go:generate stringer -type=MessageType
 type MessageType int16
 
 const (
@@ -24,6 +23,24 @@ const (
 	MessageTypeLocation                // 6: LOCATION
 	MessageTypeContact                 // 7: CONTACT
 )
+
+var messageTypeNames = map[MessageType]string{
+	MessageTypeText:        "text",
+	MessageTypeFile:        "document",
+	MessageTypeImage:       "image",
+	MessageTypeSystem:      "system",
+	MessageTypeInteractive: "interactive",
+	MessageTypeLocation:    "location",
+	MessageTypeContact:     "contact",
+}
+
+func (t MessageType) String() string {
+	if s, ok := messageTypeNames[t]; ok {
+		return s
+	}
+
+	return "text"
+}
 
 type Message struct {
 	ID             uuid.UUID `json:"id" db:"id"`
@@ -170,7 +187,7 @@ func (m *Message) WithCreatedEvent(ctx context.Context, sendID string) *Message 
 		To:                    to,
 		SendID:                sendID,
 		Body:                  m.Body,
-		Type:                  int16(m.Type),
+		Type:                  m.Type.String(),
 		OccurredAt:            m.CreatedAt,
 		Metadata:              maps.Clone(m.Metadata),
 		BotControllerMemberID: m.BotControllerMemberID,

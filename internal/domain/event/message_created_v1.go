@@ -44,7 +44,7 @@ type MessageCreated struct {
 	To          []*ThreadMember     `json:"to"`
 	SendID      string              `json:"send_id"`
 	Body        string              `json:"body"`
-	Type        int16               `json:"type"` // 1:TEXT, 2:FILE, 3:IMAGE, 4:SYSTEM
+	Type        string              `json:"type"` // text|document|image|system|interactive|location|contact
 	OccurredAt  time.Time           `json:"occurred_at"`
 	Metadata    map[string]any      `json:"metadata,omitempty"`
 	Images      []ImagePayload      `json:"images,omitempty"`
