@@ -90,6 +90,13 @@ type CompleteBotControlRequest struct {
 	DomainID int
 }
 
+// ReleaseBotControlRequest is used when a user stops the active bot from the thread
+type ReleaseBotControlRequest struct {
+	ThreadID          uuid.UUID
+	InitiatorMemberID uuid.UUID
+	DomainID          int
+}
+
 type TransferThreadRequest struct {
 	ThreadID           uuid.UUID
 	NewMemberContactID uuid.UUID
