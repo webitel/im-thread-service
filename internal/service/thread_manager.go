@@ -1543,6 +1543,7 @@ func (t *ThreadManagementService) publishBotControlReleased(ctx context.Context,
 	}
 
 	var sub *int64
+
 	if t.contactInfo != nil && contactID != uuid.Nil {
 		if id, err := t.contactInfo.GetSub(ctx, contactID, domainID); err != nil {
 			t.log().WarnContext(ctx, "failed to get sub for bot control released, skipping", "contact_id", contactID, "err", err)
