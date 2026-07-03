@@ -11,7 +11,6 @@ import (
 	"github.com/webitel/im-thread-service/internal/domain/shared"
 )
 
-//go:generate stringer -type=MessageType
 type MessageType int16
 
 const (
@@ -24,6 +23,24 @@ const (
 	MessageTypeLocation                // 6: LOCATION
 	MessageTypeContact                 // 7: CONTACT
 )
+
+var messageTypeNames = map[MessageType]string{
+	MessageTypeText:        "text",
+	MessageTypeFile:        "document",
+	MessageTypeImage:       "image",
+	MessageTypeSystem:      "system",
+	MessageTypeInteractive: "interactive",
+	MessageTypeLocation:    "location",
+	MessageTypeContact:     "contact",
+}
+
+func (t MessageType) String() string {
+	if s, ok := messageTypeNames[t]; ok {
+		return s
+	}
+
+	return "text"
+}
 
 type Message struct {
 	ID             uuid.UUID `json:"id" db:"id"`
@@ -42,19 +59,30 @@ type Message struct {
 	SenderID       uuid.UUID       `json:"sender_id" db:"sender_id"`
 	MemberID       uuid.UUID       `json:"member_id" db:"member_id"`
 
-	Images      []*MessageImage     `json:"images,omitempty" db:"images"`
-	Documents   []*MessageDocument  `json:"documents,omitempty" db:"documents"`
-	Location    *MessageLocation    `json:"location,omitempty" db:"location"`
-	Contact     *MessageContact     `json:"contact,omitempty" db:"contact"`
-	Interactive *MessageInteractive `json:"interactive,omitempty" db:"interactive"`
-	System      *MessageSystem      `json:"system,omitempty" db:"system"`
-	Member      *ThreadDialog       `json:"member,omitempty" db:"member"`
+	Images          []*MessageImage      `json:"images,omitempty" db:"images"`
+	Documents       []*MessageDocument   `json:"documents,omitempty" db:"documents"`
+	Location        *MessageLocation     `json:"location,omitempty" db:"location"`
+	Contact         *MessageContact      `json:"contact,omitempty" db:"contact"`
+	Interactive     *MessageInteractive  `json:"interactive,omitempty" db:"interactive"`
+	ReactedMetadata *InteractiveCallback `json:"reacted_metadata"`
+	System          *MessageSystem       `json:"system,omitempty" db:"system"`
+	Member          *ThreadDialog        `json:"member,omitempty" db:"member"`
 
 	// BotControllerMemberID is the thread_dialog.id of the currently active bot.
 	// Included in MessageCreated events so flow_manager can self-filter.
 	BotControllerMemberID *uuid.UUID `json:"-" db:"-"`
 
 	domainEvents []event.Outboxer
+}
+
+func (m *Message) FirstViaOrDefault() string {
+	for _, member := range m.To {
+		if via := member.Via; via != nil && *via != "" {
+			return *via
+		}
+	}
+
+	return ""
 }
 
 func (m *Message) GetSender() uuid.UUID {
@@ -159,7 +187,7 @@ func (m *Message) WithCreatedEvent(ctx context.Context, sendID string) *Message 
 		To:                    to,
 		SendID:                sendID,
 		Body:                  m.Body,
-		Type:                  int16(m.Type),
+		Type:                  m.Type.String(),
 		OccurredAt:            m.CreatedAt,
 		Metadata:              maps.Clone(m.Metadata),
 		BotControllerMemberID: m.BotControllerMemberID,
@@ -195,6 +223,10 @@ func (m *Message) WithCreatedEvent(ctx context.Context, sendID string) *Message 
 
 	WithContextPropogatedMetadata(ctx, &e)
 
+	if via := m.FirstViaOrDefault(); via != "" && uuid.Validate(via) == nil {
+		e.AddMetadata(XWebitelVia, via)
+	}
+
 	m.AddEvent(&e)
 
 	return m
@@ -205,7 +237,7 @@ func (m *MessageInteractive) AsEvent() *event.InteractivePayload {
 		return nil
 	}
 
-	payload := &event.InteractivePayload{}
+	payload := &event.InteractivePayload{SingleUse: m.SingleUse}
 
 	if m.Kind.Markup != nil {
 		payload.Markup = mapMarkupToEvent(m.Kind.Markup)

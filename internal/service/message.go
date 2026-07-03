@@ -65,6 +65,8 @@ func (s *MessageService) sendMessageToExternalProvider(ctx context.Context, mess
 // Returns false on error to remain non-blocking — the thread will be created without bot control.
 func (s *MessageService) resolveToIsBot(ctx context.Context, toID uuid.UUID, domainID int) bool {
 	if s.contactClient == nil {
+		s.logger.WarnContext(ctx, "resolveToIsBot: contactClient is nil, assuming false", "contact_id", toID)
+
 		return false
 	}
 
@@ -74,6 +76,8 @@ func (s *MessageService) resolveToIsBot(ctx context.Context, toID uuid.UUID, dom
 
 		return false
 	}
+
+	s.logger.DebugContext(ctx, "resolveToIsBot result", "contact_id", toID, "domain_id", domainID, "is_bot", isBot)
 
 	return isBot
 }
@@ -657,35 +661,4 @@ func (s *MessageService) mapDocumentInputs(dtoDocs []*dto.Document) []model.Docu
 	}
 
 	return inputs
-}
-
-func enrichAttachmentsLinks(ctx context.Context, attachments []AttachmentProcessor, fileLinksChan <-chan fetchLinksResult) error {
-	if len(attachments) == 0 {
-		return nil
-	}
-
-	select {
-	case result, ok := <-fileLinksChan:
-		if !ok {
-			return errors.Aborted("accessing closed links chan", errors.WithID("service.message.enrich_attachments_links"))
-		}
-
-		if result.Err != nil {
-			return result.Err
-		}
-
-		for id, url := range result.FileLinks {
-			for i := range attachments {
-				if attachments[i].GetID() == id {
-					attachments[i].SetURL(url)
-
-					break
-				}
-			}
-		}
-	case <-ctx.Done():
-		return errors.Aborted("context canceled", errors.WithID("service.message.enrich_attachments_links"), errors.WithCause(ctx.Err()))
-	}
-
-	return nil
 }

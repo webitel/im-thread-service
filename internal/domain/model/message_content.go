@@ -134,6 +134,7 @@ func (c *InteractiveCallback) WithCreatedEvent(ctx context.Context) *Interactive
 	}
 
 	WithContextPropogatedMetadata(ctx, e)
+	c.events = append(c.events, e)
 
 	return c
 }

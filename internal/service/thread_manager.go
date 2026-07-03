@@ -300,12 +300,6 @@ func (t *ThreadManagementService) AddMember(ctx context.Context, req *dto.AddMem
 			prev := pushResult.Prev
 			newPos := positionAfterPush(prev)
 
-			if prev != nil && prev.MemberID != nil {
-				if err = t.publishBotControlReleased(ctx, uow, newMember.ThreadID, *prev.MemberID, prev.ContactID, prev.Position, domainID, &newMember.ID, model.BotControlReasonTransfer); err != nil {
-					return err
-				}
-			}
-
 			if err = t.publishBotControlGranted(ctx, uow, newMember, prev, newPos, model.BotControlReasonTransfer, false); err != nil {
 				return err
 			}
@@ -436,14 +430,52 @@ func (t *ThreadManagementService) Transfer(ctx context.Context, req *dto.Transfe
 			prev := pushResult.Prev
 			newPos := positionAfterPush(prev)
 
-			if prev != nil && prev.MemberID != nil {
-				if err = t.publishBotControlReleased(ctx, uow, newMember.ThreadID, *prev.MemberID, prev.ContactID, prev.Position, initiator.DomainID, &newMember.ID, model.BotControlReasonTransfer); err != nil {
-					return err
-				}
-			}
-
 			if err = t.publishBotControlGranted(ctx, uow, newMember, prev, newPos, model.BotControlReasonTransfer, false); err != nil {
 				return err
+			}
+
+			// If the initiator was also a bot, their stack entry is now orphaned
+			// (dialog deleted, but stack row remains after Push). Pop it to keep
+			// the stack consistent — Push already published Released/Granted for
+			// the relevant members, so no additional events are needed here.
+			if initiator.IsBot {
+				if _, cleanupErr := uow.BotControl().Pop(ctx, req.ThreadID, initiator.ID, model.BotControlReasonTransfer, nil); cleanupErr != nil {
+					t.log().WarnContext(ctx, "transfer: failed to clean up initiator bot stack entry after push",
+						"thread_id", req.ThreadID,
+						"member_id", initiator.ID,
+						"err", cleanupErr,
+					)
+				}
+			}
+		} else if initiator.IsBot {
+			// Initiator is a bot being transferred out to a non-bot agent.
+			// Pop the initiator from the stack and publish bot control events,
+			// mirroring the RemoveMember bot control flow.
+			t.log().DebugContext(ctx, "transfer: initiator is bot, popping bot control stack",
+				"thread_id", req.ThreadID,
+				"member_id", initiator.ID,
+			)
+
+			newTop, popErr := uow.BotControl().Pop(ctx, req.ThreadID, initiator.ID, model.BotControlReasonTransfer, nil)
+			if popErr != nil {
+				t.log().ErrorContext(ctx, "transfer: failed to pop initiator bot control stack",
+					"thread_id", req.ThreadID,
+					"member_id", initiator.ID,
+					"err", popErr,
+				)
+
+				return errors.Internal("failed to pop bot control", errors.WithCause(popErr))
+			}
+
+			if newTop != nil && newTop.MemberID != nil {
+				newTopDialog := botControlStackEntryToDialog(newTop)
+				if err = t.publishBotControlGranted(ctx, uow, newTopDialog, &model.BotControlStackEntry{
+					MemberID:  &initiator.ID,
+					Position:  newTop.Position + 1,
+					ContactID: initiator.ContactID,
+				}, newTop.Position, model.BotControlReasonTransfer, true); err != nil {
+					return err
+				}
 			}
 		}
 
@@ -683,15 +715,6 @@ func (t *ThreadManagementService) RemoveMember(ctx context.Context, req *dto.Rem
 			newTop, popErr := uow.BotControl().Pop(ctx, target.ThreadID, target.ID, model.BotControlReasonRemoved, triggeredBy)
 			if popErr != nil {
 				return errors.Internal("failed to pop bot control", errors.WithCause(popErr))
-			}
-
-			var nextMemberID *uuid.UUID
-			if newTop != nil {
-				nextMemberID = newTop.MemberID
-			}
-
-			if err = t.publishBotControlReleased(ctx, uow, target.ThreadID, target.ID, target.ContactID, 0, domainID, nextMemberID, model.BotControlReasonRemoved); err != nil {
-				return err
 			}
 
 			if newTop != nil && newTop.MemberID != nil {
@@ -958,24 +981,51 @@ func (t *ThreadManagementService) CompleteBotControl(ctx context.Context, req *d
 		}
 
 		// Only the active controller (top of stack) may complete bot control.
-		if len(stack) == 0 || stack[len(stack)-1].MemberID == nil || *stack[len(stack)-1].MemberID != req.MemberID {
+		if len(stack) == 0 {
+			t.log().WarnContext(
+				ctx,
+				"CompleteBotControl rejected: stack is empty — thread has no active bot controller",
+				"thread_id",
+				req.ThreadID,
+				"requested_member_id",
+				req.MemberID,
+			)
+
+			return errors.InvalidArgument("bot control stack is empty for this thread", errors.WithID("service.thread_manager.complete_bot_control"))
+		}
+
+		top := stack[len(stack)-1]
+
+		if top.MemberID == nil || *top.MemberID != req.MemberID {
+			t.log().WarnContext(ctx, "CompleteBotControl rejected: member is not the active controller",
+				"thread_id", req.ThreadID,
+				"requested_member_id", req.MemberID,
+				"active_member_id", top.MemberID,
+				"active_position", top.Position,
+				"stack_depth", len(stack),
+			)
+
 			return errors.InvalidArgument("member is not the active bot controller",
 				errors.WithID("service.thread_manager.complete_bot_control"))
 		}
 
-		completedPosition := stack[len(stack)-1].Position
+		thread, threadErr := uow.ThreadStore().Get(ctx, queryobject.NewThreadQueryObject().WithIDFilter(req.ThreadID).WithDomainIDFilter(req.DomainID))
+		if threadErr != nil {
+			return threadErr
+		}
+
+		if thread.OwnerBotID != nil && *thread.OwnerBotID == req.MemberID {
+			t.log().WarnContext(ctx, "CompleteBotControl rejected: cannot complete owner bot",
+				"thread_id", req.ThreadID, "member_id", req.MemberID, "owner_bot_id", thread.OwnerBotID)
+
+			return errors.InvalidArgument("owner bot cannot be completed",
+				errors.WithID("service.thread_manager.complete_bot_control"))
+		}
+
+		completedPosition := top.Position
 
 		newTop, err := uow.BotControl().Pop(ctx, req.ThreadID, req.MemberID, model.BotControlReasonCompleted, nil)
 		if err != nil {
-			return err
-		}
-
-		var nextMemberID *uuid.UUID
-		if newTop != nil {
-			nextMemberID = newTop.MemberID
-		}
-
-		if err = t.publishBotControlReleased(ctx, uow, req.ThreadID, req.MemberID, stack[len(stack)-1].ContactID, completedPosition, req.DomainID, nextMemberID, model.BotControlReasonCompleted); err != nil {
 			return err
 		}
 
@@ -984,8 +1034,9 @@ func (t *ThreadManagementService) CompleteBotControl(ctx context.Context, req *d
 		}
 
 		return t.publishBotControlGranted(ctx, uow, botControlStackEntryToDialog(newTop), &model.BotControlStackEntry{
-			MemberID: &req.MemberID,
-			Position: completedPosition,
+			MemberID:  &req.MemberID,
+			Position:  completedPosition,
+			ContactID: top.ContactID,
 		}, newTop.Position, model.BotControlReasonCompleted, true)
 	})
 }
@@ -1062,6 +1113,12 @@ func (t *ThreadManagementService) EnsureDirectThread(ctx context.Context, req *d
 	}
 
 	if thread != nil {
+		if thread.BotControllerID == nil && req.ToIsBot != nil && req.ToIsBot() {
+			if err = t.ensureBotControl(ctx, thread, req.DomainID); err != nil {
+				log.WarnContext(ctx, "failed to retroactively init bot control for existing thread", "thread_id", thread.ID, "err", err)
+			}
+		}
+
 		return thread, nil
 	}
 
@@ -1072,6 +1129,45 @@ func (t *ThreadManagementService) EnsureDirectThread(ctx context.Context, req *d
 	}
 
 	return thread, nil
+}
+
+// ensureBotControl initializes bot control for an existing thread that has none.
+// Called when a thread was created without bot control but the To peer is a bot.
+func (t *ThreadManagementService) ensureBotControl(ctx context.Context, thread *model.Thread, domainID int) error {
+	var botDialog *model.ThreadDialog
+
+	for _, m := range thread.Members {
+		if m != nil && m.IsBot {
+			botDialog = m
+
+			break
+		}
+	}
+
+	if botDialog == nil {
+		return nil
+	}
+
+	return t.uow.WithinTransaction(ctx, func(ctx context.Context, uow store.UnitOfWork) error {
+		_, err := uow.BotControl().Push(ctx, model.BotControlTransition{
+			ThreadID:    thread.ID,
+			NewMemberID: botDialog.ID,
+			Reason:      model.BotControlReasonInitial,
+		})
+		if err != nil {
+			return err
+		}
+
+		dialog := &model.ThreadDialogExtended{}
+		dialog.ID = botDialog.ID
+		dialog.DomainID = domainID
+		dialog.ThreadID = thread.ID
+		dialog.ContactID = botDialog.ContactID
+		dialog.AutoLeave = botDialog.AutoLeave
+		dialog.IsBot = true
+
+		return t.publishBotControlGranted(ctx, uow, dialog, nil, 0, model.BotControlReasonInitial, false)
+	})
 }
 
 func (t *ThreadManagementService) searchThread(ctx context.Context, searchQuery model.ResolveThreadQuery) (*model.Thread, error) {
@@ -1107,6 +1203,12 @@ func (t *ThreadManagementService) orchestrateDirectThreadCreation(ctx context.Co
 		if req.ToIsBot != nil {
 			toIsBot = req.ToIsBot()
 		}
+
+		t.log().DebugContext(ctx, "orchestrateDirectThreadCreation: resolved to_is_bot",
+			"to_contact_id", req.To.ID,
+			"to_is_bot", toIsBot,
+			"domain_id", req.DomainID,
+		)
 
 		members, err := t.initializeDirectThreadDialogs(ctx, uow, createdThread.ID, req.DomainID, req.From, req.To, toIsBot)
 		if err != nil {
@@ -1367,11 +1469,20 @@ func (t *ThreadManagementService) publishBotControlGranted(ctx context.Context, 
 		prevMemberID *uuid.UUID
 		prevPosition *int
 		schemeID     *int64
+		prevSchemeID *int64
 	)
 
 	if prev != nil {
 		prevMemberID = prev.MemberID
 		prevPosition = &prev.Position
+
+		if t.contactInfo != nil && prev.ContactID != uuid.Nil {
+			if id, err := t.contactInfo.GetSub(ctx, prev.ContactID, dialog.DomainID); err != nil {
+				t.log().WarnContext(ctx, "failed to get sub for previous bot in granted event, skipping", "contact_id", prev.ContactID, "err", err)
+			} else {
+				prevSchemeID = id
+			}
+		}
 	}
 
 	if t.contactInfo != nil && dialog.ContactID != uuid.Nil {
@@ -1394,6 +1505,7 @@ func (t *ThreadManagementService) publishBotControlGranted(ctx context.Context, 
 		PreviousPosition: prevPosition,
 		PreviousMemberID: prevMemberID,
 		Sub:              schemeID,
+		ReleasedSub:      prevSchemeID,
 		OccurredAt:       time.Now().UTC(),
 	}
 
@@ -1417,60 +1529,6 @@ func (t *ThreadManagementService) publishBotControlGranted(ctx context.Context, 
 	}
 
 	t.log().DebugContext(ctx, "bot.control.granted published to outbox",
-		"topic", e.Topic(),
-		"thread_id", e.ThreadID,
-		"member_id", e.MemberID,
-	)
-
-	return nil
-}
-
-// publishBotControlReleased publishes a BotControlReleased event to the outbox.
-func (t *ThreadManagementService) publishBotControlReleased(ctx context.Context, uow store.UnitOfWork, threadID, memberID, contactID uuid.UUID, position, domainID int, nextMemberID *uuid.UUID, reason model.BotControlReason) error {
-	if memberID == uuid.Nil {
-		return nil
-	}
-
-	var sub *int64
-	if t.contactInfo != nil && contactID != uuid.Nil {
-		if id, err := t.contactInfo.GetSub(ctx, contactID, domainID); err != nil {
-			t.log().WarnContext(ctx, "failed to get sub for bot control released, skipping", "contact_id", contactID, "err", err)
-		} else {
-			sub = id
-		}
-	}
-
-	e := &event.BotControlReleased{
-		ThreadID:     threadID,
-		DomainID:     int32(domainID),
-		MemberID:     memberID,
-		Position:     position,
-		Reason:       string(reason),
-		NextMemberID: nextMemberID,
-		Sub:          sub,
-		OccurredAt:   time.Now().UTC(),
-	}
-
-	t.log().DebugContext(ctx, "publishing bot.control.released to outbox",
-		"topic", e.Topic(),
-		"thread_id", e.ThreadID,
-		"member_id", e.MemberID,
-		"reason", e.Reason,
-		"next_member_id", e.NextMemberID,
-	)
-
-	if err := uow.Outbox().Publish(ctx, e.Topic(), e); err != nil {
-		t.log().ErrorContext(ctx, "failed to publish bot.control.released to outbox",
-			"topic", e.Topic(),
-			"thread_id", e.ThreadID,
-			"member_id", e.MemberID,
-			"err", err,
-		)
-
-		return err
-	}
-
-	t.log().DebugContext(ctx, "bot.control.released published to outbox",
 		"topic", e.Topic(),
 		"thread_id", e.ThreadID,
 		"member_id", e.MemberID,

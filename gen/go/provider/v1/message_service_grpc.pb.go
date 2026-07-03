@@ -19,10 +19,11 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	ProviderMessageService_SendText_FullMethodName        = "/webitel.im.provider.v1.ProviderMessageService/SendText"
-	ProviderMessageService_SendDocument_FullMethodName    = "/webitel.im.provider.v1.ProviderMessageService/SendDocument"
-	ProviderMessageService_SendImage_FullMethodName       = "/webitel.im.provider.v1.ProviderMessageService/SendImage"
-	ProviderMessageService_SendInteractive_FullMethodName = "/webitel.im.provider.v1.ProviderMessageService/SendInteractive"
+	ProviderMessageService_SendText_FullMethodName          = "/webitel.im.provider.v1.ProviderMessageService/SendText"
+	ProviderMessageService_SendDocument_FullMethodName      = "/webitel.im.provider.v1.ProviderMessageService/SendDocument"
+	ProviderMessageService_SendImage_FullMethodName         = "/webitel.im.provider.v1.ProviderMessageService/SendImage"
+	ProviderMessageService_SendInteractive_FullMethodName   = "/webitel.im.provider.v1.ProviderMessageService/SendInteractive"
+	ProviderMessageService_SendSystemMessage_FullMethodName = "/webitel.im.provider.v1.ProviderMessageService/SendSystemMessage"
 )
 
 // ProviderMessageServiceClient is the client API for ProviderMessageService service.
@@ -39,6 +40,10 @@ type ProviderMessageServiceClient interface {
 	SendImage(ctx context.Context, in *ProviderSendImageRequest, opts ...grpc.CallOption) (*ProviderSendMessageResponse, error)
 	// SendInteractive delivers a message with interactive UI elements (buttons, menus).
 	SendInteractive(ctx context.Context, in *ProviderSendInteractiveRequest, opts ...grpc.CallOption) (*ProviderSendMessageResponse, error)
+	// SendSystemMessage delivers a system event notification to the external chat partner.
+	// The im-providers-service resolves the gate-specific template and renders it as text
+	// before forwarding to the underlying provider (Facebook, WhatsApp, etc.).
+	SendSystemMessage(ctx context.Context, in *ProviderSendSystemMessageRequest, opts ...grpc.CallOption) (*ProviderSendMessageResponse, error)
 }
 
 type providerMessageServiceClient struct {
@@ -89,6 +94,16 @@ func (c *providerMessageServiceClient) SendInteractive(ctx context.Context, in *
 	return out, nil
 }
 
+func (c *providerMessageServiceClient) SendSystemMessage(ctx context.Context, in *ProviderSendSystemMessageRequest, opts ...grpc.CallOption) (*ProviderSendMessageResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ProviderSendMessageResponse)
+	err := c.cc.Invoke(ctx, ProviderMessageService_SendSystemMessage_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // ProviderMessageServiceServer is the server API for ProviderMessageService service.
 // All implementations must embed UnimplementedProviderMessageServiceServer
 // for forward compatibility.
@@ -103,6 +118,10 @@ type ProviderMessageServiceServer interface {
 	SendImage(context.Context, *ProviderSendImageRequest) (*ProviderSendMessageResponse, error)
 	// SendInteractive delivers a message with interactive UI elements (buttons, menus).
 	SendInteractive(context.Context, *ProviderSendInteractiveRequest) (*ProviderSendMessageResponse, error)
+	// SendSystemMessage delivers a system event notification to the external chat partner.
+	// The im-providers-service resolves the gate-specific template and renders it as text
+	// before forwarding to the underlying provider (Facebook, WhatsApp, etc.).
+	SendSystemMessage(context.Context, *ProviderSendSystemMessageRequest) (*ProviderSendMessageResponse, error)
 	mustEmbedUnimplementedProviderMessageServiceServer()
 }
 
@@ -124,6 +143,9 @@ func (UnimplementedProviderMessageServiceServer) SendImage(context.Context, *Pro
 }
 func (UnimplementedProviderMessageServiceServer) SendInteractive(context.Context, *ProviderSendInteractiveRequest) (*ProviderSendMessageResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SendInteractive not implemented")
+}
+func (UnimplementedProviderMessageServiceServer) SendSystemMessage(context.Context, *ProviderSendSystemMessageRequest) (*ProviderSendMessageResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SendSystemMessage not implemented")
 }
 func (UnimplementedProviderMessageServiceServer) mustEmbedUnimplementedProviderMessageServiceServer() {
 }
@@ -219,6 +241,24 @@ func _ProviderMessageService_SendInteractive_Handler(srv interface{}, ctx contex
 	return interceptor(ctx, in, info, handler)
 }
 
+func _ProviderMessageService_SendSystemMessage_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ProviderSendSystemMessageRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ProviderMessageServiceServer).SendSystemMessage(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ProviderMessageService_SendSystemMessage_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ProviderMessageServiceServer).SendSystemMessage(ctx, req.(*ProviderSendSystemMessageRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // ProviderMessageService_ServiceDesc is the grpc.ServiceDesc for ProviderMessageService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -241,6 +281,10 @@ var ProviderMessageService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "SendInteractive",
 			Handler:    _ProviderMessageService_SendInteractive_Handler,
+		},
+		{
+			MethodName: "SendSystemMessage",
+			Handler:    _ProviderMessageService_SendSystemMessage_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
