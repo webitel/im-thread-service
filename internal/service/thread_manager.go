@@ -1536,3 +1536,56 @@ func (t *ThreadManagementService) publishBotControlGranted(ctx context.Context, 
 
 	return nil
 }
+
+func (t *ThreadManagementService) publishBotControlReleased(ctx context.Context, uow store.UnitOfWork, threadID, memberID, contactID uuid.UUID, position, domainID int, nextMemberID *uuid.UUID, reason model.BotControlReason) error {
+	if memberID == uuid.Nil {
+		return nil
+	}
+
+	var sub *int64
+	if t.contactInfo != nil && contactID != uuid.Nil {
+		if id, err := t.contactInfo.GetSub(ctx, contactID, domainID); err != nil {
+			t.log().WarnContext(ctx, "failed to get sub for bot control released, skipping", "contact_id", contactID, "err", err)
+		} else {
+			sub = id
+		}
+	}
+
+	e := &event.BotControlReleased{
+		ThreadID:     threadID,
+		DomainID:     int32(domainID),
+		MemberID:     memberID,
+		Position:     position,
+		Reason:       string(reason),
+		NextMemberID: nextMemberID,
+		Sub:          sub,
+		OccurredAt:   time.Now().UTC(),
+	}
+
+	t.log().DebugContext(ctx, "publishing bot.control.released to outbox",
+		"topic", e.Topic(),
+		"thread_id", e.ThreadID,
+		"member_id", e.MemberID,
+		"reason", e.Reason,
+		"next_member_id", e.NextMemberID,
+	)
+
+	if err := uow.Outbox().Publish(ctx, e.Topic(), e); err != nil {
+		t.log().ErrorContext(ctx, "failed to publish bot.control.released to outbox",
+			"topic", e.Topic(),
+			"thread_id", e.ThreadID,
+			"member_id", e.MemberID,
+			"err", err,
+		)
+
+		return err
+	}
+
+	t.log().DebugContext(ctx, "bot.control.released published to outbox",
+		"topic", e.Topic(),
+		"thread_id", e.ThreadID,
+		"member_id", e.MemberID,
+	)
+
+	return nil
+}
