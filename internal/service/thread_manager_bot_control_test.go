@@ -20,9 +20,13 @@ type fakeBotControlStore struct {
 	newTopEntry *model.BotControlStackEntry   // returned by Pop (new top after removal)
 	stackResult []*model.BotControlStackEntry // returned by GetStack
 
+	clearedMemberID *uuid.UUID // returned by ClearController
+
 	lastPushTransition model.BotControlTransition
 	lastPopMemberID    uuid.UUID
 	lastPopReason      model.BotControlReason
+	popCalls           int
+	clearCalls         int
 }
 
 func (f *fakeBotControlStore) Push(_ context.Context, transition model.BotControlTransition) (*model.BotControlPushResult, error) {
@@ -32,6 +36,7 @@ func (f *fakeBotControlStore) Push(_ context.Context, transition model.BotContro
 }
 
 func (f *fakeBotControlStore) Pop(_ context.Context, _, memberID uuid.UUID, reason model.BotControlReason, _ *uuid.UUID) (*model.BotControlStackEntry, error) {
+	f.popCalls++
 	f.lastPopMemberID = memberID
 	f.lastPopReason = reason
 
@@ -42,12 +47,29 @@ func (f *fakeBotControlStore) GetStack(_ context.Context, _ uuid.UUID) ([]*model
 	return f.stackResult, nil
 }
 
+func (f *fakeBotControlStore) ClearController(_ context.Context, _ uuid.UUID) (*uuid.UUID, error) {
+	f.clearCalls++
+
+	return f.clearedMemberID, nil
+}
+
 var _ store.BotControlStore = (*fakeBotControlStore)(nil)
 
 // findGrantedEvent returns the first BotControlGranted event from outbox, nil if absent.
 func findGrantedEvent(outbox *fakeOutboxStore) *event.BotControlGranted {
 	for _, pub := range outbox.published {
 		if e, ok := pub.event.(*event.BotControlGranted); ok {
+			return e
+		}
+	}
+
+	return nil
+}
+
+// findReleasedEvent returns the first BotControlReleased event from outbox, nil if absent.
+func findReleasedEvent(outbox *fakeOutboxStore) *event.BotControlReleased {
+	for _, pub := range outbox.published {
+		if e, ok := pub.event.(*event.BotControlReleased); ok {
 			return e
 		}
 	}
@@ -391,4 +413,172 @@ func TestCompleteBotControl_EmptyStack_OnlyPublishesReleased(t *testing.T) {
 
 	granted := findGrantedEvent(outboxStore)
 	require.Nil(t, granted, "no BotControlGranted when stack is empty")
+}
+
+// TestReleaseBotControl_SingleBot_PublishesReleasedOnly covers /close on a single-bot thread:
+// the stack empties (Pop returns nil), so only a released(client_leave) event fires and control
+// is fully dropped (no granted). This is the state that lets ensureBotControl re-arm /close later.
+func TestReleaseBotControl_SingleBot_PublishesReleasedOnly(t *testing.T) {
+	threadID := uuid.New()
+	botMemberID := uuid.New()
+	botContactID := uuid.New()
+	initiatorMemberID := uuid.New()
+
+	// Pop returns nil = /close empties the stack (single-bot direct thread).
+	botControl := &fakeBotControlStore{
+		newTopEntry: nil,
+		stackResult: []*model.BotControlStackEntry{
+			{MemberID: &botMemberID, ContactID: botContactID, Position: 0},
+		},
+	}
+	outboxStore := &fakeOutboxStore{}
+
+	svc := &ThreadManagementService{
+		uow: fakeUnitOfWork{
+			threadDialogStore: &fakeThreadDialogStore{},
+			messageStore:      &fakeMessageStore{},
+			outboxStore:       outboxStore,
+			botControlStore:   botControl,
+		},
+	}
+
+	err := svc.ReleaseBotControl(context.Background(), &dto.ReleaseBotControlRequest{
+		ThreadID:          threadID,
+		InitiatorMemberID: initiatorMemberID,
+		DomainID:          1,
+	})
+	require.NoError(t, err)
+
+	// Pop invoked once for the active bot with client_leave reason.
+	require.Equal(t, 1, botControl.popCalls)
+	require.Equal(t, botMemberID, botControl.lastPopMemberID)
+	require.Equal(t, model.BotControlReasonClientLeave, botControl.lastPopReason)
+
+	// released published with client_leave and no next member.
+	released := findReleasedEvent(outboxStore)
+	require.NotNil(t, released, "BotControlReleased must be published on /close")
+	require.Equal(t, string(model.BotControlReasonClientLeave), released.Reason)
+	require.Equal(t, botMemberID, released.MemberID)
+	require.Nil(t, released.NextMemberID, "no next controller when the last bot is closed")
+
+	// No granted — the bot is fully stopped, not handed back to the owner bot.
+	require.Nil(t, findGrantedEvent(outboxStore), "no BotControlGranted when the last bot is closed")
+}
+
+// TestReleaseBotControl_BotBelow_ReturnsControlWithGranted covers /close when another bot remains
+// below the active one on the stack: control transitions to that bot (granted, is_resume=true),
+// which is the pre-existing multi-bot behavior and must be preserved.
+func TestReleaseBotControl_BotBelow_ReturnsControlWithGranted(t *testing.T) {
+	threadID := uuid.New()
+	botMemberID := uuid.New()
+	botContactID := uuid.New()
+	newTopMemberID := uuid.New()
+	newTopContactID := uuid.New()
+
+	newTop := &model.BotControlStackEntry{
+		ID: uuid.New(), ThreadID: threadID, MemberID: &newTopMemberID, ContactID: newTopContactID, Position: 0,
+	}
+	botControl := &fakeBotControlStore{
+		newTopEntry: newTop,
+		stackResult: []*model.BotControlStackEntry{
+			{MemberID: &newTopMemberID, Position: 0},
+			{MemberID: &botMemberID, ContactID: botContactID, Position: 1},
+		},
+	}
+	outboxStore := &fakeOutboxStore{}
+
+	svc := &ThreadManagementService{
+		uow: fakeUnitOfWork{
+			threadDialogStore: &fakeThreadDialogStore{},
+			messageStore:      &fakeMessageStore{},
+			outboxStore:       outboxStore,
+			botControlStore:   botControl,
+		},
+	}
+
+	err := svc.ReleaseBotControl(context.Background(), &dto.ReleaseBotControlRequest{
+		ThreadID: threadID,
+		DomainID: 1,
+	})
+	require.NoError(t, err)
+
+	// Pop targets the active (top) bot with client_leave.
+	require.Equal(t, botMemberID, botControl.lastPopMemberID)
+	require.Equal(t, model.BotControlReasonClientLeave, botControl.lastPopReason)
+
+	released := findReleasedEvent(outboxStore)
+	require.NotNil(t, released)
+	require.NotNil(t, released.NextMemberID)
+	require.Equal(t, newTopMemberID, *released.NextMemberID)
+
+	granted := findGrantedEvent(outboxStore)
+	require.NotNil(t, granted, "control returns to the bot below on /close")
+	require.Equal(t, newTopMemberID, granted.MemberID)
+	require.True(t, granted.IsResume)
+}
+
+// TestReleaseBotControl_EmptyStack_NoOp verifies /close is idempotent: with no active bot on the
+// stack it does nothing — no Pop, no released, no granted.
+func TestReleaseBotControl_EmptyStack_NoOp(t *testing.T) {
+	botControl := &fakeBotControlStore{stackResult: nil}
+	outboxStore := &fakeOutboxStore{}
+
+	svc := &ThreadManagementService{
+		uow: fakeUnitOfWork{
+			threadDialogStore: &fakeThreadDialogStore{},
+			messageStore:      &fakeMessageStore{},
+			outboxStore:       outboxStore,
+			botControlStore:   botControl,
+		},
+	}
+
+	err := svc.ReleaseBotControl(context.Background(), &dto.ReleaseBotControlRequest{
+		ThreadID: uuid.New(),
+		DomainID: 1,
+	})
+	require.NoError(t, err)
+
+	require.Equal(t, 0, botControl.popCalls, "no Pop when there is no active bot")
+	require.Nil(t, findReleasedEvent(outboxStore))
+	require.Nil(t, findGrantedEvent(outboxStore))
+}
+
+// TestReleaseBotControl_DivergedState_ClearsControllerAndPublishesReleased covers the case where
+// the stack is empty but the thread still has a bot_controller_id (legacy data / owner-bot
+// fallback): /close must clear it and publish released so the running schema is stopped.
+func TestReleaseBotControl_DivergedState_ClearsControllerAndPublishesReleased(t *testing.T) {
+	threadID := uuid.New()
+	controllerID := uuid.New()
+
+	botControl := &fakeBotControlStore{
+		stackResult:     nil,           // stack empty
+		clearedMemberID: &controllerID, // ...but a controller lingers on the thread
+	}
+	outboxStore := &fakeOutboxStore{}
+
+	svc := &ThreadManagementService{
+		uow: fakeUnitOfWork{
+			threadDialogStore: &fakeThreadDialogStore{},
+			messageStore:      &fakeMessageStore{},
+			outboxStore:       outboxStore,
+			botControlStore:   botControl,
+		},
+	}
+
+	err := svc.ReleaseBotControl(context.Background(), &dto.ReleaseBotControlRequest{
+		ThreadID: threadID,
+		DomainID: 1,
+	})
+	require.NoError(t, err)
+
+	require.Equal(t, 1, botControl.clearCalls, "diverged state must clear the lingering controller")
+	require.Equal(t, 0, botControl.popCalls, "diverged path must not Pop")
+
+	released := findReleasedEvent(outboxStore)
+	require.NotNil(t, released, "released must fire so the running schema is stopped")
+	require.Equal(t, controllerID, released.MemberID)
+	require.Equal(t, string(model.BotControlReasonClientLeave), released.Reason)
+	require.Nil(t, released.NextMemberID)
+
+	require.Nil(t, findGrantedEvent(outboxStore), "nothing to grant when clearing a diverged controller")
 }

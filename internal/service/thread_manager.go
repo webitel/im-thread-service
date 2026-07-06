@@ -1057,9 +1057,17 @@ func (t *ThreadManagementService) ReleaseBotControl(ctx context.Context, req *dt
 			return err
 		}
 
-		// No active bot to release — treat as a no-op so "/close" is idempotent.
 		if len(stack) == 0 || stack[len(stack)-1].MemberID == nil {
-			return nil
+			releasedMemberID, err := uow.BotControl().ClearController(ctx, req.ThreadID)
+			if err != nil {
+				return err
+			}
+
+			if releasedMemberID == nil {
+				return nil
+			}
+
+			return t.publishBotControlReleased(ctx, uow, req.ThreadID, *releasedMemberID, uuid.Nil, 0, req.DomainID, nil, model.BotControlReasonClientLeave)
 		}
 
 		active := stack[len(stack)-1]
