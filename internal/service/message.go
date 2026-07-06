@@ -221,31 +221,60 @@ func (s *MessageService) handleBotStopCommand(ctx context.Context, in *dto.SendT
 		return nil, err
 	}
 
-	// The bot is already stopped; the confirmation is best-effort.
-	sysMsg, err := s.SendSystemMessage(ctx, s.buildBotStoppedMessage(in))
+	msg := s.buildBotStoppedMessage(in, t)
+
+	var saved *model.Message
+
+	err := s.uow.WithinTransaction(ctx, func(txCtx context.Context, uow store.UnitOfWork) error {
+		var e error
+		if saved, e = uow.Messages().SaveSystemMessage(txCtx, msg); e != nil {
+			return e
+		}
+
+		saved.To = msg.To
+		saved.WithCreatedEvent(ctx, msg.IdempotencyKey)
+
+		return s.dispatchMessageEvents(txCtx, uow, saved)
+	})
 	if err != nil {
 		log.ErrorContext(ctx, "failed to send bot stopped system message", "err", err)
 
 		return &dto.SendTextResponse{To: in.To}, nil
 	}
 
-	log.InfoContext(ctx, "bot stopped via /close", slog.String("system_message_id", sysMsg.ID.String()))
+	log.InfoContext(ctx, "bot stopped via /close", slog.String("system_message_id", saved.ID.String()))
 
-	return &dto.SendTextResponse{ID: sysMsg.ID, To: in.To}, nil
+	return &dto.SendTextResponse{ID: saved.ID, To: in.To}, nil
 }
 
-func (s *MessageService) buildBotStoppedMessage(in *dto.SendTextRequest) *model.Message {
-	return &model.Message{
+func (s *MessageService) buildBotStoppedMessage(in *dto.SendTextRequest, t *model.Thread) *model.Message {
+	to := make([]*model.ThreadDialog, 0, len(t.Members))
+	for _, m := range t.Members {
+		if m != nil && !m.IsBot {
+			to = append(to, m)
+		}
+	}
+
+	msg := &model.Message{
+		ThreadID:       t.ID,
 		DomainID:       int32(in.DomainID),
 		From:           in.From,
 		SendTo:         in.To,
 		SendAs:         in.SendAs,
+		Body:           in.Body,
+		To:             to,
 		Type:           model.MessageTypeSystem,
 		IdempotencyKey: in.SendID,
+		Metadata:       model.BuildMetadata(in.Body),
 		System: &model.MessageSystem{
-			Type: botStoppedSystemType,
+			Type:     botStoppedSystemType,
+			Metadata: make(map[string]any),
 		},
 	}
+
+	msg.SetMemberFromSlice(t.Members)
+
+	return msg
 }
 
 func memberByContactID(members []*model.ThreadDialog, contactID uuid.UUID) *model.ThreadDialog {

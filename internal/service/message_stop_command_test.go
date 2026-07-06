@@ -1,6 +1,9 @@
 package service
 
 import (
+	"context"
+	"io"
+	"log/slog"
 	"testing"
 
 	"github.com/google/uuid"
@@ -8,7 +11,31 @@ import (
 
 	"github.com/webitel/im-thread-service/internal/domain/model"
 	"github.com/webitel/im-thread-service/internal/domain/shared"
+	"github.com/webitel/im-thread-service/internal/service/dto"
 )
+
+// fakeThreadManager records ReleaseBotControl and counts EnsureDirectThread calls.
+type fakeThreadManager struct {
+	ensureCalls        int
+	releaseCalls       int
+	lastReleaseRequest *dto.ReleaseBotControlRequest
+	ensureResult       *model.Thread
+}
+
+func (f *fakeThreadManager) EnsureDirectThread(_ context.Context, _ *dto.EnsureDirectThreadRequest) (*model.Thread, error) {
+	f.ensureCalls++
+
+	return f.ensureResult, nil
+}
+
+func (f *fakeThreadManager) ReleaseBotControl(_ context.Context, req *dto.ReleaseBotControlRequest) error {
+	f.releaseCalls++
+	f.lastReleaseRequest = req
+
+	return nil
+}
+
+var _ ThreadManager = (*fakeThreadManager)(nil)
 
 func TestIsStopCommand(t *testing.T) {
 	cases := []struct {
@@ -72,4 +99,71 @@ func TestShouldStopBot(t *testing.T) {
 		// An external sender with no membership row may still issue /close.
 		require.True(t, svc.shouldStopBot(threadWithBot(), uuid.New()))
 	})
+}
+
+func TestHandleBotStopCommand_ReleasesBotAndPersistsConfirmation(t *testing.T) {
+	threadID := uuid.New()
+	userContactID := uuid.New()
+	botContactID := uuid.New()
+	botMemberID := uuid.New()
+	userMemberID := uuid.New()
+
+	thread := &model.Thread{
+		ID:              threadID,
+		BotControllerID: &botMemberID,
+		Members: []*model.ThreadDialog{
+			{BaseModel: shared.BaseModel{ID: userMemberID}, ContactID: userContactID, IsBot: false},
+			{BaseModel: shared.BaseModel{ID: botMemberID}, ContactID: botContactID, IsBot: true},
+		},
+	}
+
+	threader := &fakeThreadManager{}
+	messageStore := &fakeMessageStore{}
+	outboxStore := &fakeOutboxStore{}
+
+	svc := &MessageService{
+		logger:   slog.New(slog.NewTextHandler(io.Discard, nil)),
+		threader: threader,
+		uow: fakeUnitOfWork{
+			messageStore: messageStore,
+			outboxStore:  outboxStore,
+		},
+	}
+
+	in := &dto.SendTextRequest{
+		From:     shared.Peer{ID: userContactID},
+		To:       shared.Peer{ID: botContactID},
+		Body:     botStopCommand,
+		DomainID: 1,
+	}
+
+	resp, err := svc.handleBotStopCommand(context.Background(), in, thread)
+	require.NoError(t, err)
+
+	// Bot control is released for this thread on behalf of the initiating user member.
+	require.Equal(t, 1, threader.releaseCalls)
+	require.Equal(t, threadID, threader.lastReleaseRequest.ThreadID)
+	require.Equal(t, userMemberID, threader.lastReleaseRequest.InitiatorMemberID)
+
+	// The confirmation is saved directly, without re-resolving the thread — otherwise
+	// EnsureDirectThread would re-arm and restart the bot we just released.
+	require.Equal(t, 0, threader.ensureCalls, "must not re-run EnsureDirectThread")
+
+	saved := messageStore.lastSavedSystemMessage
+	require.NotNil(t, saved, "bot_stopped confirmation must be persisted")
+	require.Equal(t, threadID, saved.ThreadID)
+	require.Equal(t, model.MessageTypeSystem, saved.Type)
+	require.Equal(t, botStoppedSystemType, saved.System.Type)
+	require.Equal(t, botStopCommand, saved.Body)
+	// messages.metadata is JSONB NOT NULL; a nil map fails the insert and nothing shows in chat.
+	require.NotNil(t, saved.Metadata, "messages.metadata is NOT NULL")
+
+	// The confirmation must reach the user but never the bot (a bot recipient restarts the flow).
+	require.NotEmpty(t, saved.To)
+
+	for _, m := range saved.To {
+		require.False(t, m.IsBot, "bot must not be a recipient of the bot_stopped confirmation")
+	}
+
+	require.Equal(t, saved.ID, resp.ID)
 }

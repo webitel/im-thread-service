@@ -150,10 +150,12 @@ func (s *botControlStore) Pop(ctx context.Context, threadID, memberID uuid.UUID,
 
 	isTop := entry.IsTop
 
-	// Step 4: find new top, update bot_controller_id + control_epoch, and fetch the dialog
+	// Step 4: find new top, update bot_controller_id, and fetch the dialog
 	// context needed for bot.control.granted.v1 — all in one CTE round-trip.
 	// new_top JOINs thread_dialog to get contact_id/auto_leave/domain_id.
 	// owner_info does the same for the owner bot fallback (stack empty + isTop case).
+	// For client_leave we fully release control: when the stack empties, bot_controller_id
+	// is set to NULL (no owner-bot fallback) so a later message re-pushes via ensureBotControl.
 	type newTopResult struct {
 		MemberID   *uuid.UUID `db:"member_id"`
 		Position   int        `db:"position"`
@@ -177,7 +179,11 @@ func (s *botControlStore) Pop(ctx context.Context, threadID, memberID uuid.UUID,
 			UPDATE im_thread.thread
 			SET bot_controller_id = COALESCE(
 				(SELECT member_id FROM new_top),
-				CASE WHEN @IsTop THEN owner_bot_id ELSE bot_controller_id END
+				CASE
+					WHEN @IsClientLeave THEN NULL
+					WHEN @IsTop         THEN owner_bot_id
+					ELSE bot_controller_id
+				END
 			)
 			WHERE id = @ThreadID
 			RETURNING owner_bot_id
@@ -198,7 +204,11 @@ func (s *botControlStore) Pop(ctx context.Context, threadID, memberID uuid.UUID,
 		FROM upd u
 		LEFT JOIN new_top n ON true
 		LEFT JOIN owner_info oi ON true
-	`, pgx.NamedArgs{"ThreadID": threadID, "IsTop": isTop})
+	`, pgx.NamedArgs{
+		"ThreadID":      threadID,
+		"IsTop":         isTop,
+		"IsClientLeave": reason == model.BotControlReasonClientLeave,
+	})
 	if err != nil {
 		return nil, errors.Internal("fetching new top after pop", errors.WithCause(err), errors.WithID("bot_control_store.pop"))
 	}
@@ -225,7 +235,7 @@ func (s *botControlStore) Pop(ctx context.Context, threadID, memberID uuid.UUID,
 	}
 
 	// Stack is empty — synthesize owner bot entry so the service fires a granted event.
-	if isTop && result.OwnerBotID != nil {
+	if isTop && result.OwnerBotID != nil && reason != model.BotControlReasonClientLeave {
 		return &model.BotControlStackEntry{
 			ThreadID:  threadID,
 			MemberID:  result.OwnerBotID,
@@ -263,6 +273,40 @@ func (s *botControlStore) GetStack(ctx context.Context, threadID uuid.UUID) ([]*
 	}
 
 	return entries, nil
+}
+
+func (s *botControlStore) ClearController(ctx context.Context, threadID uuid.UUID) (*uuid.UUID, error) {
+	type clearedRecord struct {
+		MemberID uuid.UUID `db:"member_id"`
+	}
+
+	rows, err := s.db.Query(ctx, `
+		WITH prev AS (
+			SELECT bot_controller_id AS member_id
+			FROM im_thread.thread
+			WHERE id = @ThreadID AND bot_controller_id IS NOT NULL
+		),
+		upd AS (
+			UPDATE im_thread.thread
+			SET bot_controller_id = NULL
+			WHERE id = @ThreadID AND bot_controller_id IS NOT NULL
+		)
+		SELECT member_id FROM prev
+	`, pgx.NamedArgs{"ThreadID": threadID})
+	if err != nil {
+		return nil, errors.Internal("clear bot controller", errors.WithCause(err), errors.WithID("bot_control_store.clear_controller"))
+	}
+
+	record, err := pgx.CollectOneRow(rows, pgx.RowToAddrOfStructByNameLax[clearedRecord])
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil //nolint:nilnil // no controller to clear
+		}
+
+		return nil, errors.Internal("scanning cleared controller", errors.WithCause(err), errors.WithID("bot_control_store.clear_controller"))
+	}
+
+	return &record.MemberID, nil
 }
 
 func mapBotControlStackEntry(r *botControlStackRecord) *model.BotControlStackEntry {

@@ -93,4 +93,9 @@ type BotControlStore interface {
 
 	// GetStack returns all entries for a thread ordered by position asc.
 	GetStack(ctx context.Context, threadID uuid.UUID) ([]*model.BotControlStackEntry, error)
+
+	// ClearController sets thread.bot_controller_id to NULL and returns the member id it pointed
+	// to (nil if there was none). Used to release a controller that lingers without a matching
+	// stack entry (legacy data, or the owner-bot fallback), so /close stays effective.
+	ClearController(ctx context.Context, threadID uuid.UUID) (*uuid.UUID, error)
 }
