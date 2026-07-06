@@ -160,6 +160,7 @@ func TestHandleBotStopCommand_ReleasesBotAndPersistsConfirmation(t *testing.T) {
 
 	// The confirmation must reach the user but never the bot (a bot recipient restarts the flow).
 	require.NotEmpty(t, saved.To)
+
 	for _, m := range saved.To {
 		require.False(t, m.IsBot, "bot must not be a recipient of the bot_stopped confirmation")
 	}
