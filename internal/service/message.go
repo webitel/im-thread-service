@@ -268,7 +268,7 @@ func (s *MessageService) buildBotStoppedMessage(in *dto.SendTextRequest, t *mode
 		Metadata:       model.BuildMetadata(in.Body),
 		System: &model.MessageSystem{
 			Type:     botStoppedSystemType,
-			Metadata: map[string]any{},
+			Metadata: make(map[string]any),
 		},
 	}
 
