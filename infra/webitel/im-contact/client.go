@@ -9,11 +9,11 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	lru "github.com/hashicorp/golang-lru"
 	"google.golang.org/grpc"
 
 	"github.com/webitel/webitel-go-kit/infra/discovery"
 	rpc "github.com/webitel/webitel-go-kit/infra/transport/gRPC"
+	"github.com/webitel/webitel-go-kit/pkg/cache"
 
 	contactv1 "github.com/webitel/im-thread-service/gen/go/contact/v1"
 	infratls "github.com/webitel/im-thread-service/infra/tls"
@@ -27,14 +27,11 @@ const (
 	subCacheSize   = 2048
 )
 
-type isBotCacheEntry struct {
-	isBot     bool
-	expiresAt time.Time
-}
-
-type subCacheEntry struct {
-	sub       *int64
-	expiresAt time.Time
+// subCached wraps a nullable int64 subscription ID.
+// Stored as a struct to allow caching the "no subscription" state (sub == nil)
+// without ambiguity with a Ristretto cache miss (which also returns zero value).
+type subCached struct {
+	sub *int64
 }
 
 const ServiceName string = "im-contact-service"
@@ -43,8 +40,8 @@ type Client struct {
 	logger         *slog.Logger
 	privacyService *rpc.Client[contactv1.ContactPrivacyClient]
 	contactService *rpc.Client[contactv1.ContactsClient]
-	isBotCache     *lru.Cache
-	subCache       *lru.Cache
+	isBotCache     cache.Cache[string, bool]
+	subCache       cache.Cache[string, subCached]
 }
 
 func New(logger *slog.Logger, discovery discovery.DiscoveryProvider, tlsConf *infratls.Config) (*Client, error) {
@@ -58,12 +55,24 @@ func New(logger *slog.Logger, discovery discovery.DiscoveryProvider, tlsConf *in
 		return nil, fmt.Errorf("[im-contact-client] initialization failed: %w", err)
 	}
 
-	isBotCache, err := lru.New(isBotCacheSize)
+	isBotCache, err := cache.New[string, bool]().
+		L1(cache.RistrettoConfig{
+			MaxCost:     isBotCacheSize,
+			NumCounters: isBotCacheSize * 10,
+			TTL:         isBotCacheTTL,
+		}).
+		Build()
 	if err != nil {
 		return nil, fmt.Errorf("[im-contact-client] failed to create is_bot cache: %w", err)
 	}
 
-	subCache, err := lru.New(subCacheSize)
+	subCache, err := cache.New[string, subCached]().
+		L1(cache.RistrettoConfig{
+			MaxCost:     subCacheSize,
+			NumCounters: subCacheSize * 10,
+			TTL:         subCacheTTL,
+		}).
+		Build()
 	if err != nil {
 		return nil, fmt.Errorf("[im-contact-client] failed to create sub cache: %w", err)
 	}
@@ -130,10 +139,8 @@ func (c *Client) SearchContact(ctx context.Context, req *contactv1.SearchContact
 func (c *Client) IsBot(ctx context.Context, contactID uuid.UUID, domainID int) (bool, error) {
 	key := contactID.String()
 
-	if v, ok := c.isBotCache.Get(key); ok {
-		if entry, ok := v.(isBotCacheEntry); time.Now().Before(entry.expiresAt) && ok {
-			return entry.isBot, nil
-		}
+	if cached, ok, _ := c.isBotCache.Get(ctx, key); ok {
+		return cached, nil
 	}
 
 	var isBot bool
@@ -163,7 +170,7 @@ func (c *Client) IsBot(ctx context.Context, contactID uuid.UUID, domainID int) (
 		return false, err
 	}
 
-	c.isBotCache.Add(key, isBotCacheEntry{isBot: isBot, expiresAt: time.Now().Add(isBotCacheTTL)})
+	_ = c.isBotCache.Set(ctx, key, isBot)
 
 	return isBot, nil
 }
@@ -171,10 +178,8 @@ func (c *Client) IsBot(ctx context.Context, contactID uuid.UUID, domainID int) (
 func (c *Client) GetSub(ctx context.Context, contactID uuid.UUID, domainID int) (*int64, error) {
 	key := contactID.String()
 
-	if v, ok := c.subCache.Get(key); ok {
-		if entry, ok := v.(subCacheEntry); time.Now().Before(entry.expiresAt) && ok {
-			return entry.sub, nil
-		}
+	if cached, ok, _ := c.subCache.Get(ctx, key); ok {
+		return cached.sub, nil
 	}
 
 	resp, err := c.SearchContact(ctx, &contactv1.SearchContactRequest{
@@ -198,7 +203,7 @@ func (c *Client) GetSub(ctx context.Context, contactID uuid.UUID, domainID int) 
 		}
 	}
 
-	c.subCache.Add(key, subCacheEntry{sub: sub, expiresAt: time.Now().Add(subCacheTTL)})
+	_ = c.subCache.Set(ctx, key, subCached{sub: sub})
 
 	return sub, nil
 }
@@ -216,6 +221,14 @@ func (c *Client) Close() error {
 		if err := c.privacyService.Close(); err != nil {
 			errs = append(errs, fmt.Errorf("closing privacy service client: %w", err))
 		}
+	}
+
+	if c.isBotCache != nil {
+		_ = c.isBotCache.Close()
+	}
+
+	if c.subCache != nil {
+		_ = c.subCache.Close()
 	}
 
 	return errors.Join(errs...)
