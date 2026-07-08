@@ -3,7 +3,6 @@ package queryobject
 import (
 	"fmt"
 	"slices"
-	"strings"
 
 	"github.com/Masterminds/squirrel"
 )
@@ -122,14 +121,6 @@ func (q *baseQueryObject[T]) WithOffset(page int) T {
 	q.builder = q.builder.Offset(uint64(offset))
 
 	return q.entity
-}
-
-func (q *baseQueryObject[T]) escapeLikePattern(s string) string {
-	s = strings.ReplaceAll(s, "\\", "\\\\")
-	s = strings.ReplaceAll(s, "%", "\\%")
-	s = strings.ReplaceAll(s, "_", "\\_")
-
-	return s
 }
 
 func (q *baseQueryObject[T]) ToSQL() (string, []any, error) {
