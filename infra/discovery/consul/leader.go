@@ -179,6 +179,7 @@ func (le *LeaderElector) acquireLock(sessionID string) (bool, uint64, error) {
 		Value:   []byte(le.nodeID),
 		Session: sessionID,
 	}
+
 	acquired, _, err := le.client.KV().Acquire(kv, nil)
 	if err != nil {
 		return false, 0, err
@@ -221,6 +222,7 @@ func (le *LeaderElector) monitorLeadership(ctx context.Context, sessionID string
 		q := (&api.QueryOptions{WaitIndex: lastIndex, WaitTime: le.blockingWait}).WithContext(ctx)
 
 		pair, meta, err := le.client.KV().Get(le.key, q)
+
 		if ctx.Err() != nil {
 			return
 		}
