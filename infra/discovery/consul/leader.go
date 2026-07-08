@@ -118,21 +118,22 @@ func (le *LeaderElector) attemptLeadership(ctx context.Context, onStart func(ctx
 
 	le.log.Info("node promoted to leader", "node_id", le.nodeID, "session", sessionID)
 
-	// [GRACEFUL_RELEASE] An explicit KV release (unlike session invalidation/destroy) does NOT
-	// trigger Consul's LockDelay grace period — it clears the KV's Session and bumps its
-	// ModifyIndex immediately, waking any blocking watchers right away. Registered after the
-	// destroySession defer above, so on unwind it runs FIRST: release the lock cleanly, then
-	// destroy the now-unused session for cleanup.
-	defer le.releaseLock(sessionID)
-
 	// [LEADER_CONTEXT]
 	// Bound to the duration of our leadership
 	leaderCtx, cancelLeader := context.WithCancel(ctx)
 	defer cancelLeader()
 
+	// [RENEW_STOP] Deliberately NOT tied to leaderCtx: consul/api's RenewPeriodic calls
+	// Session().Destroy() itself as soon as this channel closes, which Consul treats as
+	// invalidation and triggers LockDelay. leaderCtx gets canceled the instant the parent ctx
+	// does (e.g. on shutdown), which would race our own explicit releaseLock() below — whichever
+	// wins nondeterministically decides if LockDelay applies. Keeping this channel separate lets
+	// us release the lock ourselves first, and only then let the renewal goroutine clean up.
+	renewDone := make(chan struct{})
+
 	// Keep session alive via background heartbeat
 	go func() {
-		if err := le.client.Session().RenewPeriodic(le.renewInterval.String(), sessionID, nil, leaderCtx.Done()); err != nil {
+		if err := le.client.Session().RenewPeriodic(le.renewInterval.String(), sessionID, nil, renewDone); err != nil {
 			le.log.Error("consul session renewal failed, stepping down", "err", err)
 			cancelLeader()
 		}
@@ -153,6 +154,12 @@ func (le *LeaderElector) attemptLeadership(ctx context.Context, onStart func(ctx
 
 	le.log.Warn("node demoted: releasing leadership")
 	onStop()
+
+	// [GRACEFUL_RELEASE] Release the KV lock ourselves first — this does NOT trigger LockDelay,
+	// unlike session invalidation/destroy — then let the renewal goroutine stop and clean up
+	// the now-unused session.
+	le.releaseLock(sessionID)
+	close(renewDone)
 }
 
 func (le *LeaderElector) createSession() (string, error) {
