@@ -122,38 +122,52 @@ func RegisterOutboxForwarder(
 	)
 
 	mainCtx, cancelMain := context.WithCancel(context.Background())
+	electorDone := make(chan struct{})
 
 	lc.Append(fx.Hook{
 		OnStart: func(_ context.Context) error {
 			slog.Info("starting webitel outbox forwarder with leadership election")
 
 			// [LEADERSHIP] Only the active Leader node performs outbox relay to prevent DUPLICATE delivery
-			go elector.Run(mainCtx,
-				func(leaderCtx context.Context) error {
-					slog.Info("node PROMOTED to leader: initializing background workers")
+			go func() {
+				defer close(electorDone)
 
-					// [CLEANUP] Start periodic purging of processed outbox entries
-					go StartOutboxCleanupJob(leaderCtx, outbox, slog)
+				elector.Run(mainCtx,
+					func(leaderCtx context.Context) error {
+						slog.Info("node PROMOTED to leader: initializing background workers")
 
-					// [ROUTER] Run the Watermill message router bound to Leader context
-					go func() {
-						if err := router.Run(leaderCtx); err != nil {
-							slog.Error("watermill router: unexpected stop", "error", err)
-						}
-					}()
+						// [CLEANUP] Start periodic purging of processed outbox entries
+						go StartOutboxCleanupJob(leaderCtx, outbox, slog)
 
-					return nil
-				},
-				func() {
-					slog.Warn("node DEMOTED to follower: halting leader-specific tasks")
-				},
-			)
+						// [ROUTER] Run the Watermill message router bound to Leader context
+						go func() {
+							if err := router.Run(leaderCtx); err != nil {
+								slog.Error("watermill router: unexpected stop", "error", err)
+							}
+						}()
+
+						return nil
+					},
+					func() {
+						slog.Warn("node DEMOTED to follower: halting leader-specific tasks")
+					},
+				)
+			}()
 
 			return nil
 		},
-		OnStop: func(_ context.Context) error {
+		OnStop: func(ctx context.Context) error {
 			slog.Info("shutting down webitel outbox forwarder")
 			cancelMain() // Signal LeaderElector and workers to stop
+
+			// [GRACEFUL_RELEASE] Wait for the elector goroutine to actually finish releasing the
+			// Consul lock (KV release + session cleanup) before this hook returns — otherwise the
+			// process can exit mid-release, forcing Consul to fall back to TTL-based expiry.
+			select {
+			case <-electorDone:
+			case <-ctx.Done():
+				slog.Warn("timed out waiting for leader election to release the lock")
+			}
 
 			return router.Close()
 		},
