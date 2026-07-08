@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"go.uber.org/goleak"
+
+	"github.com/webitel/im-thread-service/config"
 )
 
 func TestLeaderElector_Run_LeakCheck(t *testing.T) {
@@ -15,7 +17,15 @@ func TestLeaderElector_Run_LeakCheck(t *testing.T) {
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 
-	le, err := NewLeaderElector("localhost:9999", "test-node", logger)
+	cfg := config.LeaderElectionConfig{
+		TTL:           10 * time.Second,
+		RenewInterval: 5 * time.Second,
+		ErrCooldown:   5 * time.Second,
+		BlockingWait:  2 * time.Minute,
+		LockDelay:     time.Second,
+	}
+
+	le, err := NewLeaderElector("localhost:9999", "test-node", cfg, logger)
 	if err != nil {
 		t.Fatal(err)
 	}
