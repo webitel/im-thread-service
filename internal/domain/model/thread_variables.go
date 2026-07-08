@@ -30,9 +30,9 @@ type GetThreadVariablesQuery struct {
 }
 
 type VariableEntry struct {
-	Value map[string]any `json:"value"`
-	SetBy uuid.UUID      `json:"set_by"`
-	SetAt time.Time      `json:"set_at"`
+	Value any       `json:"value"`
+	SetBy uuid.UUID `json:"set_by"`
+	SetAt time.Time `json:"set_at"`
 }
 
 type ThreadVariables struct {

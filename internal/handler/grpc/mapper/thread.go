@@ -323,7 +323,7 @@ func MapSetVariablesRequestToCommand(req *impb.SetVariablesRequest) (*model.SetT
 	vars := make(map[string]model.VariableEntry)
 	for _, v := range req.GetVariables() {
 		vars[v.GetKey()] = model.VariableEntry{
-			Value: v.GetValue().AsMap(),
+			Value: v.GetValue().AsInterface(),
 			SetBy: originator,
 		}
 	}
@@ -344,7 +344,7 @@ func MapThreadVariablesToProto(vars *model.ThreadVariables) *impb.ThreadVariable
 
 	protoVars := make(map[string]*impb.VariableEntry, len(vars.Variables))
 	for k, v := range vars.Variables {
-		value, err := structpb.NewStruct(v.Value)
+		value, err := structpb.NewValue(v.Value)
 		if err != nil {
 			continue
 		}
