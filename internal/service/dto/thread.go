@@ -38,17 +38,23 @@ type (
 	}
 
 	ThreadSearchRequest struct {
-		Fields     []string
-		IDs        uuid.UUIDs
-		DomainIDs  []int
-		Kinds      []model.ThreadKind
-		Owners     uuid.UUIDs
-		Q          string
-		SelfID     uuid.UUID
-		ContactIDs uuid.UUIDs
-		Size       int
-		Sort       string
-		Page       int
+		Fields       []string
+		IDs          uuid.UUIDs
+		DomainIDs    []int
+		Kinds        []model.ThreadKind
+		Owners       uuid.UUIDs
+		Q            string
+		SelfID       uuid.UUID
+		ContactIDs   uuid.UUIDs
+		Participants []ContactIdentity
+		Size         int
+		Sort         string
+		Page         int
+	}
+
+	ContactIdentity struct {
+		Sub string
+		Iss string
 	}
 
 	SearchLeftRequest struct {

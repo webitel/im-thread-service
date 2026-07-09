@@ -6,6 +6,7 @@ const (
 	DirectSettingsTable string = "im_thread.direct_settings"
 	ThreadTable         string = "im_thread.thread"
 	ThreadDialogTable   string = "im_thread.thread_dialog"
+	ContactTable        string = "im_contact.contact"
 )
 
 // Default values

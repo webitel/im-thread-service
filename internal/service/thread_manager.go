@@ -111,10 +111,15 @@ func (t *ThreadManagementService) Search(ctx context.Context, searchRequest *dto
 		WithoutDeletedAtFilter().
 		WithOffset(searchRequest.Page)
 
-	if len(searchRequest.ContactIDs) > 0 {
+	switch {
+	case len(searchRequest.ContactIDs) > 0:
 		query = query.WithSharedMembersFilter(searchRequest.SelfID, searchRequest.ContactIDs...)
-	} else {
+	case len(searchRequest.Participants) == 0:
 		query = query.WithContactIDFilter(searchRequest.SelfID)
+	}
+
+	if len(searchRequest.Participants) > 0 {
+		query = query.WithParticipantsFilter(searchRequest.SelfID, searchRequest.DomainIDs, searchRequest.Participants...)
 	}
 
 	threads, err := t.uow.ThreadStore().Search(ctx, query)

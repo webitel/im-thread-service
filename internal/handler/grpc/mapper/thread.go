@@ -53,18 +53,36 @@ func (s *ThreadInConverter) ConvertSearch(in *impb.ThreadSearchRequest) (*dto.Th
 	}
 
 	return &dto.ThreadSearchRequest{
-		Fields:     in.GetFields(),
-		Q:          in.GetQ(),
-		Sort:       in.GetSort(),
-		Page:       int(in.GetPage()),
-		Size:       int(in.GetSize()),
-		IDs:        ids,
-		DomainIDs:  domains,
-		Kinds:      s.convertThreadKinds(in.GetKinds()),
-		Owners:     owners,
-		SelfID:     selfID,
-		ContactIDs: members,
+		Fields:       in.GetFields(),
+		Q:            in.GetQ(),
+		Sort:         in.GetSort(),
+		Page:         int(in.GetPage()),
+		Size:         int(in.GetSize()),
+		IDs:          ids,
+		DomainIDs:    domains,
+		Kinds:        s.convertThreadKinds(in.GetKinds()),
+		Owners:       owners,
+		SelfID:       selfID,
+		ContactIDs:   members,
+		Participants: convertParticipants(in.GetParticipants()),
 	}, nil
+}
+
+// convertParticipants maps proto (iss, sub) identities to their DTO form.
+func convertParticipants(in []*impb.ContactIdentity) []dto.ContactIdentity {
+	if len(in) == 0 {
+		return nil
+	}
+
+	participants := make([]dto.ContactIdentity, 0, len(in))
+	for _, p := range in {
+		participants = append(participants, dto.ContactIdentity{
+			Sub: p.GetSub(),
+			Iss: p.GetIss(),
+		})
+	}
+
+	return participants
 }
 
 func (s *ThreadInConverter) convertThreadKinds(kinds []impb.ThreadKind) []model.ThreadKind {
