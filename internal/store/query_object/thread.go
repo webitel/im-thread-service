@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/webitel/im-thread-service/internal/domain/model"
+	"github.com/webitel/im-thread-service/internal/service/dto"
 )
 
 const (
@@ -309,6 +310,56 @@ func (q *threadQueryObject) WithSharedMembersFilter(selfID uuid.UUID, memberIDs 
 		)`, threadAlias, ThreadDialogTable, strings.Join(placeholders, ", ")),
 		args...,
 	)
+
+	return q
+}
+
+func (q *threadQueryObject) WithParticipantsFilter(selfID uuid.UUID, domainIDs []int, participants ...dto.ContactIdentity) *threadQueryObject {
+	if selfID == uuid.Nil || len(participants) == 0 {
+		return q
+	}
+
+	q.EnsureJoins(threadLinkThreadDialog)
+	q.mustIncludeComputedSubject = true
+
+	prefixArgs := make([]any, 0, len(domainIDs)+2*len(participants))
+
+	domainPlaceholders := make([]string, len(domainIDs))
+	for i, id := range domainIDs {
+		domainPlaceholders[i] = "?"
+
+		prefixArgs = append(prefixArgs, id)
+	}
+
+	pairPlaceholders := make([]string, len(participants))
+	for i, p := range participants {
+		pairPlaceholders[i] = "(?, ?)"
+
+		prefixArgs = append(prefixArgs, p.Iss, p.Sub)
+	}
+
+	var domainClause string
+	if len(domainIDs) != 0 {
+		domainClause = fmt.Sprintf("c.domain_id IN (%s) AND ", strings.Join(domainPlaceholders, ", "))
+	}
+
+	cte := fmt.Sprintf(`WITH participant_contacts AS (
+		SELECT c.id FROM %s c
+		WHERE %s(c.issuer_id, c.subject_id) IN (%s)
+	)`, ContactTable, domainClause, strings.Join(pairPlaceholders, ", "))
+
+	q.builder = q.builder.Prefix(cte, prefixArgs...)
+
+	q.builder = q.builder.Where(squirrel.Eq{threadThreadDialogAlias + ".member_id": selfID})
+	q.builder = q.builder.Where(squirrel.Eq{threadThreadDialogAlias + ".deleted_at": nil})
+
+	q.builder = q.builder.Where(fmt.Sprintf(`%s.id IN (
+		SELECT td2.thread_id FROM %s td2
+		WHERE td2.member_id IN (SELECT id FROM participant_contacts)
+		  AND td2.deleted_at IS NULL
+		GROUP BY td2.thread_id
+		HAVING COUNT(DISTINCT td2.member_id) = (SELECT COUNT(*) FROM participant_contacts)
+	)`, threadAlias, ThreadDialogTable))
 
 	return q
 }
