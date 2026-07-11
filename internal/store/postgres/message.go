@@ -105,10 +105,6 @@ func (m *messageStore) EditMessage(ctx context.Context, msg *model.Message) (*mo
 		return nil, errors.InvalidArgument("editor id cannot be nil", errors.WithID("postgres.message.edit_message"))
 	}
 
-	// The WHERE clause authorizes the edit: the editor must be the author (sender
-	// or origin sender, to cover SendAs) and still hold an active, non-deleted
-	// membership in the thread (i.e. the chat is not closed for them). When none
-	// of these hold, zero rows are updated and we surface Forbidden.
 	const query = `
 		update im_message.messages m
 		set body = @Body,
