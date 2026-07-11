@@ -165,6 +165,10 @@ func (f *fakeOutboxStore) Cleanup(ctx context.Context, opt *model.OutboxCleanupO
 
 type fakeMessageStore struct {
 	lastSavedSystemMessage *model.Message
+
+	editMessageErr    error
+	editMessageCalls  int
+	lastEditedMessage *model.Message
 }
 
 func (f *fakeMessageStore) SaveMessage(ctx context.Context, msg *model.Message) (*model.Message, error) {
@@ -198,6 +202,17 @@ func (f *fakeMessageStore) SaveMessageLocation(ctx context.Context, msg *model.M
 }
 
 func (f *fakeMessageStore) SaveInteractiveMessage(ctx context.Context, msg *model.Message) (*model.Message, error) {
+	return msg, nil
+}
+
+func (f *fakeMessageStore) EditMessage(ctx context.Context, msg *model.Message) (*model.Message, error) {
+	f.editMessageCalls++
+	f.lastEditedMessage = msg
+
+	if f.editMessageErr != nil {
+		return nil, f.editMessageErr
+	}
+
 	return msg, nil
 }
 
