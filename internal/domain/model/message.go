@@ -250,6 +250,7 @@ func (m *Message) WithEditedEvent(ctx context.Context) *Message {
 	to := make([]*event.ThreadMember, 0, len(m.To))
 	for _, member := range m.To {
 		var memberID *uuid.UUID
+
 		if member.ID != uuid.Nil {
 			id := member.ID
 			memberID = &id
