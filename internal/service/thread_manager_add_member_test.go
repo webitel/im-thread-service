@@ -19,11 +19,12 @@ import (
 )
 
 type fakeUnitOfWork struct {
-	threadDialogStore store.ThreadDialogStore
-	messageStore      store.MessageStore
-	outboxStore       store.OutboxStore
-	botControlStore   store.BotControlStore
-	threadStore       store.ThreadStore
+	threadDialogStore    store.ThreadDialogStore
+	messageStore         store.MessageStore
+	messageExternalStore store.MessageExternalStore
+	outboxStore          store.OutboxStore
+	botControlStore      store.BotControlStore
+	threadStore          store.ThreadStore
 }
 
 func (f fakeUnitOfWork) WithinTransaction(ctx context.Context, fn func(context.Context, store.UnitOfWork) error) error {
@@ -46,6 +47,10 @@ func (f fakeUnitOfWork) MessageHistory() store.MessageHistory {
 
 func (f fakeUnitOfWork) Messages() store.MessageStore {
 	return f.messageStore
+}
+
+func (f fakeUnitOfWork) MessageExternal() store.MessageExternalStore {
+	return f.messageExternalStore
 }
 
 func (f fakeUnitOfWork) Outbox() store.OutboxStore {
@@ -165,10 +170,41 @@ func (f *fakeOutboxStore) Cleanup(ctx context.Context, opt *model.OutboxCleanupO
 
 type fakeMessageStore struct {
 	lastSavedSystemMessage *model.Message
+	replyPreview           *model.ReplyToPreview
+	replyPreviewErr        error
 }
 
 func (f *fakeMessageStore) SaveMessage(ctx context.Context, msg *model.Message) (*model.Message, error) {
 	return msg, nil
+}
+
+func (f *fakeMessageStore) GetReplyPreview(ctx context.Context, id uuid.UUID, domainID int32) (*model.ReplyToPreview, error) {
+	return f.replyPreview, f.replyPreviewErr
+}
+
+type fakeMessageExternalStore struct {
+	saved            []*model.MessageExternalID
+	messageIDByExt   map[string]uuid.UUID
+	externalIDByMsg  map[uuid.UUID]string
+	lookupMessageErr error
+}
+
+func (f *fakeMessageExternalStore) Save(ctx context.Context, rec *model.MessageExternalID) error {
+	f.saved = append(f.saved, rec)
+
+	return nil
+}
+
+func (f *fakeMessageExternalStore) LookupMessageID(ctx context.Context, gateID, externalID string) (uuid.UUID, error) {
+	if f.lookupMessageErr != nil {
+		return uuid.Nil, f.lookupMessageErr
+	}
+
+	return f.messageIDByExt[externalID], nil
+}
+
+func (f *fakeMessageExternalStore) LookupExternalID(ctx context.Context, messageID uuid.UUID, gateID string) (string, error) {
+	return f.externalIDByMsg[messageID], nil
 }
 
 func (f *fakeMessageStore) SaveImages(ctx context.Context, messageID uuid.UUID, images []*model.MessageImage) ([]*model.MessageImage, error) {

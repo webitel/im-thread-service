@@ -62,6 +62,10 @@ type SendDocumentRequest struct {
 	DomainID int64  `json:"domain_id"`
 	SendID   string `json:"send_id"`
 	SendAs   *uuid.UUID
+
+	ReplyToMessageID  *uuid.UUID `json:"reply_to_message_id,omitempty"`
+	ExternalID        string     `json:"external_id,omitempty"`
+	ReplyToExternalID string     `json:"reply_to_external_id,omitempty"`
 }
 
 func (sendDocumentRequest *SendDocumentRequest) Validate() error {
@@ -79,6 +83,10 @@ func (sendDocumentRequest *SendDocumentRequest) Validate() error {
 
 	if sendDocumentRequest.To.ID == uuid.Nil {
 		return errors.InvalidArgument("to peer is required", errors.WithID("dto.document.validate"))
+	}
+
+	if sendDocumentRequest.ReplyToMessageID != nil && *sendDocumentRequest.ReplyToMessageID == uuid.Nil {
+		return errors.InvalidArgument("reply_to_message_id is not a valid uuid", errors.WithID("dto.document.validate"))
 	}
 
 	return nil

@@ -44,7 +44,7 @@ type MessageCreated struct {
 	To          []*ThreadMember     `json:"to"`
 	SendID      string              `json:"send_id"`
 	Body        string              `json:"body"`
-	Type        string              `json:"type"` // text|document|image|system|interactive|location|contact
+	Type        string              `json:"type"`
 	OccurredAt  time.Time           `json:"occurred_at"`
 	Metadata    map[string]any      `json:"metadata,omitempty"`
 	Images      []ImagePayload      `json:"images,omitempty"`
@@ -57,7 +57,19 @@ type MessageCreated struct {
 	// Matches the member_id field in bot.control.granted.v1 events.
 	// flow_manager compares this against its own member_id to decide whether to process the message.
 	BotControllerMemberID *uuid.UUID        `json:"bot_controller_member_id,omitempty"`
+	ReplyTo               *ReplyToPayload   `json:"reply_to,omitempty"`
 	ExternalMetadata      map[string]string `json:"-"`
+}
+
+type ReplyToPayload struct {
+	MessageID      uuid.UUID `json:"message_id"`
+	SenderID       uuid.UUID `json:"sender_id"`
+	Type           string    `json:"type"`
+	Body           string    `json:"body"`
+	CreatedAt      int64     `json:"created_at"`
+	AttachmentKind *string   `json:"attachment_kind,omitempty"`
+	AttachmentName *string   `json:"attachment_name,omitempty"`
+	AttachmentMime *string   `json:"attachment_mime,omitempty"`
 }
 
 func (m *MessageCreated) AddMetadata(key, value string) {

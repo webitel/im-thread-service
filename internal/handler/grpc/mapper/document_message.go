@@ -33,12 +33,15 @@ func MapToSendDocumentRequest(in *impb.SendDocumentRequest) *dto.SendDocumentReq
 	sendAs, _ := uuid.Parse(in.GetSendAs())
 
 	return &dto.SendDocumentRequest{
-		From:     MapPeerFromProto(in.GetFrom()),
-		To:       MapPeerFromProto(in.GetTo()),
-		Document: docReq,
-		DomainID: in.GetDomainId(),
-		SendID:   in.GetSendId(),
-		SendAs:   &sendAs,
+		From:              MapPeerFromProto(in.GetFrom()),
+		To:                MapPeerFromProto(in.GetTo()),
+		Document:          docReq,
+		DomainID:          in.GetDomainId(),
+		SendID:            in.GetSendId(),
+		SendAs:            &sendAs,
+		ReplyToMessageID:  ParseOptionalUUID(in.ReplyToMessageId),
+		ExternalID:        in.GetExternalId(),
+		ReplyToExternalID: in.GetReplyToExternalId(),
 	}
 }
 

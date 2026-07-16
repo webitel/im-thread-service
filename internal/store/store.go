@@ -20,6 +20,7 @@ type Store interface {
 
 type MessageStore interface {
 	SaveMessage(ctx context.Context, msg *model.Message) (*model.Message, error)
+	GetReplyPreview(ctx context.Context, id uuid.UUID, domainID int32) (*model.ReplyToPreview, error)
 	SaveImages(ctx context.Context, messageID uuid.UUID, images []*model.MessageImage) ([]*model.MessageImage, error)
 	SaveDocuments(ctx context.Context, messageID uuid.UUID, docs []*model.MessageDocument) ([]*model.MessageDocument, error)
 	ReadMessage(ctx context.Context, read struct {
@@ -37,6 +38,12 @@ type MessageStore interface {
 type OutboxStore interface {
 	Publish(ctx context.Context, topic string, event event.Outboxer) error
 	Cleanup(ctx context.Context, opt *model.OutboxCleanupOptions) (int64, error)
+}
+
+type MessageExternalStore interface {
+	Save(ctx context.Context, rec *model.MessageExternalID) error
+	LookupMessageID(ctx context.Context, gateID, externalID string) (uuid.UUID, error)
+	LookupExternalID(ctx context.Context, messageID uuid.UUID, gateID string) (string, error)
 }
 
 type ThreadDialogStore interface {

@@ -7,12 +7,14 @@ import (
 	"log/slog"
 	"strconv"
 	"sync"
+	"time"
 
 	"github.com/webitel/webitel-go-kit/pkg/errors"
 
 	"github.com/webitel/im-thread-service/gen/go/provider/v1"
 	improviders "github.com/webitel/im-thread-service/infra/webitel/im-providers"
 	"github.com/webitel/im-thread-service/internal/domain/model"
+	"github.com/webitel/im-thread-service/internal/store"
 )
 
 type ProvidersAdapter interface {
@@ -22,14 +24,16 @@ type ProvidersAdapter interface {
 type baseRPCProvidersAdapter struct {
 	logger          *slog.Logger
 	providersClient *improviders.Client
+	externalIDs     store.MessageExternalStore
 }
 
-func newBaseRPCProvidersAdapter(logger *slog.Logger, providersClient *improviders.Client) *baseRPCProvidersAdapter {
+func newBaseRPCProvidersAdapter(logger *slog.Logger, providersClient *improviders.Client, externalIDs store.MessageExternalStore) *baseRPCProvidersAdapter {
 	log := logger.With("component", "base_rpc_providers_adapter")
 
 	return &baseRPCProvidersAdapter{
 		logger:          log,
 		providersClient: providersClient,
+		externalIDs:     externalIDs,
 	}
 }
 
@@ -95,7 +99,10 @@ func (a *baseRPCProvidersAdapter) SendMessage(ctx context.Context, message *mode
 
 	for _, externalPeer := range externalPairs {
 		wg.Go(func() {
-			var err error
+			var (
+				err  error
+				resp *provider.ProviderSendMessageResponse
+			)
 
 			userID := externalPeer.ContactID.String()
 			peerLog := log.With(
@@ -106,25 +113,29 @@ func (a *baseRPCProvidersAdapter) SendMessage(ctx context.Context, message *mode
 
 			peerLog.Debug("dispatching to external provider")
 
+			replyToExternal := a.lookupReplyExternalID(ctx, message, externalPeer.Via, peerLog)
+
 			switch message.Type {
 			case model.MessageTypeFile:
 				peerLog.Debug("sending document", slog.Int("documents_count", len(message.Documents)))
-				_, err = a.providersClient.SendDocument(ctx, &provider.ProviderSendDocumentRequest{
-					GateId:         externalPeer.Via,
-					ExternalUserId: userID,
-					Documents:      extratcFiles(message.Documents),
-					Caption:        message.Body,
-					DomainId:       message.DomainID,
+				resp, err = a.providersClient.SendDocument(ctx, &provider.ProviderSendDocumentRequest{
+					GateId:            externalPeer.Via,
+					ExternalUserId:    userID,
+					Documents:         extratcFiles(message.Documents),
+					Caption:           message.Body,
+					DomainId:          message.DomainID,
+					ReplyToExternalId: replyToExternal,
 				})
 
 			case model.MessageTypeText:
 				peerLog.Debug("sending text")
 
-				_, err = a.providersClient.SendText(ctx, &provider.ProviderSendTextRequest{
-					GateId:         externalPeer.Via,
-					ExternalUserId: userID,
-					Text:           message.Body,
-					DomainId:       message.DomainID,
+				resp, err = a.providersClient.SendText(ctx, &provider.ProviderSendTextRequest{
+					GateId:            externalPeer.Via,
+					ExternalUserId:    userID,
+					Text:              message.Body,
+					DomainId:          message.DomainID,
+					ReplyToExternalId: replyToExternal,
 				})
 
 			case model.MessageTypeContact:
@@ -140,13 +151,14 @@ func (a *baseRPCProvidersAdapter) SendMessage(ctx context.Context, message *mode
 
 				body := message.Body
 				sendID := message.ID.String()
-				_, err = a.providersClient.SendInteractive(ctx, &provider.ProviderSendInteractiveRequest{
-					GateId:         externalPeer.Via,
-					ExternalUserId: userID,
-					DomainId:       message.DomainID,
-					Body:           &body,
-					SendId:         &sendID,
-					Interactive:    mapInteractive(message.Interactive),
+				resp, err = a.providersClient.SendInteractive(ctx, &provider.ProviderSendInteractiveRequest{
+					GateId:            externalPeer.Via,
+					ExternalUserId:    userID,
+					DomainId:          message.DomainID,
+					Body:              &body,
+					SendId:            &sendID,
+					Interactive:       mapInteractive(message.Interactive),
+					ReplyToExternalId: replyToExternal,
 				})
 			case model.MessageTypeLocation:
 				peerLog.Debug("message type location: not implemented, skipping")
@@ -158,7 +170,7 @@ func (a *baseRPCProvidersAdapter) SendMessage(ctx context.Context, message *mode
 				}
 
 				peerLog.Debug("sending system message", slog.String("event_type", message.System.Type))
-				_, err = a.providersClient.SendSystemMessage(ctx, &provider.ProviderSendSystemMessageRequest{
+				resp, err = a.providersClient.SendSystemMessage(ctx, &provider.ProviderSendSystemMessageRequest{
 					GateId:         externalPeer.Via,
 					ExternalUserId: userID,
 					DomainId:       message.DomainID,
@@ -185,6 +197,8 @@ func (a *baseRPCProvidersAdapter) SendMessage(ctx context.Context, message *mode
 			}
 
 			peerLog.Debug("provider RPC succeeded")
+
+			a.persistExternalID(ctx, message, externalPeer.Via, resp, peerLog)
 		})
 	}
 
@@ -206,6 +220,46 @@ func (a *baseRPCProvidersAdapter) SendMessage(ctx context.Context, message *mode
 	)
 
 	return nil
+}
+
+func (a *baseRPCProvidersAdapter) lookupReplyExternalID(ctx context.Context, message *model.Message, gateID string, log *slog.Logger) string {
+	if message.ReplyToID == nil {
+		return ""
+	}
+
+	ext, err := a.externalIDs.LookupExternalID(ctx, *message.ReplyToID, gateID)
+	if err != nil {
+		log.Warn("external id lookup failed; sending without native reply", slog.String("error", err.Error()))
+
+		return ""
+	}
+
+	if ext == "" {
+		log.Info("reply target has no external id for gate; sending without native reply")
+	}
+
+	return ext
+}
+
+func (a *baseRPCProvidersAdapter) persistExternalID(ctx context.Context, message *model.Message, gateID string, resp *provider.ProviderSendMessageResponse, log *slog.Logger) {
+	extID := resp.GetExternalId()
+	if extID == "" {
+		return
+	}
+
+	saveCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 3*time.Second)
+	defer cancel()
+
+	err := a.externalIDs.Save(saveCtx, &model.MessageExternalID{
+		MessageID:  message.ID,
+		ThreadID:   message.ThreadID,
+		GateID:     gateID,
+		ExternalID: extID,
+		Direction:  model.ExternalDirectionOutbound,
+	})
+	if err != nil {
+		log.Warn("failed to persist external message id mapping", slog.String("error", err.Error()))
+	}
 }
 
 func mapInteractive(m *model.MessageInteractive) *provider.ProviderInteractive {

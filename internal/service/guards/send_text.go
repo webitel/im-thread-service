@@ -25,6 +25,7 @@ func SendTextGuard(request *dto.SendTextRequest) error {
 		checkNilRequest(),
 		checkEmptyPeers(),
 		checkEmptyBody(),
+		checkReplyTarget(),
 	}
 
 	for _, guard := range guards {
@@ -60,6 +61,16 @@ func checkEmptyBody() MessageGuard {
 	return func(req *dto.SendTextRequest) error {
 		if req.Body == "" {
 			return errors.New("message body is empty")
+		}
+
+		return nil
+	}
+}
+
+func checkReplyTarget() MessageGuard {
+	return func(req *dto.SendTextRequest) error {
+		if req.ReplyToMessageID != nil && *req.ReplyToMessageID == uuid.Nil {
+			return errors.New("reply_to_message_id is not a valid uuid")
 		}
 
 		return nil
