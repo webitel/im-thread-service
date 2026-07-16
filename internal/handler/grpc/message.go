@@ -24,6 +24,7 @@ type MessageService interface {
 	SendInteractive(ctx context.Context, msg *model.Message) (*model.Message, error)
 	SendInteractiveCallback(ctx context.Context, callback *model.InteractiveCallback) (*model.InteractiveCallback, error)
 	SendSystemMessage(ctx context.Context, msg *model.Message) (*model.Message, error)
+	EditMessage(ctx context.Context, msg *model.Message) (*model.Message, error)
 }
 
 type MessageServer struct {
@@ -206,4 +207,15 @@ func (m *MessageServer) SendSystemMessage(ctx context.Context, in *impb.SendSyst
 		},
 		Id: saved.ID.String(),
 	}, nil
+}
+
+func (m *MessageServer) EditMessage(ctx context.Context, in *impb.EditMessageRequest) (*impb.EditMessageResponse, error) {
+	edited, err := m.handler.EditMessage(ctx, mapper.ConvertPbEditMessageToDomain(in))
+	if err != nil {
+		m.logger.Error("failed to edit message", "error", err)
+
+		return nil, err
+	}
+
+	return mapper.MapToEditMessageResponse(edited), nil
 }

@@ -20,7 +20,6 @@ type Store interface {
 
 type MessageStore interface {
 	SaveMessage(ctx context.Context, msg *model.Message) (*model.Message, error)
-	SaveImages(ctx context.Context, messageID uuid.UUID, images []*model.MessageImage) ([]*model.MessageImage, error)
 	SaveDocuments(ctx context.Context, messageID uuid.UUID, docs []*model.MessageDocument) ([]*model.MessageDocument, error)
 	ReadMessage(ctx context.Context, read struct {
 		DomainID  int32
@@ -32,6 +31,8 @@ type MessageStore interface {
 	SaveMessageLocation(ctx context.Context, msg *model.Message) (*model.Message, error)
 	SaveInteractiveMessage(ctx context.Context, msg *model.Message) (*model.Message, error)
 	SaveSystemMessage(ctx context.Context, msg *model.Message) (*model.Message, error)
+
+	EditMessage(ctx context.Context, msg *model.Message) (*model.Message, error)
 }
 
 type OutboxStore interface {
