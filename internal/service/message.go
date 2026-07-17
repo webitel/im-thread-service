@@ -138,7 +138,7 @@ func (s *MessageService) SendText(ctx context.Context, in *dto.SendTextRequest) 
 		return s.handleBotStopCommand(ctx, in, t)
 	}
 
-	replyToID, replyPreview, err := s.resolveReply(ctx, in.ReplyToMessageID, in.ReplyToExternalID, &in.From, t, int32(in.DomainID))
+	replyPreview, err := s.resolveReply(ctx, in.ReplyToMessageID, in.ReplyToExternalID, &in.From, t, int32(in.DomainID))
 	if err != nil {
 		return nil, err
 	}
@@ -153,7 +153,6 @@ func (s *MessageService) SendText(ctx context.Context, in *dto.SendTextRequest) 
 		Metadata:              model.BuildMetadata(in.Body),
 		SendAs:                in.SendAs,
 		BotControllerMemberID: t.BotControllerID,
-		ReplyToID:             replyToID,
 		ReplyTo:               replyPreview,
 	}
 
@@ -166,7 +165,6 @@ func (s *MessageService) SendText(ctx context.Context, in *dto.SendTextRequest) 
 		}
 
 		saved.To = t.Members
-		saved.ReplyToID = msg.ReplyToID
 		saved.ReplyTo = msg.ReplyTo
 
 		if err = s.recordInboundExternalID(ctx, uow, saved, &in.From, in.ExternalID); err != nil {
@@ -324,7 +322,7 @@ func (s *MessageService) SendDocument(ctx context.Context, in *dto.SendDocumentR
 		return nil, err
 	}
 
-	replyToID, replyPreview, err := s.resolveReply(ctx, in.ReplyToMessageID, in.ReplyToExternalID, &in.From, t, int32(in.DomainID))
+	replyPreview, err := s.resolveReply(ctx, in.ReplyToMessageID, in.ReplyToExternalID, &in.From, t, int32(in.DomainID))
 	if err != nil {
 		return nil, err
 	}
@@ -368,7 +366,6 @@ func (s *MessageService) SendDocument(ctx context.Context, in *dto.SendDocumentR
 	})
 	msg.BotControllerMemberID = t.BotControllerID
 	msg.SendAs = in.SendAs
-	msg.ReplyToID = replyToID
 	msg.ReplyTo = replyPreview
 	msg.SetMemberFromSlice(t.Members)
 
@@ -459,7 +456,6 @@ func (s *MessageService) SendLocation(ctx context.Context, msg *model.Message) (
 
 		savedMsg.To = msg.To
 		savedMsg.IdempotencyKey = msg.IdempotencyKey
-		savedMsg.ReplyToID = msg.ReplyToID
 		savedMsg.ReplyTo = msg.ReplyTo
 
 		savedMsg.WithCreatedEvent(ctx, msg.IdempotencyKey)
@@ -498,7 +494,6 @@ func (s *MessageService) SendContact(ctx context.Context, msg *model.Message) (*
 
 		savedMsg.To = msg.To
 		savedMsg.IdempotencyKey = msg.IdempotencyKey
-		savedMsg.ReplyToID = msg.ReplyToID
 		savedMsg.ReplyTo = msg.ReplyTo
 
 		savedMsg.WithCreatedEvent(ctx, msg.IdempotencyKey)
@@ -656,12 +651,16 @@ func (s *MessageService) prepareMessageForSending(ctx context.Context, msg *mode
 
 	msg.SetMemberFromSlice(t.Members)
 
-	preview, err := s.resolveReplyPreview(ctx, msg.ReplyToID, t.ID, msg.DomainID)
-	if err != nil {
-		return err
-	}
+	if msg.ReplyTo != nil {
+		targetID := msg.ReplyTo.MessageID
 
-	msg.ReplyTo = preview
+		preview, err := s.resolveReplyPreview(ctx, &targetID, t.ID, msg.DomainID)
+		if err != nil {
+			return err
+		}
+
+		msg.ReplyTo = preview
+	}
 
 	return nil
 }
@@ -673,23 +672,18 @@ func (s *MessageService) resolveReply(
 	from *shared.Peer,
 	t *model.Thread,
 	domainID int32,
-) (*uuid.UUID, *model.ReplyToPreview, error) {
+) (*model.ReplyToPreview, error) {
 	if replyToID != nil {
-		preview, err := s.resolveReplyPreview(ctx, replyToID, t.ID, domainID)
-		if err != nil {
-			return nil, nil, err
-		}
-
-		return replyToID, preview, nil
+		return s.resolveReplyPreview(ctx, replyToID, t.ID, domainID)
 	}
 
 	if replyToExternalID == "" {
-		return nil, nil, nil
+		return nil, nil
 	}
 
 	gateID := gateIDForPeer(from, t.Members)
 	if gateID == "" {
-		return nil, nil, nil
+		return nil, nil
 	}
 
 	log := s.logger.With("gate_id", gateID, "reply_to_external_id", replyToExternalID)
@@ -698,23 +692,23 @@ func (s *MessageService) resolveReply(
 	if err != nil {
 		log.WarnContext(ctx, "external reply lookup failed; saving message without reply link", "err", err)
 
-		return nil, nil, nil
+		return nil, nil
 	}
 
 	if id == uuid.Nil {
 		log.WarnContext(ctx, "external reply reference not found; saving message without reply link")
 
-		return nil, nil, nil
+		return nil, nil
 	}
 
 	preview, err := s.uow.Messages().GetReplyPreview(ctx, id, domainID)
 	if err != nil || preview == nil || preview.ThreadID != t.ID {
 		log.WarnContext(ctx, "external reply target unusable; saving message without reply link", "err", err)
 
-		return nil, nil, nil
+		return nil, nil
 	}
 
-	return &id, preview, nil
+	return preview, nil
 }
 
 func (s *MessageService) resolveReplyPreview(ctx context.Context, replyToID *uuid.UUID, threadID uuid.UUID, domainID int32) (*model.ReplyToPreview, error) {

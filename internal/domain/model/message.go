@@ -52,7 +52,7 @@ type Message struct {
 	SendTo         shared.Peer     `json:"send_to" db:"send_to"`
 	To             []*ThreadDialog `json:"to" db:"to"`
 	Body           string          `json:"body" db:"body"`
-	Type           MessageType     `json:"type" db:"type"`
+	Type           MessageType     `json:"type" db:"type"` // text|document|image|system|interactive|location|contact
 	Metadata       map[string]any  `json:"metadata,omitempty" db:"metadata"`
 	CreatedAt      time.Time       `json:"created_at" db:"created_at"`
 	UpdatedAt      time.Time       `json:"updated_at" db:"updated_at"`
@@ -72,8 +72,7 @@ type Message struct {
 	// Included in MessageCreated events so flow_manager can self-filter.
 	BotControllerMemberID *uuid.UUID `json:"-" db:"-"`
 
-	ReplyToID *uuid.UUID      `json:"-" db:"-"`
-	ReplyTo   *ReplyToPreview `json:"reply_to,omitempty" db:"reply_to"`
+	ReplyTo *ReplyToPreview `json:"reply_to,omitempty" db:"reply_to"`
 
 	domainEvents []event.Outboxer
 }
@@ -92,6 +91,14 @@ type ReplyToPreview struct {
 	Body       string           `json:"body"`
 	CreatedAt  int64            `json:"created_at"`
 	Attachment *ReplyAttachment `json:"attachment,omitempty"`
+}
+
+func NewReplyTarget(id *uuid.UUID) *ReplyToPreview {
+	if id == nil {
+		return nil
+	}
+
+	return &ReplyToPreview{MessageID: *id}
 }
 
 func (m *Message) FirstViaOrDefault() string {

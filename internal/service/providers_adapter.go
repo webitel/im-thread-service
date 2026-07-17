@@ -223,11 +223,11 @@ func (a *baseRPCProvidersAdapter) SendMessage(ctx context.Context, message *mode
 }
 
 func (a *baseRPCProvidersAdapter) lookupReplyExternalID(ctx context.Context, message *model.Message, gateID string, log *slog.Logger) string {
-	if message.ReplyToID == nil {
+	if message.ReplyTo == nil {
 		return ""
 	}
 
-	ext, err := a.externalIDs.LookupExternalID(ctx, *message.ReplyToID, gateID)
+	ext, err := a.externalIDs.LookupExternalID(ctx, message.ReplyTo.MessageID, gateID)
 	if err != nil {
 		log.Warn("external id lookup failed; sending without native reply", slog.String("error", err.Error()))
 

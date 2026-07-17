@@ -51,6 +51,16 @@ func validateMessageForSave(msg *model.Message, operationID string) error {
 	return nil
 }
 
+func replyToArg(msg *model.Message) *uuid.UUID {
+	if msg.ReplyTo == nil {
+		return nil
+	}
+
+	id := msg.ReplyTo.MessageID
+
+	return &id
+}
+
 func (m *messageStore) SaveMessage(ctx context.Context, msg *model.Message) (*model.Message, error) {
 	if err := validateMessageForSave(msg, "postgres.message.save_message"); err != nil {
 		return nil, err
@@ -77,7 +87,7 @@ func (m *messageStore) SaveMessage(ctx context.Context, msg *model.Message) (*mo
 		"Body":         msg.Body,
 		"Metadata":     msg.Metadata,
 		"OriginSender": msg.GetOriginSender(),
-		"ReplyTo":      msg.ReplyToID,
+		"ReplyTo":      replyToArg(msg),
 	}
 
 	rows, err := m.db.Query(ctx, query, args)
@@ -359,7 +369,7 @@ func prepareSaveMessageLocationQuery(msg *model.Message) (string, pgx.NamedArgs)
 		"Type":      msg.Type,
 		"Body":      msg.Body,
 		"Metadata":  msg.Metadata,
-		"ReplyTo":   msg.ReplyToID,
+		"ReplyTo":   replyToArg(msg),
 		"Address":   msg.Location.Address,
 		"Latitude":  msg.Location.Latitude,
 		"Longitude": msg.Location.Longitude,
@@ -428,7 +438,7 @@ func prepareSaveMessageContactQuery(msg *model.Message) (string, pgx.NamedArgs) 
 		"Type":     msg.Type,
 		"Body":     msg.Body,
 		"Metadata": msg.Metadata,
-		"ReplyTo":  msg.ReplyToID,
+		"ReplyTo":  replyToArg(msg),
 		"Phone":    msg.Contact.PhoneNumber,
 		"Name":     msg.Contact.Name,
 		"Email":    msg.Contact.Email,
