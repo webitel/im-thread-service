@@ -90,7 +90,7 @@ func (m *MessageServer) SendLocation(ctx context.Context, in *impb.SendLocationR
 			Name:      in.Name,
 		},
 		SendAs:  &sendAs,
-		ReplyTo: model.NewReplyTarget(mapper.ParseOptionalUUID(in.ReplyToMessageId)),
+		ReplyTo: model.NewReplyTarget(mapper.ParseOptionalUUID(in.GetReplyToMessageId())),
 	}
 
 	saved, err := m.handler.SendLocation(ctx, msg)
@@ -122,7 +122,7 @@ func (m *MessageServer) SendContact(ctx context.Context, in *impb.SendContactReq
 			Email:       in.Email,
 		},
 		SendAs:  &sendAs,
-		ReplyTo: model.NewReplyTarget(mapper.ParseOptionalUUID(in.ReplyToMessageId)),
+		ReplyTo: model.NewReplyTarget(mapper.ParseOptionalUUID(in.GetReplyToMessageId())),
 	}
 
 	saved, err := m.handler.SendContact(ctx, msg)

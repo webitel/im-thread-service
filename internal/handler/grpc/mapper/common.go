@@ -2,12 +2,12 @@ package mapper
 
 import "github.com/google/uuid"
 
-func ParseOptionalUUID(s *string) *uuid.UUID {
-	if s == nil || *s == "" {
+func ParseOptionalUUID(s string) *uuid.UUID {
+	if s == "" {
 		return nil
 	}
 
-	id, err := uuid.Parse(*s)
+	id, err := uuid.Parse(s)
 	if err != nil {
 		nilID := uuid.Nil
 

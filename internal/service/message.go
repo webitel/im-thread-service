@@ -695,9 +695,7 @@ func (s *MessageService) prepareMessageForSending(ctx context.Context, msg *mode
 	msg.SetMemberFromSlice(t.Members)
 
 	if msg.ReplyTo != nil {
-		targetID := msg.ReplyTo.MessageID
-
-		preview, err := s.resolveReplyPreview(ctx, &targetID, t.ID, msg.DomainID)
+		preview, err := s.resolveReplyPreview(ctx, msg.ReplyTo.MessageID, t.ID, msg.DomainID)
 		if err != nil {
 			return err
 		}
@@ -717,16 +715,26 @@ func (s *MessageService) resolveReply(
 	domainID int32,
 ) (*model.ReplyToPreview, error) {
 	if replyToID != nil {
-		return s.resolveReplyPreview(ctx, replyToID, t.ID, domainID)
+		return s.resolveReplyPreview(ctx, *replyToID, t.ID, domainID)
 	}
 
+	return s.resolveExternalReply(ctx, replyToExternalID, from, t, domainID), nil
+}
+
+func (s *MessageService) resolveExternalReply(
+	ctx context.Context,
+	replyToExternalID string,
+	from *shared.Peer,
+	t *model.Thread,
+	domainID int32,
+) *model.ReplyToPreview {
 	if replyToExternalID == "" {
-		return nil, nil
+		return nil
 	}
 
 	gateID := gateIDForPeer(from, t.Members)
 	if gateID == "" {
-		return nil, nil
+		return nil
 	}
 
 	log := s.logger.With("gate_id", gateID, "reply_to_external_id", replyToExternalID)
@@ -735,40 +743,40 @@ func (s *MessageService) resolveReply(
 	if err != nil {
 		log.WarnContext(ctx, "external reply lookup failed; saving message without reply link", "err", err)
 
-		return nil, nil
+		return nil
 	}
 
 	if id == uuid.Nil {
 		log.WarnContext(ctx, "external reply reference not found; saving message without reply link")
 
-		return nil, nil
+		return nil
 	}
 
 	preview, err := s.uow.Messages().GetReplyPreview(ctx, id, domainID)
-	if err != nil || preview == nil || preview.ThreadID != t.ID {
+	if err != nil || preview.ThreadID != t.ID {
 		log.WarnContext(ctx, "external reply target unusable; saving message without reply link", "err", err)
 
-		return nil, nil
+		return nil
 	}
 
-	return preview, nil
+	return preview
 }
 
-func (s *MessageService) resolveReplyPreview(ctx context.Context, replyToID *uuid.UUID, threadID uuid.UUID, domainID int32) (*model.ReplyToPreview, error) {
-	if replyToID == nil {
-		return nil, nil
-	}
-
-	if *replyToID == uuid.Nil {
+func (s *MessageService) resolveReplyPreview(ctx context.Context, replyToID, threadID uuid.UUID, domainID int32) (*model.ReplyToPreview, error) {
+	if replyToID == uuid.Nil {
 		return nil, errors.InvalidArgument("reply_to_message_id is not a valid uuid", errors.WithID("service.message.reply_target"))
 	}
 
-	preview, err := s.uow.Messages().GetReplyPreview(ctx, *replyToID, domainID)
+	preview, err := s.uow.Messages().GetReplyPreview(ctx, replyToID, domainID)
 	if err != nil {
+		if errors.Is(err, store.ErrReplyTargetNotFound) {
+			return nil, errors.InvalidArgument("reply target message not found in this thread", errors.WithID("service.message.reply_target"))
+		}
+
 		return nil, err
 	}
 
-	if preview == nil || preview.ThreadID != threadID {
+	if preview.ThreadID != threadID {
 		return nil, errors.InvalidArgument("reply target message not found in this thread", errors.WithID("service.message.reply_target"))
 	}
 

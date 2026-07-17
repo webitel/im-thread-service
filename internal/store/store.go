@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"errors"
 
 	"github.com/google/uuid"
 
@@ -9,6 +10,10 @@ import (
 	"github.com/webitel/im-thread-service/internal/domain/model"
 	queryobject "github.com/webitel/im-thread-service/internal/store/query_object"
 )
+
+// ErrReplyTargetNotFound is returned by MessageStore.GetReplyPreview when no
+// message matches the requested id and domain.
+var ErrReplyTargetNotFound = errors.New("reply target message not found")
 
 type Store interface {
 	Messages() MessageStore

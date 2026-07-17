@@ -183,7 +183,15 @@ func (f *fakeMessageStore) SaveMessage(ctx context.Context, msg *model.Message) 
 }
 
 func (f *fakeMessageStore) GetReplyPreview(ctx context.Context, id uuid.UUID, domainID int32) (*model.ReplyToPreview, error) {
-	return f.replyPreview, f.replyPreviewErr
+	if f.replyPreviewErr != nil {
+		return nil, f.replyPreviewErr
+	}
+
+	if f.replyPreview == nil {
+		return nil, store.ErrReplyTargetNotFound
+	}
+
+	return f.replyPreview, nil
 }
 
 type fakeMessageExternalStore struct {

@@ -22,7 +22,7 @@ func MapToSendTextRequest(in *impb.SendTextRequest) *dto.SendTextRequest {
 		DomainID:          in.GetDomainId(),
 		SendID:            in.GetSendId(),
 		SendAs:            &sendAs,
-		ReplyToMessageID:  ParseOptionalUUID(in.ReplyToMessageId),
+		ReplyToMessageID:  ParseOptionalUUID(in.GetReplyToMessageId()),
 		ExternalID:        in.GetExternalId(),
 		ReplyToExternalID: in.GetReplyToExternalId(),
 	}

@@ -141,7 +141,7 @@ func (m *messageStore) GetReplyPreview(ctx context.Context, id uuid.UUID, domain
 	preview, err := pgx.CollectExactlyOneRow(rows, pgx.RowToAddrOfStructByNameLax[model.ReplyToPreview])
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, nil
+			return nil, store.ErrReplyTargetNotFound
 		}
 
 		return nil, errors.Internal("collecting reply preview", errors.WithCause(err), errors.WithID("postgres.message.reply_preview.collecting"))

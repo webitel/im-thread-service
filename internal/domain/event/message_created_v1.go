@@ -37,25 +37,25 @@ type OutboxEvent struct {
 var _ Outboxer = (*MessageCreated)(nil)
 
 type MessageCreated struct {
-	MessageID   uuid.UUID           `json:"message_id"`
-	ThreadID    uuid.UUID           `json:"thread_id"`
-	DomainID    int32               `json:"domain_id"`
-	From        *ThreadMember       `json:"from"`
-	To          []*ThreadMember     `json:"to"`
-	SendID      string              `json:"send_id"`
-	Body        string              `json:"body"`
-	Type        string              `json:"type"` // text|document|image|system|interactive|location|contact
-	OccurredAt  time.Time           `json:"occurred_at"`
-	Metadata    map[string]any      `json:"metadata,omitempty"`
-	Images      []ImagePayload      `json:"images,omitempty"`
-	Documents   []DocumentPayload   `json:"documents,omitempty"`
-	Location    *LocationPayload    `json:"location,omitempty"`
-	Contact     *ContactPayload     `json:"contact,omitempty"`
-	Interactive *InteractivePayload `json:"interactive,omitempty"`
-	System      *SystemPayload      `json:"system,omitempty"`
-	BotControllerMemberID *uuid.UUID        `json:"bot_controller_member_id,omitempty"`
-	ReplyTo               *ReplyToPayload   `json:"reply_to,omitempty"`
-	ExternalMetadata      map[string]string `json:"-"`
+	MessageID             uuid.UUID           `json:"message_id"`
+	ThreadID              uuid.UUID           `json:"thread_id"`
+	DomainID              int32               `json:"domain_id"`
+	From                  *ThreadMember       `json:"from"`
+	To                    []*ThreadMember     `json:"to"`
+	SendID                string              `json:"send_id"`
+	Body                  string              `json:"body"`
+	Type                  string              `json:"type"` // text|document|image|system|interactive|location|contact
+	OccurredAt            time.Time           `json:"occurred_at"`
+	Metadata              map[string]any      `json:"metadata,omitempty"`
+	Images                []ImagePayload      `json:"images,omitempty"`
+	Documents             []DocumentPayload   `json:"documents,omitempty"`
+	Location              *LocationPayload    `json:"location,omitempty"`
+	Contact               *ContactPayload     `json:"contact,omitempty"`
+	Interactive           *InteractivePayload `json:"interactive,omitempty"`
+	System                *SystemPayload      `json:"system,omitempty"`
+	BotControllerMemberID *uuid.UUID          `json:"bot_controller_member_id,omitempty"`
+	ReplyTo               *ReplyToPayload     `json:"reply_to,omitempty"`
+	ExternalMetadata      map[string]string   `json:"-"`
 }
 
 type ReplyToPayload struct {
