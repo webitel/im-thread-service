@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"errors"
 
 	"github.com/google/uuid"
 
@@ -9,6 +10,10 @@ import (
 	"github.com/webitel/im-thread-service/internal/domain/model"
 	queryobject "github.com/webitel/im-thread-service/internal/store/query_object"
 )
+
+// ErrReplyTargetNotFound is returned by MessageStore.GetReplyPreview when no
+// message matches the requested id and domain.
+var ErrReplyTargetNotFound = errors.New("reply target message not found")
 
 type Store interface {
 	Messages() MessageStore
@@ -20,6 +25,7 @@ type Store interface {
 
 type MessageStore interface {
 	SaveMessage(ctx context.Context, msg *model.Message) (*model.Message, error)
+	GetReplyPreview(ctx context.Context, id uuid.UUID, domainID int32) (*model.ReplyToPreview, error)
 	SaveDocuments(ctx context.Context, messageID uuid.UUID, docs []*model.MessageDocument) ([]*model.MessageDocument, error)
 	ReadMessage(ctx context.Context, read struct {
 		DomainID  int32
@@ -38,6 +44,12 @@ type MessageStore interface {
 type OutboxStore interface {
 	Publish(ctx context.Context, topic string, event event.Outboxer) error
 	Cleanup(ctx context.Context, opt *model.OutboxCleanupOptions) (int64, error)
+}
+
+type MessageExternalStore interface {
+	Save(ctx context.Context, rec *model.MessageExternalID) error
+	LookupMessageID(ctx context.Context, gateID, externalID string) (uuid.UUID, error)
+	LookupExternalID(ctx context.Context, messageID uuid.UUID, gateID string) (string, error)
 }
 
 type ThreadDialogStore interface {

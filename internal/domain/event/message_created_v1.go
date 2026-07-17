@@ -54,7 +54,19 @@ type MessageCreated struct {
 	Interactive           *InteractivePayload `json:"interactive,omitempty"`
 	System                *SystemPayload      `json:"system,omitempty"`
 	BotControllerMemberID *uuid.UUID          `json:"bot_controller_member_id,omitempty"`
+	ReplyTo               *ReplyToPayload     `json:"reply_to,omitempty"`
 	ExternalMetadata      map[string]string   `json:"-"`
+}
+
+type ReplyToPayload struct {
+	MessageID      uuid.UUID `json:"message_id"`
+	SenderID       uuid.UUID `json:"sender_id"`
+	Type           string    `json:"type"`
+	Body           string    `json:"body"`
+	CreatedAt      int64     `json:"created_at"`
+	AttachmentKind *string   `json:"attachment_kind,omitempty"`
+	AttachmentName *string   `json:"attachment_name,omitempty"`
+	AttachmentMime *string   `json:"attachment_mime,omitempty"`
 }
 
 func (m *MessageCreated) AddMetadata(key, value string) {

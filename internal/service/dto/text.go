@@ -14,6 +14,10 @@ type (
 		DomainID int64       `json:"domain_id"`
 		SendID   string      `json:"send_id"`
 		SendAs   *uuid.UUID
+
+		ReplyToMessageID  *uuid.UUID `json:"reply_to_message_id,omitempty"`
+		ExternalID        string     `json:"external_id,omitempty"`
+		ReplyToExternalID string     `json:"reply_to_external_id,omitempty"`
 	}
 
 	SendTextResponse struct {

@@ -14,6 +14,7 @@ import (
 	imcontact "github.com/webitel/im-thread-service/infra/webitel/im-contact"
 	"github.com/webitel/im-thread-service/internal/domain/event"
 	"github.com/webitel/im-thread-service/internal/domain/model"
+	"github.com/webitel/im-thread-service/internal/domain/shared"
 	"github.com/webitel/im-thread-service/internal/service/dto"
 	"github.com/webitel/im-thread-service/internal/service/guards"
 	"github.com/webitel/im-thread-service/internal/store"
@@ -137,6 +138,11 @@ func (s *MessageService) SendText(ctx context.Context, in *dto.SendTextRequest) 
 		return s.handleBotStopCommand(ctx, in, t)
 	}
 
+	replyPreview, err := s.resolveReply(ctx, in.ReplyToMessageID, in.ReplyToExternalID, &in.From, t, int32(in.DomainID))
+	if err != nil {
+		return nil, err
+	}
+
 	msg := &model.Message{
 		ThreadID:              t.ID,
 		DomainID:              int32(in.DomainID),
@@ -147,6 +153,7 @@ func (s *MessageService) SendText(ctx context.Context, in *dto.SendTextRequest) 
 		Metadata:              model.BuildMetadata(in.Body),
 		SendAs:                in.SendAs,
 		BotControllerMemberID: t.BotControllerID,
+		ReplyTo:               replyPreview,
 	}
 
 	msg.SetMemberFromSlice(t.Members)
@@ -158,6 +165,12 @@ func (s *MessageService) SendText(ctx context.Context, in *dto.SendTextRequest) 
 		}
 
 		saved.To = t.Members
+		saved.ReplyTo = msg.ReplyTo
+
+		if err = s.recordInboundExternalID(ctx, uow, saved, &in.From, in.ExternalID); err != nil {
+			return err
+		}
+
 		saved.WithCreatedEvent(ctx, in.SendID)
 
 		if err = s.dispatchMessageEvents(ctx, uow, saved); err != nil {
@@ -309,6 +322,11 @@ func (s *MessageService) SendDocument(ctx context.Context, in *dto.SendDocumentR
 		return nil, err
 	}
 
+	replyPreview, err := s.resolveReply(ctx, in.ReplyToMessageID, in.ReplyToExternalID, &in.From, t, int32(in.DomainID))
+	if err != nil {
+		return nil, err
+	}
+
 	attachments := make([]AttachmentProcessor, len(in.Document.Documents))
 	for i, doc := range in.Document.Documents {
 		attachments[i] = doc
@@ -348,6 +366,7 @@ func (s *MessageService) SendDocument(ctx context.Context, in *dto.SendDocumentR
 	})
 	msg.BotControllerMemberID = t.BotControllerID
 	msg.SendAs = in.SendAs
+	msg.ReplyTo = replyPreview
 	msg.SetMemberFromSlice(t.Members)
 
 	err = s.uow.WithinTransaction(ctx, func(txCtx context.Context, uow store.UnitOfWork) error {
@@ -363,6 +382,11 @@ func (s *MessageService) SendDocument(ctx context.Context, in *dto.SendDocumentR
 
 		msg.ID = saved.ID
 		msg.From = saved.From
+
+		if err = s.recordInboundExternalID(txCtx, uow, msg, &in.From, in.ExternalID); err != nil {
+			return errors.Internal("save external message id", errors.WithCause(err), errors.WithID("service.message.send_document"))
+		}
+
 		msg.WithCreatedEvent(ctx, in.SendID)
 
 		if err := s.dispatchMessageEvents(txCtx, uow, msg); err != nil {
@@ -432,6 +456,7 @@ func (s *MessageService) SendLocation(ctx context.Context, msg *model.Message) (
 
 		savedMsg.To = msg.To
 		savedMsg.IdempotencyKey = msg.IdempotencyKey
+		savedMsg.ReplyTo = msg.ReplyTo
 
 		savedMsg.WithCreatedEvent(ctx, msg.IdempotencyKey)
 
@@ -469,6 +494,7 @@ func (s *MessageService) SendContact(ctx context.Context, msg *model.Message) (*
 
 		savedMsg.To = msg.To
 		savedMsg.IdempotencyKey = msg.IdempotencyKey
+		savedMsg.ReplyTo = msg.ReplyTo
 
 		savedMsg.WithCreatedEvent(ctx, msg.IdempotencyKey)
 
@@ -668,7 +694,135 @@ func (s *MessageService) prepareMessageForSending(ctx context.Context, msg *mode
 
 	msg.SetMemberFromSlice(t.Members)
 
+	if msg.ReplyTo != nil {
+		preview, err := s.resolveReplyPreview(ctx, msg.ReplyTo.MessageID, t.ID, msg.DomainID)
+		if err != nil {
+			return err
+		}
+
+		msg.ReplyTo = preview
+	}
+
 	return nil
+}
+
+func (s *MessageService) resolveReply(
+	ctx context.Context,
+	replyToID *uuid.UUID,
+	replyToExternalID string,
+	from *shared.Peer,
+	t *model.Thread,
+	domainID int32,
+) (*model.ReplyToPreview, error) {
+	if replyToID != nil {
+		return s.resolveReplyPreview(ctx, *replyToID, t.ID, domainID)
+	}
+
+	return s.resolveExternalReply(ctx, replyToExternalID, from, t, domainID), nil
+}
+
+func (s *MessageService) resolveExternalReply(
+	ctx context.Context,
+	replyToExternalID string,
+	from *shared.Peer,
+	t *model.Thread,
+	domainID int32,
+) *model.ReplyToPreview {
+	if replyToExternalID == "" {
+		return nil
+	}
+
+	gateID := gateIDForPeer(from, t.Members)
+	if gateID == "" {
+		return nil
+	}
+
+	log := s.logger.With("gate_id", gateID, "reply_to_external_id", replyToExternalID)
+
+	id, err := s.uow.MessageExternal().LookupMessageID(ctx, gateID, replyToExternalID)
+	if err != nil {
+		log.WarnContext(ctx, "external reply lookup failed; saving message without reply link", "err", err)
+
+		return nil
+	}
+
+	if id == uuid.Nil {
+		log.WarnContext(ctx, "external reply reference not found; saving message without reply link")
+
+		return nil
+	}
+
+	preview, err := s.uow.Messages().GetReplyPreview(ctx, id, domainID)
+	if err != nil || preview.ThreadID != t.ID {
+		log.WarnContext(ctx, "external reply target unusable; saving message without reply link", "err", err)
+
+		return nil
+	}
+
+	return preview
+}
+
+func (s *MessageService) resolveReplyPreview(ctx context.Context, replyToID, threadID uuid.UUID, domainID int32) (*model.ReplyToPreview, error) {
+	if replyToID == uuid.Nil {
+		return nil, errors.InvalidArgument("reply_to_message_id is not a valid uuid", errors.WithID("service.message.reply_target"))
+	}
+
+	preview, err := s.uow.Messages().GetReplyPreview(ctx, replyToID, domainID)
+	if err != nil {
+		if errors.Is(err, store.ErrReplyTargetNotFound) {
+			return nil, errors.InvalidArgument("reply target message not found in this thread", errors.WithID("service.message.reply_target"))
+		}
+
+		return nil, err
+	}
+
+	if preview.ThreadID != threadID {
+		return nil, errors.InvalidArgument("reply target message not found in this thread", errors.WithID("service.message.reply_target"))
+	}
+
+	return preview, nil
+}
+
+func (s *MessageService) recordInboundExternalID(ctx context.Context, uow store.UnitOfWork, msg *model.Message, from *shared.Peer, externalID string) error {
+	if externalID == "" {
+		return nil
+	}
+
+	gateID := gateIDForPeer(from, msg.To)
+	if gateID == "" {
+		s.logger.WarnContext(ctx, "inbound message has external id but no gate; skipping mapping",
+			"message_id", msg.ID.String(),
+			"external_id", externalID,
+		)
+
+		return nil
+	}
+
+	return uow.MessageExternal().Save(ctx, &model.MessageExternalID{
+		MessageID:  msg.ID,
+		ThreadID:   msg.ThreadID,
+		GateID:     gateID,
+		ExternalID: externalID,
+		Direction:  model.ExternalDirectionInbound,
+	})
+}
+
+func gateIDForPeer(peer *shared.Peer, members []*model.ThreadDialog) string {
+	if peer == nil {
+		return ""
+	}
+
+	if peer.Identity != nil && peer.Identity.Via != nil && *peer.Identity.Via != "" {
+		return *peer.Identity.Via
+	}
+
+	for _, m := range members {
+		if m != nil && m.ContactID == peer.ID && m.Via != nil && *m.Via != "" {
+			return *m.Via
+		}
+	}
+
+	return ""
 }
 
 // --- Internal Helpers ---

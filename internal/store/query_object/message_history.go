@@ -28,12 +28,14 @@ var (
 		"contact":          true,
 		"system":           true,
 		"reacted_metadata": true,
+		"reply_to":         true,
 	}
 	defaultFields = []string{
 		"id", "thread_id", "sender_id",
 		"type", "body", "metadata",
 		"created_at", "updated_at", "images", "documents",
 		"member", "interactive", "location", "contact", "system", "reacted_metadata",
+		"reply_to",
 	}
 )
 

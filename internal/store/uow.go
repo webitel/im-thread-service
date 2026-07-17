@@ -9,6 +9,7 @@ type UnitOfWork interface {
 	ThreadPermissionStore() ThreadPermissionStore
 	MessageHistory() MessageHistory
 	Messages() MessageStore
+	MessageExternal() MessageExternalStore
 	Outbox() OutboxStore
 	InteractiveCallback() InteractiveCallback
 	BotControl() BotControlStore

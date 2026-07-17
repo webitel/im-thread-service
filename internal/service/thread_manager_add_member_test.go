@@ -19,11 +19,12 @@ import (
 )
 
 type fakeUnitOfWork struct {
-	threadDialogStore store.ThreadDialogStore
-	messageStore      store.MessageStore
-	outboxStore       store.OutboxStore
-	botControlStore   store.BotControlStore
-	threadStore       store.ThreadStore
+	threadDialogStore    store.ThreadDialogStore
+	messageStore         store.MessageStore
+	messageExternalStore store.MessageExternalStore
+	outboxStore          store.OutboxStore
+	botControlStore      store.BotControlStore
+	threadStore          store.ThreadStore
 }
 
 func (f fakeUnitOfWork) WithinTransaction(ctx context.Context, fn func(context.Context, store.UnitOfWork) error) error {
@@ -46,6 +47,10 @@ func (f fakeUnitOfWork) MessageHistory() store.MessageHistory {
 
 func (f fakeUnitOfWork) Messages() store.MessageStore {
 	return f.messageStore
+}
+
+func (f fakeUnitOfWork) MessageExternal() store.MessageExternalStore {
+	return f.messageExternalStore
 }
 
 func (f fakeUnitOfWork) Outbox() store.OutboxStore {
@@ -165,6 +170,8 @@ func (f *fakeOutboxStore) Cleanup(ctx context.Context, opt *model.OutboxCleanupO
 
 type fakeMessageStore struct {
 	lastSavedSystemMessage *model.Message
+	replyPreview           *model.ReplyToPreview
+	replyPreviewErr        error
 
 	editMessageErr    error
 	editMessageCalls  int
@@ -173,6 +180,18 @@ type fakeMessageStore struct {
 
 func (f *fakeMessageStore) SaveMessage(ctx context.Context, msg *model.Message) (*model.Message, error) {
 	return msg, nil
+}
+
+func (f *fakeMessageStore) GetReplyPreview(ctx context.Context, id uuid.UUID, domainID int32) (*model.ReplyToPreview, error) {
+	if f.replyPreviewErr != nil {
+		return nil, f.replyPreviewErr
+	}
+
+	if f.replyPreview == nil {
+		return nil, store.ErrReplyTargetNotFound
+	}
+
+	return f.replyPreview, nil
 }
 
 func (f *fakeMessageStore) SaveImages(ctx context.Context, messageID uuid.UUID, images []*model.MessageImage) ([]*model.MessageImage, error) {

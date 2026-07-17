@@ -73,7 +73,33 @@ type Message struct {
 	// Included in MessageCreated events so flow_manager can self-filter.
 	BotControllerMemberID *uuid.UUID `json:"-" db:"-"`
 
+	ReplyTo *ReplyToPreview `json:"reply_to,omitempty" db:"reply_to"`
+
 	domainEvents []event.Outboxer
+}
+
+type ReplyAttachment struct {
+	Kind string  `json:"kind"`
+	Name *string `json:"name,omitempty"`
+	Mime *string `json:"mime,omitempty"`
+}
+
+type ReplyToPreview struct {
+	MessageID  uuid.UUID        `json:"message_id"`
+	ThreadID   uuid.UUID        `json:"-" db:"thread_id"`
+	SenderID   uuid.UUID        `json:"sender_id"`
+	Type       MessageType      `json:"type"`
+	Body       string           `json:"body"`
+	CreatedAt  int64            `json:"created_at"`
+	Attachment *ReplyAttachment `json:"attachment,omitempty"`
+}
+
+func NewReplyTarget(id *uuid.UUID) *ReplyToPreview {
+	if id == nil {
+		return nil
+	}
+
+	return &ReplyToPreview{MessageID: *id}
 }
 
 func (m *Message) FirstViaOrDefault() string {
@@ -216,6 +242,21 @@ func (m *Message) WithCreatedEvent(ctx context.Context, sendID string) *Message 
 
 	if m.Interactive != nil {
 		e.Interactive = m.Interactive.AsEvent()
+	}
+
+	if m.ReplyTo != nil {
+		e.ReplyTo = &event.ReplyToPayload{
+			MessageID: m.ReplyTo.MessageID,
+			SenderID:  m.ReplyTo.SenderID,
+			Type:      m.ReplyTo.Type.String(),
+			Body:      m.ReplyTo.Body,
+			CreatedAt: m.ReplyTo.CreatedAt,
+		}
+		if a := m.ReplyTo.Attachment; a != nil {
+			e.ReplyTo.AttachmentKind = &a.Kind
+			e.ReplyTo.AttachmentName = a.Name
+			e.ReplyTo.AttachmentMime = a.Mime
+		}
 	}
 
 	if payload, ok := TryGetPayloadFromContext(ctx); ok {

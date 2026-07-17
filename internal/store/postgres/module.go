@@ -29,6 +29,11 @@ var Module = fx.Module("store",
 		),
 
 		fx.Annotate(
+			NewMessageExternalStore,
+			fx.As(new(store.MessageExternalStore)),
+		),
+
+		fx.Annotate(
 			NewOutboxStore,
 			fx.As(new(store.OutboxStore)),
 		),

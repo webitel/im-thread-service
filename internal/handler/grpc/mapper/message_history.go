@@ -113,12 +113,35 @@ func MapMessage2SearchMessageHistoryResponse(messages []*model.Message) *impb.Se
 			System:          mapSystem(m.System),
 			Interactive:     mapInteractive(m.Interactive),
 			ReactedMetadata: mapReactedMetadata(m.ReactedMetadata),
+			ReplyTo:         mapReplyTo(m.ReplyTo),
 		}
 	})
 
 	return &impb.SearchMessageHistoryResponse{
 		Items: responseMessages,
 	}
+}
+
+func mapReplyTo(in *model.ReplyToPreview) *impb.ReplyToMessage {
+	if in == nil {
+		return nil
+	}
+
+	out := &impb.ReplyToMessage{
+		Id:        in.MessageID.String(),
+		SenderId:  in.SenderID.String(),
+		Type:      int32(in.Type),
+		Body:      in.Body,
+		CreatedAt: in.CreatedAt,
+	}
+
+	if a := in.Attachment; a != nil {
+		out.AttachmentKind = &a.Kind
+		out.AttachmentName = a.Name
+		out.AttachmentMime = a.Mime
+	}
+
+	return out
 }
 
 func mapReactedMetadata(in *model.InteractiveCallback) *impb.InteractiveCallback {

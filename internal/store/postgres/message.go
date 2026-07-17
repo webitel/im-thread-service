@@ -51,6 +51,16 @@ func validateMessageForSave(msg *model.Message, operationID string) error {
 	return nil
 }
 
+func replyToArg(msg *model.Message) *uuid.UUID {
+	if msg.ReplyTo == nil {
+		return nil
+	}
+
+	id := msg.ReplyTo.MessageID
+
+	return &id
+}
+
 func (m *messageStore) SaveMessage(ctx context.Context, msg *model.Message) (*model.Message, error) {
 	if err := validateMessageForSave(msg, "postgres.message.save_message"); err != nil {
 		return nil, err
@@ -58,10 +68,10 @@ func (m *messageStore) SaveMessage(ctx context.Context, msg *model.Message) (*mo
 
 	const query = `
 		insert into im_message.messages (
-			domain_id, thread_id, sender_id, member_id, type, body, metadata, origin_sender
+			domain_id, thread_id, sender_id, member_id, type, body, metadata, origin_sender, reply_to
 		)
 		values (
-			@DomainID, @ThreadID, @SenderID, @MemberID, @Type, @Body, @Metadata, @OriginSender
+			@DomainID, @ThreadID, @SenderID, @MemberID, @Type, @Body, @Metadata, @OriginSender, @ReplyTo
 		)
 		returning
 			id, domain_id, thread_id, member_id, type, body, metadata, created_at, updated_at,
@@ -77,6 +87,7 @@ func (m *messageStore) SaveMessage(ctx context.Context, msg *model.Message) (*mo
 		"Body":         msg.Body,
 		"Metadata":     msg.Metadata,
 		"OriginSender": msg.GetOriginSender(),
+		"ReplyTo":      replyToArg(msg),
 	}
 
 	rows, err := m.db.Query(ctx, query, args)
@@ -90,6 +101,53 @@ func (m *messageStore) SaveMessage(ctx context.Context, msg *model.Message) (*mo
 	}
 
 	return savedMessage, nil
+}
+
+func (m *messageStore) GetReplyPreview(ctx context.Context, id uuid.UUID, domainID int32) (*model.ReplyToPreview, error) {
+	const query = `
+		select
+			m.id as message_id,
+			m.thread_id,
+			m.sender_id,
+			m.type,
+			left(coalesce(m.body, ''), 256) as body,
+			(extract(epoch from m.created_at) * 1000)::bigint as created_at,
+			coalesce(
+				(select jsonb_build_object('kind', 'document', 'name', d.name, 'mime', d.mime)
+					from im_message.message_documents d
+					where d.message_id = m.id
+					order by d.created_at
+					limit 1),
+				(select jsonb_build_object('kind', 'image', 'mime', i.mime)
+					from im_message.message_images i
+					where i.message_id = m.id
+					order by i.created_at
+					limit 1)
+			) as attachment
+		from im_message.messages m
+		where m.id = @ID and m.domain_id = @DomainID
+	`
+
+	args := pgx.NamedArgs{
+		"ID":       id,
+		"DomainID": domainID,
+	}
+
+	rows, err := m.db.Query(ctx, query, args)
+	if err != nil {
+		return nil, errors.Internal("executing reply preview query", errors.WithCause(err), errors.WithID("postgres.message.reply_preview.query"))
+	}
+
+	preview, err := pgx.CollectExactlyOneRow(rows, pgx.RowToAddrOfStructByNameLax[model.ReplyToPreview])
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, store.ErrReplyTargetNotFound
+		}
+
+		return nil, errors.Internal("collecting reply preview", errors.WithCause(err), errors.WithID("postgres.message.reply_preview.collecting"))
+	}
+
+	return preview, nil
 }
 
 func (m *messageStore) EditMessage(ctx context.Context, msg *model.Message) (*model.Message, error) {
@@ -271,8 +329,8 @@ func prepareSaveMessageLocationQuery(msg *model.Message) (string, pgx.NamedArgs)
 	query := `
 		with msg_ins as (
 			insert into im_message.messages
-			(thread_id, domain_id, sender_id, member_id, type, body, metadata)
-			values (@ThreadID, @DomainID, @SenderID, @MemberID, @Type, @Body, @Metadata)
+			(thread_id, domain_id, sender_id, member_id, type, body, metadata, reply_to)
+			values (@ThreadID, @DomainID, @SenderID, @MemberID, @Type, @Body, @Metadata, @ReplyTo)
 			returning *
 		),
 		location_ins as (
@@ -306,6 +364,7 @@ func prepareSaveMessageLocationQuery(msg *model.Message) (string, pgx.NamedArgs)
 		"Type":      msg.Type,
 		"Body":      msg.Body,
 		"Metadata":  msg.Metadata,
+		"ReplyTo":   replyToArg(msg),
 		"Address":   msg.Location.Address,
 		"Latitude":  msg.Location.Latitude,
 		"Longitude": msg.Location.Longitude,
@@ -339,8 +398,8 @@ func prepareSaveMessageContactQuery(msg *model.Message) (string, pgx.NamedArgs) 
 	query := `
 		with msg_ins as (
 			insert into im_message.messages
-			(thread_id, domain_id, sender_id, member_id, type, body, metadata)
-			values (@ThreadID, @DomainID, @SenderID, @MemberID, @Type, @Body, @Metadata)
+			(thread_id, domain_id, sender_id, member_id, type, body, metadata, reply_to)
+			values (@ThreadID, @DomainID, @SenderID, @MemberID, @Type, @Body, @Metadata, @ReplyTo)
 			returning *
 		),
 		contact_ins as (
@@ -374,6 +433,7 @@ func prepareSaveMessageContactQuery(msg *model.Message) (string, pgx.NamedArgs) 
 		"Type":     msg.Type,
 		"Body":     msg.Body,
 		"Metadata": msg.Metadata,
+		"ReplyTo":  replyToArg(msg),
 		"Phone":    msg.Contact.PhoneNumber,
 		"Name":     msg.Contact.Name,
 		"Email":    msg.Contact.Email,
