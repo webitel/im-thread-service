@@ -52,7 +52,7 @@ type Message struct {
 	SendTo         shared.Peer     `json:"send_to" db:"send_to"`
 	To             []*ThreadDialog `json:"to" db:"to"`
 	Body           string          `json:"body" db:"body"`
-	Type           MessageType     `json:"type" db:"type"` // text|document|image|system|interactive|location|contact
+	Type           MessageType     `json:"type" db:"type"`
 	Metadata       map[string]any  `json:"metadata,omitempty" db:"metadata"`
 	CreatedAt      time.Time       `json:"created_at" db:"created_at"`
 	UpdatedAt      time.Time       `json:"updated_at" db:"updated_at"`
