@@ -194,31 +194,6 @@ func (f *fakeMessageStore) GetReplyPreview(ctx context.Context, id uuid.UUID, do
 	return f.replyPreview, nil
 }
 
-type fakeMessageExternalStore struct {
-	saved            []*model.MessageExternalID
-	messageIDByExt   map[string]uuid.UUID
-	externalIDByMsg  map[uuid.UUID]string
-	lookupMessageErr error
-}
-
-func (f *fakeMessageExternalStore) Save(ctx context.Context, rec *model.MessageExternalID) error {
-	f.saved = append(f.saved, rec)
-
-	return nil
-}
-
-func (f *fakeMessageExternalStore) LookupMessageID(ctx context.Context, gateID, externalID string) (uuid.UUID, error) {
-	if f.lookupMessageErr != nil {
-		return uuid.Nil, f.lookupMessageErr
-	}
-
-	return f.messageIDByExt[externalID], nil
-}
-
-func (f *fakeMessageExternalStore) LookupExternalID(ctx context.Context, messageID uuid.UUID, gateID string) (string, error) {
-	return f.externalIDByMsg[messageID], nil
-}
-
 func (f *fakeMessageStore) SaveImages(ctx context.Context, messageID uuid.UUID, images []*model.MessageImage) ([]*model.MessageImage, error) {
 	return images, nil
 }
