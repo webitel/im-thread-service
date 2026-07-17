@@ -633,6 +633,49 @@ func (s *MessageService) SendSystemMessage(ctx context.Context, msg *model.Messa
 	return savedMsg, nil
 }
 
+func (s *MessageService) EditMessage(ctx context.Context, msg *model.Message) (*model.Message, error) {
+	log := s.logger.With("operation", "edit_message")
+
+	if msg == nil || msg.ID == uuid.Nil {
+		return nil, errors.InvalidArgument("message id is required", errors.WithID("service.message.edit_message"))
+	}
+
+	editor := msg.From
+	if editor.ID == uuid.Nil {
+		return nil, errors.InvalidArgument("editor identity is required", errors.WithID("service.message.edit_message"))
+	}
+
+	var editedMsg *model.Message
+
+	err := s.uow.WithinTransaction(ctx, func(txCtx context.Context, uow store.UnitOfWork) error {
+		var err error
+		if editedMsg, err = uow.Messages().EditMessage(txCtx, msg); err != nil {
+			return err
+		}
+
+		members, err := uow.ThreadDialogStore().GetQuickView(txCtx, &model.ThreadDialogStoreFilter{
+			ThreadIDs:      []uuid.UUID{editedMsg.ThreadID},
+			IncludeDeleted: false,
+		})
+		if err != nil {
+			return err
+		}
+
+		editedMsg.To = members
+		editedMsg.From = editor
+		editedMsg.WithEditedEvent(txCtx)
+
+		return s.dispatchMessageEvents(txCtx, uow, editedMsg)
+	})
+	if err != nil {
+		log.ErrorContext(ctx, "transaction_failed", "err", err)
+
+		return nil, err
+	}
+
+	return editedMsg, nil
+}
+
 func (s *MessageService) prepareMessageForSending(ctx context.Context, msg *model.Message) error {
 	t, err := s.threader.EnsureDirectThread(ctx, &dto.EnsureDirectThreadRequest{
 		DomainID: int(msg.DomainID),
@@ -801,10 +844,19 @@ func (s *MessageService) dispatchMessageEvents(ctx context.Context, uow store.Un
 	return s.dispatchEvents(ctx, uow, evs, func(e event.Outboxer) string {
 		return fmt.Sprintf("im_message.%s.message.%s.%s",
 			e.RecipientID(),
-			"created",
+			messageEventAction(e),
 			e.Version(),
 		)
 	})
+}
+
+func messageEventAction(e event.Outboxer) string {
+	switch e.EventType() {
+	case event.MessageEditedEvent:
+		return "edited"
+	default:
+		return "created"
+	}
 }
 
 func buildMessageCreatedTopic(recipientID uuid.UUID, version string) string {

@@ -150,68 +150,63 @@ func (m *messageStore) GetReplyPreview(ctx context.Context, id uuid.UUID, domain
 	return preview, nil
 }
 
-func (m *messageStore) SaveImages(ctx context.Context, messageID uuid.UUID, images []*model.MessageImage) ([]*model.MessageImage, error) {
-	if len(images) == 0 {
-		return nil, nil
+func (m *messageStore) EditMessage(ctx context.Context, msg *model.Message) (*model.Message, error) {
+	if msg == nil {
+		return nil, errors.InvalidArgument("message cannot be nil", errors.WithID("postgres.message.edit_message"))
 	}
 
-	var (
-		fileIDs    = make([]int64, len(images))
-		mimes      = make([]string, len(images))
-		thumbnails = make([]map[string]any, len(images))
-		widths     = make([]int32, len(images))
-		heights    = make([]int32, len(images))
-	)
+	if msg.ID == uuid.Nil {
+		return nil, errors.InvalidArgument("message id cannot be nil", errors.WithID("postgres.message.edit_message"))
+	}
 
-	for i, img := range images {
-		fileIDs[i] = img.FileID
-		mimes[i] = img.Mime
-		thumbnails[i] = img.Thumbnails
-		widths[i] = img.Width
-		heights[i] = img.Height
+	if msg.From.ID == uuid.Nil {
+		return nil, errors.InvalidArgument("editor id cannot be nil", errors.WithID("postgres.message.edit_message"))
 	}
 
 	const query = `
-		insert into im_message.message_images (
-			message_id, file_id, mime, thumbnails, width, height
-		)
-		select
-			@MessageID,
-			u.file_id,
-			u.mime,
-			u.thumbnails,
-			u.width,
-			u.height
-		from unnest(
-			@FileIDs::int[],
-			@Mimes::text[],
-			@Thumbnails::jsonb[],
-			@Widths::int[],
-			@Heights::int[]
-		) as u(file_id, mime, thumbnails, width, height)
-		returning id, message_id, file_id, mime, thumbnails, width, height, created_at
+		update im_message.messages m
+		set body = @Body,
+		    edited = true,
+		    updated_at = now()
+		where m.id = @ID
+		  and (m.sender_id = @EditorID or m.origin_sender = @EditorID)
+		  and exists (
+			select 1
+			from im_thread.thread_dialog td
+			where td.thread_id = m.thread_id
+			  and td.member_id = @EditorID
+			  and td.deleted_at is null
+		  )
+		returning
+			id, domain_id, thread_id, member_id, type, body, metadata,
+			created_at, updated_at, edited
 	`
 
 	args := pgx.NamedArgs{
-		"MessageID":  messageID,
-		"FileIDs":    fileIDs,
-		"Mimes":      mimes,
-		"Thumbnails": thumbnails,
-		"Widths":     widths,
-		"Heights":    heights,
+		"ID":       msg.ID,
+		"EditorID": msg.From.ID,
+		"Body":     msg.Body,
 	}
 
 	rows, err := m.db.Query(ctx, query, args)
 	if err != nil {
-		return nil, err
+		return nil, errors.Internal("executing edit message query", errors.WithCause(err), errors.WithID("postgres.message.edit.query"))
 	}
 
-	savedImages, err := pgx.CollectRows(rows, pgx.RowToAddrOfStructByNameLax[model.MessageImage])
+	edited, err := pgx.CollectExactlyOneRow(rows, pgx.RowToAddrOfStructByNameLax[model.Message])
 	if err != nil {
-		return nil, err
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, errors.Forbidden(
+				"message cannot be edited: not found, not authored by the editor, or the chat is closed",
+				errors.WithCause(err),
+				errors.WithID("postgres.message.edit.not_allowed"),
+			)
+		}
+
+		return nil, errors.Internal("collecting edited message", errors.WithCause(err), errors.WithID("postgres.message.edit.collecting"))
 	}
 
-	return savedImages, nil
+	return edited, nil
 }
 
 func (m *messageStore) SaveDocuments(ctx context.Context, messageID uuid.UUID, docs []*model.MessageDocument) ([]*model.MessageDocument, error) {

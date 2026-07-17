@@ -56,6 +56,7 @@ type Message struct {
 	Metadata       map[string]any  `json:"metadata,omitempty" db:"metadata"`
 	CreatedAt      time.Time       `json:"created_at" db:"created_at"`
 	UpdatedAt      time.Time       `json:"updated_at" db:"updated_at"`
+	Edited         bool            `json:"edited" db:"edited"`
 	SenderID       uuid.UUID       `json:"sender_id" db:"sender_id"`
 	MemberID       uuid.UUID       `json:"member_id" db:"member_id"`
 
@@ -260,6 +261,60 @@ func (m *Message) WithCreatedEvent(ctx context.Context, sendID string) *Message 
 
 	if payload, ok := TryGetPayloadFromContext(ctx); ok {
 		e.AddMetadata(XJWTPayload, payload)
+	}
+
+	WithContextPropogatedMetadata(ctx, &e)
+
+	if via := m.FirstViaOrDefault(); via != "" && uuid.Validate(via) == nil {
+		e.AddMetadata(XWebitelVia, via)
+	}
+
+	m.AddEvent(&e)
+
+	return m
+}
+
+func (m *Message) WithEditedEvent(ctx context.Context) *Message {
+	if m == nil {
+		return m
+	}
+
+	var editedBy *event.ThreadMember
+	if m.From.ID != uuid.Nil {
+		editedBy = &event.ThreadMember{ContactID: m.From.ID}
+		if m.MemberID != uuid.Nil {
+			memberID := m.MemberID
+			editedBy.ID = &memberID
+		}
+	}
+
+	to := make([]*event.ThreadMember, 0, len(m.To))
+	for _, member := range m.To {
+		var memberID *uuid.UUID
+
+		if member.ID != uuid.Nil {
+			id := member.ID
+			memberID = &id
+		}
+
+		to = append(to, &event.ThreadMember{
+			ID:        memberID,
+			ContactID: member.ContactID,
+			Role:      int(member.ThreadRole),
+			IsBot:     member.IsBot,
+		})
+	}
+
+	e := event.MessageEdited{
+		MessageID:  m.ID,
+		ThreadID:   m.ThreadID,
+		DomainID:   m.DomainID,
+		EditedBy:   editedBy,
+		To:         to,
+		Body:       m.Body,
+		Type:       m.Type.String(),
+		OccurredAt: m.UpdatedAt,
+		Metadata:   maps.Clone(m.Metadata),
 	}
 
 	WithContextPropogatedMetadata(ctx, &e)

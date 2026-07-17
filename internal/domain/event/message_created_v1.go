@@ -53,9 +53,6 @@ type MessageCreated struct {
 	Contact     *ContactPayload     `json:"contact,omitempty"`
 	Interactive *InteractivePayload `json:"interactive,omitempty"`
 	System      *SystemPayload      `json:"system,omitempty"`
-	// BotControllerMemberID is the members[].id (thread membership record ID) of the active bot controller.
-	// Matches the member_id field in bot.control.granted.v1 events.
-	// flow_manager compares this against its own member_id to decide whether to process the message.
 	BotControllerMemberID *uuid.UUID        `json:"bot_controller_member_id,omitempty"`
 	ReplyTo               *ReplyToPayload   `json:"reply_to,omitempty"`
 	ExternalMetadata      map[string]string `json:"-"`
