@@ -124,6 +124,8 @@ func (a *baseRPCProvidersAdapter) SendMessage(ctx context.Context, message *mode
 					Documents:         extratcFiles(message.Documents),
 					Caption:           message.Body,
 					DomainId:          message.DomainID,
+					MessageId:         message.ID.String(),
+					ThreadId:          message.ThreadID.String(),
 					ReplyToExternalId: replyToExternal,
 				})
 
@@ -135,6 +137,8 @@ func (a *baseRPCProvidersAdapter) SendMessage(ctx context.Context, message *mode
 					ExternalUserId:    userID,
 					Text:              message.Body,
 					DomainId:          message.DomainID,
+					MessageId:         message.ID.String(),
+					ThreadId:          message.ThreadID.String(),
 					ReplyToExternalId: replyToExternal,
 				})
 
@@ -158,6 +162,8 @@ func (a *baseRPCProvidersAdapter) SendMessage(ctx context.Context, message *mode
 					Body:              &body,
 					SendId:            &sendID,
 					Interactive:       mapInteractive(message.Interactive),
+					MessageId:         message.ID.String(),
+					ThreadId:          message.ThreadID.String(),
 					ReplyToExternalId: replyToExternal,
 				})
 			case model.MessageTypeLocation:
@@ -176,6 +182,8 @@ func (a *baseRPCProvidersAdapter) SendMessage(ctx context.Context, message *mode
 					DomainId:       message.DomainID,
 					EventType:      message.System.Type,
 					Vars:           metadataToStringMap(message.System.Metadata),
+					MessageId:      message.ID.String(),
+					ThreadId:       message.ThreadID.String(),
 				})
 			case model.MessageTypeUnknown:
 				peerLog.Warn("message type unknown: skipping")

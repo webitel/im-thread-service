@@ -69,6 +69,12 @@ type Message struct {
 	System          *MessageSystem       `json:"system,omitempty" db:"system"`
 	Member          *ThreadDialog        `json:"member,omitempty" db:"member"`
 
+	// DeliveryStatus is the aggregate across recipients: FAILED when every
+	// recipient failed, otherwise the minimal status among non-failed ones.
+	// Nil for messages without per-recipient tracking (historical).
+	DeliveryStatus *MessageDeliveryStatus    `json:"delivery_status,omitempty" db:"delivery_status"`
+	Statuses       []*MessageRecipientStatus `json:"statuses,omitempty" db:"statuses"`
+
 	// BotControllerMemberID is the thread_dialog.id of the currently active bot.
 	// Included in MessageCreated events so flow_manager can self-filter.
 	BotControllerMemberID *uuid.UUID `json:"-" db:"-"`

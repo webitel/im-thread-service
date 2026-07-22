@@ -171,6 +171,10 @@ func (s *MessageService) SendText(ctx context.Context, in *dto.SendTextRequest) 
 			return err
 		}
 
+		if err = s.insertSentStatuses(ctx, uow, saved); err != nil {
+			return err
+		}
+
 		saved.WithCreatedEvent(ctx, in.SendID)
 
 		if err = s.dispatchMessageEvents(ctx, uow, saved); err != nil {
@@ -245,6 +249,11 @@ func (s *MessageService) handleBotStopCommand(ctx context.Context, in *dto.SendT
 		}
 
 		saved.To = msg.To
+
+		if e = s.insertSentStatuses(txCtx, uow, saved); e != nil {
+			return e
+		}
+
 		saved.WithCreatedEvent(ctx, msg.IdempotencyKey)
 
 		return s.dispatchMessageEvents(txCtx, uow, saved)
@@ -387,6 +396,10 @@ func (s *MessageService) SendDocument(ctx context.Context, in *dto.SendDocumentR
 			return errors.Internal("save external message id", errors.WithCause(err), errors.WithID("service.message.send_document"))
 		}
 
+		if err := s.insertSentStatuses(txCtx, uow, msg); err != nil {
+			return errors.Internal("insert sent statuses", errors.WithCause(err), errors.WithID("service.message.send_document"))
+		}
+
 		msg.WithCreatedEvent(ctx, in.SendID)
 
 		if err := s.dispatchMessageEvents(txCtx, uow, msg); err != nil {
@@ -408,6 +421,9 @@ func (s *MessageService) SendDocument(ctx context.Context, in *dto.SendDocumentR
 	return &dto.SendDocumentResponse{ID: msg.ID, To: in.To}, nil
 }
 
+// Read marks the thread as read by the user up to the given message
+// (inclusive): every earlier unread message of the recipient is covered by
+// a single bulk update and a single status event.
 func (s *MessageService) Read(ctx context.Context, in *dto.ReadMessageRequest) error {
 	if err := guards.ValidateReadMessage(in); err != nil {
 		return fmt.Errorf("validation: %w", err)
@@ -418,22 +434,17 @@ func (s *MessageService) Read(ctx context.Context, in *dto.ReadMessageRequest) e
 	uID, _ := uuid.Parse(in.UserID)
 
 	return s.uow.WithinTransaction(ctx, func(txCtx context.Context, uow store.UnitOfWork) error {
-		err := uow.Messages().ReadMessage(txCtx, struct {
-			DomainID  int32
-			ThreadID  uuid.UUID
-			MessageID uuid.UUID
-			UserID    uuid.UUID
-		}{
-			DomainID:  in.DomainID,
-			ThreadID:  tID,
-			MessageID: mID,
-			UserID:    uID,
-		})
+		changes, err := uow.MessageStatuses().MarkRead(txCtx, []*model.ReadReceipt{{
+			DomainID:      in.DomainID,
+			ThreadID:      tID,
+			MemberID:      uID,
+			UpToMessageID: mID,
+		}})
 		if err != nil {
 			return fmt.Errorf("read_message: %w", err)
 		}
 
-		return nil
+		return dispatchStatusChangeEvents(txCtx, uow, changes)
 	})
 }
 
@@ -457,6 +468,10 @@ func (s *MessageService) SendLocation(ctx context.Context, msg *model.Message) (
 		savedMsg.To = msg.To
 		savedMsg.IdempotencyKey = msg.IdempotencyKey
 		savedMsg.ReplyTo = msg.ReplyTo
+
+		if err = s.insertSentStatuses(txCtx, uow, savedMsg); err != nil {
+			return err
+		}
 
 		savedMsg.WithCreatedEvent(ctx, msg.IdempotencyKey)
 
@@ -495,6 +510,10 @@ func (s *MessageService) SendContact(ctx context.Context, msg *model.Message) (*
 		savedMsg.To = msg.To
 		savedMsg.IdempotencyKey = msg.IdempotencyKey
 		savedMsg.ReplyTo = msg.ReplyTo
+
+		if err = s.insertSentStatuses(txCtx, uow, savedMsg); err != nil {
+			return err
+		}
 
 		savedMsg.WithCreatedEvent(ctx, msg.IdempotencyKey)
 
@@ -552,6 +571,11 @@ func (s *MessageService) SendInteractive(ctx context.Context, msg *model.Message
 		}
 
 		savedMsg.To = msg.To
+
+		if err = s.insertSentStatuses(ctx, uow, savedMsg); err != nil {
+			return err
+		}
+
 		savedMsg.WithCreatedEvent(ctx, msg.IdempotencyKey)
 
 		return s.dispatchMessageEvents(ctx, uow, savedMsg)
@@ -619,6 +643,10 @@ func (s *MessageService) SendSystemMessage(ctx context.Context, msg *model.Messa
 
 		savedMsg.To = msg.To
 		savedMsg.IdempotencyKey = msg.IdempotencyKey
+
+		if err = s.insertSentStatuses(txCtx, uow, savedMsg); err != nil {
+			return err
+		}
 
 		savedMsg.WithCreatedEvent(ctx, msg.IdempotencyKey)
 
@@ -826,6 +854,59 @@ func gateIDForPeer(peer *shared.Peer, members []*model.ThreadDialog) string {
 }
 
 // --- Internal Helpers ---
+
+// statusViaBot is the confirmation source recorded for bot recipients.
+const statusViaBot = "bot"
+
+// insertSentStatuses creates per-recipient SENT status rows for a freshly
+// saved message: every thread member except the effective sender. No status
+// event is published — MessageCreated already implies the initial SENT state.
+//
+// Bot members are promoted to DELIVERED right away: the transactional
+// outbox hand-off is the delivery into the bot pipeline, and bots publish
+// no receipts of their own, so DELIVERED is their terminal state. The
+// promotion does publish a status event so timelines update live.
+func (s *MessageService) insertSentStatuses(ctx context.Context, uow store.UnitOfWork, msg *model.Message) error {
+	sender := msg.GetSender()
+
+	recipients := make([]uuid.UUID, 0, len(msg.To))
+
+	var botReceipts []*model.StatusReceipt
+
+	for _, member := range msg.To {
+		if member == nil || member.ContactID == sender {
+			continue
+		}
+
+		recipients = append(recipients, member.ContactID)
+
+		if member.IsBot {
+			botReceipts = append(botReceipts, &model.StatusReceipt{
+				DomainID:  msg.DomainID,
+				ThreadID:  msg.ThreadID,
+				MessageID: msg.ID,
+				MemberID:  member.ContactID,
+				Via:       statusViaBot,
+			})
+		}
+	}
+
+	if err := uow.MessageStatuses().InsertSent(ctx, msg, recipients); err != nil {
+		return err
+	}
+
+	if len(botReceipts) == 0 {
+		return nil
+	}
+
+	changes, err := uow.MessageStatuses().MarkDelivered(ctx, botReceipts)
+	if err != nil {
+		return fmt.Errorf("marking bot recipients delivered: %w", err)
+	}
+
+	return dispatchStatusChangeEvents(ctx, uow, changes)
+}
+
 func (s *MessageService) dispatchInteractiveCallbackEvents(ctx context.Context, uow store.UnitOfWork, callback *model.InteractiveCallback) error {
 	evs := callback.Events()
 	if len(evs) == 0 {

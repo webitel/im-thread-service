@@ -1,6 +1,7 @@
 package mapper
 
 import (
+	"encoding/json"
 	"time"
 
 	"github.com/google/uuid"
@@ -114,6 +115,8 @@ func MapMessage2SearchMessageHistoryResponse(messages []*model.Message) *impb.Se
 			Interactive:     mapInteractive(m.Interactive),
 			ReactedMetadata: mapReactedMetadata(m.ReactedMetadata),
 			ReplyTo:         mapReplyTo(m.ReplyTo),
+			DeliveryStatus:  mapDeliveryStatus(m.DeliveryStatus),
+			Statuses:        mapRecipientStatuses(m.Statuses),
 		}
 	})
 
@@ -139,6 +142,59 @@ func mapReplyTo(in *model.ReplyToPreview) *impb.ReplyToMessage {
 		out.AttachmentKind = &a.Kind
 		out.AttachmentName = a.Name
 		out.AttachmentMime = a.Mime
+	}
+
+	return out
+}
+
+func mapDeliveryStatus(in *model.MessageDeliveryStatus) impb.MessageDeliveryStatus {
+	if in == nil {
+		return impb.MessageDeliveryStatus_MESSAGE_DELIVERY_STATUS_UNSPECIFIED
+	}
+
+	return impb.MessageDeliveryStatus(*in)
+}
+
+func mapRecipientStatuses(in []*model.MessageRecipientStatus) []*impb.MessageRecipientStatus {
+	if len(in) == 0 {
+		return nil
+	}
+
+	out := make([]*impb.MessageRecipientStatus, 0, len(in))
+
+	for _, st := range in {
+		if st == nil {
+			continue
+		}
+
+		pb := &impb.MessageRecipientStatus{
+			MemberId: st.MemberID.String(),
+			Status:   impb.MessageDeliveryStatus(st.Status),
+		}
+
+		if st.DeliveredAt != nil {
+			pb.DeliveredAt = max(st.DeliveredAt.UnixMilli(), 0)
+		}
+
+		if st.ReadAt != nil {
+			pb.ReadAt = max(st.ReadAt.UnixMilli(), 0)
+		}
+
+		if st.FailedAt != nil {
+			pb.FailedAt = max(st.FailedAt.UnixMilli(), 0)
+		}
+
+		if st.Via != nil {
+			pb.Via = *st.Via
+		}
+
+		if len(st.Error) > 0 {
+			if raw, err := json.Marshal(st.Error); err == nil {
+				pb.Error = string(raw)
+			}
+		}
+
+		out = append(out, pb)
 	}
 
 	return out

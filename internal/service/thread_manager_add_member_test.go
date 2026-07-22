@@ -22,6 +22,7 @@ type fakeUnitOfWork struct {
 	threadDialogStore    store.ThreadDialogStore
 	messageStore         store.MessageStore
 	messageExternalStore store.MessageExternalStore
+	messageStatusStore   store.MessageStatusStore
 	outboxStore          store.OutboxStore
 	botControlStore      store.BotControlStore
 	threadStore          store.ThreadStore
@@ -51,6 +52,32 @@ func (f fakeUnitOfWork) Messages() store.MessageStore {
 
 func (f fakeUnitOfWork) MessageExternal() store.MessageExternalStore {
 	return f.messageExternalStore
+}
+
+func (f fakeUnitOfWork) MessageStatuses() store.MessageStatusStore {
+	if f.messageStatusStore == nil {
+		return noopMessageStatusStore{}
+	}
+
+	return f.messageStatusStore
+}
+
+type noopMessageStatusStore struct{}
+
+func (noopMessageStatusStore) InsertSent(context.Context, *model.Message, []uuid.UUID) error {
+	return nil
+}
+
+func (noopMessageStatusStore) MarkDelivered(context.Context, []*model.StatusReceipt) ([]*model.StatusChange, error) {
+	return nil, nil
+}
+
+func (noopMessageStatusStore) MarkRead(context.Context, []*model.ReadReceipt) ([]*model.StatusChange, error) {
+	return nil, nil
+}
+
+func (noopMessageStatusStore) MarkFailed(context.Context, []*model.StatusReceipt) ([]*model.StatusChange, error) {
+	return nil, nil
 }
 
 func (f fakeUnitOfWork) Outbox() store.OutboxStore {

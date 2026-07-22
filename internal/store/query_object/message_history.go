@@ -29,6 +29,8 @@ var (
 		"system":           true,
 		"reacted_metadata": true,
 		"reply_to":         true,
+		"delivery_status":  true,
+		"statuses":         true,
 	}
 	defaultFields = []string{
 		"id", "thread_id", "sender_id",
@@ -36,6 +38,7 @@ var (
 		"created_at", "updated_at", "images", "documents",
 		"member", "interactive", "location", "contact", "system", "reacted_metadata",
 		"reply_to",
+		"delivery_status", "statuses",
 	}
 )
 
