@@ -2,11 +2,9 @@ package postgres
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/webitel/webitel-go-kit/pkg/errors"
 
@@ -267,42 +265,6 @@ func (m *messageStore) SaveDocuments(ctx context.Context, messageID uuid.UUID, d
 	}
 
 	return savedDocuments, nil
-}
-
-func (m *messageStore) ReadMessage(ctx context.Context, read struct {
-	DomainID  int32
-	ThreadID  uuid.UUID
-	MessageID uuid.UUID
-	UserID    uuid.UUID
-},
-) error {
-	const query = `
-		INSERT INTO im_message.message_reads (domain_id, thread_id, message_id, user_id)
-		VALUES (@DomainID, @ThreadID, @MessageID, @UserID)
-		ON CONFLICT (message_id, user_id) DO NOTHING;
-	`
-
-	args := pgx.NamedArgs{
-		"DomainID":  read.DomainID,
-		"MessageID": read.MessageID,
-		"ThreadID":  read.ThreadID,
-		"UserID":    read.UserID,
-	}
-
-	_, err := m.db.Exec(ctx, query, args)
-	if err != nil {
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) {
-			// 23503 is the PostgreSQL code for foreign_key_violation
-			if pgErr.Code == "23503" {
-				return fmt.Errorf("read_message: message or thread not found: %w", err)
-			}
-		}
-
-		return fmt.Errorf("read_message: failed to execute insert: %w", err)
-	}
-
-	return nil
 }
 
 func (m *messageStore) SaveMessageLocation(ctx context.Context, msg *model.Message) (*model.Message, error) {

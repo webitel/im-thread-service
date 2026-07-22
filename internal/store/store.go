@@ -27,18 +27,33 @@ type MessageStore interface {
 	SaveMessage(ctx context.Context, msg *model.Message) (*model.Message, error)
 	GetReplyPreview(ctx context.Context, id uuid.UUID, domainID int32) (*model.ReplyToPreview, error)
 	SaveDocuments(ctx context.Context, messageID uuid.UUID, docs []*model.MessageDocument) ([]*model.MessageDocument, error)
-	ReadMessage(ctx context.Context, read struct {
-		DomainID  int32
-		ThreadID  uuid.UUID
-		MessageID uuid.UUID
-		UserID    uuid.UUID
-	}) error
 	SaveMessageContact(ctx context.Context, msg *model.Message) (*model.Message, error)
 	SaveMessageLocation(ctx context.Context, msg *model.Message) (*model.Message, error)
 	SaveInteractiveMessage(ctx context.Context, msg *model.Message) (*model.Message, error)
 	SaveSystemMessage(ctx context.Context, msg *model.Message) (*model.Message, error)
 
 	EditMessage(ctx context.Context, msg *model.Message) (*model.Message, error)
+}
+
+// MessageStatusStore tracks per-recipient delivery states of messages
+// (im_message.message_statuses). All transitions are monotonic upserts:
+// duplicate and out-of-order receipts change nothing and return no changes.
+type MessageStatusStore interface {
+	// InsertSent creates SENT rows for the message recipients within the
+	// message-save transaction. Existing rows are left intact.
+	InsertSent(ctx context.Context, msg *model.Message, recipientIDs []uuid.UUID) error
+
+	// MarkDelivered applies delivery receipts and returns the rows that
+	// actually changed.
+	MarkDelivered(ctx context.Context, receipts []*model.StatusReceipt) ([]*model.StatusChange, error)
+
+	// MarkRead applies read receipts with read-up-to semantics and returns
+	// the rows that actually changed.
+	MarkRead(ctx context.Context, receipts []*model.ReadReceipt) ([]*model.StatusChange, error)
+
+	// MarkFailed applies failure receipts (sent -> failed only) and returns
+	// the rows that actually changed.
+	MarkFailed(ctx context.Context, receipts []*model.StatusReceipt) ([]*model.StatusChange, error)
 }
 
 type OutboxStore interface {

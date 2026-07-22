@@ -10,6 +10,7 @@ type UnitOfWork interface {
 	MessageHistory() MessageHistory
 	Messages() MessageStore
 	MessageExternal() MessageExternalStore
+	MessageStatuses() MessageStatusStore
 	Outbox() OutboxStore
 	InteractiveCallback() InteractiveCallback
 	BotControl() BotControlStore

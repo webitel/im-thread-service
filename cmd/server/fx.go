@@ -91,6 +91,9 @@ var serviceToHandlerBridgeModule = fx.Module(
 		func(s *service.MessageService) grpchandler.MessageService {
 			return s
 		},
+		func(s *service.MessageStatusService) grpchandler.MessageStatusReporter {
+			return s
+		},
 		func(s *decorators.MessageHistoryEnricher) grpchandler.MessageHistoryService {
 			return s
 		},
