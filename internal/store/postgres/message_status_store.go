@@ -273,6 +273,7 @@ func dedupStatusReceipts(receipts []*model.StatusReceipt) []*model.StatusReceipt
 		}
 
 		seen[k] = struct{}{}
+
 		out = append(out, r)
 	}
 

@@ -43,25 +43,25 @@ func TestMapRecipientStatuses(t *testing.T) {
 
 	got := out[0]
 
-	if got.MemberId != member.String() || got.Status != impb.MessageDeliveryStatus_MESSAGE_DELIVERY_STATUS_FAILED {
+	if got.GetMemberId() != member.String() || got.GetStatus() != impb.MessageDeliveryStatus_MESSAGE_DELIVERY_STATUS_FAILED {
 		t.Errorf("identity mismatch: %+v", got)
 	}
 
-	if got.DeliveredAt != deliveredAt.UnixMilli() {
-		t.Errorf("delivered_at = %d, want %d", got.DeliveredAt, deliveredAt.UnixMilli())
+	if got.GetDeliveredAt() != deliveredAt.UnixMilli() {
+		t.Errorf("delivered_at = %d, want %d", got.GetDeliveredAt(), deliveredAt.UnixMilli())
 	}
 
-	if got.ReadAt != 0 || got.FailedAt != 0 {
+	if got.GetReadAt() != 0 || got.GetFailedAt() != 0 {
 		t.Errorf("unset timestamps must stay zero: %+v", got)
 	}
 
-	if got.Via != via {
-		t.Errorf("via = %q, want %q", got.Via, via)
+	if got.GetVia() != via {
+		t.Errorf("via = %q, want %q", got.GetVia(), via)
 	}
 
 	// The error payload is passed to clients as a JSON string.
-	if got.Error == "" || got.Error[0] != '{' {
-		t.Errorf("expected JSON-encoded error, got %q", got.Error)
+	if got.GetError() == "" || got.GetError()[0] != '{' {
+		t.Errorf("expected JSON-encoded error, got %q", got.GetError())
 	}
 }
 

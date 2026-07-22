@@ -15,8 +15,6 @@ import (
 )
 
 type recordingMessageStatusStore struct {
-	noopMessageStatusStore
-
 	insertedMsg        *model.Message
 	insertedRecipients []uuid.UUID
 	deliveredReceipts  []*model.StatusReceipt

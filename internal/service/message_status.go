@@ -147,6 +147,7 @@ func threadParticipants(ctx context.Context, uow store.UnitOfWork, events []*eve
 	}
 
 	participants := make(map[uuid.UUID][]uuid.UUID, len(threadIDs))
+
 	for _, d := range dialogs {
 		if d == nil {
 			continue
