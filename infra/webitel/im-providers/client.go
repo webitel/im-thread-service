@@ -125,6 +125,40 @@ func (client *Client) SendSystemMessage(ctx context.Context, in *provider.Provid
 	return response, err
 }
 
+func (client *Client) SendLocation(ctx context.Context, in *provider.ProviderSendLocationRequest) (*provider.ProviderSendMessageResponse, error) {
+	var response *provider.ProviderSendMessageResponse
+
+	err := client.providerMessageServiceClient.Execute(ctx, func(pmsc provider.ProviderMessageServiceClient) error {
+		r, err := pmsc.SendLocation(ctx, in)
+		if err != nil {
+			return err
+		}
+
+		response = r
+
+		return nil
+	})
+
+	return response, err
+}
+
+func (client *Client) SendContact(ctx context.Context, in *provider.ProviderSendContactRequest) (*provider.ProviderSendMessageResponse, error) {
+	var response *provider.ProviderSendMessageResponse
+
+	err := client.providerMessageServiceClient.Execute(ctx, func(pmsc provider.ProviderMessageServiceClient) error {
+		r, err := pmsc.SendContact(ctx, in)
+		if err != nil {
+			return err
+		}
+
+		response = r
+
+		return nil
+	})
+
+	return response, err
+}
+
 func (client *Client) Close() error {
 	if client.providerMessageServiceClient != nil {
 		return client.providerMessageServiceClient.Close()

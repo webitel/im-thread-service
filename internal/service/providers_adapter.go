@@ -139,7 +139,22 @@ func (a *baseRPCProvidersAdapter) SendMessage(ctx context.Context, message *mode
 				})
 
 			case model.MessageTypeContact:
-				peerLog.Debug("message type contact: not implemented, skipping")
+				if message.Contact == nil {
+					peerLog.Warn("contact message has nil contact payload")
+
+					return
+				}
+
+				peerLog.Debug("sending contact")
+				resp, err = a.providersClient.SendContact(ctx, &provider.ProviderSendContactRequest{
+					GateId:            externalPeer.Via,
+					ExternalUserId:    userID,
+					DomainId:          message.DomainID,
+					Name:              strval(message.Contact.Name),
+					PhoneNumber:       strval(message.Contact.PhoneNumber),
+					Email:             message.Contact.Email,
+					ReplyToExternalId: replyToExternal,
+				})
 			case model.MessageTypeInteractive:
 				if message.Interactive == nil {
 					peerLog.Warn("interactive message has nil interactive payload, skipping")
@@ -161,7 +176,23 @@ func (a *baseRPCProvidersAdapter) SendMessage(ctx context.Context, message *mode
 					ReplyToExternalId: replyToExternal,
 				})
 			case model.MessageTypeLocation:
-				peerLog.Debug("message type location: not implemented, skipping")
+				if message.Location == nil {
+					peerLog.Warn("location message has nil location payload, skipping")
+
+					return
+				}
+
+				peerLog.Debug("sending location")
+				resp, err = a.providersClient.SendLocation(ctx, &provider.ProviderSendLocationRequest{
+					GateId:            externalPeer.Via,
+					ExternalUserId:    userID,
+					DomainId:          message.DomainID,
+					Latitude:          message.Location.Latitude,
+					Longitude:         message.Location.Longitude,
+					Name:              message.Location.Name,
+					Address:           message.Location.Address,
+					ReplyToExternalId: replyToExternal,
+				})
 			case model.MessageTypeSystem:
 				if message.System == nil {
 					peerLog.Warn("system message has nil system payload, skipping")
@@ -336,6 +367,15 @@ func mapButtons(buttons []*model.KeyboardButton) []*provider.ProviderKeyboardBut
 	}
 
 	return out
+}
+
+// strval safely dereferences an optional string, returning "" for nil.
+func strval(s *string) string {
+	if s == nil {
+		return ""
+	}
+
+	return *s
 }
 
 // metadataToStringMap converts map[string]any to map[string]string by calling
