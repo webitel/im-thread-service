@@ -21,6 +21,7 @@ const _ = grpc.SupportPackageIsVersion9
 const (
 	ThreadManagement_Search_FullMethodName             = "/webitel.im.service.thread.v1.ThreadManagement/Search"
 	ThreadManagement_SearchLeft_FullMethodName         = "/webitel.im.service.thread.v1.ThreadManagement/SearchLeft"
+	ThreadManagement_GetUnreadSummary_FullMethodName   = "/webitel.im.service.thread.v1.ThreadManagement/GetUnreadSummary"
 	ThreadManagement_Get_FullMethodName                = "/webitel.im.service.thread.v1.ThreadManagement/Get"
 	ThreadManagement_Create_FullMethodName             = "/webitel.im.service.thread.v1.ThreadManagement/Create"
 	ThreadManagement_AddMember_FullMethodName          = "/webitel.im.service.thread.v1.ThreadManagement/AddMember"
@@ -45,6 +46,10 @@ type ThreadManagementClient interface {
 	Search(ctx context.Context, in *ThreadSearchRequest, opts ...grpc.CallOption) (*SearchThreadResponse, error)
 	// Lists threads that a specific contact has left
 	SearchLeft(ctx context.Context, in *SearchLeftRequest, opts ...grpc.CallOption) (*SearchLeftResponse, error)
+	// Returns the unread summary for a participant: the number of chats that
+	// have unread messages and the total number of unread messages across all
+	// chats. Counts are individual to the participant's own read state.
+	GetUnreadSummary(ctx context.Context, in *GetUnreadSummaryRequest, opts ...grpc.CallOption) (*GetUnreadSummaryResponse, error)
 	// Creates a new group thread.
 	// The creator becomes the owner of the thread.
 	// Returns a single thread by its identifier.
@@ -90,6 +95,16 @@ func (c *threadManagementClient) SearchLeft(ctx context.Context, in *SearchLeftR
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(SearchLeftResponse)
 	err := c.cc.Invoke(ctx, ThreadManagement_SearchLeft_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *threadManagementClient) GetUnreadSummary(ctx context.Context, in *GetUnreadSummaryRequest, opts ...grpc.CallOption) (*GetUnreadSummaryResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetUnreadSummaryResponse)
+	err := c.cc.Invoke(ctx, ThreadManagement_GetUnreadSummary_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -208,6 +223,10 @@ type ThreadManagementServer interface {
 	Search(context.Context, *ThreadSearchRequest) (*SearchThreadResponse, error)
 	// Lists threads that a specific contact has left
 	SearchLeft(context.Context, *SearchLeftRequest) (*SearchLeftResponse, error)
+	// Returns the unread summary for a participant: the number of chats that
+	// have unread messages and the total number of unread messages across all
+	// chats. Counts are individual to the participant's own read state.
+	GetUnreadSummary(context.Context, *GetUnreadSummaryRequest) (*GetUnreadSummaryResponse, error)
 	// Creates a new group thread.
 	// The creator becomes the owner of the thread.
 	// Returns a single thread by its identifier.
@@ -244,6 +263,9 @@ func (UnimplementedThreadManagementServer) Search(context.Context, *ThreadSearch
 }
 func (UnimplementedThreadManagementServer) SearchLeft(context.Context, *SearchLeftRequest) (*SearchLeftResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SearchLeft not implemented")
+}
+func (UnimplementedThreadManagementServer) GetUnreadSummary(context.Context, *GetUnreadSummaryRequest) (*GetUnreadSummaryResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetUnreadSummary not implemented")
 }
 func (UnimplementedThreadManagementServer) Get(context.Context, *GetThreadRequest) (*Thread, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Get not implemented")
@@ -328,6 +350,24 @@ func _ThreadManagement_SearchLeft_Handler(srv interface{}, ctx context.Context, 
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(ThreadManagementServer).SearchLeft(ctx, req.(*SearchLeftRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ThreadManagement_GetUnreadSummary_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetUnreadSummaryRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ThreadManagementServer).GetUnreadSummary(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ThreadManagement_GetUnreadSummary_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ThreadManagementServer).GetUnreadSummary(ctx, req.(*GetUnreadSummaryRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -526,6 +566,10 @@ var ThreadManagement_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "SearchLeft",
 			Handler:    _ThreadManagement_SearchLeft_Handler,
+		},
+		{
+			MethodName: "GetUnreadSummary",
+			Handler:    _ThreadManagement_GetUnreadSummary_Handler,
 		},
 		{
 			MethodName: "Get",

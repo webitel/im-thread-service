@@ -67,6 +67,11 @@ type (
 		Page     int
 	}
 
+	UnreadSummaryRequest struct {
+		SelfID   uuid.UUID
+		DomainID int32
+	}
+
 	ThreadMembersResponse struct {
 		Members uuid.UUIDs `db:"members"`
 	}

@@ -44,6 +44,30 @@ func (s *messageStatusStore) InsertSent(ctx context.Context, msg *model.Message,
 		return errors.Internal("inserting sent statuses", errors.WithCause(err), errors.WithID("postgres.message_status.insert_sent"))
 	}
 
+	// Bump each recipient's denormalized unread counter. Content messages only —
+	// system messages are never counted as unread; the sender is not among the
+	// recipients, so own messages never bump.
+	if msg.Type == model.MessageTypeSystem {
+		return nil
+	}
+
+	const bumpQuery = `
+		update im_thread.thread_dialog
+		set unread_count = unread_count + 1
+		where thread_id = @ThreadID
+		  and member_id = any(@MemberIDs::uuid[])
+		  and deleted_at is null
+	`
+
+	bumpArgs := pgx.NamedArgs{
+		"ThreadID":  msg.ThreadID,
+		"MemberIDs": recipientIDs,
+	}
+
+	if _, err := s.db.Exec(ctx, bumpQuery, bumpArgs); err != nil {
+		return errors.Internal("bumping unread counters", errors.WithCause(err), errors.WithID("postgres.message_status.bump_unread"))
+	}
+
 	return nil
 }
 
@@ -170,7 +194,18 @@ func (s *messageStatusStore) MarkRead(ctx context.Context, receipts []*model.Rea
 		"Vias":           vias,
 	}
 
-	return s.collectChanges(ctx, query, args, "postgres.message_status.mark_read")
+	changes, err := s.collectChanges(ctx, query, args, "postgres.message_status.mark_read")
+	if err != nil {
+		return nil, err
+	}
+
+	// Advance each member's read horizon and refresh the denormalized unread
+	// counter in the same transaction.
+	if err := s.advanceReadHorizon(ctx, receipts); err != nil {
+		return nil, err
+	}
+
+	return changes, nil
 }
 
 // MarkFailed performs a monotonic batch upsert to FAILED with provider
@@ -229,6 +264,179 @@ func (s *messageStatusStore) MarkFailed(ctx context.Context, receipts []*model.S
 	}
 
 	return s.collectChanges(ctx, query, args, "postgres.message_status.mark_failed")
+}
+
+// ReadUnread returns the denormalized unread_count per thread for the member,
+// read straight from thread_dialog (O(1) per row, no message scan). Threads
+// with no active row for the member are omitted.
+func (s *messageStatusStore) ReadUnread(ctx context.Context, domainID int32, memberID uuid.UUID, threadIDs []uuid.UUID) (map[uuid.UUID]int64, error) {
+	if memberID == uuid.Nil || len(threadIDs) == 0 {
+		return nil, nil
+	}
+
+	const query = `
+		select thread_id, unread_count
+		from im_thread.thread_dialog
+		where member_id = @MemberID
+		  and (@DomainID <= 0 or domain_id = @DomainID)
+		  and thread_id = any(@ThreadIDs::uuid[])
+		  and deleted_at is null
+	`
+
+	args := pgx.NamedArgs{
+		"MemberID":  memberID,
+		"DomainID":  domainID,
+		"ThreadIDs": threadIDs,
+	}
+
+	rows, err := s.db.Query(ctx, query, args)
+	if err != nil {
+		return nil, errors.Internal("reading unread counts", errors.WithCause(err), errors.WithID("postgres.message_status.read_unread"))
+	}
+
+	type unreadRow struct {
+		ThreadID uuid.UUID `db:"thread_id"`
+		Unread   int64     `db:"unread_count"`
+	}
+
+	counts, err := pgx.CollectRows(rows, pgx.RowToStructByName[unreadRow])
+	if err != nil {
+		return nil, errors.Internal("collecting unread counts", errors.WithCause(err), errors.WithID("postgres.message_status.read_unread"))
+	}
+
+	result := make(map[uuid.UUID]int64, len(counts))
+	for _, c := range counts {
+		result[c.ThreadID] = c.Unread
+	}
+
+	return result, nil
+}
+
+// UnreadSummary returns the member's denormalized unread totals across the
+// threads they are still an active participant of (thread_dialog not
+// soft-deleted): the number of chats with unread messages and the total unread
+// message count. Read straight from the denormalized counters.
+func (s *messageStatusStore) UnreadSummary(ctx context.Context, domainID int32, memberID uuid.UUID) (model.UnreadSummary, error) {
+	if memberID == uuid.Nil {
+		return model.UnreadSummary{}, nil
+	}
+
+	const query = `
+		select
+			count(*) filter (where unread_count > 0) as unread_chats,
+			coalesce(sum(unread_count), 0) as unread_messages
+		from im_thread.thread_dialog
+		where member_id = @MemberID
+		  and (@DomainID <= 0 or domain_id = @DomainID)
+		  and deleted_at is null
+	`
+
+	args := pgx.NamedArgs{
+		"MemberID": memberID,
+		"DomainID": domainID,
+	}
+
+	rows, err := s.db.Query(ctx, query, args)
+	if err != nil {
+		return model.UnreadSummary{}, errors.Internal("querying unread summary", errors.WithCause(err), errors.WithID("postgres.message_status.unread_summary"))
+	}
+
+	summary, err := pgx.CollectExactlyOneRow(rows, pgx.RowToStructByName[model.UnreadSummary])
+	if err != nil {
+		return model.UnreadSummary{}, errors.Internal("collecting unread summary", errors.WithCause(err), errors.WithID("postgres.message_status.unread_summary"))
+	}
+
+	return summary, nil
+}
+
+// advanceReadHorizon moves each member's read horizon
+// (thread_dialog.last_read_message_id) forward to the receipt's up-to boundary —
+// monotonically, never backward — and refreshes the denormalized unread_count
+// from the new horizon: content messages after it that the member did not send.
+// Mirrors Telegram's read_inbox_max_id + dialog unread_count. Runs in the same
+// transaction as the MarkRead status upsert.
+func (s *messageStatusStore) advanceReadHorizon(ctx context.Context, receipts []*model.ReadReceipt) error {
+	if len(receipts) == 0 {
+		return nil
+	}
+
+	var (
+		threadIDs = make([]uuid.UUID, len(receipts))
+		memberIDs = make([]uuid.UUID, len(receipts))
+		upTos     = make([]uuid.UUID, len(receipts))
+	)
+
+	for i, r := range receipts {
+		threadIDs[i] = r.ThreadID
+		memberIDs[i] = r.MemberID
+		upTos[i] = r.UpToMessageID
+	}
+
+	// The horizon CASE is repeated in SET and in the count subquery: the UPDATE
+	// target (td) is only in scope of SET/WHERE, not of a lateral FROM item.
+	const query = `
+		update im_thread.thread_dialog td
+		set last_read_message_id = case
+				when td.last_read_message_id is null or r.up_to > td.last_read_message_id
+				then r.up_to else td.last_read_message_id end,
+		    unread_count = coalesce((
+		        select count(*)
+		        from im_message.messages m
+		        where m.thread_id = td.thread_id
+		          and m.sender_id <> td.member_id
+		          and m.type <> @SystemType
+		          and m.id > case
+		                when td.last_read_message_id is null or r.up_to > td.last_read_message_id
+		                then r.up_to else td.last_read_message_id end
+		    ), 0)
+		from unnest(@ThreadIDs::uuid[], @MemberIDs::uuid[], @UpTos::uuid[])
+			as r(thread_id, member_id, up_to)
+		where td.thread_id = r.thread_id
+		  and td.member_id = r.member_id
+		  and td.deleted_at is null
+	`
+
+	args := pgx.NamedArgs{
+		"ThreadIDs":  threadIDs,
+		"MemberIDs":  memberIDs,
+		"UpTos":      upTos,
+		"SystemType": int(model.MessageTypeSystem),
+	}
+
+	if _, err := s.db.Exec(ctx, query, args); err != nil {
+		return errors.Internal("advancing read horizon", errors.WithCause(err), errors.WithID("postgres.message_status.advance_read_horizon"))
+	}
+
+	return nil
+}
+
+// ReconcileUnread recomputes unread_count for every active dialog straight from
+// the read horizon (optionally scoped to a domain). A drift safety net for a
+// periodic job, not the hot path. Returns the number of rows updated.
+func (s *messageStatusStore) ReconcileUnread(ctx context.Context, domainID int32) (int64, error) {
+	const query = `
+		update im_thread.thread_dialog td
+		set unread_count = coalesce((
+			select count(*)
+			from im_message.messages m
+			where m.thread_id = td.thread_id
+			  and m.sender_id <> td.member_id
+			  and m.type <> @SystemType
+			  and (td.last_read_message_id is null or m.id > td.last_read_message_id)
+		), 0)
+		where (@DomainID <= 0 or td.domain_id = @DomainID)
+		  and td.deleted_at is null
+	`
+
+	tag, err := s.db.Exec(ctx, query, pgx.NamedArgs{
+		"DomainID":   domainID,
+		"SystemType": int(model.MessageTypeSystem),
+	})
+	if err != nil {
+		return 0, errors.Internal("reconciling unread counts", errors.WithCause(err), errors.WithID("postgres.message_status.reconcile_unread"))
+	}
+
+	return tag.RowsAffected(), nil
 }
 
 func (s *messageStatusStore) collectChanges(ctx context.Context, query string, args pgx.NamedArgs, operationID string) ([]*model.StatusChange, error) {

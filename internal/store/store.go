@@ -54,6 +54,21 @@ type MessageStatusStore interface {
 	// MarkFailed applies failure receipts (sent -> failed only) and returns
 	// the rows that actually changed.
 	MarkFailed(ctx context.Context, receipts []*model.StatusReceipt) ([]*model.StatusChange, error)
+
+	// ReadUnread returns the denormalized unread_count per thread for the
+	// member, read straight from thread_dialog (no message scan). Threads with
+	// no active row for the member are omitted.
+	ReadUnread(ctx context.Context, domainID int32, memberID uuid.UUID, threadIDs []uuid.UUID) (map[uuid.UUID]int64, error)
+
+	// UnreadSummary returns the member's denormalized unread totals across the
+	// threads they are still an active participant of: the number of chats with
+	// unread messages and the total number of unread messages.
+	UnreadSummary(ctx context.Context, domainID int32, memberID uuid.UUID) (model.UnreadSummary, error)
+
+	// ReconcileUnread recomputes unread_count for every active dialog from the
+	// read horizon (optionally scoped to a domain). Drift safety net for a
+	// periodic job; returns the number of rows updated.
+	ReconcileUnread(ctx context.Context, domainID int32) (int64, error)
 }
 
 type OutboxStore interface {
