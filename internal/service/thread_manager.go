@@ -129,7 +129,51 @@ func (t *ThreadManagementService) Search(ctx context.Context, searchRequest *dto
 		return nil, err
 	}
 
+	t.enrichUnread(ctx, searchRequest.SelfID, firstDomainID(searchRequest.DomainIDs), threads)
+
 	return threads, nil
+}
+
+// enrichUnread fills UnreadCount on each thread for the requesting participant.
+// Unread is auxiliary: a failure is logged and the threads keep a zero count
+// rather than failing the whole search.
+func (t *ThreadManagementService) enrichUnread(ctx context.Context, selfID uuid.UUID, domainID int32, threads []*model.Thread) {
+	if selfID == uuid.Nil || len(threads) == 0 {
+		return
+	}
+
+	threadIDs := make([]uuid.UUID, len(threads))
+	for i, th := range threads {
+		threadIDs[i] = th.ID
+	}
+
+	counts, err := t.uow.MessageStatuses().ReadUnread(ctx, domainID, selfID, threadIDs)
+	if err != nil {
+		t.log().Error("counting unread messages", "operation", "service.thread_manager.enrich_unread", "err", err)
+
+		return
+	}
+
+	for _, th := range threads {
+		th.UnreadCount = counts[th.ID]
+	}
+}
+
+// GetUnreadSummary returns the participant's unread totals across all chats.
+func (t *ThreadManagementService) GetUnreadSummary(ctx context.Context, req *dto.UnreadSummaryRequest) (model.UnreadSummary, error) {
+	if req == nil || req.SelfID == uuid.Nil {
+		return model.UnreadSummary{}, errors.InvalidArgument("self id is required", errors.WithID("service.thread_manager.unread_summary"))
+	}
+
+	return t.uow.MessageStatuses().UnreadSummary(ctx, req.DomainID, req.SelfID)
+}
+
+func firstDomainID(ids []int) int32 {
+	if len(ids) > 0 {
+		return int32(ids[0])
+	}
+
+	return 0
 }
 
 func (t *ThreadManagementService) SearchLeft(ctx context.Context, req *dto.SearchLeftRequest) ([]*model.Thread, error) {

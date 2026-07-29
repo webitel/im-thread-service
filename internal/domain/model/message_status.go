@@ -103,3 +103,11 @@ type StatusChange struct {
 	Error     map[string]any        `db:"error"`
 	UpdatedAt time.Time             `db:"updated_at"`
 }
+
+// UnreadSummary is a participant's unread totals across all their chats.
+type UnreadSummary struct {
+	// Chats is the number of threads with at least one unread message.
+	Chats int32 `db:"unread_chats"`
+	// Messages is the total number of unread messages across all chats.
+	Messages int64 `db:"unread_messages"`
+}

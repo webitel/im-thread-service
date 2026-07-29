@@ -80,6 +80,18 @@ func (noopMessageStatusStore) MarkFailed(context.Context, []*model.StatusReceipt
 	return nil, nil
 }
 
+func (noopMessageStatusStore) ReadUnread(context.Context, int32, uuid.UUID, []uuid.UUID) (map[uuid.UUID]int64, error) {
+	return make(map[uuid.UUID]int64), nil
+}
+
+func (noopMessageStatusStore) UnreadSummary(context.Context, int32, uuid.UUID) (model.UnreadSummary, error) {
+	return model.UnreadSummary{}, nil
+}
+
+func (noopMessageStatusStore) ReconcileUnread(context.Context, int32) (int64, error) {
+	return 0, nil
+}
+
 func (f fakeUnitOfWork) Outbox() store.OutboxStore {
 	return f.outboxStore
 }

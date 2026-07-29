@@ -43,6 +43,18 @@ func (r *recordingMessageStatusStore) MarkFailed(context.Context, []*model.Statu
 	return r.changes, nil
 }
 
+func (r *recordingMessageStatusStore) ReadUnread(context.Context, int32, uuid.UUID, []uuid.UUID) (map[uuid.UUID]int64, error) {
+	return make(map[uuid.UUID]int64), nil
+}
+
+func (r *recordingMessageStatusStore) UnreadSummary(context.Context, int32, uuid.UUID) (model.UnreadSummary, error) {
+	return model.UnreadSummary{}, nil
+}
+
+func (r *recordingMessageStatusStore) ReconcileUnread(context.Context, int32) (int64, error) {
+	return 0, nil
+}
+
 func TestGroupStatusChanges_BatchesSameRecipientAndStatus(t *testing.T) {
 	var (
 		threadID = uuid.New()
