@@ -20,6 +20,7 @@ var (
 			CanRemoveMembers:            true,
 			CanChangeMembersPermissions: true,
 			CanChangeThreadInfo:         true,
+			CanDeleteMessages:           true,
 		},
 		model.RoleAdmin: {
 			CanSendMessages:             true,
@@ -27,6 +28,7 @@ var (
 			CanRemoveMembers:            true,
 			CanChangeMembersPermissions: true,
 			CanChangeThreadInfo:         true,
+			CanDeleteMessages:           true,
 		},
 		model.RoleSupervisor: {
 			CanSendMessages:             true,
@@ -34,6 +36,7 @@ var (
 			CanRemoveMembers:            true,
 			CanChangeMembersPermissions: false,
 			CanChangeThreadInfo:         false,
+			CanDeleteMessages:           true,
 		},
 		model.RoleMember: {
 			CanSendMessages:             true,
@@ -41,6 +44,7 @@ var (
 			CanRemoveMembers:            true,
 			CanChangeMembersPermissions: false,
 			CanChangeThreadInfo:         false,
+			CanDeleteMessages:           true,
 		},
 	}
 	defaultPermissionsByRole = map[model.ThreadRole]*model.ThreadPermissions{
@@ -50,6 +54,7 @@ var (
 			CanRemoveMembers:            true,
 			CanChangeMembersPermissions: true,
 			CanChangeThreadInfo:         true,
+			CanDeleteMessages:           true,
 		},
 		model.RoleAdmin: {
 			CanSendMessages:             true,
@@ -57,6 +62,7 @@ var (
 			CanRemoveMembers:            true,
 			CanChangeMembersPermissions: true,
 			CanChangeThreadInfo:         true,
+			CanDeleteMessages:           true,
 		},
 		model.RoleSupervisor: {
 			CanSendMessages:             true,
@@ -64,6 +70,7 @@ var (
 			CanRemoveMembers:            true,
 			CanChangeMembersPermissions: false,
 			CanChangeThreadInfo:         false,
+			CanDeleteMessages:           true,
 		},
 		model.RoleMember: {
 			CanSendMessages:             true,
@@ -71,6 +78,7 @@ var (
 			CanRemoveMembers:            true,
 			CanChangeMembersPermissions: false,
 			CanChangeThreadInfo:         false,
+			CanDeleteMessages:           true,
 		},
 	}
 )
@@ -246,6 +254,7 @@ func checkPermissionChangeAllowedByTargetRole(req *permissionChangeValidationStr
 		{changes.CanRemoveMembers, allowed.CanRemoveMembers, "change add admins permission is not allowed for the target role"},
 		{changes.CanChangeMembersPermissions, allowed.CanChangeMembersPermissions, "change members permissions permission is not allowed for the target role"},
 		{changes.CanChangeThreadInfo, allowed.CanChangeThreadInfo, "change thread info permission is not allowed for the target role"},
+		{changes.CanDeleteMessages, allowed.CanDeleteMessages, "change delete messages permission is not allowed for the target role"},
 	}
 
 	for _, rule := range rules {
@@ -297,6 +306,7 @@ func checkInitiatorHasSamePermissionThatChanged(req *permissionChangeValidationS
 		{changes.CanRemoveMembers, initiator.CanRemoveMembers, "initiator does not have permission to remove members"},
 		{changes.CanChangeMembersPermissions, initiator.CanChangeMembersPermissions, "initiator does not have permission to change members permissions permission"},
 		{changes.CanChangeThreadInfo, initiator.CanChangeThreadInfo, "initiator does not have permission to change thread info permission"},
+		{changes.CanDeleteMessages, initiator.CanDeleteMessages, "initiator does not have permission to change delete messages permission"},
 	}
 
 	for _, rule := range rules {

@@ -87,42 +87,51 @@ func MapSearchLeftThreadsMessageHistoryRequest2LeftThreadsMessageHistoryInputDTO
 }
 
 func MapMessage2SearchMessageHistoryResponse(messages []*model.Message) *impb.SearchMessageHistoryResponse {
-	responseMessages := utils.Map(messages, func(m *model.Message) *impb.HistoryMessage {
-		var (
-			docs   = mapDocs(m.Documents)
-			images = mapImages(m.Images)
-		)
-
-		md, err := structpb.NewStruct(m.Metadata)
-		if err != nil {
-			return nil
-		}
-
-		return &impb.HistoryMessage{
-			Id:              m.ID.String(),
-			ThreadId:        m.ThreadID.String(),
-			SenderId:        m.SenderID.String(),
-			Body:            m.Body,
-			Type:            int32(m.Type),
-			Metadata:        md,
-			CreatedAt:       max(m.CreatedAt.UnixMilli(), 0),
-			UpdatedAt:       max(m.UpdatedAt.UnixMilli(), 0),
-			Documents:       docs,
-			Images:          images,
-			Location:        mapLocation(m.Location),
-			Contact:         mapContact(m.Contact),
-			System:          mapSystem(m.System),
-			Interactive:     mapInteractive(m.Interactive),
-			ReactedMetadata: mapReactedMetadata(m.ReactedMetadata),
-			ReplyTo:         mapReplyTo(m.ReplyTo),
-			DeliveryStatus:  mapDeliveryStatus(m.DeliveryStatus),
-			Statuses:        mapRecipientStatuses(m.Statuses),
-		}
-	})
+	responseMessages := utils.Map(messages, mapHistoryMessage)
 
 	return &impb.SearchMessageHistoryResponse{
 		Items: responseMessages,
 	}
+}
+
+func mapHistoryMessage(m *model.Message) *impb.HistoryMessage {
+	out := &impb.HistoryMessage{
+		Id:             m.ID.String(),
+		ThreadId:       m.ThreadID.String(),
+		SenderId:       m.SenderID.String(),
+		Type:           int32(m.Type),
+		CreatedAt:      max(m.CreatedAt.UnixMilli(), 0),
+		UpdatedAt:      max(m.UpdatedAt.UnixMilli(), 0),
+		DeliveryStatus: mapDeliveryStatus(m.DeliveryStatus),
+		Statuses:       mapRecipientStatuses(m.Statuses),
+	}
+
+	// A deleted message keeps its place in the timeline but carries no content
+	// field: clients only learn that something was removed and by when.
+	if m.IsDeleted() {
+		out.Deleted = true
+		out.DeletedAt = m.DeletedAtUnixMillis()
+
+		return out
+	}
+
+	md, err := structpb.NewStruct(m.Metadata)
+	if err != nil {
+		return nil
+	}
+
+	out.Body = m.Body
+	out.Metadata = md
+	out.Documents = mapDocs(m.Documents)
+	out.Images = mapImages(m.Images)
+	out.Location = mapLocation(m.Location)
+	out.Contact = mapContact(m.Contact)
+	out.System = mapSystem(m.System)
+	out.Interactive = mapInteractive(m.Interactive)
+	out.ReactedMetadata = mapReactedMetadata(m.ReactedMetadata)
+	out.ReplyTo = mapReplyTo(m.ReplyTo)
+
+	return out
 }
 
 func mapReplyTo(in *model.ReplyToPreview) *impb.ReplyToMessage {

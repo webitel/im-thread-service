@@ -210,6 +210,16 @@ func Test_checkPermissionChangeAllowedByTargetRole(t *testing.T) {
 			},
 			wantErr: false,
 		},
+		{
+			name: "delete messages permission may be revoked from a plain member",
+			req: &permissionChangeValidationStruct{
+				Target: testDialog(uuid.New(), model.RoleMember, model.ThreadPermissions{}),
+				Changes: &model.UpdateThreadPermissionRequest{
+					CanDeleteMessages: ptr(false),
+				},
+			},
+			wantErr: false,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -264,6 +274,26 @@ func Test_checkInitiatorHasSamePermissionThatChanged(t *testing.T) {
 				Initiator: testDialog(uuid.New(), model.RoleAdmin, model.ThreadPermissions{CanRemoveMembers: true}),
 				Changes: &model.UpdateThreadPermissionRequest{
 					CanRemoveMembers: ptr(false),
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "initiator whose delete messages permission was revoked cannot revoke it from others",
+			req: &permissionChangeValidationStruct{
+				Initiator: testDialog(uuid.New(), model.RoleAdmin, model.ThreadPermissions{CanDeleteMessages: false}),
+				Changes: &model.UpdateThreadPermissionRequest{
+					CanDeleteMessages: ptr(false),
+				},
+			},
+			wantErr: true,
+		},
+		{
+			name: "initiator holding delete messages permission may change it",
+			req: &permissionChangeValidationStruct{
+				Initiator: testDialog(uuid.New(), model.RoleAdmin, model.ThreadPermissions{CanDeleteMessages: true}),
+				Changes: &model.UpdateThreadPermissionRequest{
+					CanDeleteMessages: ptr(false),
 				},
 			},
 			wantErr: false,

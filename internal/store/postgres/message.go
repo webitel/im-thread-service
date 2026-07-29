@@ -123,7 +123,7 @@ func (m *messageStore) GetReplyPreview(ctx context.Context, id uuid.UUID, domain
 					limit 1)
 			) as attachment
 		from im_message.messages m
-		where m.id = @ID and m.domain_id = @DomainID
+		where m.id = @ID and m.domain_id = @DomainID and m.deleted_at is null
 	`
 
 	args := pgx.NamedArgs{
@@ -205,6 +205,78 @@ func (m *messageStore) EditMessage(ctx context.Context, msg *model.Message) (*mo
 	}
 
 	return edited, nil
+}
+
+func (m *messageStore) DeleteMessages(ctx context.Context, ids []uuid.UUID, deleterID uuid.UUID) ([]*model.Message, error) {
+	if len(ids) == 0 {
+		return nil, errors.InvalidArgument("message ids cannot be empty", errors.WithID("postgres.message.delete_messages"))
+	}
+
+	if deleterID == uuid.Nil {
+		return nil, errors.InvalidArgument("deleter id cannot be nil", errors.WithID("postgres.message.delete_messages"))
+	}
+
+	// Returns every message the caller is allowed to remove, including ones
+	// already deleted by an earlier call, so that a retry does not report
+	// failure for a deletion that already succeeded. just_deleted tells the
+	// caller which rows this statement actually changed, so events fire once.
+	const query = `
+		with target as (
+			select m.id, (m.deleted_at is null) as was_live
+			from im_message.messages m
+			where m.id = any(@IDs)
+			  and (m.sender_id = @DeleterID or m.origin_sender = @DeleterID)
+			  and exists (
+				select 1
+				from im_thread.thread_dialog td
+				left join im_thread.thread_permission tp on tp.thread_dialog_id = td.id
+				where td.thread_id = m.thread_id
+				  and td.member_id = @DeleterID
+				  and td.deleted_at is null
+				  -- can_delete_messages is granted by default and revoked per
+				  -- member; a dialog with no permission row at all (rows
+				  -- predating the table) keeps the default.
+				  and coalesce(tp.can_delete_messages, true)
+			  )
+		),
+		updated as (
+			update im_message.messages m
+			set deleted_at = now(),
+			    deleted_by = @DeleterID,
+			    updated_at = now()
+			from target t
+			where m.id = t.id and t.was_live
+			returning
+				m.id, m.domain_id, m.thread_id, m.member_id, m.sender_id, m.type,
+				m.created_at, m.updated_at, m.deleted_at, m.deleted_by
+		)
+		select u.*, true as just_deleted
+		from updated u
+		union all
+		select
+			m.id, m.domain_id, m.thread_id, m.member_id, m.sender_id, m.type,
+			m.created_at, m.updated_at, m.deleted_at, m.deleted_by, false as just_deleted
+		from im_message.messages m
+		join target t on t.id = m.id
+		where not t.was_live
+	`
+
+	args := pgx.NamedArgs{
+		"IDs":       ids,
+		"DeleterID": deleterID,
+	}
+
+	rows, err := m.db.Query(ctx, query, args)
+	if err != nil {
+		return nil, errors.Internal("executing delete messages query", errors.WithCause(err), errors.WithID("postgres.message.delete.query"))
+	}
+
+	deleted, err := pgx.CollectRows(rows, pgx.RowToAddrOfStructByNameLax[model.Message])
+	if err != nil {
+		return nil, errors.Internal("collecting deleted messages", errors.WithCause(err), errors.WithID("postgres.message.delete.collecting"))
+	}
+
+	return deleted, nil
 }
 
 func (m *messageStore) SaveDocuments(ctx context.Context, messageID uuid.UUID, docs []*model.MessageDocument) ([]*model.MessageDocument, error) {

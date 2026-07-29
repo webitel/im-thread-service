@@ -101,6 +101,7 @@ type fakeThreadDialogStore struct {
 	lastReason      *string
 	lastCreate      *model.ThreadDialogExtended
 	quickViewResult []*model.ThreadDialog
+	quickViewCalls  int
 }
 
 func (f *fakeThreadDialogStore) Create(ctx context.Context, threadDialog *model.ThreadDialogExtended) (*model.ThreadDialogExtended, error) {
@@ -125,6 +126,7 @@ func (f *fakeThreadDialogStore) Delete(ctx context.Context, memberID uuid.UUID, 
 
 func (f *fakeThreadDialogStore) GetQuickView(ctx context.Context, filter *model.ThreadDialogStoreFilter) ([]*model.ThreadDialog, error) {
 	f.lastFilter = filter
+	f.quickViewCalls++
 
 	return f.quickViewResult, nil
 }
@@ -203,6 +205,12 @@ type fakeMessageStore struct {
 	editMessageErr    error
 	editMessageCalls  int
 	lastEditedMessage *model.Message
+
+	deleteMessagesResult []*model.Message
+	deleteMessagesErr    error
+	deleteMessagesCalls  int
+	lastDeletedIDs       []uuid.UUID
+	lastDeleterID        uuid.UUID
 }
 
 func (f *fakeMessageStore) SaveMessage(ctx context.Context, msg *model.Message) (*model.Message, error) {
@@ -260,6 +268,18 @@ func (f *fakeMessageStore) EditMessage(ctx context.Context, msg *model.Message) 
 	}
 
 	return msg, nil
+}
+
+func (f *fakeMessageStore) DeleteMessages(ctx context.Context, ids []uuid.UUID, deleterID uuid.UUID) ([]*model.Message, error) {
+	f.deleteMessagesCalls++
+	f.lastDeletedIDs = ids
+	f.lastDeleterID = deleterID
+
+	if f.deleteMessagesErr != nil {
+		return nil, f.deleteMessagesErr
+	}
+
+	return f.deleteMessagesResult, nil
 }
 
 func (f *fakeMessageStore) SaveSystemMessage(ctx context.Context, msg *model.Message) (*model.Message, error) {

@@ -60,6 +60,16 @@ type Message struct {
 	SenderID       uuid.UUID       `json:"sender_id" db:"sender_id"`
 	MemberID       uuid.UUID       `json:"member_id" db:"member_id"`
 
+	// DeletedAt marks a soft-deleted message. The row and its attachments are
+	// kept for analytics; the API layer renders a tombstone instead.
+	DeletedAt *time.Time `json:"deleted_at,omitempty" db:"deleted_at"`
+	DeletedBy *uuid.UUID `json:"deleted_by,omitempty" db:"deleted_by"`
+
+	// JustDeleted distinguishes a message this call removed from one that was
+	// already deleted. Both satisfy a delete request, but only the former
+	// emits an event.
+	JustDeleted bool `json:"-" db:"just_deleted"`
+
 	Images          []*MessageImage      `json:"images,omitempty" db:"images"`
 	Documents       []*MessageDocument   `json:"documents,omitempty" db:"documents"`
 	Location        *MessageLocation     `json:"location,omitempty" db:"location"`
@@ -332,6 +342,82 @@ func (m *Message) WithEditedEvent(ctx context.Context) *Message {
 	m.AddEvent(&e)
 
 	return m
+}
+
+func (m *Message) WithDeletedEvent(ctx context.Context) *Message {
+	if m == nil {
+		return m
+	}
+
+	var deletedBy *event.ThreadMember
+	if m.From.ID != uuid.Nil {
+		deletedBy = &event.ThreadMember{ContactID: m.From.ID}
+		if m.MemberID != uuid.Nil {
+			memberID := m.MemberID
+			deletedBy.ID = &memberID
+		}
+	}
+
+	e := event.MessageDeleted{
+		MessageID:  m.ID,
+		ThreadID:   m.ThreadID,
+		DomainID:   m.DomainID,
+		DeletedBy:  deletedBy,
+		To:         threadDialogsAsEventMembers(m.To),
+		Type:       m.Type.String(),
+		OccurredAt: m.DeletedAtOrNow(),
+	}
+
+	WithContextPropogatedMetadata(ctx, &e)
+
+	if via := m.FirstViaOrDefault(); via != "" && uuid.Validate(via) == nil {
+		e.AddMetadata(XWebitelVia, via)
+	}
+
+	m.AddEvent(&e)
+
+	return m
+}
+
+func (m *Message) DeletedAtOrNow() time.Time {
+	if m.DeletedAt != nil {
+		return *m.DeletedAt
+	}
+
+	return time.Now().UTC()
+}
+
+func (m *Message) DeletedAtUnixMillis() int64 {
+	if m.DeletedAt == nil {
+		return 0
+	}
+
+	return max(m.DeletedAt.UTC().UnixMilli(), 0)
+}
+
+func (m *Message) IsDeleted() bool {
+	return m != nil && m.DeletedAt != nil
+}
+
+func threadDialogsAsEventMembers(members []*ThreadDialog) []*event.ThreadMember {
+	out := make([]*event.ThreadMember, 0, len(members))
+	for _, member := range members {
+		var memberID *uuid.UUID
+
+		if member.ID != uuid.Nil {
+			id := member.ID
+			memberID = &id
+		}
+
+		out = append(out, &event.ThreadMember{
+			ID:        memberID,
+			ContactID: member.ContactID,
+			Role:      int(member.ThreadRole),
+			IsBot:     member.IsBot,
+		})
+	}
+
+	return out
 }
 
 func (m *MessageInteractive) AsEvent() *event.InteractivePayload {
