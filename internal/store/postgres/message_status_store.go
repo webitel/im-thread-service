@@ -271,7 +271,7 @@ func (s *messageStatusStore) MarkFailed(ctx context.Context, receipts []*model.S
 // with no active row for the member are omitted.
 func (s *messageStatusStore) ReadUnread(ctx context.Context, domainID int32, memberID uuid.UUID, threadIDs []uuid.UUID) (map[uuid.UUID]int64, error) {
 	if memberID == uuid.Nil || len(threadIDs) == 0 {
-		return map[uuid.UUID]int64{}, nil
+		return make(map[uuid.UUID]int64), nil
 	}
 
 	const query = `

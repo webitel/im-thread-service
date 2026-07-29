@@ -81,7 +81,7 @@ func (noopMessageStatusStore) MarkFailed(context.Context, []*model.StatusReceipt
 }
 
 func (noopMessageStatusStore) ReadUnread(context.Context, int32, uuid.UUID, []uuid.UUID) (map[uuid.UUID]int64, error) {
-	return nil, nil
+	return make(map[uuid.UUID]int64), nil
 }
 
 func (noopMessageStatusStore) UnreadSummary(context.Context, int32, uuid.UUID) (model.UnreadSummary, error) {
