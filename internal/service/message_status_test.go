@@ -44,7 +44,7 @@ func (r *recordingMessageStatusStore) MarkFailed(context.Context, []*model.Statu
 }
 
 func (r *recordingMessageStatusStore) ReadUnread(context.Context, int32, uuid.UUID, []uuid.UUID) (map[uuid.UUID]int64, error) {
-	return nil, nil
+	return map[uuid.UUID]int64{}, nil
 }
 
 func (r *recordingMessageStatusStore) UnreadSummary(context.Context, int32, uuid.UUID) (model.UnreadSummary, error) {
