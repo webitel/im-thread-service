@@ -31,6 +31,8 @@ var (
 		"reply_to":         true,
 		"delivery_status":  true,
 		"statuses":         true,
+		"edited":           true,
+		"deleted_at":       true,
 	}
 	defaultFields = []string{
 		"id", "thread_id", "sender_id",
@@ -39,6 +41,7 @@ var (
 		"member", "interactive", "location", "contact", "system", "reacted_metadata",
 		"reply_to",
 		"delivery_status", "statuses",
+		"edited", "deleted_at",
 	}
 )
 

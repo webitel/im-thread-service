@@ -25,6 +25,7 @@ type MessageService interface {
 	SendInteractiveCallback(ctx context.Context, callback *model.InteractiveCallback) (*model.InteractiveCallback, error)
 	SendSystemMessage(ctx context.Context, msg *model.Message) (*model.Message, error)
 	EditMessage(ctx context.Context, msg *model.Message) (*model.Message, error)
+	DeleteMessages(ctx context.Context, in *dto.DeleteMessagesRequest) (*dto.DeleteMessagesResponse, error)
 }
 
 type MessageServer struct {
@@ -220,4 +221,15 @@ func (m *MessageServer) EditMessage(ctx context.Context, in *impb.EditMessageReq
 	}
 
 	return mapper.MapToEditMessageResponse(edited), nil
+}
+
+func (m *MessageServer) DeleteMessages(ctx context.Context, in *impb.DeleteMessagesRequest) (*impb.DeleteMessagesResponse, error) {
+	out, err := m.handler.DeleteMessages(ctx, mapper.ConvertPbDeleteMessagesToDomain(in))
+	if err != nil {
+		m.logger.Error("failed to delete messages", "error", err)
+
+		return nil, err
+	}
+
+	return mapper.MapToDeleteMessagesResponse(out), nil
 }

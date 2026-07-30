@@ -704,6 +704,104 @@ func (s *MessageService) EditMessage(ctx context.Context, msg *model.Message) (*
 	return editedMsg, nil
 }
 
+// DeleteMessages soft-deletes the caller's own messages, provided the caller
+// still holds can_delete_messages in that thread. It is best-effort: messages
+// the caller may not remove are reported as skipped rather than failing the
+// whole batch, and only an empty result is an error. It is also idempotent, so
+// a message an earlier attempt already deleted still counts as satisfied.
+func (s *MessageService) DeleteMessages(ctx context.Context, in *dto.DeleteMessagesRequest) (*dto.DeleteMessagesResponse, error) {
+	log := s.logger.With("operation", "delete_messages")
+
+	if in == nil || len(in.IDs) == 0 {
+		return nil, errors.InvalidArgument("message ids are required", errors.WithID("service.message.delete_messages"))
+	}
+
+	deleter := in.DeletedBy
+	if deleter.ID == uuid.Nil {
+		return nil, errors.InvalidArgument("deleter identity is required", errors.WithID("service.message.delete_messages"))
+	}
+
+	var deleted []*model.Message
+
+	err := s.uow.WithinTransaction(ctx, func(txCtx context.Context, uow store.UnitOfWork) error {
+		var err error
+		if deleted, err = uow.Messages().DeleteMessages(txCtx, in.IDs, deleter.ID); err != nil {
+			return err
+		}
+
+		if len(deleted) == 0 {
+			return errors.Forbidden(
+				"no messages could be deleted: not found, not authored by the caller, the chat is closed, or the caller may not delete messages there",
+				errors.WithID("service.message.delete.not_allowed"),
+			)
+		}
+
+		// A batch may span several threads, so resolve the recipient list once
+		// per thread rather than once per message.
+		membersByThread := make(map[uuid.UUID][]*model.ThreadDialog)
+
+		for _, msg := range deleted {
+			// An already-deleted message sent its event on the first call.
+			if !msg.JustDeleted {
+				continue
+			}
+
+			members, ok := membersByThread[msg.ThreadID]
+			if !ok {
+				if members, err = uow.ThreadDialogStore().GetQuickView(txCtx, &model.ThreadDialogStoreFilter{
+					ThreadIDs:      []uuid.UUID{msg.ThreadID},
+					IncludeDeleted: false,
+				}); err != nil {
+					return err
+				}
+
+				membersByThread[msg.ThreadID] = members
+			}
+
+			msg.To = members
+			msg.From = deleter
+			msg.WithDeletedEvent(txCtx)
+
+			if err = s.dispatchMessageEvents(txCtx, uow, msg); err != nil {
+				return err
+			}
+		}
+
+		return nil
+	})
+	if err != nil {
+		log.ErrorContext(ctx, "transaction_failed", "err", err)
+
+		return nil, err
+	}
+
+	return buildDeleteMessagesResponse(in.IDs, deleted), nil
+}
+
+func buildDeleteMessagesResponse(requested uuid.UUIDs, deleted []*model.Message) *dto.DeleteMessagesResponse {
+	deletedIDs := make(uuid.UUIDs, 0, len(deleted))
+	deletedSet := make(map[uuid.UUID]struct{}, len(deleted))
+
+	for _, msg := range deleted {
+		deletedIDs = append(deletedIDs, msg.ID)
+		deletedSet[msg.ID] = struct{}{}
+	}
+
+	skippedIDs := make(uuid.UUIDs, 0, len(requested)-len(deleted))
+
+	for _, id := range requested {
+		if _, ok := deletedSet[id]; !ok {
+			skippedIDs = append(skippedIDs, id)
+		}
+	}
+
+	return &dto.DeleteMessagesResponse{
+		DeletedIDs: deletedIDs,
+		SkippedIDs: skippedIDs,
+		DeletedAt:  deleted[0].DeletedAtOrNow(),
+	}
+}
+
 func (s *MessageService) prepareMessageForSending(ctx context.Context, msg *model.Message) error {
 	t, err := s.threader.EnsureDirectThread(ctx, &dto.EnsureDirectThreadRequest{
 		DomainID: int(msg.DomainID),
@@ -943,6 +1041,8 @@ func messageEventAction(e event.Outboxer) string {
 	switch e.EventType() {
 	case event.MessageEditedEvent:
 		return "edited"
+	case event.MessageDeletedEvent:
+		return "deleted"
 	default:
 		return "created"
 	}
