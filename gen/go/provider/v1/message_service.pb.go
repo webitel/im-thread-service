@@ -21,6 +21,134 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+// ProviderSendTypingRequest asks a provider to show/hide a typing indicator
+// to the external chat partner.
+type ProviderSendTypingRequest struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Type           ProviderType `protobuf:"varint,1,opt,name=type,proto3,enum=webitel.im.provider.v1.ProviderType" json:"type,omitempty"`   // Explicit provider type (FACEBOOK, WHATSAPP, etc.)
+	GateId         string       `protobuf:"bytes,2,opt,name=gate_id,json=gateId,proto3" json:"gate_id,omitempty"`                           // Internal ID of the specific configured gateway
+	ExternalUserId string       `protobuf:"bytes,3,opt,name=external_user_id,json=externalUserId,proto3" json:"external_user_id,omitempty"` // Recipient's platform-specific identifier
+	DomainId       int32        `protobuf:"varint,4,opt,name=domain_id,json=domainId,proto3" json:"domain_id,omitempty"`
+	TypingOn       bool         `protobuf:"varint,5,opt,name=typing_on,json=typingOn,proto3" json:"typing_on,omitempty"` // true = start typing, false = stop
+	ThreadId       string       `protobuf:"bytes,6,opt,name=thread_id,json=threadId,proto3" json:"thread_id,omitempty"`  // Internal thread UUID (for logging/correlation)
+}
+
+func (x *ProviderSendTypingRequest) Reset() {
+	*x = ProviderSendTypingRequest{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_service_provider_v1_message_service_proto_msgTypes[0]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *ProviderSendTypingRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ProviderSendTypingRequest) ProtoMessage() {}
+
+func (x *ProviderSendTypingRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_service_provider_v1_message_service_proto_msgTypes[0]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ProviderSendTypingRequest.ProtoReflect.Descriptor instead.
+func (*ProviderSendTypingRequest) Descriptor() ([]byte, []int) {
+	return file_service_provider_v1_message_service_proto_rawDescGZIP(), []int{0}
+}
+
+func (x *ProviderSendTypingRequest) GetType() ProviderType {
+	if x != nil {
+		return x.Type
+	}
+	return ProviderType_PROVIDER_TYPE_UNSPECIFIED
+}
+
+func (x *ProviderSendTypingRequest) GetGateId() string {
+	if x != nil {
+		return x.GateId
+	}
+	return ""
+}
+
+func (x *ProviderSendTypingRequest) GetExternalUserId() string {
+	if x != nil {
+		return x.ExternalUserId
+	}
+	return ""
+}
+
+func (x *ProviderSendTypingRequest) GetDomainId() int32 {
+	if x != nil {
+		return x.DomainId
+	}
+	return 0
+}
+
+func (x *ProviderSendTypingRequest) GetTypingOn() bool {
+	if x != nil {
+		return x.TypingOn
+	}
+	return false
+}
+
+func (x *ProviderSendTypingRequest) GetThreadId() string {
+	if x != nil {
+		return x.ThreadId
+	}
+	return ""
+}
+
+// ProviderSendTypingResponse is intentionally empty: typing is fire-and-forget.
+type ProviderSendTypingResponse struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+}
+
+func (x *ProviderSendTypingResponse) Reset() {
+	*x = ProviderSendTypingResponse{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_service_provider_v1_message_service_proto_msgTypes[1]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *ProviderSendTypingResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ProviderSendTypingResponse) ProtoMessage() {}
+
+func (x *ProviderSendTypingResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_service_provider_v1_message_service_proto_msgTypes[1]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ProviderSendTypingResponse.ProtoReflect.Descriptor instead.
+func (*ProviderSendTypingResponse) Descriptor() ([]byte, []int) {
+	return file_service_provider_v1_message_service_proto_rawDescGZIP(), []int{1}
+}
+
 // ProviderSendMessageResponse returns the delivery status and external message ID.
 type ProviderSendMessageResponse struct {
 	state         protoimpl.MessageState
@@ -34,7 +162,7 @@ type ProviderSendMessageResponse struct {
 func (x *ProviderSendMessageResponse) Reset() {
 	*x = ProviderSendMessageResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_service_provider_v1_message_service_proto_msgTypes[0]
+		mi := &file_service_provider_v1_message_service_proto_msgTypes[2]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -47,7 +175,7 @@ func (x *ProviderSendMessageResponse) String() string {
 func (*ProviderSendMessageResponse) ProtoMessage() {}
 
 func (x *ProviderSendMessageResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_service_provider_v1_message_service_proto_msgTypes[0]
+	mi := &file_service_provider_v1_message_service_proto_msgTypes[2]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -60,7 +188,7 @@ func (x *ProviderSendMessageResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProviderSendMessageResponse.ProtoReflect.Descriptor instead.
 func (*ProviderSendMessageResponse) Descriptor() ([]byte, []int) {
-	return file_service_provider_v1_message_service_proto_rawDescGZIP(), []int{0}
+	return file_service_provider_v1_message_service_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *ProviderSendMessageResponse) GetExternalId() string {
@@ -93,7 +221,7 @@ type ProviderFile struct {
 func (x *ProviderFile) Reset() {
 	*x = ProviderFile{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_service_provider_v1_message_service_proto_msgTypes[1]
+		mi := &file_service_provider_v1_message_service_proto_msgTypes[3]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -106,7 +234,7 @@ func (x *ProviderFile) String() string {
 func (*ProviderFile) ProtoMessage() {}
 
 func (x *ProviderFile) ProtoReflect() protoreflect.Message {
-	mi := &file_service_provider_v1_message_service_proto_msgTypes[1]
+	mi := &file_service_provider_v1_message_service_proto_msgTypes[3]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -119,7 +247,7 @@ func (x *ProviderFile) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProviderFile.ProtoReflect.Descriptor instead.
 func (*ProviderFile) Descriptor() ([]byte, []int) {
-	return file_service_provider_v1_message_service_proto_rawDescGZIP(), []int{1}
+	return file_service_provider_v1_message_service_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *ProviderFile) GetId() string {
@@ -180,7 +308,7 @@ type ProviderSendTextRequest struct {
 func (x *ProviderSendTextRequest) Reset() {
 	*x = ProviderSendTextRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_service_provider_v1_message_service_proto_msgTypes[2]
+		mi := &file_service_provider_v1_message_service_proto_msgTypes[4]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -193,7 +321,7 @@ func (x *ProviderSendTextRequest) String() string {
 func (*ProviderSendTextRequest) ProtoMessage() {}
 
 func (x *ProviderSendTextRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_service_provider_v1_message_service_proto_msgTypes[2]
+	mi := &file_service_provider_v1_message_service_proto_msgTypes[4]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -206,7 +334,7 @@ func (x *ProviderSendTextRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProviderSendTextRequest.ProtoReflect.Descriptor instead.
 func (*ProviderSendTextRequest) Descriptor() ([]byte, []int) {
-	return file_service_provider_v1_message_service_proto_rawDescGZIP(), []int{2}
+	return file_service_provider_v1_message_service_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *ProviderSendTextRequest) GetType() ProviderType {
@@ -293,7 +421,7 @@ type ProviderSendDocumentRequest struct {
 func (x *ProviderSendDocumentRequest) Reset() {
 	*x = ProviderSendDocumentRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_service_provider_v1_message_service_proto_msgTypes[3]
+		mi := &file_service_provider_v1_message_service_proto_msgTypes[5]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -306,7 +434,7 @@ func (x *ProviderSendDocumentRequest) String() string {
 func (*ProviderSendDocumentRequest) ProtoMessage() {}
 
 func (x *ProviderSendDocumentRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_service_provider_v1_message_service_proto_msgTypes[3]
+	mi := &file_service_provider_v1_message_service_proto_msgTypes[5]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -319,7 +447,7 @@ func (x *ProviderSendDocumentRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProviderSendDocumentRequest.ProtoReflect.Descriptor instead.
 func (*ProviderSendDocumentRequest) Descriptor() ([]byte, []int) {
-	return file_service_provider_v1_message_service_proto_rawDescGZIP(), []int{3}
+	return file_service_provider_v1_message_service_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *ProviderSendDocumentRequest) GetType() ProviderType {
@@ -406,7 +534,7 @@ type ProviderSendImageRequest struct {
 func (x *ProviderSendImageRequest) Reset() {
 	*x = ProviderSendImageRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_service_provider_v1_message_service_proto_msgTypes[4]
+		mi := &file_service_provider_v1_message_service_proto_msgTypes[6]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -419,7 +547,7 @@ func (x *ProviderSendImageRequest) String() string {
 func (*ProviderSendImageRequest) ProtoMessage() {}
 
 func (x *ProviderSendImageRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_service_provider_v1_message_service_proto_msgTypes[4]
+	mi := &file_service_provider_v1_message_service_proto_msgTypes[6]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -432,7 +560,7 @@ func (x *ProviderSendImageRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProviderSendImageRequest.ProtoReflect.Descriptor instead.
 func (*ProviderSendImageRequest) Descriptor() ([]byte, []int) {
-	return file_service_provider_v1_message_service_proto_rawDescGZIP(), []int{4}
+	return file_service_provider_v1_message_service_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *ProviderSendImageRequest) GetType() ProviderType {
@@ -522,7 +650,7 @@ type ProviderSendInteractiveRequest struct {
 func (x *ProviderSendInteractiveRequest) Reset() {
 	*x = ProviderSendInteractiveRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_service_provider_v1_message_service_proto_msgTypes[5]
+		mi := &file_service_provider_v1_message_service_proto_msgTypes[7]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -535,7 +663,7 @@ func (x *ProviderSendInteractiveRequest) String() string {
 func (*ProviderSendInteractiveRequest) ProtoMessage() {}
 
 func (x *ProviderSendInteractiveRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_service_provider_v1_message_service_proto_msgTypes[5]
+	mi := &file_service_provider_v1_message_service_proto_msgTypes[7]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -548,7 +676,7 @@ func (x *ProviderSendInteractiveRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProviderSendInteractiveRequest.ProtoReflect.Descriptor instead.
 func (*ProviderSendInteractiveRequest) Descriptor() ([]byte, []int) {
-	return file_service_provider_v1_message_service_proto_rawDescGZIP(), []int{5}
+	return file_service_provider_v1_message_service_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *ProviderSendInteractiveRequest) GetGateId() string {
@@ -632,7 +760,7 @@ type ProviderInteractive struct {
 func (x *ProviderInteractive) Reset() {
 	*x = ProviderInteractive{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_service_provider_v1_message_service_proto_msgTypes[6]
+		mi := &file_service_provider_v1_message_service_proto_msgTypes[8]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -645,7 +773,7 @@ func (x *ProviderInteractive) String() string {
 func (*ProviderInteractive) ProtoMessage() {}
 
 func (x *ProviderInteractive) ProtoReflect() protoreflect.Message {
-	mi := &file_service_provider_v1_message_service_proto_msgTypes[6]
+	mi := &file_service_provider_v1_message_service_proto_msgTypes[8]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -658,7 +786,7 @@ func (x *ProviderInteractive) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProviderInteractive.ProtoReflect.Descriptor instead.
 func (*ProviderInteractive) Descriptor() ([]byte, []int) {
-	return file_service_provider_v1_message_service_proto_rawDescGZIP(), []int{6}
+	return file_service_provider_v1_message_service_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *ProviderInteractive) GetSingleUse() bool {
@@ -717,7 +845,7 @@ type ProviderKeyboardMarkup struct {
 func (x *ProviderKeyboardMarkup) Reset() {
 	*x = ProviderKeyboardMarkup{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_service_provider_v1_message_service_proto_msgTypes[7]
+		mi := &file_service_provider_v1_message_service_proto_msgTypes[9]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -730,7 +858,7 @@ func (x *ProviderKeyboardMarkup) String() string {
 func (*ProviderKeyboardMarkup) ProtoMessage() {}
 
 func (x *ProviderKeyboardMarkup) ProtoReflect() protoreflect.Message {
-	mi := &file_service_provider_v1_message_service_proto_msgTypes[7]
+	mi := &file_service_provider_v1_message_service_proto_msgTypes[9]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -743,7 +871,7 @@ func (x *ProviderKeyboardMarkup) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProviderKeyboardMarkup.ProtoReflect.Descriptor instead.
 func (*ProviderKeyboardMarkup) Descriptor() ([]byte, []int) {
-	return file_service_provider_v1_message_service_proto_rawDescGZIP(), []int{7}
+	return file_service_provider_v1_message_service_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *ProviderKeyboardMarkup) GetRows() []*ProviderKeyboardRow {
@@ -767,7 +895,7 @@ type ProviderKeyboardListReply struct {
 func (x *ProviderKeyboardListReply) Reset() {
 	*x = ProviderKeyboardListReply{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_service_provider_v1_message_service_proto_msgTypes[8]
+		mi := &file_service_provider_v1_message_service_proto_msgTypes[10]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -780,7 +908,7 @@ func (x *ProviderKeyboardListReply) String() string {
 func (*ProviderKeyboardListReply) ProtoMessage() {}
 
 func (x *ProviderKeyboardListReply) ProtoReflect() protoreflect.Message {
-	mi := &file_service_provider_v1_message_service_proto_msgTypes[8]
+	mi := &file_service_provider_v1_message_service_proto_msgTypes[10]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -793,7 +921,7 @@ func (x *ProviderKeyboardListReply) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProviderKeyboardListReply.ProtoReflect.Descriptor instead.
 func (*ProviderKeyboardListReply) Descriptor() ([]byte, []int) {
-	return file_service_provider_v1_message_service_proto_rawDescGZIP(), []int{8}
+	return file_service_provider_v1_message_service_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *ProviderKeyboardListReply) GetMainButtonTitle() string {
@@ -822,7 +950,7 @@ type ProviderKeyboardRow struct {
 func (x *ProviderKeyboardRow) Reset() {
 	*x = ProviderKeyboardRow{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_service_provider_v1_message_service_proto_msgTypes[9]
+		mi := &file_service_provider_v1_message_service_proto_msgTypes[11]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -835,7 +963,7 @@ func (x *ProviderKeyboardRow) String() string {
 func (*ProviderKeyboardRow) ProtoMessage() {}
 
 func (x *ProviderKeyboardRow) ProtoReflect() protoreflect.Message {
-	mi := &file_service_provider_v1_message_service_proto_msgTypes[9]
+	mi := &file_service_provider_v1_message_service_proto_msgTypes[11]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -848,7 +976,7 @@ func (x *ProviderKeyboardRow) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProviderKeyboardRow.ProtoReflect.Descriptor instead.
 func (*ProviderKeyboardRow) Descriptor() ([]byte, []int) {
-	return file_service_provider_v1_message_service_proto_rawDescGZIP(), []int{9}
+	return file_service_provider_v1_message_service_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *ProviderKeyboardRow) GetButtons() []*ProviderKeyboardButton {
@@ -871,7 +999,7 @@ type ProviderKeyboardRowWithSection struct {
 func (x *ProviderKeyboardRowWithSection) Reset() {
 	*x = ProviderKeyboardRowWithSection{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_service_provider_v1_message_service_proto_msgTypes[10]
+		mi := &file_service_provider_v1_message_service_proto_msgTypes[12]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -884,7 +1012,7 @@ func (x *ProviderKeyboardRowWithSection) String() string {
 func (*ProviderKeyboardRowWithSection) ProtoMessage() {}
 
 func (x *ProviderKeyboardRowWithSection) ProtoReflect() protoreflect.Message {
-	mi := &file_service_provider_v1_message_service_proto_msgTypes[10]
+	mi := &file_service_provider_v1_message_service_proto_msgTypes[12]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -897,7 +1025,7 @@ func (x *ProviderKeyboardRowWithSection) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProviderKeyboardRowWithSection.ProtoReflect.Descriptor instead.
 func (*ProviderKeyboardRowWithSection) Descriptor() ([]byte, []int) {
-	return file_service_provider_v1_message_service_proto_rawDescGZIP(), []int{10}
+	return file_service_provider_v1_message_service_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *ProviderKeyboardRowWithSection) GetSection() string {
@@ -935,7 +1063,7 @@ type ProviderKeyboardButton struct {
 func (x *ProviderKeyboardButton) Reset() {
 	*x = ProviderKeyboardButton{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_service_provider_v1_message_service_proto_msgTypes[11]
+		mi := &file_service_provider_v1_message_service_proto_msgTypes[13]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -948,7 +1076,7 @@ func (x *ProviderKeyboardButton) String() string {
 func (*ProviderKeyboardButton) ProtoMessage() {}
 
 func (x *ProviderKeyboardButton) ProtoReflect() protoreflect.Message {
-	mi := &file_service_provider_v1_message_service_proto_msgTypes[11]
+	mi := &file_service_provider_v1_message_service_proto_msgTypes[13]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -961,7 +1089,7 @@ func (x *ProviderKeyboardButton) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProviderKeyboardButton.ProtoReflect.Descriptor instead.
 func (*ProviderKeyboardButton) Descriptor() ([]byte, []int) {
-	return file_service_provider_v1_message_service_proto_rawDescGZIP(), []int{11}
+	return file_service_provider_v1_message_service_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *ProviderKeyboardButton) GetId() string {
@@ -1040,7 +1168,7 @@ type ProviderKeyboardButtonURL struct {
 func (x *ProviderKeyboardButtonURL) Reset() {
 	*x = ProviderKeyboardButtonURL{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_service_provider_v1_message_service_proto_msgTypes[12]
+		mi := &file_service_provider_v1_message_service_proto_msgTypes[14]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1053,7 +1181,7 @@ func (x *ProviderKeyboardButtonURL) String() string {
 func (*ProviderKeyboardButtonURL) ProtoMessage() {}
 
 func (x *ProviderKeyboardButtonURL) ProtoReflect() protoreflect.Message {
-	mi := &file_service_provider_v1_message_service_proto_msgTypes[12]
+	mi := &file_service_provider_v1_message_service_proto_msgTypes[14]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1066,7 +1194,7 @@ func (x *ProviderKeyboardButtonURL) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProviderKeyboardButtonURL.ProtoReflect.Descriptor instead.
 func (*ProviderKeyboardButtonURL) Descriptor() ([]byte, []int) {
-	return file_service_provider_v1_message_service_proto_rawDescGZIP(), []int{12}
+	return file_service_provider_v1_message_service_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *ProviderKeyboardButtonURL) GetUrl() string {
@@ -1088,7 +1216,7 @@ type ProviderKeyboardButtonCallback struct {
 func (x *ProviderKeyboardButtonCallback) Reset() {
 	*x = ProviderKeyboardButtonCallback{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_service_provider_v1_message_service_proto_msgTypes[13]
+		mi := &file_service_provider_v1_message_service_proto_msgTypes[15]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1101,7 +1229,7 @@ func (x *ProviderKeyboardButtonCallback) String() string {
 func (*ProviderKeyboardButtonCallback) ProtoMessage() {}
 
 func (x *ProviderKeyboardButtonCallback) ProtoReflect() protoreflect.Message {
-	mi := &file_service_provider_v1_message_service_proto_msgTypes[13]
+	mi := &file_service_provider_v1_message_service_proto_msgTypes[15]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1114,7 +1242,7 @@ func (x *ProviderKeyboardButtonCallback) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProviderKeyboardButtonCallback.ProtoReflect.Descriptor instead.
 func (*ProviderKeyboardButtonCallback) Descriptor() ([]byte, []int) {
-	return file_service_provider_v1_message_service_proto_rawDescGZIP(), []int{13}
+	return file_service_provider_v1_message_service_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *ProviderKeyboardButtonCallback) GetData() string {
@@ -1136,7 +1264,7 @@ type ProviderKeyboardButtonRequest struct {
 func (x *ProviderKeyboardButtonRequest) Reset() {
 	*x = ProviderKeyboardButtonRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_service_provider_v1_message_service_proto_msgTypes[14]
+		mi := &file_service_provider_v1_message_service_proto_msgTypes[16]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1149,7 +1277,7 @@ func (x *ProviderKeyboardButtonRequest) String() string {
 func (*ProviderKeyboardButtonRequest) ProtoMessage() {}
 
 func (x *ProviderKeyboardButtonRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_service_provider_v1_message_service_proto_msgTypes[14]
+	mi := &file_service_provider_v1_message_service_proto_msgTypes[16]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1162,7 +1290,7 @@ func (x *ProviderKeyboardButtonRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProviderKeyboardButtonRequest.ProtoReflect.Descriptor instead.
 func (*ProviderKeyboardButtonRequest) Descriptor() ([]byte, []int) {
-	return file_service_provider_v1_message_service_proto_rawDescGZIP(), []int{14}
+	return file_service_provider_v1_message_service_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *ProviderKeyboardButtonRequest) GetAction() string {
@@ -1199,7 +1327,7 @@ type ProviderSendSystemMessageRequest struct {
 func (x *ProviderSendSystemMessageRequest) Reset() {
 	*x = ProviderSendSystemMessageRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_service_provider_v1_message_service_proto_msgTypes[15]
+		mi := &file_service_provider_v1_message_service_proto_msgTypes[17]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1212,7 +1340,7 @@ func (x *ProviderSendSystemMessageRequest) String() string {
 func (*ProviderSendSystemMessageRequest) ProtoMessage() {}
 
 func (x *ProviderSendSystemMessageRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_service_provider_v1_message_service_proto_msgTypes[15]
+	mi := &file_service_provider_v1_message_service_proto_msgTypes[17]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1225,7 +1353,7 @@ func (x *ProviderSendSystemMessageRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProviderSendSystemMessageRequest.ProtoReflect.Descriptor instead.
 func (*ProviderSendSystemMessageRequest) Descriptor() ([]byte, []int) {
-	return file_service_provider_v1_message_service_proto_rawDescGZIP(), []int{15}
+	return file_service_provider_v1_message_service_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *ProviderSendSystemMessageRequest) GetGateId() string {
@@ -1288,7 +1416,24 @@ var file_service_provider_v1_message_service_proto_rawDesc = []byte{
 	0x61, 0x6e, 0x6e, 0x6f, 0x74, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x73, 0x2e, 0x70, 0x72, 0x6f, 0x74,
 	0x6f, 0x1a, 0x1f, 0x73, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x2f, 0x70, 0x72, 0x6f, 0x76, 0x69,
 	0x64, 0x65, 0x72, 0x2f, 0x76, 0x31, 0x2f, 0x65, 0x6e, 0x75, 0x6d, 0x73, 0x2e, 0x70, 0x72, 0x6f,
-	0x74, 0x6f, 0x22, 0x5d, 0x0a, 0x1b, 0x50, 0x72, 0x6f, 0x76, 0x69, 0x64, 0x65, 0x72, 0x53, 0x65,
+	0x74, 0x6f, 0x22, 0xef, 0x01, 0x0a, 0x19, 0x50, 0x72, 0x6f, 0x76, 0x69, 0x64, 0x65, 0x72, 0x53,
+	0x65, 0x6e, 0x64, 0x54, 0x79, 0x70, 0x69, 0x6e, 0x67, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74,
+	0x12, 0x38, 0x0a, 0x04, 0x74, 0x79, 0x70, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0e, 0x32, 0x24,
+	0x2e, 0x77, 0x65, 0x62, 0x69, 0x74, 0x65, 0x6c, 0x2e, 0x69, 0x6d, 0x2e, 0x70, 0x72, 0x6f, 0x76,
+	0x69, 0x64, 0x65, 0x72, 0x2e, 0x76, 0x31, 0x2e, 0x50, 0x72, 0x6f, 0x76, 0x69, 0x64, 0x65, 0x72,
+	0x54, 0x79, 0x70, 0x65, 0x52, 0x04, 0x74, 0x79, 0x70, 0x65, 0x12, 0x17, 0x0a, 0x07, 0x67, 0x61,
+	0x74, 0x65, 0x5f, 0x69, 0x64, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x06, 0x67, 0x61, 0x74,
+	0x65, 0x49, 0x64, 0x12, 0x28, 0x0a, 0x10, 0x65, 0x78, 0x74, 0x65, 0x72, 0x6e, 0x61, 0x6c, 0x5f,
+	0x75, 0x73, 0x65, 0x72, 0x5f, 0x69, 0x64, 0x18, 0x03, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0e, 0x65,
+	0x78, 0x74, 0x65, 0x72, 0x6e, 0x61, 0x6c, 0x55, 0x73, 0x65, 0x72, 0x49, 0x64, 0x12, 0x1b, 0x0a,
+	0x09, 0x64, 0x6f, 0x6d, 0x61, 0x69, 0x6e, 0x5f, 0x69, 0x64, 0x18, 0x04, 0x20, 0x01, 0x28, 0x05,
+	0x52, 0x08, 0x64, 0x6f, 0x6d, 0x61, 0x69, 0x6e, 0x49, 0x64, 0x12, 0x1b, 0x0a, 0x09, 0x74, 0x79,
+	0x70, 0x69, 0x6e, 0x67, 0x5f, 0x6f, 0x6e, 0x18, 0x05, 0x20, 0x01, 0x28, 0x08, 0x52, 0x08, 0x74,
+	0x79, 0x70, 0x69, 0x6e, 0x67, 0x4f, 0x6e, 0x12, 0x1b, 0x0a, 0x09, 0x74, 0x68, 0x72, 0x65, 0x61,
+	0x64, 0x5f, 0x69, 0x64, 0x18, 0x06, 0x20, 0x01, 0x28, 0x09, 0x52, 0x08, 0x74, 0x68, 0x72, 0x65,
+	0x61, 0x64, 0x49, 0x64, 0x22, 0x1c, 0x0a, 0x1a, 0x50, 0x72, 0x6f, 0x76, 0x69, 0x64, 0x65, 0x72,
+	0x53, 0x65, 0x6e, 0x64, 0x54, 0x79, 0x70, 0x69, 0x6e, 0x67, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e,
+	0x73, 0x65, 0x22, 0x5d, 0x0a, 0x1b, 0x50, 0x72, 0x6f, 0x76, 0x69, 0x64, 0x65, 0x72, 0x53, 0x65,
 	0x6e, 0x64, 0x4d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73,
 	0x65, 0x12, 0x1f, 0x0a, 0x0b, 0x65, 0x78, 0x74, 0x65, 0x72, 0x6e, 0x61, 0x6c, 0x5f, 0x69, 0x64,
 	0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0a, 0x65, 0x78, 0x74, 0x65, 0x72, 0x6e, 0x61, 0x6c,
@@ -1499,7 +1644,7 @@ var file_service_provider_v1_message_service_proto_rawDesc = []byte{
 	0x1a, 0x37, 0x0a, 0x09, 0x56, 0x61, 0x72, 0x73, 0x45, 0x6e, 0x74, 0x72, 0x79, 0x12, 0x10, 0x0a,
 	0x03, 0x6b, 0x65, 0x79, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x03, 0x6b, 0x65, 0x79, 0x12,
 	0x14, 0x0a, 0x05, 0x76, 0x61, 0x6c, 0x75, 0x65, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x05,
-	0x76, 0x61, 0x6c, 0x75, 0x65, 0x3a, 0x02, 0x38, 0x01, 0x32, 0xbe, 0x06, 0x0a, 0x16, 0x50, 0x72,
+	0x76, 0x61, 0x6c, 0x75, 0x65, 0x3a, 0x02, 0x38, 0x01, 0x32, 0xd9, 0x07, 0x0a, 0x16, 0x50, 0x72,
 	0x6f, 0x76, 0x69, 0x64, 0x65, 0x72, 0x4d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x53, 0x65, 0x72,
 	0x76, 0x69, 0x63, 0x65, 0x12, 0x93, 0x01, 0x0a, 0x08, 0x53, 0x65, 0x6e, 0x64, 0x54, 0x65, 0x78,
 	0x74, 0x12, 0x2f, 0x2e, 0x77, 0x65, 0x62, 0x69, 0x74, 0x65, 0x6c, 0x2e, 0x69, 0x6d, 0x2e, 0x70,
@@ -1551,22 +1696,32 @@ var file_service_provider_v1_message_service_proto_rawDesc = []byte{
 	0x65, 0x72, 0x53, 0x65, 0x6e, 0x64, 0x4d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x52, 0x65, 0x73,
 	0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22, 0x23, 0x82, 0xd3, 0xe4, 0x93, 0x02, 0x1d, 0x3a, 0x01, 0x2a,
 	0x22, 0x18, 0x2f, 0x69, 0x6d, 0x2f, 0x70, 0x72, 0x6f, 0x76, 0x69, 0x64, 0x65, 0x72, 0x2f, 0x73,
-	0x65, 0x6e, 0x64, 0x2f, 0x73, 0x79, 0x73, 0x74, 0x65, 0x6d, 0x42, 0xe6, 0x01, 0x0a, 0x1a, 0x63,
-	0x6f, 0x6d, 0x2e, 0x77, 0x65, 0x62, 0x69, 0x74, 0x65, 0x6c, 0x2e, 0x69, 0x6d, 0x2e, 0x70, 0x72,
-	0x6f, 0x76, 0x69, 0x64, 0x65, 0x72, 0x2e, 0x76, 0x31, 0x42, 0x13, 0x4d, 0x65, 0x73, 0x73, 0x61,
-	0x67, 0x65, 0x53, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x50, 0x72, 0x6f, 0x74, 0x6f, 0x50, 0x01,
-	0x5a, 0x38, 0x67, 0x69, 0x74, 0x68, 0x75, 0x62, 0x2e, 0x63, 0x6f, 0x6d, 0x2f, 0x77, 0x65, 0x62,
-	0x69, 0x74, 0x65, 0x6c, 0x2f, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x73, 0x2f, 0x67, 0x65, 0x6e, 0x2f,
-	0x67, 0x6f, 0x2f, 0x69, 0x6d, 0x2f, 0x70, 0x72, 0x6f, 0x76, 0x69, 0x64, 0x65, 0x72, 0x2f, 0x76,
-	0x31, 0x3b, 0x70, 0x72, 0x6f, 0x76, 0x69, 0x64, 0x65, 0x72, 0xa2, 0x02, 0x03, 0x57, 0x49, 0x50,
-	0xaa, 0x02, 0x16, 0x57, 0x65, 0x62, 0x69, 0x74, 0x65, 0x6c, 0x2e, 0x49, 0x6d, 0x2e, 0x50, 0x72,
-	0x6f, 0x76, 0x69, 0x64, 0x65, 0x72, 0x2e, 0x56, 0x31, 0xca, 0x02, 0x16, 0x57, 0x65, 0x62, 0x69,
-	0x74, 0x65, 0x6c, 0x5c, 0x49, 0x6d, 0x5c, 0x50, 0x72, 0x6f, 0x76, 0x69, 0x64, 0x65, 0x72, 0x5c,
-	0x56, 0x31, 0xe2, 0x02, 0x22, 0x57, 0x65, 0x62, 0x69, 0x74, 0x65, 0x6c, 0x5c, 0x49, 0x6d, 0x5c,
-	0x50, 0x72, 0x6f, 0x76, 0x69, 0x64, 0x65, 0x72, 0x5c, 0x56, 0x31, 0x5c, 0x47, 0x50, 0x42, 0x4d,
-	0x65, 0x74, 0x61, 0x64, 0x61, 0x74, 0x61, 0xea, 0x02, 0x19, 0x57, 0x65, 0x62, 0x69, 0x74, 0x65,
-	0x6c, 0x3a, 0x3a, 0x49, 0x6d, 0x3a, 0x3a, 0x50, 0x72, 0x6f, 0x76, 0x69, 0x64, 0x65, 0x72, 0x3a,
-	0x3a, 0x56, 0x31, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
+	0x65, 0x6e, 0x64, 0x2f, 0x73, 0x79, 0x73, 0x74, 0x65, 0x6d, 0x12, 0x98, 0x01, 0x0a, 0x0a, 0x53,
+	0x65, 0x6e, 0x64, 0x54, 0x79, 0x70, 0x69, 0x6e, 0x67, 0x12, 0x31, 0x2e, 0x77, 0x65, 0x62, 0x69,
+	0x74, 0x65, 0x6c, 0x2e, 0x69, 0x6d, 0x2e, 0x70, 0x72, 0x6f, 0x76, 0x69, 0x64, 0x65, 0x72, 0x2e,
+	0x76, 0x31, 0x2e, 0x50, 0x72, 0x6f, 0x76, 0x69, 0x64, 0x65, 0x72, 0x53, 0x65, 0x6e, 0x64, 0x54,
+	0x79, 0x70, 0x69, 0x6e, 0x67, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x32, 0x2e, 0x77,
+	0x65, 0x62, 0x69, 0x74, 0x65, 0x6c, 0x2e, 0x69, 0x6d, 0x2e, 0x70, 0x72, 0x6f, 0x76, 0x69, 0x64,
+	0x65, 0x72, 0x2e, 0x76, 0x31, 0x2e, 0x50, 0x72, 0x6f, 0x76, 0x69, 0x64, 0x65, 0x72, 0x53, 0x65,
+	0x6e, 0x64, 0x54, 0x79, 0x70, 0x69, 0x6e, 0x67, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65,
+	0x22, 0x23, 0x82, 0xd3, 0xe4, 0x93, 0x02, 0x1d, 0x3a, 0x01, 0x2a, 0x22, 0x18, 0x2f, 0x69, 0x6d,
+	0x2f, 0x70, 0x72, 0x6f, 0x76, 0x69, 0x64, 0x65, 0x72, 0x2f, 0x73, 0x65, 0x6e, 0x64, 0x2f, 0x74,
+	0x79, 0x70, 0x69, 0x6e, 0x67, 0x42, 0xe6, 0x01, 0x0a, 0x1a, 0x63, 0x6f, 0x6d, 0x2e, 0x77, 0x65,
+	0x62, 0x69, 0x74, 0x65, 0x6c, 0x2e, 0x69, 0x6d, 0x2e, 0x70, 0x72, 0x6f, 0x76, 0x69, 0x64, 0x65,
+	0x72, 0x2e, 0x76, 0x31, 0x42, 0x13, 0x4d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x53, 0x65, 0x72,
+	0x76, 0x69, 0x63, 0x65, 0x50, 0x72, 0x6f, 0x74, 0x6f, 0x50, 0x01, 0x5a, 0x38, 0x67, 0x69, 0x74,
+	0x68, 0x75, 0x62, 0x2e, 0x63, 0x6f, 0x6d, 0x2f, 0x77, 0x65, 0x62, 0x69, 0x74, 0x65, 0x6c, 0x2f,
+	0x70, 0x72, 0x6f, 0x74, 0x6f, 0x73, 0x2f, 0x67, 0x65, 0x6e, 0x2f, 0x67, 0x6f, 0x2f, 0x69, 0x6d,
+	0x2f, 0x70, 0x72, 0x6f, 0x76, 0x69, 0x64, 0x65, 0x72, 0x2f, 0x76, 0x31, 0x3b, 0x70, 0x72, 0x6f,
+	0x76, 0x69, 0x64, 0x65, 0x72, 0xa2, 0x02, 0x03, 0x57, 0x49, 0x50, 0xaa, 0x02, 0x16, 0x57, 0x65,
+	0x62, 0x69, 0x74, 0x65, 0x6c, 0x2e, 0x49, 0x6d, 0x2e, 0x50, 0x72, 0x6f, 0x76, 0x69, 0x64, 0x65,
+	0x72, 0x2e, 0x56, 0x31, 0xca, 0x02, 0x16, 0x57, 0x65, 0x62, 0x69, 0x74, 0x65, 0x6c, 0x5c, 0x49,
+	0x6d, 0x5c, 0x50, 0x72, 0x6f, 0x76, 0x69, 0x64, 0x65, 0x72, 0x5c, 0x56, 0x31, 0xe2, 0x02, 0x22,
+	0x57, 0x65, 0x62, 0x69, 0x74, 0x65, 0x6c, 0x5c, 0x49, 0x6d, 0x5c, 0x50, 0x72, 0x6f, 0x76, 0x69,
+	0x64, 0x65, 0x72, 0x5c, 0x56, 0x31, 0x5c, 0x47, 0x50, 0x42, 0x4d, 0x65, 0x74, 0x61, 0x64, 0x61,
+	0x74, 0x61, 0xea, 0x02, 0x19, 0x57, 0x65, 0x62, 0x69, 0x74, 0x65, 0x6c, 0x3a, 0x3a, 0x49, 0x6d,
+	0x3a, 0x3a, 0x50, 0x72, 0x6f, 0x76, 0x69, 0x64, 0x65, 0x72, 0x3a, 0x3a, 0x56, 0x31, 0x62, 0x06,
+	0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
 }
 
 var (
@@ -1581,61 +1736,66 @@ func file_service_provider_v1_message_service_proto_rawDescGZIP() []byte {
 	return file_service_provider_v1_message_service_proto_rawDescData
 }
 
-var file_service_provider_v1_message_service_proto_msgTypes = make([]protoimpl.MessageInfo, 18)
+var file_service_provider_v1_message_service_proto_msgTypes = make([]protoimpl.MessageInfo, 20)
 var file_service_provider_v1_message_service_proto_goTypes = []interface{}{
-	(*ProviderSendMessageResponse)(nil),      // 0: webitel.im.provider.v1.ProviderSendMessageResponse
-	(*ProviderFile)(nil),                     // 1: webitel.im.provider.v1.ProviderFile
-	(*ProviderSendTextRequest)(nil),          // 2: webitel.im.provider.v1.ProviderSendTextRequest
-	(*ProviderSendDocumentRequest)(nil),      // 3: webitel.im.provider.v1.ProviderSendDocumentRequest
-	(*ProviderSendImageRequest)(nil),         // 4: webitel.im.provider.v1.ProviderSendImageRequest
-	(*ProviderSendInteractiveRequest)(nil),   // 5: webitel.im.provider.v1.ProviderSendInteractiveRequest
-	(*ProviderInteractive)(nil),              // 6: webitel.im.provider.v1.ProviderInteractive
-	(*ProviderKeyboardMarkup)(nil),           // 7: webitel.im.provider.v1.ProviderKeyboardMarkup
-	(*ProviderKeyboardListReply)(nil),        // 8: webitel.im.provider.v1.ProviderKeyboardListReply
-	(*ProviderKeyboardRow)(nil),              // 9: webitel.im.provider.v1.ProviderKeyboardRow
-	(*ProviderKeyboardRowWithSection)(nil),   // 10: webitel.im.provider.v1.ProviderKeyboardRowWithSection
-	(*ProviderKeyboardButton)(nil),           // 11: webitel.im.provider.v1.ProviderKeyboardButton
-	(*ProviderKeyboardButtonURL)(nil),        // 12: webitel.im.provider.v1.ProviderKeyboardButtonURL
-	(*ProviderKeyboardButtonCallback)(nil),   // 13: webitel.im.provider.v1.ProviderKeyboardButtonCallback
-	(*ProviderKeyboardButtonRequest)(nil),    // 14: webitel.im.provider.v1.ProviderKeyboardButtonRequest
-	(*ProviderSendSystemMessageRequest)(nil), // 15: webitel.im.provider.v1.ProviderSendSystemMessageRequest
-	nil,                                      // 16: webitel.im.provider.v1.ProviderSendTextRequest.MetadataEntry
-	nil,                                      // 17: webitel.im.provider.v1.ProviderSendSystemMessageRequest.VarsEntry
-	(ProviderType)(0),                        // 18: webitel.im.provider.v1.ProviderType
+	(*ProviderSendTypingRequest)(nil),        // 0: webitel.im.provider.v1.ProviderSendTypingRequest
+	(*ProviderSendTypingResponse)(nil),       // 1: webitel.im.provider.v1.ProviderSendTypingResponse
+	(*ProviderSendMessageResponse)(nil),      // 2: webitel.im.provider.v1.ProviderSendMessageResponse
+	(*ProviderFile)(nil),                     // 3: webitel.im.provider.v1.ProviderFile
+	(*ProviderSendTextRequest)(nil),          // 4: webitel.im.provider.v1.ProviderSendTextRequest
+	(*ProviderSendDocumentRequest)(nil),      // 5: webitel.im.provider.v1.ProviderSendDocumentRequest
+	(*ProviderSendImageRequest)(nil),         // 6: webitel.im.provider.v1.ProviderSendImageRequest
+	(*ProviderSendInteractiveRequest)(nil),   // 7: webitel.im.provider.v1.ProviderSendInteractiveRequest
+	(*ProviderInteractive)(nil),              // 8: webitel.im.provider.v1.ProviderInteractive
+	(*ProviderKeyboardMarkup)(nil),           // 9: webitel.im.provider.v1.ProviderKeyboardMarkup
+	(*ProviderKeyboardListReply)(nil),        // 10: webitel.im.provider.v1.ProviderKeyboardListReply
+	(*ProviderKeyboardRow)(nil),              // 11: webitel.im.provider.v1.ProviderKeyboardRow
+	(*ProviderKeyboardRowWithSection)(nil),   // 12: webitel.im.provider.v1.ProviderKeyboardRowWithSection
+	(*ProviderKeyboardButton)(nil),           // 13: webitel.im.provider.v1.ProviderKeyboardButton
+	(*ProviderKeyboardButtonURL)(nil),        // 14: webitel.im.provider.v1.ProviderKeyboardButtonURL
+	(*ProviderKeyboardButtonCallback)(nil),   // 15: webitel.im.provider.v1.ProviderKeyboardButtonCallback
+	(*ProviderKeyboardButtonRequest)(nil),    // 16: webitel.im.provider.v1.ProviderKeyboardButtonRequest
+	(*ProviderSendSystemMessageRequest)(nil), // 17: webitel.im.provider.v1.ProviderSendSystemMessageRequest
+	nil,                                      // 18: webitel.im.provider.v1.ProviderSendTextRequest.MetadataEntry
+	nil,                                      // 19: webitel.im.provider.v1.ProviderSendSystemMessageRequest.VarsEntry
+	(ProviderType)(0),                        // 20: webitel.im.provider.v1.ProviderType
 }
 var file_service_provider_v1_message_service_proto_depIdxs = []int32{
-	18, // 0: webitel.im.provider.v1.ProviderSendTextRequest.type:type_name -> webitel.im.provider.v1.ProviderType
-	16, // 1: webitel.im.provider.v1.ProviderSendTextRequest.metadata:type_name -> webitel.im.provider.v1.ProviderSendTextRequest.MetadataEntry
-	18, // 2: webitel.im.provider.v1.ProviderSendDocumentRequest.type:type_name -> webitel.im.provider.v1.ProviderType
-	1,  // 3: webitel.im.provider.v1.ProviderSendDocumentRequest.documents:type_name -> webitel.im.provider.v1.ProviderFile
-	18, // 4: webitel.im.provider.v1.ProviderSendImageRequest.type:type_name -> webitel.im.provider.v1.ProviderType
-	1,  // 5: webitel.im.provider.v1.ProviderSendImageRequest.images:type_name -> webitel.im.provider.v1.ProviderFile
-	6,  // 6: webitel.im.provider.v1.ProviderSendInteractiveRequest.interactive:type_name -> webitel.im.provider.v1.ProviderInteractive
-	7,  // 7: webitel.im.provider.v1.ProviderInteractive.markup:type_name -> webitel.im.provider.v1.ProviderKeyboardMarkup
-	8,  // 8: webitel.im.provider.v1.ProviderInteractive.list_reply:type_name -> webitel.im.provider.v1.ProviderKeyboardListReply
-	9,  // 9: webitel.im.provider.v1.ProviderKeyboardMarkup.rows:type_name -> webitel.im.provider.v1.ProviderKeyboardRow
-	10, // 10: webitel.im.provider.v1.ProviderKeyboardListReply.sections:type_name -> webitel.im.provider.v1.ProviderKeyboardRowWithSection
-	11, // 11: webitel.im.provider.v1.ProviderKeyboardRow.buttons:type_name -> webitel.im.provider.v1.ProviderKeyboardButton
-	11, // 12: webitel.im.provider.v1.ProviderKeyboardRowWithSection.buttons:type_name -> webitel.im.provider.v1.ProviderKeyboardButton
-	12, // 13: webitel.im.provider.v1.ProviderKeyboardButton.url:type_name -> webitel.im.provider.v1.ProviderKeyboardButtonURL
-	13, // 14: webitel.im.provider.v1.ProviderKeyboardButton.callback:type_name -> webitel.im.provider.v1.ProviderKeyboardButtonCallback
-	14, // 15: webitel.im.provider.v1.ProviderKeyboardButton.request:type_name -> webitel.im.provider.v1.ProviderKeyboardButtonRequest
-	17, // 16: webitel.im.provider.v1.ProviderSendSystemMessageRequest.vars:type_name -> webitel.im.provider.v1.ProviderSendSystemMessageRequest.VarsEntry
-	2,  // 17: webitel.im.provider.v1.ProviderMessageService.SendText:input_type -> webitel.im.provider.v1.ProviderSendTextRequest
-	3,  // 18: webitel.im.provider.v1.ProviderMessageService.SendDocument:input_type -> webitel.im.provider.v1.ProviderSendDocumentRequest
-	4,  // 19: webitel.im.provider.v1.ProviderMessageService.SendImage:input_type -> webitel.im.provider.v1.ProviderSendImageRequest
-	5,  // 20: webitel.im.provider.v1.ProviderMessageService.SendInteractive:input_type -> webitel.im.provider.v1.ProviderSendInteractiveRequest
-	15, // 21: webitel.im.provider.v1.ProviderMessageService.SendSystemMessage:input_type -> webitel.im.provider.v1.ProviderSendSystemMessageRequest
-	0,  // 22: webitel.im.provider.v1.ProviderMessageService.SendText:output_type -> webitel.im.provider.v1.ProviderSendMessageResponse
-	0,  // 23: webitel.im.provider.v1.ProviderMessageService.SendDocument:output_type -> webitel.im.provider.v1.ProviderSendMessageResponse
-	0,  // 24: webitel.im.provider.v1.ProviderMessageService.SendImage:output_type -> webitel.im.provider.v1.ProviderSendMessageResponse
-	0,  // 25: webitel.im.provider.v1.ProviderMessageService.SendInteractive:output_type -> webitel.im.provider.v1.ProviderSendMessageResponse
-	0,  // 26: webitel.im.provider.v1.ProviderMessageService.SendSystemMessage:output_type -> webitel.im.provider.v1.ProviderSendMessageResponse
-	22, // [22:27] is the sub-list for method output_type
-	17, // [17:22] is the sub-list for method input_type
-	17, // [17:17] is the sub-list for extension type_name
-	17, // [17:17] is the sub-list for extension extendee
-	0,  // [0:17] is the sub-list for field type_name
+	20, // 0: webitel.im.provider.v1.ProviderSendTypingRequest.type:type_name -> webitel.im.provider.v1.ProviderType
+	20, // 1: webitel.im.provider.v1.ProviderSendTextRequest.type:type_name -> webitel.im.provider.v1.ProviderType
+	18, // 2: webitel.im.provider.v1.ProviderSendTextRequest.metadata:type_name -> webitel.im.provider.v1.ProviderSendTextRequest.MetadataEntry
+	20, // 3: webitel.im.provider.v1.ProviderSendDocumentRequest.type:type_name -> webitel.im.provider.v1.ProviderType
+	3,  // 4: webitel.im.provider.v1.ProviderSendDocumentRequest.documents:type_name -> webitel.im.provider.v1.ProviderFile
+	20, // 5: webitel.im.provider.v1.ProviderSendImageRequest.type:type_name -> webitel.im.provider.v1.ProviderType
+	3,  // 6: webitel.im.provider.v1.ProviderSendImageRequest.images:type_name -> webitel.im.provider.v1.ProviderFile
+	8,  // 7: webitel.im.provider.v1.ProviderSendInteractiveRequest.interactive:type_name -> webitel.im.provider.v1.ProviderInteractive
+	9,  // 8: webitel.im.provider.v1.ProviderInteractive.markup:type_name -> webitel.im.provider.v1.ProviderKeyboardMarkup
+	10, // 9: webitel.im.provider.v1.ProviderInteractive.list_reply:type_name -> webitel.im.provider.v1.ProviderKeyboardListReply
+	11, // 10: webitel.im.provider.v1.ProviderKeyboardMarkup.rows:type_name -> webitel.im.provider.v1.ProviderKeyboardRow
+	12, // 11: webitel.im.provider.v1.ProviderKeyboardListReply.sections:type_name -> webitel.im.provider.v1.ProviderKeyboardRowWithSection
+	13, // 12: webitel.im.provider.v1.ProviderKeyboardRow.buttons:type_name -> webitel.im.provider.v1.ProviderKeyboardButton
+	13, // 13: webitel.im.provider.v1.ProviderKeyboardRowWithSection.buttons:type_name -> webitel.im.provider.v1.ProviderKeyboardButton
+	14, // 14: webitel.im.provider.v1.ProviderKeyboardButton.url:type_name -> webitel.im.provider.v1.ProviderKeyboardButtonURL
+	15, // 15: webitel.im.provider.v1.ProviderKeyboardButton.callback:type_name -> webitel.im.provider.v1.ProviderKeyboardButtonCallback
+	16, // 16: webitel.im.provider.v1.ProviderKeyboardButton.request:type_name -> webitel.im.provider.v1.ProviderKeyboardButtonRequest
+	19, // 17: webitel.im.provider.v1.ProviderSendSystemMessageRequest.vars:type_name -> webitel.im.provider.v1.ProviderSendSystemMessageRequest.VarsEntry
+	4,  // 18: webitel.im.provider.v1.ProviderMessageService.SendText:input_type -> webitel.im.provider.v1.ProviderSendTextRequest
+	5,  // 19: webitel.im.provider.v1.ProviderMessageService.SendDocument:input_type -> webitel.im.provider.v1.ProviderSendDocumentRequest
+	6,  // 20: webitel.im.provider.v1.ProviderMessageService.SendImage:input_type -> webitel.im.provider.v1.ProviderSendImageRequest
+	7,  // 21: webitel.im.provider.v1.ProviderMessageService.SendInteractive:input_type -> webitel.im.provider.v1.ProviderSendInteractiveRequest
+	17, // 22: webitel.im.provider.v1.ProviderMessageService.SendSystemMessage:input_type -> webitel.im.provider.v1.ProviderSendSystemMessageRequest
+	0,  // 23: webitel.im.provider.v1.ProviderMessageService.SendTyping:input_type -> webitel.im.provider.v1.ProviderSendTypingRequest
+	2,  // 24: webitel.im.provider.v1.ProviderMessageService.SendText:output_type -> webitel.im.provider.v1.ProviderSendMessageResponse
+	2,  // 25: webitel.im.provider.v1.ProviderMessageService.SendDocument:output_type -> webitel.im.provider.v1.ProviderSendMessageResponse
+	2,  // 26: webitel.im.provider.v1.ProviderMessageService.SendImage:output_type -> webitel.im.provider.v1.ProviderSendMessageResponse
+	2,  // 27: webitel.im.provider.v1.ProviderMessageService.SendInteractive:output_type -> webitel.im.provider.v1.ProviderSendMessageResponse
+	2,  // 28: webitel.im.provider.v1.ProviderMessageService.SendSystemMessage:output_type -> webitel.im.provider.v1.ProviderSendMessageResponse
+	1,  // 29: webitel.im.provider.v1.ProviderMessageService.SendTyping:output_type -> webitel.im.provider.v1.ProviderSendTypingResponse
+	24, // [24:30] is the sub-list for method output_type
+	18, // [18:24] is the sub-list for method input_type
+	18, // [18:18] is the sub-list for extension type_name
+	18, // [18:18] is the sub-list for extension extendee
+	0,  // [0:18] is the sub-list for field type_name
 }
 
 func init() { file_service_provider_v1_message_service_proto_init() }
@@ -1646,7 +1806,7 @@ func file_service_provider_v1_message_service_proto_init() {
 	file_service_provider_v1_enums_proto_init()
 	if !protoimpl.UnsafeEnabled {
 		file_service_provider_v1_message_service_proto_msgTypes[0].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*ProviderSendMessageResponse); i {
+			switch v := v.(*ProviderSendTypingRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -1658,7 +1818,7 @@ func file_service_provider_v1_message_service_proto_init() {
 			}
 		}
 		file_service_provider_v1_message_service_proto_msgTypes[1].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*ProviderFile); i {
+			switch v := v.(*ProviderSendTypingResponse); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -1670,7 +1830,7 @@ func file_service_provider_v1_message_service_proto_init() {
 			}
 		}
 		file_service_provider_v1_message_service_proto_msgTypes[2].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*ProviderSendTextRequest); i {
+			switch v := v.(*ProviderSendMessageResponse); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -1682,7 +1842,7 @@ func file_service_provider_v1_message_service_proto_init() {
 			}
 		}
 		file_service_provider_v1_message_service_proto_msgTypes[3].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*ProviderSendDocumentRequest); i {
+			switch v := v.(*ProviderFile); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -1694,7 +1854,7 @@ func file_service_provider_v1_message_service_proto_init() {
 			}
 		}
 		file_service_provider_v1_message_service_proto_msgTypes[4].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*ProviderSendImageRequest); i {
+			switch v := v.(*ProviderSendTextRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -1706,7 +1866,7 @@ func file_service_provider_v1_message_service_proto_init() {
 			}
 		}
 		file_service_provider_v1_message_service_proto_msgTypes[5].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*ProviderSendInteractiveRequest); i {
+			switch v := v.(*ProviderSendDocumentRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -1718,7 +1878,7 @@ func file_service_provider_v1_message_service_proto_init() {
 			}
 		}
 		file_service_provider_v1_message_service_proto_msgTypes[6].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*ProviderInteractive); i {
+			switch v := v.(*ProviderSendImageRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -1730,7 +1890,7 @@ func file_service_provider_v1_message_service_proto_init() {
 			}
 		}
 		file_service_provider_v1_message_service_proto_msgTypes[7].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*ProviderKeyboardMarkup); i {
+			switch v := v.(*ProviderSendInteractiveRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -1742,7 +1902,7 @@ func file_service_provider_v1_message_service_proto_init() {
 			}
 		}
 		file_service_provider_v1_message_service_proto_msgTypes[8].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*ProviderKeyboardListReply); i {
+			switch v := v.(*ProviderInteractive); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -1754,7 +1914,7 @@ func file_service_provider_v1_message_service_proto_init() {
 			}
 		}
 		file_service_provider_v1_message_service_proto_msgTypes[9].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*ProviderKeyboardRow); i {
+			switch v := v.(*ProviderKeyboardMarkup); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -1766,7 +1926,7 @@ func file_service_provider_v1_message_service_proto_init() {
 			}
 		}
 		file_service_provider_v1_message_service_proto_msgTypes[10].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*ProviderKeyboardRowWithSection); i {
+			switch v := v.(*ProviderKeyboardListReply); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -1778,7 +1938,7 @@ func file_service_provider_v1_message_service_proto_init() {
 			}
 		}
 		file_service_provider_v1_message_service_proto_msgTypes[11].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*ProviderKeyboardButton); i {
+			switch v := v.(*ProviderKeyboardRow); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -1790,7 +1950,7 @@ func file_service_provider_v1_message_service_proto_init() {
 			}
 		}
 		file_service_provider_v1_message_service_proto_msgTypes[12].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*ProviderKeyboardButtonURL); i {
+			switch v := v.(*ProviderKeyboardRowWithSection); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -1802,7 +1962,7 @@ func file_service_provider_v1_message_service_proto_init() {
 			}
 		}
 		file_service_provider_v1_message_service_proto_msgTypes[13].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*ProviderKeyboardButtonCallback); i {
+			switch v := v.(*ProviderKeyboardButton); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -1814,7 +1974,7 @@ func file_service_provider_v1_message_service_proto_init() {
 			}
 		}
 		file_service_provider_v1_message_service_proto_msgTypes[14].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*ProviderKeyboardButtonRequest); i {
+			switch v := v.(*ProviderKeyboardButtonURL); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -1826,6 +1986,30 @@ func file_service_provider_v1_message_service_proto_init() {
 			}
 		}
 		file_service_provider_v1_message_service_proto_msgTypes[15].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*ProviderKeyboardButtonCallback); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_service_provider_v1_message_service_proto_msgTypes[16].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*ProviderKeyboardButtonRequest); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_service_provider_v1_message_service_proto_msgTypes[17].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*ProviderSendSystemMessageRequest); i {
 			case 0:
 				return &v.state
@@ -1838,12 +2022,12 @@ func file_service_provider_v1_message_service_proto_init() {
 			}
 		}
 	}
-	file_service_provider_v1_message_service_proto_msgTypes[5].OneofWrappers = []interface{}{}
-	file_service_provider_v1_message_service_proto_msgTypes[6].OneofWrappers = []interface{}{
+	file_service_provider_v1_message_service_proto_msgTypes[7].OneofWrappers = []interface{}{}
+	file_service_provider_v1_message_service_proto_msgTypes[8].OneofWrappers = []interface{}{
 		(*ProviderInteractive_Markup)(nil),
 		(*ProviderInteractive_ListReply)(nil),
 	}
-	file_service_provider_v1_message_service_proto_msgTypes[11].OneofWrappers = []interface{}{
+	file_service_provider_v1_message_service_proto_msgTypes[13].OneofWrappers = []interface{}{
 		(*ProviderKeyboardButton_Url)(nil),
 		(*ProviderKeyboardButton_Callback)(nil),
 		(*ProviderKeyboardButton_Request)(nil),
@@ -1854,7 +2038,7 @@ func file_service_provider_v1_message_service_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: file_service_provider_v1_message_service_proto_rawDesc,
 			NumEnums:      0,
-			NumMessages:   18,
+			NumMessages:   20,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

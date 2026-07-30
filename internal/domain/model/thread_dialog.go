@@ -58,6 +58,16 @@ type ExternalPeerPair struct {
 	Via       string
 }
 
+// TypingDispatch is a fire-and-forget outbound typing request for the external
+// peers of a thread. Peers carries each external recipient's channel (Via, used
+// as the provider gate id) and contact id.
+type TypingDispatch struct {
+	ThreadID uuid.UUID
+	DomainID int32
+	TypingOn bool
+	Peers    []*ExternalPeerPair
+}
+
 func (threadDialogs ThreadDialogs) ExtractExternalPeers() []*ExternalPeerPair {
 	if len(threadDialogs) == 0 {
 		return nil
@@ -104,4 +114,7 @@ type ThreadDialogStoreFilter struct {
 	ContactIDs     []uuid.UUID
 	IDs            []uuid.UUID
 	IncludeDeleted bool
+	// DomainID scopes the query to a single tenant. Zero means "any domain"
+	// (backward-compatible with callers that do not set it).
+	DomainID int
 }

@@ -28,6 +28,28 @@ func MapToSendTextRequest(in *impb.SendTextRequest) *dto.SendTextRequest {
 	}
 }
 
+// MapToSendTypingRequest maps a proto typing request to its DTO. The target
+// thread is taken from the `to` peer's thread_id variant; other peer kinds
+// leave ThreadID zero and are rejected by the guard.
+func MapToSendTypingRequest(in *impb.SendTypingRequest) *dto.SendTypingRequest {
+	if in == nil {
+		return nil
+	}
+
+	var threadID uuid.UUID
+	if tid := MapPeerFromProto(in.GetTo()).ResolveThreadID(); tid != nil {
+		threadID = *tid
+	}
+
+	return &dto.SendTypingRequest{
+		From:        MapPeerFromProto(in.GetFrom()),
+		ThreadID:    threadID,
+		DomainID:    in.GetDomainId(),
+		TimeoutMS:   in.GetTimeoutMs(),
+		PreviewText: in.GetPreviewText(),
+	}
+}
+
 func MapPeerFromProto(pb *impb.Peer) shared.Peer {
 	if pb == nil {
 		return shared.Peer{}

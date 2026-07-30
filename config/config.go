@@ -21,6 +21,32 @@ type Config struct {
 	Pubsub         appconfig.Pubsub     `mapstructure:"pubsub"`
 	Profiler       appconfig.Profiler   `mapstructure:"profiler"`
 	LeaderElection LeaderElectionConfig `mapstructure:"leader_election"`
+	Typing         TypingConfig         `mapstructure:"typing"`
+}
+
+// TypingConfig tunes the ephemeral typing indicator and its live-preview
+// extension. Both are real-time only: they never touch the outbox, are never
+// stored and never pushed.
+type TypingConfig struct {
+	// Enabled toggles the whole typing-indicator feature. When false SendTyping
+	// is accepted but becomes a no-op.
+	Enabled bool `mapstructure:"enabled"`
+	// PreviewEnabled toggles the Live Typing Preview extension (forwarding the
+	// client's unsent draft to operators/supervisors). Defaults to false: the
+	// draft is privacy-sensitive and needs product/legal signoff before rollout.
+	PreviewEnabled bool `mapstructure:"preview_enabled"`
+	// RateLimitWindow is the minimum interval between typing events for a single
+	// participant in a single thread. Excess events are silently dropped.
+	RateLimitWindow time.Duration `mapstructure:"rate_limit_window"`
+	// DefaultTimeout is the indicator lifetime applied when the caller does not
+	// specify one.
+	DefaultTimeout time.Duration `mapstructure:"default_timeout"`
+	// MaxTimeout is the upper clamp on the indicator lifetime (e.g. for bots
+	// holding the indicator over a long operation).
+	MaxTimeout time.Duration `mapstructure:"max_timeout"`
+	// MaxPreviewBytes caps the preview draft size; longer drafts are truncated
+	// on a rune boundary.
+	MaxPreviewBytes int `mapstructure:"max_preview_bytes"`
 }
 
 type ServiceConfig struct {
@@ -137,6 +163,19 @@ func registerServiceFlags() {
 			"acts as a safety-net upper bound on failover latency if a change notification is ever missed")
 	pflag.Duration("leader_election.lock_delay", time.Second,
 		"Consul post-release anti-flapping grace period; must be > 0 per Consul's session API")
+
+	pflag.Bool("typing.enabled", true, "enable typing indicators")
+	pflag.Bool("typing.preview_enabled", true,
+		"enable Live Typing Preview (forwards the client's unsent draft to operators; "+
+			"privacy-sensitive, off by default)")
+	pflag.Duration("typing.rate_limit_window", 3*time.Second,
+		"minimum interval between typing events per participant per thread")
+	pflag.Duration("typing.default_timeout", 6*time.Second,
+		"default typing-indicator lifetime when the caller does not specify one")
+	pflag.Duration("typing.max_timeout", 30*time.Second,
+		"maximum typing-indicator lifetime (upper clamp, e.g. for bots)")
+	pflag.Int("typing.max_preview_bytes", 1024,
+		"maximum size of the typing preview draft, in bytes")
 }
 
 func (c *Config) validate() error {
@@ -196,5 +235,31 @@ func (c *Config) validate() error {
 		return errors.New("config: leader_election.lock_delay must be positive (Consul requires > 0)")
 	}
 
+	c.Typing.applyDefaults()
+
+	if c.Typing.DefaultTimeout > c.Typing.MaxTimeout {
+		return errors.New("config: typing.default_timeout must not exceed typing.max_timeout")
+	}
+
 	return nil
+}
+
+// applyDefaults fills zero-valued typing settings with safe defaults so the
+// feature stays well-behaved even when the section is omitted from config.
+func (t *TypingConfig) applyDefaults() {
+	if t.RateLimitWindow <= 0 {
+		t.RateLimitWindow = 3 * time.Second
+	}
+
+	if t.DefaultTimeout <= 0 {
+		t.DefaultTimeout = 6 * time.Second
+	}
+
+	if t.MaxTimeout <= 0 {
+		t.MaxTimeout = 30 * time.Second
+	}
+
+	if t.MaxPreviewBytes <= 0 {
+		t.MaxPreviewBytes = 1024
+	}
 }

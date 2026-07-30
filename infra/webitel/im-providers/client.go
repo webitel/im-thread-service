@@ -108,6 +108,23 @@ func (client *Client) SendInteractive(ctx context.Context, in *provider.Provider
 	return response, err
 }
 
+func (client *Client) SendTyping(ctx context.Context, in *provider.ProviderSendTypingRequest) (*provider.ProviderSendTypingResponse, error) {
+	var response *provider.ProviderSendTypingResponse
+
+	err := client.providerMessageServiceClient.Execute(ctx, func(pmsc provider.ProviderMessageServiceClient) error {
+		r, err := pmsc.SendTyping(ctx, in)
+		if err != nil {
+			return err
+		}
+
+		response = r
+
+		return nil
+	})
+
+	return response, err
+}
+
 func (client *Client) SendSystemMessage(ctx context.Context, in *provider.ProviderSendSystemMessageRequest) (*provider.ProviderSendMessageResponse, error) {
 	var response *provider.ProviderSendMessageResponse
 
