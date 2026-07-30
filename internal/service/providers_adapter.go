@@ -19,6 +19,9 @@ import (
 
 type ProvidersAdapter interface {
 	SendMessage(ctx context.Context, message *model.Message) error
+	// SendTyping forwards a fire-and-forget typing indicator to the external
+	// peers of a thread whose channel supports it.
+	SendTyping(ctx context.Context, req *model.TypingDispatch) error
 }
 
 type baseRPCProvidersAdapter struct {
@@ -226,6 +229,54 @@ func (a *baseRPCProvidersAdapter) SendMessage(ctx context.Context, message *mode
 		slog.String("message_id", message.ID.String()),
 		slog.Int("external_peers_count", len(externalPairs)),
 	)
+
+	return nil
+}
+
+func (a *baseRPCProvidersAdapter) SendTyping(ctx context.Context, req *model.TypingDispatch) error {
+	if req == nil || len(req.Peers) == 0 {
+		return nil
+	}
+
+	log := a.logger.With("operation", "send_typing", slog.String("thread_id", req.ThreadID.String()))
+
+	var (
+		wg          sync.WaitGroup
+		errorsMu    sync.Mutex
+		errorsArray []error
+	)
+
+	for _, peer := range req.Peers {
+		wg.Go(func() {
+			_, err := a.providersClient.SendTyping(ctx, &provider.ProviderSendTypingRequest{
+				GateId:         peer.Via,
+				ExternalUserId: peer.ContactID.String(),
+				DomainId:       req.DomainID,
+				TypingOn:       req.TypingOn,
+				ThreadId:       req.ThreadID.String(),
+			})
+			if err == nil {
+				return
+			}
+
+			log.Warn("provider SendTyping failed",
+				slog.String("external_user_id", peer.ContactID.String()),
+				slog.String("gate_id", peer.Via),
+				slog.String("error", err.Error()),
+			)
+
+			errorsMu.Lock()
+
+			errorsArray = append(errorsArray, err)
+			errorsMu.Unlock()
+		})
+	}
+
+	wg.Wait()
+
+	if len(errorsArray) > 0 {
+		return stderrs.Join(errorsArray...)
+	}
 
 	return nil
 }

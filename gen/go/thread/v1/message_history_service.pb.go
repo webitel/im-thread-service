@@ -886,9 +886,9 @@ type HistoryMessage struct {
 	DeliveryStatus MessageDeliveryStatus `protobuf:"varint,18,opt,name=delivery_status,json=deliveryStatus,proto3,enum=webitel.im.service.thread.v1.MessageDeliveryStatus" json:"delivery_status,omitempty"`
 	// Per-recipient delivery details.
 	Statuses []*MessageRecipientStatus `protobuf:"bytes,19,rep,name=statuses,proto3" json:"statuses,omitempty"`
-	// True when the message was deleted by its author. Content fields
-	// (body, attachments, contact, location, interactive, metadata) are
-	// cleared for deleted messages; clients should render a tombstone.
+	// True when the message was deleted by its author. Every content field
+	// (body, attachments, contact, location, interactive, metadata) is cleared,
+	// so clients should render a tombstone.
 	Deleted bool `protobuf:"varint,20,opt,name=deleted,proto3" json:"deleted,omitempty"`
 	// Unix time in milliseconds when the message was deleted.
 	DeletedAt int64 `protobuf:"varint,21,opt,name=deleted_at,json=deletedAt,proto3" json:"deleted_at,omitempty"`

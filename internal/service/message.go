@@ -11,6 +11,7 @@ import (
 
 	"github.com/webitel/webitel-go-kit/pkg/errors"
 
+	"github.com/webitel/im-thread-service/config"
 	imcontact "github.com/webitel/im-thread-service/infra/webitel/im-contact"
 	"github.com/webitel/im-thread-service/internal/domain/event"
 	"github.com/webitel/im-thread-service/internal/domain/model"
@@ -38,6 +39,11 @@ type MessageService struct {
 	contactClient    *imcontact.Client
 	mediaProcessor   MediaProcessor
 	providersAdapter ProvidersAdapter
+
+	// Ephemeral typing-indicator collaborators (see typing.go).
+	typingBus   TypingBus
+	rateLimiter RateLimiter
+	typingCfg   config.TypingConfig
 }
 
 func NewMessageService(
@@ -47,6 +53,9 @@ func NewMessageService(
 	contactClient *imcontact.Client,
 	mediaProcessor MediaProcessor,
 	providersAdapter ProvidersAdapter,
+	typingBus TypingBus,
+	rateLimiter RateLimiter,
+	typingCfg config.TypingConfig,
 ) *MessageService {
 	return &MessageService{
 		uow:              uow,
@@ -55,6 +64,9 @@ func NewMessageService(
 		contactClient:    contactClient,
 		mediaProcessor:   mediaProcessor,
 		providersAdapter: providersAdapter,
+		typingBus:        typingBus,
+		rateLimiter:      rateLimiter,
+		typingCfg:        typingCfg,
 	}
 }
 
