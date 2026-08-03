@@ -27,6 +27,7 @@ type MessageService interface {
 	EditMessage(ctx context.Context, msg *model.Message) (*model.Message, error)
 	DeleteMessages(ctx context.Context, in *dto.DeleteMessagesRequest) (*dto.DeleteMessagesResponse, error)
 	ForwardMessages(ctx context.Context, in *dto.ForwardMessagesRequest) (*dto.ForwardMessagesResponse, error)
+	SendTyping(ctx context.Context, in *dto.SendTypingRequest) (*dto.SendTypingResponse, error)
 }
 
 type MessageServer struct {
@@ -213,6 +214,14 @@ func (m *MessageServer) SendSystemMessage(ctx context.Context, in *impb.SendSyst
 		},
 		Id: saved.ID.String(),
 	}, nil
+}
+
+func (m *MessageServer) SendTyping(ctx context.Context, in *impb.SendTypingRequest) (*impb.SendTypingResponse, error) {
+	if _, err := m.handler.SendTyping(ctx, mapper.MapToSendTypingRequest(in)); err != nil {
+		return nil, err
+	}
+
+	return &impb.SendTypingResponse{}, nil
 }
 
 func (m *MessageServer) EditMessage(ctx context.Context, in *impb.EditMessageRequest) (*impb.EditMessageResponse, error) {

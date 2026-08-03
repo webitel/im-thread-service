@@ -189,6 +189,8 @@ func mapToThreadDialogModel(dialog *threadDialog) (*model.ThreadDialog, error) {
 		LeaveReason: dialog.LeaveReason,
 		ThreadID:    dialog.ThreadID,
 		ThreadRole:  dialog.Role,
+		Via:         dialog.Via,
+		IsBot:       dialog.IsBot,
 	}, nil
 }
 
@@ -221,18 +223,21 @@ func (t *threadDialogStore) GetQuickView(ctx context.Context, filter *model.Thre
 	var (
 		query = `SELECT
 	-- basic thread dialog fields
-		 dial.id, dial.domain_id, dial.created_at, dial.updated_at, dial.invited_by, dial.leave_reason, dial.member_id, dial.thread_id, dial.thread_role
+		 dial.id, dial.domain_id, dial.created_at, dial.updated_at, dial.invited_by, dial.leave_reason, dial.member_id, dial.thread_id, dial.thread_role,
+		 dial.is_bot, dial.via
 
 
 	FROM im_thread.thread_dialog dial
 	WHERE (@ThreadIDs::uuid[] IS NULL OR dial.thread_id = ANY(@ThreadIDs))
 	AND (@ContactIDs::uuid[] IS NULL OR dial.member_id = ANY(@ContactIDs))
+	AND (@DomainID = 0 OR dial.domain_id = @DomainID)
 	AND (@IncludeDeleted OR dial.deleted_at IS NULL)
 
 	OFFSET @Offset`
 		args = pgx.NamedArgs{
 			"ThreadIDs":      filter.ThreadIDs,
 			"ContactIDs":     filter.ContactIDs,
+			"DomainID":       filter.DomainID,
 			"Offset":         filter.Offset,
 			"IncludeDeleted": filter.IncludeDeleted,
 		}
