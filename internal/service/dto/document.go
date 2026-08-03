@@ -7,6 +7,7 @@ import (
 
 	"github.com/webitel/webitel-go-kit/pkg/errors"
 
+	"github.com/webitel/im-thread-service/internal/domain/model"
 	"github.com/webitel/im-thread-service/internal/domain/shared"
 )
 
@@ -66,6 +67,8 @@ type SendDocumentRequest struct {
 	ReplyToMessageID  *uuid.UUID `json:"reply_to_message_id,omitempty"`
 	ExternalID        string     `json:"external_id,omitempty"`
 	ReplyToExternalID string     `json:"reply_to_external_id,omitempty"`
+
+	ForwardOrigin *model.ForwardOrigin `json:"forward_origin,omitempty"`
 }
 
 func (sendDocumentRequest *SendDocumentRequest) Validate() error {
