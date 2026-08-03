@@ -191,6 +191,11 @@ func forwardedType(src *model.Message) model.MessageType {
 		if src.Contact == nil {
 			return model.MessageTypeText
 		}
+	case model.MessageTypeUnknown,
+		model.MessageTypeText,
+		model.MessageTypeFile,
+		model.MessageTypeImage,
+		model.MessageTypeSystem:
 	}
 
 	return src.Type
