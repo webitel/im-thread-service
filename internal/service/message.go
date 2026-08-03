@@ -154,6 +154,7 @@ func (s *MessageService) SendText(ctx context.Context, in *dto.SendTextRequest) 
 		SendAs:                in.SendAs,
 		BotControllerMemberID: t.BotControllerID,
 		ReplyTo:               replyPreview,
+		ForwardOrigin:         in.ForwardOrigin,
 	}
 
 	msg.SetMemberFromSlice(t.Members)
@@ -376,6 +377,7 @@ func (s *MessageService) SendDocument(ctx context.Context, in *dto.SendDocumentR
 	msg.BotControllerMemberID = t.BotControllerID
 	msg.SendAs = in.SendAs
 	msg.ReplyTo = replyPreview
+	msg.ForwardOrigin = in.ForwardOrigin
 	msg.SetMemberFromSlice(t.Members)
 
 	err = s.uow.WithinTransaction(ctx, func(txCtx context.Context, uow store.UnitOfWork) error {

@@ -223,10 +223,51 @@ type fakeMessageStore struct {
 	deleteMessagesCalls  int
 	lastDeletedIDs       []uuid.UUID
 	lastDeleterID        uuid.UUID
+
+	forwardSources    []*model.Message
+	forwardSourcesErr error
+	lastForwardIDs    []uuid.UUID
+	lastForwardCaller uuid.UUID
+
+	copyAttachmentsErr   error
+	copiedAttachmentsFor []uuid.UUID
+	savedMessages        []*model.Message
 }
 
 func (f *fakeMessageStore) SaveMessage(ctx context.Context, msg *model.Message) (*model.Message, error) {
+	if msg.ID == uuid.Nil {
+		msg.ID = uuid.Must(uuid.NewV7())
+	}
+
+	f.savedMessages = append(f.savedMessages, msg)
+
 	return msg, nil
+}
+
+func (f *fakeMessageStore) LoadForwardSources(
+	ctx context.Context,
+	ids []uuid.UUID,
+	callerID uuid.UUID,
+	domainID int32,
+) ([]*model.Message, error) {
+	f.lastForwardIDs = ids
+	f.lastForwardCaller = callerID
+
+	if f.forwardSourcesErr != nil {
+		return nil, f.forwardSourcesErr
+	}
+
+	return f.forwardSources, nil
+}
+
+func (f *fakeMessageStore) CopyAttachments(ctx context.Context, sourceID, targetID uuid.UUID) error {
+	if f.copyAttachmentsErr != nil {
+		return f.copyAttachmentsErr
+	}
+
+	f.copiedAttachmentsFor = append(f.copiedAttachmentsFor, sourceID)
+
+	return nil
 }
 
 func (f *fakeMessageStore) GetReplyPreview(ctx context.Context, id uuid.UUID, domainID int32) (*model.ReplyToPreview, error) {

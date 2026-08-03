@@ -27,6 +27,19 @@ type MessageStore interface {
 	SaveMessage(ctx context.Context, msg *model.Message) (*model.Message, error)
 	GetReplyPreview(ctx context.Context, id uuid.UUID, domainID int32) (*model.ReplyToPreview, error)
 	SaveDocuments(ctx context.Context, messageID uuid.UUID, docs []*model.MessageDocument) ([]*model.MessageDocument, error)
+
+	// CopyAttachments duplicates every document and image row of sourceID onto
+	// targetID. Nothing is re-uploaded: the copies reference the same stored
+	// files by file_id.
+	CopyAttachments(ctx context.Context, sourceID, targetID uuid.UUID) error
+
+	// LoadForwardSources returns the messages callerID may forward, with their
+	// content already assembled. Ids the caller cannot read, ids that do not
+	// exist, deleted messages and system messages are silently omitted, so the
+	// result may be shorter than ids or empty, which is not an error at this
+	// layer. Rows come back oldest-first so copies keep the original order.
+	LoadForwardSources(ctx context.Context, ids []uuid.UUID, callerID uuid.UUID, domainID int32) ([]*model.Message, error)
+
 	SaveMessageContact(ctx context.Context, msg *model.Message) (*model.Message, error)
 	SaveMessageLocation(ctx context.Context, msg *model.Message) (*model.Message, error)
 	SaveInteractiveMessage(ctx context.Context, msg *model.Message) (*model.Message, error)

@@ -3,6 +3,7 @@ package dto
 import (
 	"github.com/google/uuid"
 
+	"github.com/webitel/im-thread-service/internal/domain/model"
 	"github.com/webitel/im-thread-service/internal/domain/shared"
 )
 
@@ -18,6 +19,8 @@ type (
 		ReplyToMessageID  *uuid.UUID `json:"reply_to_message_id,omitempty"`
 		ExternalID        string     `json:"external_id,omitempty"`
 		ReplyToExternalID string     `json:"reply_to_external_id,omitempty"`
+
+		ForwardOrigin *model.ForwardOrigin `json:"forward_origin,omitempty"`
 	}
 
 	SendTextResponse struct {

@@ -130,6 +130,29 @@ func mapHistoryMessage(m *model.Message) *impb.HistoryMessage {
 	out.Interactive = mapInteractive(m.Interactive)
 	out.ReactedMetadata = mapReactedMetadata(m.ReactedMetadata)
 	out.ReplyTo = mapReplyTo(m.ReplyTo)
+	out.ForwardOrigin = mapForwardOrigin(m.ForwardOrigin)
+
+	return out
+}
+
+func mapForwardOrigin(in *model.ForwardOrigin) *impb.ForwardOrigin {
+	if in == nil {
+		return nil
+	}
+
+	out := &impb.ForwardOrigin{
+		Kind:           impb.ForwardOriginKind(in.Kind),
+		SenderName:     in.SenderName,
+		OriginalSentAt: in.OriginalSentAt,
+	}
+
+	if in.SenderID != nil {
+		out.SenderId = in.SenderID.String()
+	}
+
+	if in.SourceMessageID != nil {
+		out.SourceMessageId = in.SourceMessageID.String()
+	}
 
 	return out
 }

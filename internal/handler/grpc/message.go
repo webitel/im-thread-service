@@ -26,6 +26,7 @@ type MessageService interface {
 	SendSystemMessage(ctx context.Context, msg *model.Message) (*model.Message, error)
 	EditMessage(ctx context.Context, msg *model.Message) (*model.Message, error)
 	DeleteMessages(ctx context.Context, in *dto.DeleteMessagesRequest) (*dto.DeleteMessagesResponse, error)
+	ForwardMessages(ctx context.Context, in *dto.ForwardMessagesRequest) (*dto.ForwardMessagesResponse, error)
 }
 
 type MessageServer struct {
@@ -90,8 +91,9 @@ func (m *MessageServer) SendLocation(ctx context.Context, in *impb.SendLocationR
 			Longitude: in.GetLongitude(),
 			Name:      in.Name,
 		},
-		SendAs:  &sendAs,
-		ReplyTo: model.NewReplyTarget(mapper.ParseOptionalUUID(in.GetReplyToMessageId())),
+		SendAs:        &sendAs,
+		ReplyTo:       model.NewReplyTarget(mapper.ParseOptionalUUID(in.GetReplyToMessageId())),
+		ForwardOrigin: mapper.MapExternalForwardOrigin(in.GetForwardOrigin()),
 	}
 
 	saved, err := m.handler.SendLocation(ctx, msg)
@@ -122,8 +124,9 @@ func (m *MessageServer) SendContact(ctx context.Context, in *impb.SendContactReq
 			PhoneNumber: in.PhoneNumber,
 			Email:       in.Email,
 		},
-		SendAs:  &sendAs,
-		ReplyTo: model.NewReplyTarget(mapper.ParseOptionalUUID(in.GetReplyToMessageId())),
+		SendAs:        &sendAs,
+		ReplyTo:       model.NewReplyTarget(mapper.ParseOptionalUUID(in.GetReplyToMessageId())),
+		ForwardOrigin: mapper.MapExternalForwardOrigin(in.GetForwardOrigin()),
 	}
 
 	saved, err := m.handler.SendContact(ctx, msg)
@@ -232,4 +235,15 @@ func (m *MessageServer) DeleteMessages(ctx context.Context, in *impb.DeleteMessa
 	}
 
 	return mapper.MapToDeleteMessagesResponse(out), nil
+}
+
+func (m *MessageServer) ForwardMessages(ctx context.Context, in *impb.ForwardMessagesRequest) (*impb.ForwardMessagesResponse, error) {
+	out, err := m.handler.ForwardMessages(ctx, mapper.MapToForwardMessagesRequest(in))
+	if err != nil {
+		m.logger.Error("failed to forward messages", "error", err)
+
+		return nil, err
+	}
+
+	return mapper.MapToForwardMessagesResponse(out), nil
 }

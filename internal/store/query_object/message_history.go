@@ -29,6 +29,7 @@ var (
 		"system":           true,
 		"reacted_metadata": true,
 		"reply_to":         true,
+		"forward_origin":   true,
 		"delivery_status":  true,
 		"statuses":         true,
 		"edited":           true,
@@ -39,7 +40,7 @@ var (
 		"type", "body", "metadata",
 		"created_at", "updated_at", "images", "documents",
 		"member", "interactive", "location", "contact", "system", "reacted_metadata",
-		"reply_to",
+		"reply_to", "forward_origin",
 		"delivery_status", "statuses",
 		"edited", "deleted_at",
 	}
