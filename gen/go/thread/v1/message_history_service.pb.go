@@ -759,24 +759,16 @@ func (x *ReplyToMessage) GetAttachmentMime() string {
 	return ""
 }
 
-// ForwardOrigin identifies who originally wrote a forwarded message. It is a
-// snapshot taken at forward time, not a live reference: the copy may live in a
-// thread whose reader has no access to the source at all.
 type ForwardOrigin struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	Kind ForwardOriginKind `protobuf:"varint,1,opt,name=kind,proto3,enum=webitel.im.service.thread.v1.ForwardOriginKind" json:"kind,omitempty"`
-	// Contact id of the original author. Empty unless kind is INTERNAL.
-	SenderId string `protobuf:"bytes,2,opt,name=sender_id,json=senderId,proto3" json:"sender_id,omitempty"`
-	// Display name of the original author — the "from whom" label.
-	SenderName string `protobuf:"bytes,3,opt,name=sender_name,json=senderName,proto3" json:"sender_name,omitempty"`
-	// When the original message was sent, Unix time in milliseconds.
-	OriginalSentAt int64 `protobuf:"varint,4,opt,name=original_sent_at,json=originalSentAt,proto3" json:"original_sent_at,omitempty"`
-	// Source message this copy was made from. Empty unless kind is INTERNAL,
-	// and cleared if the source is later purged.
-	SourceMessageId string `protobuf:"bytes,5,opt,name=source_message_id,json=sourceMessageId,proto3" json:"source_message_id,omitempty"`
+	Kind            ForwardOriginKind `protobuf:"varint,1,opt,name=kind,proto3,enum=webitel.im.service.thread.v1.ForwardOriginKind" json:"kind,omitempty"`
+	SenderId        string            `protobuf:"bytes,2,opt,name=sender_id,json=senderId,proto3" json:"sender_id,omitempty"`
+	SenderName      string            `protobuf:"bytes,3,opt,name=sender_name,json=senderName,proto3" json:"sender_name,omitempty"`
+	OriginalSentAt  int64             `protobuf:"varint,4,opt,name=original_sent_at,json=originalSentAt,proto3" json:"original_sent_at,omitempty"`
+	SourceMessageId string            `protobuf:"bytes,5,opt,name=source_message_id,json=sourceMessageId,proto3" json:"source_message_id,omitempty"`
 }
 
 func (x *ForwardOrigin) Reset() {
