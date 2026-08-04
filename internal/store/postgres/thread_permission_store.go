@@ -27,6 +27,7 @@ type threadPermissionRecord struct {
 	CanChangeMembersPermissions bool      `db:"can_change_members_permissions"`
 	CanChangeThreadInfo         bool      `db:"can_change_thread_info"`
 	CanDeleteMessages           bool      `db:"can_delete_messages"`
+	CanReactMessages            bool      `db:"can_react_messages"`
 
 	CreatedAt time.Time `db:"created_at"`
 	UpdatedAt time.Time `db:"updated_at"`
@@ -59,6 +60,7 @@ func (t *threadDialogPermissionStore) Get(ctx context.Context, in *model.ThreadP
 			perm.can_change_members_permissions,
 			perm.can_change_thread_info,
 			perm.can_delete_messages,
+			perm.can_react_messages,
 			perm.created_at,
 			perm.updated_at
 		FROM im_thread.thread_permission perm
@@ -108,7 +110,8 @@ func (t *threadDialogPermissionStore) Create(ctx context.Context, in *model.Thre
 			can_remove_members,
 			can_change_members_permissions,
 			can_change_thread_info,
-			can_delete_messages
+			can_delete_messages,
+			can_react_messages
 		) VALUES (
 			@ThreadID,
 			@ThreadDialogID,
@@ -117,8 +120,9 @@ func (t *threadDialogPermissionStore) Create(ctx context.Context, in *model.Thre
 			@CanRemoveMembers,
 			@CanChangeMembersPermissions,
 			@CanChangeThreadInfo,
-			@CanDeleteMessages
-		) RETURNING id, thread_id, thread_dialog_id, can_send_messages, can_add_members, can_remove_members, can_change_members_permissions, can_change_thread_info, can_delete_messages, created_at, updated_at`
+			@CanDeleteMessages,
+			@CanReactMessages
+		) RETURNING id, thread_id, thread_dialog_id, can_send_messages, can_add_members, can_remove_members, can_change_members_permissions, can_change_thread_info, can_delete_messages, can_react_messages, created_at, updated_at`
 
 	rows, err := t.db.Query(ctx, query, pgx.NamedArgs{
 		"ThreadID":                    in.ThreadID,
@@ -129,6 +133,7 @@ func (t *threadDialogPermissionStore) Create(ctx context.Context, in *model.Thre
 		"CanChangeMembersPermissions": in.CanChangeMembersPermissions,
 		"CanChangeThreadInfo":         in.CanChangeThreadInfo,
 		"CanDeleteMessages":           in.CanDeleteMessages,
+		"CanReactMessages":            in.CanReactMessages,
 	})
 	if err != nil {
 		return nil, err
@@ -152,6 +157,7 @@ func mapToThreadPermission(p *threadPermissionRecord) (*model.ThreadPermission, 
 			CanChangeMembersPermissions: p.CanChangeMembersPermissions,
 			CanChangeThreadInfo:         p.CanChangeThreadInfo,
 			CanDeleteMessages:           p.CanDeleteMessages,
+			CanReactMessages:            p.CanReactMessages,
 		},
 		ID:             p.ID,
 		ThreadID:       p.ThreadID,
@@ -179,9 +185,10 @@ func (t *threadDialogPermissionStore) Update(ctx context.Context, in *model.Upda
 			can_change_members_permissions = COALESCE(@CanChangeMembersPermissions, can_change_members_permissions),
 			can_change_thread_info = COALESCE(@CanChangeThreadInfo, can_change_thread_info),
 			can_delete_messages = COALESCE(@CanDeleteMessages, can_delete_messages),
+			can_react_messages = COALESCE(@CanReactMessages, can_react_messages),
 			updated_at = NOW()
 		WHERE thread_dialog_id = ANY(SELECT id FROM im_thread.thread_dialog WHERE thread_id = @ThreadID AND member_id = @TargetMemberID)
-	 RETURNING id, thread_id, thread_dialog_id, can_send_messages, can_add_members, can_remove_members, can_change_members_permissions, can_change_thread_info, can_delete_messages, created_at, updated_at`
+	 RETURNING id, thread_id, thread_dialog_id, can_send_messages, can_add_members, can_remove_members, can_change_members_permissions, can_change_thread_info, can_delete_messages, can_react_messages, created_at, updated_at`
 
 	rows, err := t.db.Query(ctx, query,
 		pgx.NamedArgs{
@@ -193,6 +200,7 @@ func (t *threadDialogPermissionStore) Update(ctx context.Context, in *model.Upda
 			"CanChangeMembersPermissions": in.CanChangeMembersPermissions,
 			"CanChangeThreadInfo":         in.CanChangeThreadInfo,
 			"CanDeleteMessages":           in.CanDeleteMessages,
+			"CanReactMessages":            in.CanReactMessages,
 		})
 	if err != nil {
 		return nil, err

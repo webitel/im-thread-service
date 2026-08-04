@@ -15,6 +15,11 @@ import (
 // message matches the requested id and domain.
 var ErrReplyTargetNotFound = errors.New("reply target message not found")
 
+// ErrReactionNotAllowed is returned by MessageReactionStore.SetReaction when the
+// reactor may not react: the message does not exist in the domain, is deleted,
+// or the reactor is not an active member holding can_react_messages.
+var ErrReactionNotAllowed = errors.New("reaction not allowed")
+
 type Store interface {
 	Messages() MessageStore
 	Outbox() OutboxStore
@@ -135,6 +140,13 @@ type DirectThreadDialogOrchestration interface {
 
 type InteractiveCallback interface {
 	Save(ctx context.Context, callback *model.InteractiveCallback) (*model.InteractiveCallback, error)
+}
+
+// MessageReactionStore persists emoji reactions. A member holds at most one
+// reaction per message; SetReaction applies set/replace/remove toggle semantics
+// idempotently and reports the resulting state.
+type MessageReactionStore interface {
+	SetReaction(ctx context.Context, reaction *model.Reaction) (*model.ReactionResult, error)
 }
 
 type ThreadVariablesStore interface {

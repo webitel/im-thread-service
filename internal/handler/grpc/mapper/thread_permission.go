@@ -57,6 +57,7 @@ func (s *ThreadPermissionInConverter) ConvertUpdateThreadPermissionRequest(in *i
 		CanChangeMembersPermissions: in.CanChangeMembersPermissions,
 		CanChangeThreadInfo:         in.CanChangeThreadInfo,
 		CanDeleteMessages:           in.CanDeleteMessages,
+		CanReactMessages:            in.CanReactMessages,
 		CanRemoveMembers:            in.CanRemoveMembers,
 		CanSendMessages:             in.CanSendMessages,
 	}
@@ -86,6 +87,7 @@ func (s *ThreadPermissionOutConverter) ConvertThreadPermission(in *model.ThreadP
 		CanChangeMembersPermissions: in.CanChangeMembersPermissions,
 		CanChangeThreadInfo:         in.CanChangeThreadInfo,
 		CanDeleteMessages:           in.CanDeleteMessages,
+		CanReactMessages:            in.CanReactMessages,
 		Id:                          in.ID.String(),
 		MemberId:                    in.ThreadDialogID.String(),
 		ThreadId:                    in.ThreadID.String(),

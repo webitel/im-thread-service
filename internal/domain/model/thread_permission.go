@@ -24,6 +24,7 @@ type ThreadPermissions struct {
 	CanChangeMembersPermissions bool `db:"can_change_members_permissions"`
 	CanChangeThreadInfo         bool `db:"can_change_thread_info"`
 	CanDeleteMessages           bool `db:"can_delete_messages"`
+	CanReactMessages            bool `db:"can_react_messages"`
 }
 
 type ThreadPermissionStoreFilters struct {
@@ -40,6 +41,7 @@ type ThreadPermissionsAllowance struct {
 	CanChangeMembersPermissions bool
 	CanChangeThreadInfo         bool
 	CanDeleteMessages           bool
+	CanReactMessages            bool
 }
 
 type PermissionChangeInitiator struct {
@@ -65,6 +67,7 @@ type UpdateThreadPermissionRequest struct {
 	CanChangeMembersPermissions *bool
 	CanChangeThreadInfo         *bool
 	CanDeleteMessages           *bool
+	CanReactMessages            *bool
 }
 
 type ThreadPermission struct {

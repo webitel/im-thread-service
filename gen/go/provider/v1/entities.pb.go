@@ -545,6 +545,93 @@ func (x *ProviderWhatsAppGate) GetUpdatedAt() int64 {
 	return 0
 }
 
+type ProviderTelegramBotGate struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Id        string         `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Name      string         `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	Uri       string         `protobuf:"bytes,3,opt,name=uri,proto3" json:"uri,omitempty"`
+	Status    ProviderStatus `protobuf:"varint,6,opt,name=status,proto3,enum=webitel.im.provider.v1.ProviderStatus" json:"status,omitempty"`
+	CreatedAt int64          `protobuf:"varint,7,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	UpdatedAt int64          `protobuf:"varint,8,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+}
+
+func (x *ProviderTelegramBotGate) Reset() {
+	*x = ProviderTelegramBotGate{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_service_provider_v1_entities_proto_msgTypes[5]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *ProviderTelegramBotGate) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ProviderTelegramBotGate) ProtoMessage() {}
+
+func (x *ProviderTelegramBotGate) ProtoReflect() protoreflect.Message {
+	mi := &file_service_provider_v1_entities_proto_msgTypes[5]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ProviderTelegramBotGate.ProtoReflect.Descriptor instead.
+func (*ProviderTelegramBotGate) Descriptor() ([]byte, []int) {
+	return file_service_provider_v1_entities_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *ProviderTelegramBotGate) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *ProviderTelegramBotGate) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *ProviderTelegramBotGate) GetUri() string {
+	if x != nil {
+		return x.Uri
+	}
+	return ""
+}
+
+func (x *ProviderTelegramBotGate) GetStatus() ProviderStatus {
+	if x != nil {
+		return x.Status
+	}
+	return ProviderStatus_PROVIDER_STATUS_UNSPECIFIED
+}
+
+func (x *ProviderTelegramBotGate) GetCreatedAt() int64 {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return 0
+}
+
+func (x *ProviderTelegramBotGate) GetUpdatedAt() int64 {
+	if x != nil {
+		return x.UpdatedAt
+	}
+	return 0
+}
+
 var File_service_provider_v1_entities_proto protoreflect.FileDescriptor
 
 var file_service_provider_v1_entities_proto_rawDesc = []byte{
@@ -642,6 +729,19 @@ var file_service_provider_v1_entities_proto_rawDesc = []byte{
 	0x63, 0x72, 0x65, 0x61, 0x74, 0x65, 0x64, 0x5f, 0x61, 0x74, 0x18, 0x09, 0x20, 0x01, 0x28, 0x03,
 	0x52, 0x09, 0x63, 0x72, 0x65, 0x61, 0x74, 0x65, 0x64, 0x41, 0x74, 0x12, 0x1d, 0x0a, 0x0a, 0x75,
 	0x70, 0x64, 0x61, 0x74, 0x65, 0x64, 0x5f, 0x61, 0x74, 0x18, 0x0a, 0x20, 0x01, 0x28, 0x03, 0x52,
+	0x09, 0x75, 0x70, 0x64, 0x61, 0x74, 0x65, 0x64, 0x41, 0x74, 0x22, 0xcd, 0x01, 0x0a, 0x17, 0x50,
+	0x72, 0x6f, 0x76, 0x69, 0x64, 0x65, 0x72, 0x54, 0x65, 0x6c, 0x65, 0x67, 0x72, 0x61, 0x6d, 0x42,
+	0x6f, 0x74, 0x47, 0x61, 0x74, 0x65, 0x12, 0x0e, 0x0a, 0x02, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01,
+	0x28, 0x09, 0x52, 0x02, 0x69, 0x64, 0x12, 0x12, 0x0a, 0x04, 0x6e, 0x61, 0x6d, 0x65, 0x18, 0x02,
+	0x20, 0x01, 0x28, 0x09, 0x52, 0x04, 0x6e, 0x61, 0x6d, 0x65, 0x12, 0x10, 0x0a, 0x03, 0x75, 0x72,
+	0x69, 0x18, 0x03, 0x20, 0x01, 0x28, 0x09, 0x52, 0x03, 0x75, 0x72, 0x69, 0x12, 0x3e, 0x0a, 0x06,
+	0x73, 0x74, 0x61, 0x74, 0x75, 0x73, 0x18, 0x06, 0x20, 0x01, 0x28, 0x0e, 0x32, 0x26, 0x2e, 0x77,
+	0x65, 0x62, 0x69, 0x74, 0x65, 0x6c, 0x2e, 0x69, 0x6d, 0x2e, 0x70, 0x72, 0x6f, 0x76, 0x69, 0x64,
+	0x65, 0x72, 0x2e, 0x76, 0x31, 0x2e, 0x50, 0x72, 0x6f, 0x76, 0x69, 0x64, 0x65, 0x72, 0x53, 0x74,
+	0x61, 0x74, 0x75, 0x73, 0x52, 0x06, 0x73, 0x74, 0x61, 0x74, 0x75, 0x73, 0x12, 0x1d, 0x0a, 0x0a,
+	0x63, 0x72, 0x65, 0x61, 0x74, 0x65, 0x64, 0x5f, 0x61, 0x74, 0x18, 0x07, 0x20, 0x01, 0x28, 0x03,
+	0x52, 0x09, 0x63, 0x72, 0x65, 0x61, 0x74, 0x65, 0x64, 0x41, 0x74, 0x12, 0x1d, 0x0a, 0x0a, 0x75,
+	0x70, 0x64, 0x61, 0x74, 0x65, 0x64, 0x5f, 0x61, 0x74, 0x18, 0x08, 0x20, 0x01, 0x28, 0x03, 0x52,
 	0x09, 0x75, 0x70, 0x64, 0x61, 0x74, 0x65, 0x64, 0x41, 0x74, 0x42, 0xe0, 0x01, 0x0a, 0x1a, 0x63,
 	0x6f, 0x6d, 0x2e, 0x77, 0x65, 0x62, 0x69, 0x74, 0x65, 0x6c, 0x2e, 0x69, 0x6d, 0x2e, 0x70, 0x72,
 	0x6f, 0x76, 0x69, 0x64, 0x65, 0x72, 0x2e, 0x76, 0x31, 0x42, 0x0d, 0x45, 0x6e, 0x74, 0x69, 0x74,
@@ -672,27 +772,29 @@ func file_service_provider_v1_entities_proto_rawDescGZIP() []byte {
 	return file_service_provider_v1_entities_proto_rawDescData
 }
 
-var file_service_provider_v1_entities_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
+var file_service_provider_v1_entities_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
 var file_service_provider_v1_entities_proto_goTypes = []interface{}{
 	(*ProviderStatusCapabilities)(nil), // 0: webitel.im.provider.v1.ProviderStatusCapabilities
 	(*ProviderSummary)(nil),            // 1: webitel.im.provider.v1.ProviderSummary
 	(*ProviderMetaApp)(nil),            // 2: webitel.im.provider.v1.ProviderMetaApp
 	(*ProviderFacebookGate)(nil),       // 3: webitel.im.provider.v1.ProviderFacebookGate
 	(*ProviderWhatsAppGate)(nil),       // 4: webitel.im.provider.v1.ProviderWhatsAppGate
-	(ProviderType)(0),                  // 5: webitel.im.provider.v1.ProviderType
-	(ProviderStatus)(0),                // 6: webitel.im.provider.v1.ProviderStatus
+	(*ProviderTelegramBotGate)(nil),    // 5: webitel.im.provider.v1.ProviderTelegramBotGate
+	(ProviderType)(0),                  // 6: webitel.im.provider.v1.ProviderType
+	(ProviderStatus)(0),                // 7: webitel.im.provider.v1.ProviderStatus
 }
 var file_service_provider_v1_entities_proto_depIdxs = []int32{
-	5, // 0: webitel.im.provider.v1.ProviderSummary.type:type_name -> webitel.im.provider.v1.ProviderType
-	6, // 1: webitel.im.provider.v1.ProviderSummary.status:type_name -> webitel.im.provider.v1.ProviderStatus
+	6, // 0: webitel.im.provider.v1.ProviderSummary.type:type_name -> webitel.im.provider.v1.ProviderType
+	7, // 1: webitel.im.provider.v1.ProviderSummary.status:type_name -> webitel.im.provider.v1.ProviderStatus
 	0, // 2: webitel.im.provider.v1.ProviderSummary.capabilities:type_name -> webitel.im.provider.v1.ProviderStatusCapabilities
-	6, // 3: webitel.im.provider.v1.ProviderFacebookGate.status:type_name -> webitel.im.provider.v1.ProviderStatus
-	6, // 4: webitel.im.provider.v1.ProviderWhatsAppGate.status:type_name -> webitel.im.provider.v1.ProviderStatus
-	5, // [5:5] is the sub-list for method output_type
-	5, // [5:5] is the sub-list for method input_type
-	5, // [5:5] is the sub-list for extension type_name
-	5, // [5:5] is the sub-list for extension extendee
-	0, // [0:5] is the sub-list for field type_name
+	7, // 3: webitel.im.provider.v1.ProviderFacebookGate.status:type_name -> webitel.im.provider.v1.ProviderStatus
+	7, // 4: webitel.im.provider.v1.ProviderWhatsAppGate.status:type_name -> webitel.im.provider.v1.ProviderStatus
+	7, // 5: webitel.im.provider.v1.ProviderTelegramBotGate.status:type_name -> webitel.im.provider.v1.ProviderStatus
+	6, // [6:6] is the sub-list for method output_type
+	6, // [6:6] is the sub-list for method input_type
+	6, // [6:6] is the sub-list for extension type_name
+	6, // [6:6] is the sub-list for extension extendee
+	0, // [0:6] is the sub-list for field type_name
 }
 
 func init() { file_service_provider_v1_entities_proto_init() }
@@ -762,6 +864,18 @@ func file_service_provider_v1_entities_proto_init() {
 				return nil
 			}
 		}
+		file_service_provider_v1_entities_proto_msgTypes[5].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*ProviderTelegramBotGate); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -769,7 +883,7 @@ func file_service_provider_v1_entities_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: file_service_provider_v1_entities_proto_rawDesc,
 			NumEnums:      0,
-			NumMessages:   5,
+			NumMessages:   6,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

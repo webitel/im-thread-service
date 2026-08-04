@@ -142,6 +142,23 @@ func (client *Client) SendSystemMessage(ctx context.Context, in *provider.Provid
 	return response, err
 }
 
+func (client *Client) SendReaction(ctx context.Context, in *provider.ProviderSendReactionRequest) (*provider.ProviderSendReactionResponse, error) {
+	var response *provider.ProviderSendReactionResponse
+
+	err := client.providerMessageServiceClient.Execute(ctx, func(pmsc provider.ProviderMessageServiceClient) error {
+		r, err := pmsc.SendReaction(ctx, in)
+		if err != nil {
+			return err
+		}
+
+		response = r
+
+		return nil
+	})
+
+	return response, err
+}
+
 func (client *Client) Close() error {
 	if client.providerMessageServiceClient != nil {
 		return client.providerMessageServiceClient.Close()

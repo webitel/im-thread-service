@@ -86,15 +86,17 @@ func MapSearchLeftThreadsMessageHistoryRequest2LeftThreadsMessageHistoryInputDTO
 	}
 }
 
-func MapMessage2SearchMessageHistoryResponse(messages []*model.Message) *impb.SearchMessageHistoryResponse {
-	responseMessages := utils.Map(messages, mapHistoryMessage)
+func MapMessage2SearchMessageHistoryResponse(messages []*model.Message, callerID uuid.UUID) *impb.SearchMessageHistoryResponse {
+	responseMessages := utils.Map(messages, func(m *model.Message) *impb.HistoryMessage {
+		return mapHistoryMessage(m, callerID)
+	})
 
 	return &impb.SearchMessageHistoryResponse{
 		Items: responseMessages,
 	}
 }
 
-func mapHistoryMessage(m *model.Message) *impb.HistoryMessage {
+func mapHistoryMessage(m *model.Message, callerID uuid.UUID) *impb.HistoryMessage {
 	out := &impb.HistoryMessage{
 		Id:             m.ID.String(),
 		ThreadId:       m.ThreadID.String(),
@@ -131,6 +133,7 @@ func mapHistoryMessage(m *model.Message) *impb.HistoryMessage {
 	out.ReactedMetadata = mapReactedMetadata(m.ReactedMetadata)
 	out.ReplyTo = mapReplyTo(m.ReplyTo)
 	out.ForwardOrigin = mapForwardOrigin(m.ForwardOrigin)
+	out.Reactions = mapReactions(m.Reactions, callerID)
 
 	return out
 }
@@ -155,6 +158,18 @@ func mapForwardOrigin(in *model.ForwardOrigin) *impb.ForwardOrigin {
 	}
 
 	return out
+}
+
+func mapReactions(in []*model.MessageReaction, callerID uuid.UUID) []*impb.MessageReaction {
+	return utils.Map(in, func(r *model.MessageReaction) *impb.MessageReaction {
+		return &impb.MessageReaction{
+			Reaction:      &impb.ReactionContent{Kind: &impb.ReactionContent_Emoji{Emoji: r.Emoji}},
+			Count:         r.Count,
+			ReactedByMe:   callerID != uuid.Nil && r.ReactedBy(callerID),
+			ReactorIds:    utils.Map(r.ReactorIDs, uuid.UUID.String),
+			LastReactedAt: r.LastReactedAt,
+		}
+	})
 }
 
 func mapReplyTo(in *model.ReplyToPreview) *impb.ReplyToMessage {

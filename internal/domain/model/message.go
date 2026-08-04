@@ -85,6 +85,10 @@ type Message struct {
 	DeliveryStatus *MessageDeliveryStatus    `json:"delivery_status,omitempty" db:"delivery_status"`
 	Statuses       []*MessageRecipientStatus `json:"statuses,omitempty" db:"statuses"`
 
+	// Reactions holds the emoji reactions currently on the message, one per
+	// reactor, ordered by first-reaction time.
+	Reactions []*MessageReaction `json:"reactions,omitempty" db:"reactions"`
+
 	// BotControllerMemberID is the thread_dialog.id of the currently active bot.
 	// Included in MessageCreated events so flow_manager can self-filter.
 	BotControllerMemberID *uuid.UUID `json:"-" db:"-"`

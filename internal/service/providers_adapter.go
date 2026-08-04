@@ -22,21 +22,29 @@ type ProvidersAdapter interface {
 	// SendTyping forwards a fire-and-forget typing indicator to the external
 	// peers of a thread whose channel supports it.
 	SendTyping(ctx context.Context, req *model.TypingDispatch) error
+	SendReaction(ctx context.Context, reaction *model.Reaction, result *model.ReactionResult) error
 }
 
 type baseRPCProvidersAdapter struct {
 	logger          *slog.Logger
 	providersClient *improviders.Client
 	externalIDs     store.MessageExternalStore
+	reactionCaps    ReactionCapabilities
 }
 
-func newBaseRPCProvidersAdapter(logger *slog.Logger, providersClient *improviders.Client, externalIDs store.MessageExternalStore) *baseRPCProvidersAdapter {
+func newBaseRPCProvidersAdapter(
+	logger *slog.Logger,
+	providersClient *improviders.Client,
+	externalIDs store.MessageExternalStore,
+	reactionCaps ReactionCapabilities,
+) *baseRPCProvidersAdapter {
 	log := logger.With("component", "base_rpc_providers_adapter")
 
 	return &baseRPCProvidersAdapter{
 		logger:          log,
 		providersClient: providersClient,
 		externalIDs:     externalIDs,
+		reactionCaps:    reactionCaps,
 	}
 }
 
@@ -269,6 +277,101 @@ func (a *baseRPCProvidersAdapter) SendTyping(ctx context.Context, req *model.Typ
 
 			errorsArray = append(errorsArray, err)
 			errorsMu.Unlock()
+		})
+	}
+
+	wg.Wait()
+
+	if len(errorsArray) > 0 {
+		return stderrs.Join(errorsArray...)
+	}
+
+	return nil
+}
+
+// SendReaction forwards a reaction change to the external messenger(s) the
+// message was exchanged with. It is best-effort and messenger-dependent: only
+// gates that carry the message externally and whose provider supports reactions
+// receive it; everything else is a no-op. Internal (webitel) recipients see the
+// change through the MessageReaction domain event, not through this path.
+func (a *baseRPCProvidersAdapter) SendReaction(ctx context.Context, reaction *model.Reaction, result *model.ReactionResult) error {
+	log := a.logger.With("operation", "send_reaction")
+
+	if reaction == nil || result == nil {
+		return nil
+	}
+
+	externalPairs := make([]*model.ExternalPeerPair, 0)
+
+	for _, p := range model.ThreadDialogs.ExtractExternalPeers(reaction.To) {
+		if p.ContactID != reaction.ReactorID {
+			externalPairs = append(externalPairs, p)
+		}
+	}
+
+	if len(externalPairs) == 0 {
+		return nil
+	}
+
+	removed := result.Action == model.ReactionActionRemoved
+
+	var (
+		wg          sync.WaitGroup
+		errorsMu    sync.Mutex
+		errorsArray []error
+	)
+
+	for _, externalPeer := range externalPairs {
+		// The provider reacts to a message by its platform-specific id, so a gate
+		// with no external id for this message cannot carry the reaction.
+		externalID, err := a.externalIDs.LookupExternalID(ctx, reaction.MessageID, externalPeer.Via)
+		if err != nil || externalID == "" {
+			log.Debug("skipping reaction forward: message has no external id for gate",
+				slog.String("message_id", reaction.MessageID.String()),
+				slog.String("gate_id", externalPeer.Via),
+			)
+
+			continue
+		}
+
+		// A removal is always forwarded (clearing must reach the far side); a set
+		// is gated by the gate's reaction allow-list.
+		if !removed && a.reactionCaps != nil && !a.reactionCaps.Allowed(externalPeer.Via, result.Emoji) {
+			log.Debug("skipping reaction forward: emoji not allowed for gate",
+				slog.String("gate_id", externalPeer.Via),
+				slog.String("emoji", result.Emoji),
+			)
+
+			continue
+		}
+
+		wg.Go(func() {
+			peerLog := log.With(
+				slog.String("gate_id", externalPeer.Via),
+				slog.String("external_message_id", externalID),
+			)
+
+			if _, err := a.providersClient.SendReaction(ctx, &provider.ProviderSendReactionRequest{
+				GateId:            externalPeer.Via,
+				ExternalUserId:    externalPeer.ContactID.String(),
+				DomainId:          reaction.DomainID,
+				ExternalMessageId: externalID,
+				Emoji:             result.Emoji,
+				Removed:           removed,
+				MessageId:         reaction.MessageID.String(),
+				ThreadId:          reaction.ThreadID.String(),
+			}); err != nil {
+				peerLog.Error("provider SendReaction failed", slog.String("error", err.Error()))
+
+				errorsMu.Lock()
+
+				errorsArray = append(errorsArray, err)
+				errorsMu.Unlock()
+
+				return
+			}
+
+			peerLog.Debug("reaction forwarded to provider")
 		})
 	}
 

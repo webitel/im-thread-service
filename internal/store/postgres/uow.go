@@ -26,6 +26,7 @@ type unitOfWork struct {
 	messageHistoryStore             store.MessageHistory
 	directThreadDialogOrchestration store.DirectThreadDialogOrchestration
 	interactiveCallbackStore        store.InteractiveCallback
+	messageReactionStore            store.MessageReactionStore
 	botControlStore                 store.BotControlStore
 }
 
@@ -86,6 +87,14 @@ func (u *unitOfWork) Messages() store.MessageStore {
 	}
 
 	return u.messageStore
+}
+
+func (u *unitOfWork) MessageReactions() store.MessageReactionStore {
+	if u.messageReactionStore == nil {
+		u.messageReactionStore = NewMessageReactionStore(u.querier)
+	}
+
+	return u.messageReactionStore
 }
 
 func (u *unitOfWork) MessageExternal() store.MessageExternalStore {
