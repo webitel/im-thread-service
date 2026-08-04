@@ -79,9 +79,11 @@ func (a *baseRPCProvidersAdapter) SendMessage(ctx context.Context, message *mode
 
 	allExternal := model.ThreadDialogs.ExtractExternalPeers(message.To)
 
+	sender := message.GetSender()
+
 	externalPairs := make([]*model.ExternalPeerPair, 0, len(allExternal))
 	for _, p := range allExternal {
-		if p.ContactID != message.From.ID {
+		if p.ContactID != sender {
 			externalPairs = append(externalPairs, p)
 		}
 	}
