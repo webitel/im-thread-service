@@ -25,6 +25,7 @@ const (
 	ProviderMessageService_SendInteractive_FullMethodName   = "/webitel.im.provider.v1.ProviderMessageService/SendInteractive"
 	ProviderMessageService_SendSystemMessage_FullMethodName = "/webitel.im.provider.v1.ProviderMessageService/SendSystemMessage"
 	ProviderMessageService_SendTyping_FullMethodName        = "/webitel.im.provider.v1.ProviderMessageService/SendTyping"
+	ProviderMessageService_SendReaction_FullMethodName      = "/webitel.im.provider.v1.ProviderMessageService/SendReaction"
 )
 
 // ProviderMessageServiceClient is the client API for ProviderMessageService service.
@@ -50,6 +51,11 @@ type ProviderMessageServiceClient interface {
 	// fire-and-forget and best-effort: channels whose provider does not support
 	// typing are a silent no-op. Nothing is persisted.
 	SendTyping(ctx context.Context, in *ProviderSendTypingRequest, opts ...grpc.CallOption) (*ProviderSendTypingResponse, error)
+	// SendReaction forwards an emoji reaction change to the external chat partner
+	// (e.g. Telegram setMessageReaction). Best-effort and messenger-dependent:
+	// providers without reaction support are a silent no-op. An empty emoji (with
+	// removed=true) clears the caller's reaction on the target message.
+	SendReaction(ctx context.Context, in *ProviderSendReactionRequest, opts ...grpc.CallOption) (*ProviderSendReactionResponse, error)
 }
 
 type providerMessageServiceClient struct {
@@ -120,6 +126,16 @@ func (c *providerMessageServiceClient) SendTyping(ctx context.Context, in *Provi
 	return out, nil
 }
 
+func (c *providerMessageServiceClient) SendReaction(ctx context.Context, in *ProviderSendReactionRequest, opts ...grpc.CallOption) (*ProviderSendReactionResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ProviderSendReactionResponse)
+	err := c.cc.Invoke(ctx, ProviderMessageService_SendReaction_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // ProviderMessageServiceServer is the server API for ProviderMessageService service.
 // All implementations must embed UnimplementedProviderMessageServiceServer
 // for forward compatibility.
@@ -143,6 +159,11 @@ type ProviderMessageServiceServer interface {
 	// fire-and-forget and best-effort: channels whose provider does not support
 	// typing are a silent no-op. Nothing is persisted.
 	SendTyping(context.Context, *ProviderSendTypingRequest) (*ProviderSendTypingResponse, error)
+	// SendReaction forwards an emoji reaction change to the external chat partner
+	// (e.g. Telegram setMessageReaction). Best-effort and messenger-dependent:
+	// providers without reaction support are a silent no-op. An empty emoji (with
+	// removed=true) clears the caller's reaction on the target message.
+	SendReaction(context.Context, *ProviderSendReactionRequest) (*ProviderSendReactionResponse, error)
 	mustEmbedUnimplementedProviderMessageServiceServer()
 }
 
@@ -170,6 +191,9 @@ func (UnimplementedProviderMessageServiceServer) SendSystemMessage(context.Conte
 }
 func (UnimplementedProviderMessageServiceServer) SendTyping(context.Context, *ProviderSendTypingRequest) (*ProviderSendTypingResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SendTyping not implemented")
+}
+func (UnimplementedProviderMessageServiceServer) SendReaction(context.Context, *ProviderSendReactionRequest) (*ProviderSendReactionResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SendReaction not implemented")
 }
 func (UnimplementedProviderMessageServiceServer) mustEmbedUnimplementedProviderMessageServiceServer() {
 }
@@ -301,6 +325,24 @@ func _ProviderMessageService_SendTyping_Handler(srv interface{}, ctx context.Con
 	return interceptor(ctx, in, info, handler)
 }
 
+func _ProviderMessageService_SendReaction_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ProviderSendReactionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ProviderMessageServiceServer).SendReaction(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ProviderMessageService_SendReaction_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ProviderMessageServiceServer).SendReaction(ctx, req.(*ProviderSendReactionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // ProviderMessageService_ServiceDesc is the grpc.ServiceDesc for ProviderMessageService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -331,6 +373,10 @@ var ProviderMessageService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "SendTyping",
 			Handler:    _ProviderMessageService_SendTyping_Handler,
+		},
+		{
+			MethodName: "SendReaction",
+			Handler:    _ProviderMessageService_SendReaction_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

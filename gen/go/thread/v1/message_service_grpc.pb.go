@@ -30,6 +30,7 @@ const (
 	Message_EditMessage_FullMethodName             = "/webitel.im.service.thread.v1.Message/EditMessage"
 	Message_DeleteMessages_FullMethodName          = "/webitel.im.service.thread.v1.Message/DeleteMessages"
 	Message_ForwardMessages_FullMethodName         = "/webitel.im.service.thread.v1.Message/ForwardMessages"
+	Message_SetReaction_FullMethodName             = "/webitel.im.service.thread.v1.Message/SetReaction"
 	Message_SendTyping_FullMethodName              = "/webitel.im.service.thread.v1.Message/SendTyping"
 )
 
@@ -68,6 +69,15 @@ type MessageClient interface {
 	// stamping each copy with the original author. Best-effort: sources that are
 	// missing, unreadable or unforwardable come back as skipped.
 	ForwardMessages(ctx context.Context, in *ForwardMessagesRequest, opts ...grpc.CallOption) (*ForwardMessagesResponse, error)
+	// Sets or clears the caller's emoji reaction on a single message.
+	//
+	// A member may hold at most one reaction per message: a new emoji replaces
+	// the previous one, sending the same emoji again clears it (toggle), and an
+	// empty emoji clears it explicitly. The call is idempotent (send_id) and
+	// serves both webitel participants and inbound reactions relayed from an
+	// external messenger. Whether a reaction is forwarded to the far side
+	// depends on the messenger's capabilities.
+	SetReaction(ctx context.Context, in *SetReactionRequest, opts ...grpc.CallOption) (*SetReactionResponse, error)
 	// Sends an ephemeral typing indicator to the other participants of a thread.
 	//
 	// The event is real-time only: it is published fire-and-forget (it never
@@ -200,6 +210,16 @@ func (c *messageClient) ForwardMessages(ctx context.Context, in *ForwardMessages
 	return out, nil
 }
 
+func (c *messageClient) SetReaction(ctx context.Context, in *SetReactionRequest, opts ...grpc.CallOption) (*SetReactionResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SetReactionResponse)
+	err := c.cc.Invoke(ctx, Message_SetReaction_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *messageClient) SendTyping(ctx context.Context, in *SendTypingRequest, opts ...grpc.CallOption) (*SendTypingResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(SendTypingResponse)
@@ -245,6 +265,15 @@ type MessageServer interface {
 	// stamping each copy with the original author. Best-effort: sources that are
 	// missing, unreadable or unforwardable come back as skipped.
 	ForwardMessages(context.Context, *ForwardMessagesRequest) (*ForwardMessagesResponse, error)
+	// Sets or clears the caller's emoji reaction on a single message.
+	//
+	// A member may hold at most one reaction per message: a new emoji replaces
+	// the previous one, sending the same emoji again clears it (toggle), and an
+	// empty emoji clears it explicitly. The call is idempotent (send_id) and
+	// serves both webitel participants and inbound reactions relayed from an
+	// external messenger. Whether a reaction is forwarded to the far side
+	// depends on the messenger's capabilities.
+	SetReaction(context.Context, *SetReactionRequest) (*SetReactionResponse, error)
 	// Sends an ephemeral typing indicator to the other participants of a thread.
 	//
 	// The event is real-time only: it is published fire-and-forget (it never
@@ -299,6 +328,9 @@ func (UnimplementedMessageServer) DeleteMessages(context.Context, *DeleteMessage
 }
 func (UnimplementedMessageServer) ForwardMessages(context.Context, *ForwardMessagesRequest) (*ForwardMessagesResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ForwardMessages not implemented")
+}
+func (UnimplementedMessageServer) SetReaction(context.Context, *SetReactionRequest) (*SetReactionResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SetReaction not implemented")
 }
 func (UnimplementedMessageServer) SendTyping(context.Context, *SendTypingRequest) (*SendTypingResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SendTyping not implemented")
@@ -522,6 +554,24 @@ func _Message_ForwardMessages_Handler(srv interface{}, ctx context.Context, dec 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Message_SetReaction_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SetReactionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MessageServer).SetReaction(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Message_SetReaction_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MessageServer).SetReaction(ctx, req.(*SetReactionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _Message_SendTyping_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(SendTypingRequest)
 	if err := dec(in); err != nil {
@@ -590,6 +640,10 @@ var Message_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ForwardMessages",
 			Handler:    _Message_ForwardMessages_Handler,
+		},
+		{
+			MethodName: "SetReaction",
+			Handler:    _Message_SetReaction_Handler,
 		},
 		{
 			MethodName: "SendTyping",

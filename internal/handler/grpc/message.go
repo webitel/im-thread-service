@@ -28,6 +28,7 @@ type MessageService interface {
 	DeleteMessages(ctx context.Context, in *dto.DeleteMessagesRequest) (*dto.DeleteMessagesResponse, error)
 	ForwardMessages(ctx context.Context, in *dto.ForwardMessagesRequest) (*dto.ForwardMessagesResponse, error)
 	SendTyping(ctx context.Context, in *dto.SendTypingRequest) (*dto.SendTypingResponse, error)
+	SetReaction(ctx context.Context, in *dto.SetReactionRequest) (*dto.SetReactionResponse, error)
 }
 
 type MessageServer struct {
@@ -255,4 +256,15 @@ func (m *MessageServer) ForwardMessages(ctx context.Context, in *impb.ForwardMes
 	}
 
 	return mapper.MapToForwardMessagesResponse(out), nil
+}
+
+func (m *MessageServer) SetReaction(ctx context.Context, in *impb.SetReactionRequest) (*impb.SetReactionResponse, error) {
+	out, err := m.handler.SetReaction(ctx, mapper.ConvertPbSetReactionToDomain(in))
+	if err != nil {
+		m.logger.Error("failed to set reaction", "error", err)
+
+		return nil, err
+	}
+
+	return mapper.MapToSetReactionResponse(out), nil
 }

@@ -792,6 +792,88 @@ func (s *MessageService) DeleteMessages(ctx context.Context, in *dto.DeleteMessa
 	return buildDeleteMessagesResponse(in.IDs, deleted), nil
 }
 
+// SetReaction sets, replaces or clears the caller's single emoji reaction on a
+// message. It is idempotent per send_id: every at-least-once redelivery of the
+// same request is a no-op (dedup ledger), so a retried toggle-off never
+// resurrects a reaction and a reordered retry never reverts a newer state.
+// Distinct requests apply in arrival order (last-writer-wins). A no-op change
+// publishes nothing; a real change is fanned out to both sides via a
+// MessageReaction event and forwarded best-effort to the external messenger
+// (subject to the messenger's capabilities).
+func (s *MessageService) SetReaction(ctx context.Context, in *dto.SetReactionRequest) (*dto.SetReactionResponse, error) {
+	log := s.logger.With("operation", "set_reaction")
+
+	if err := guards.ValidateSetReaction(in); err != nil {
+		return nil, err
+	}
+
+	reaction := &model.Reaction{
+		MessageID:      in.MessageID,
+		DomainID:       in.DomainID,
+		ReactorID:      in.Reactor.ID,
+		Emoji:          in.Emoji,
+		IdempotencyKey: in.IdempotencyKey,
+		ExternalID:     in.ExternalID,
+		Reactor:        in.Reactor,
+	}
+
+	if in.ThreadID != nil {
+		reaction.ThreadID = *in.ThreadID
+	}
+
+	var result *model.ReactionResult
+
+	err := s.uow.WithinTransaction(ctx, func(txCtx context.Context, uow store.UnitOfWork) error {
+		var err error
+		if result, err = uow.MessageReactions().SetReaction(txCtx, reaction); err != nil {
+			if errors.Is(err, store.ErrReactionNotAllowed) {
+				return errors.Forbidden(
+					"reaction not allowed: message not found, deleted, or the reactor may not react in this thread",
+					errors.WithID("service.message.set_reaction.not_allowed"),
+				)
+			}
+
+			return err
+		}
+
+		if !result.Changed {
+			return nil
+		}
+
+		reaction.ThreadID = result.ThreadID
+
+		members, err := uow.ThreadDialogStore().GetQuickView(txCtx, &model.ThreadDialogStoreFilter{
+			ThreadIDs:      []uuid.UUID{reaction.ThreadID},
+			IncludeDeleted: false,
+		})
+		if err != nil {
+			return err
+		}
+
+		reaction.To = members
+		reaction.WithReactionEvent(txCtx, result)
+
+		return s.dispatchReactionEvents(txCtx, uow, reaction)
+	})
+	if err != nil {
+		log.ErrorContext(ctx, "transaction_failed", "err", err)
+
+		return nil, err
+	}
+
+	if result.Changed {
+		if err = s.providersAdapter.SendReaction(ctx, reaction, result); err != nil {
+			log.Error("forwarding reaction to external providers", "error", err)
+		}
+	}
+
+	return &dto.SetReactionResponse{
+		Action:    result.Action,
+		Emoji:     result.Emoji,
+		ReactedAt: result.ReactedAt,
+	}, nil
+}
+
 func buildDeleteMessagesResponse(requested uuid.UUIDs, deleted []*model.Message) *dto.DeleteMessagesResponse {
 	deletedIDs := make(uuid.UUIDs, 0, len(deleted))
 	deletedSet := make(map[uuid.UUID]struct{}, len(deleted))
@@ -1036,6 +1118,20 @@ func (s *MessageService) dispatchInteractiveCallbackEvents(ctx context.Context, 
 	})
 }
 
+func (s *MessageService) dispatchReactionEvents(ctx context.Context, uow store.UnitOfWork, reaction *model.Reaction) error {
+	evs := reaction.Events()
+	if len(evs) == 0 {
+		return nil
+	}
+
+	return s.dispatchEvents(ctx, uow, evs, func(e event.Outboxer) string {
+		return fmt.Sprintf("im_message.%s.message.reaction.%s",
+			e.RecipientID(),
+			e.Version(),
+		)
+	})
+}
+
 func (s *MessageService) dispatchMessageEvents(ctx context.Context, uow store.UnitOfWork, msg *model.Message) error {
 	evs := msg.Events()
 	if len(evs) == 0 {
@@ -1057,6 +1153,8 @@ func messageEventAction(e event.Outboxer) string {
 		return "edited"
 	case event.MessageDeletedEvent:
 		return "deleted"
+	case event.MessageReactionEvent:
+		return "reaction"
 	default:
 		return "created"
 	}

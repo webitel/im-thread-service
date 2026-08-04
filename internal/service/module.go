@@ -3,6 +3,7 @@ package service
 import (
 	"go.uber.org/fx"
 
+	"github.com/webitel/im-thread-service/config"
 	storageclient "github.com/webitel/im-thread-service/infra/webitel/storage"
 	"github.com/webitel/im-thread-service/internal/adapter/pubsub"
 	"github.com/webitel/im-thread-service/internal/service/decorators"
@@ -12,6 +13,9 @@ var Module = fx.Module(
 	"service",
 
 	fx.Provide(
+		func(cfg *config.Config) ReactionCapabilities {
+			return NewStaticReactionCapabilities(cfg.Reactions.AllowedEmoji)
+		},
 		fx.Annotate(newBaseRPCProvidersAdapter, fx.As(new(ProvidersAdapter))),
 		NewMessageService,
 		NewMessageStatusService,

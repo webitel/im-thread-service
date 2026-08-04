@@ -32,6 +32,7 @@ var (
 		"forward_origin":   true,
 		"delivery_status":  true,
 		"statuses":         true,
+		"reactions":        true,
 		"edited":           true,
 		"deleted_at":       true,
 	}
@@ -41,7 +42,7 @@ var (
 		"created_at", "updated_at", "images", "documents",
 		"member", "interactive", "location", "contact", "system", "reacted_metadata",
 		"reply_to", "forward_origin",
-		"delivery_status", "statuses",
+		"delivery_status", "statuses", "reactions",
 		"edited", "deleted_at",
 	}
 )

@@ -112,7 +112,7 @@ out to all of the reader's sessions (multi-device).
 
 ## Migration
 
-`migrations/20260727120000_add_unread_horizon_to_thread_dialog.sql`:
+`migrations/20260727120001_add_unread_horizon_to_thread_dialog.sql`:
 
 1. `ALTER TABLE thread_dialog ADD last_read_message_id UUID, unread_count INTEGER NOT NULL DEFAULT 0`.
 2. Backfill the horizon from existing read state (`max(message_id)` where

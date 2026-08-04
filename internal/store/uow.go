@@ -13,5 +13,6 @@ type UnitOfWork interface {
 	MessageStatuses() MessageStatusStore
 	Outbox() OutboxStore
 	InteractiveCallback() InteractiveCallback
+	MessageReactions() MessageReactionStore
 	BotControl() BotControlStore
 }

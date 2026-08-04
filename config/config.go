@@ -22,6 +22,7 @@ type Config struct {
 	Profiler       appconfig.Profiler   `mapstructure:"profiler"`
 	LeaderElection LeaderElectionConfig `mapstructure:"leader_election"`
 	Typing         TypingConfig         `mapstructure:"typing"`
+	Reactions      ReactionsConfig      `mapstructure:"reactions"`
 }
 
 // TypingConfig tunes the ephemeral typing indicator and its live-preview
@@ -47,6 +48,14 @@ type TypingConfig struct {
 	// MaxPreviewBytes caps the preview draft size; longer drafts are truncated
 	// on a rune boundary.
 	MaxPreviewBytes int `mapstructure:"max_preview_bytes"`
+}
+
+// ReactionsConfig tunes emoji-reaction handling. AllowedEmoji, when non-empty,
+// is the server-wide allow-list of emoji that may be forwarded to external
+// messengers; empty means unrestricted (each provider still silently drops what
+// it cannot render).
+type ReactionsConfig struct {
+	AllowedEmoji []string `mapstructure:"allowed_emoji"`
 }
 
 type ServiceConfig struct {

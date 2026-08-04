@@ -59,6 +59,10 @@ type fakeProvidersAdapter struct {
 
 func (f *fakeProvidersAdapter) SendMessage(context.Context, *model.Message) error { return nil }
 
+func (f *fakeProvidersAdapter) SendReaction(context.Context, *model.Reaction, *model.ReactionResult) error {
+	return nil
+}
+
 func (f *fakeProvidersAdapter) SendTyping(_ context.Context, req *model.TypingDispatch) error {
 	f.typingCalls = append(f.typingCalls, req)
 

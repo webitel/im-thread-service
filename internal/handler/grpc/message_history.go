@@ -3,6 +3,8 @@ package grpc
 import (
 	"context"
 
+	"github.com/google/uuid"
+
 	impb "github.com/webitel/im-thread-service/gen/go/thread/v1"
 	"github.com/webitel/im-thread-service/internal/domain/model"
 	"github.com/webitel/im-thread-service/internal/handler/grpc/mapper"
@@ -37,7 +39,7 @@ func (s *MessageHistoryServer) SearchThreadMessagesHistory(ctx context.Context, 
 		return nil, err
 	}
 
-	resp := mapper.MapMessage2SearchMessageHistoryResponse(messages)
+	resp := mapper.MapMessage2SearchMessageHistoryResponse(messages, hmiDTO.CallerID)
 	resp.From = mapper.GetUniqueFrom(messages)
 
 	if pageInfo.HasNextPage {
@@ -63,7 +65,8 @@ func (s *MessageHistoryServer) SearchLeftThreadsMessageHistory(ctx context.Conte
 		return nil, err
 	}
 
-	resp := mapper.MapMessage2SearchMessageHistoryResponse(messages)
+	// Left-threads history has no caller context; reacted_by_me stays false.
+	resp := mapper.MapMessage2SearchMessageHistoryResponse(messages, uuid.Nil)
 	resp.From = mapper.GetUniqueFrom(messages)
 
 	if pageInfo.HasNextPage {

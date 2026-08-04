@@ -23,6 +23,7 @@ type fakeUnitOfWork struct {
 	messageStore         store.MessageStore
 	messageExternalStore store.MessageExternalStore
 	messageStatusStore   store.MessageStatusStore
+	messageReactionStore store.MessageReactionStore
 	outboxStore          store.OutboxStore
 	botControlStore      store.BotControlStore
 	threadStore          store.ThreadStore
@@ -98,6 +99,10 @@ func (f fakeUnitOfWork) Outbox() store.OutboxStore {
 
 func (f fakeUnitOfWork) InteractiveCallback() store.InteractiveCallback {
 	return nil
+}
+
+func (f fakeUnitOfWork) MessageReactions() store.MessageReactionStore {
+	return f.messageReactionStore
 }
 
 func (f fakeUnitOfWork) BotControl() store.BotControlStore {
