@@ -91,7 +91,63 @@ type Message struct {
 
 	ReplyTo *ReplyToPreview `json:"reply_to,omitempty" db:"reply_to"`
 
+	ForwardOrigin *ForwardOrigin `json:"forward_origin,omitempty" db:"forward_origin"`
+
 	domainEvents []event.Outboxer
+}
+
+type ForwardOriginKind int16
+
+const (
+	ForwardOriginUnspecified ForwardOriginKind = iota
+	ForwardOriginInternal
+	ForwardOriginExternalUser
+	ForwardOriginExternalHiddenUser
+	ForwardOriginExternalChat
+)
+
+func (k ForwardOriginKind) IsExternal() bool {
+	return k == ForwardOriginExternalUser ||
+		k == ForwardOriginExternalHiddenUser ||
+		k == ForwardOriginExternalChat
+}
+
+type ForwardOrigin struct {
+	Kind            ForwardOriginKind `json:"kind"`
+	SenderID        *uuid.UUID        `json:"sender_id,omitempty"`
+	SenderName      string            `json:"sender_name,omitempty"`
+	OriginalSentAt  int64             `json:"original_sent_at,omitempty"`
+	SourceMessageID *uuid.UUID        `json:"source_message_id,omitempty"`
+}
+
+func NewInternalForwardOrigin(src *Message, senderName string) *ForwardOrigin {
+	if src == nil {
+		return nil
+	}
+
+	senderID, sourceID := src.SenderID, src.ID
+
+	return &ForwardOrigin{
+		Kind:            ForwardOriginInternal,
+		SenderID:        &senderID,
+		SenderName:      senderName,
+		OriginalSentAt:  src.CreatedAtUnixMillis(),
+		SourceMessageID: &sourceID,
+	}
+}
+
+func (f *ForwardOrigin) AsEvent() *event.ForwardOriginPayload {
+	if f == nil {
+		return nil
+	}
+
+	return &event.ForwardOriginPayload{
+		Kind:            int16(f.Kind),
+		SenderID:        f.SenderID,
+		SenderName:      f.SenderName,
+		OriginalSentAt:  f.OriginalSentAt,
+		SourceMessageID: f.SourceMessageID,
+	}
 }
 
 type ReplyAttachment struct {
@@ -274,6 +330,8 @@ func (m *Message) WithCreatedEvent(ctx context.Context, sendID string) *Message 
 			e.ReplyTo.AttachmentMime = a.Mime
 		}
 	}
+
+	e.ForwardOrigin = m.ForwardOrigin.AsEvent()
 
 	if payload, ok := TryGetPayloadFromContext(ctx); ok {
 		e.AddMetadata(XJWTPayload, payload)

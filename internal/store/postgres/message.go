@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -59,6 +60,39 @@ func replyToArg(msg *model.Message) *uuid.UUID {
 	return &id
 }
 
+const (
+	forwardOriginColumns = `forward_origin_kind, forward_origin_sender_id, forward_origin_sender_name,
+		forward_origin_sent_at, forward_from_message_id`
+	forwardOriginValues = `@ForwardOriginKind, @ForwardOriginSenderID, @ForwardOriginSenderName,
+		@ForwardOriginSentAt, @ForwardFromMessageID`
+)
+
+func addForwardOriginArgs(args pgx.NamedArgs, msg *model.Message) pgx.NamedArgs {
+	origin := msg.ForwardOrigin
+	if origin == nil {
+		args["ForwardOriginKind"] = nil
+		args["ForwardOriginSenderID"] = nil
+		args["ForwardOriginSenderName"] = nil
+		args["ForwardOriginSentAt"] = nil
+		args["ForwardFromMessageID"] = nil
+
+		return args
+	}
+
+	args["ForwardOriginKind"] = int16(origin.Kind)
+	args["ForwardOriginSenderID"] = origin.SenderID
+	args["ForwardOriginSenderName"] = origin.SenderName
+	args["ForwardFromMessageID"] = origin.SourceMessageID
+
+	if origin.OriginalSentAt > 0 {
+		args["ForwardOriginSentAt"] = time.UnixMilli(origin.OriginalSentAt).UTC()
+	} else {
+		args["ForwardOriginSentAt"] = nil
+	}
+
+	return args
+}
+
 func (m *messageStore) SaveMessage(ctx context.Context, msg *model.Message) (*model.Message, error) {
 	if err := validateMessageForSave(msg, "postgres.message.save_message"); err != nil {
 		return nil, err
@@ -66,17 +100,19 @@ func (m *messageStore) SaveMessage(ctx context.Context, msg *model.Message) (*mo
 
 	const query = `
 		insert into im_message.messages (
-			domain_id, thread_id, sender_id, member_id, type, body, metadata, origin_sender, reply_to
+			domain_id, thread_id, sender_id, member_id, type, body, metadata, origin_sender, reply_to,
+			` + forwardOriginColumns + `
 		)
 		values (
-			@DomainID, @ThreadID, @SenderID, @MemberID, @Type, @Body, @Metadata, @OriginSender, @ReplyTo
+			@DomainID, @ThreadID, @SenderID, @MemberID, @Type, @Body, @Metadata, @OriginSender, @ReplyTo,
+			` + forwardOriginValues + `
 		)
 		returning
 			id, domain_id, thread_id, member_id, type, body, metadata, created_at, updated_at,
 			jsonb_build_object('id', sender_id) as "from"
 	`
 
-	args := pgx.NamedArgs{
+	args := addForwardOriginArgs(pgx.NamedArgs{
 		"DomainID":     msg.DomainID,
 		"ThreadID":     msg.ThreadID,
 		"SenderID":     msg.GetSender(),
@@ -86,7 +122,7 @@ func (m *messageStore) SaveMessage(ctx context.Context, msg *model.Message) (*mo
 		"Metadata":     msg.Metadata,
 		"OriginSender": msg.GetOriginSender(),
 		"ReplyTo":      replyToArg(msg),
-	}
+	}, msg)
 
 	rows, err := m.db.Query(ctx, query, args)
 	if err != nil {
@@ -363,8 +399,10 @@ func prepareSaveMessageLocationQuery(msg *model.Message) (string, pgx.NamedArgs)
 	query := `
 		with msg_ins as (
 			insert into im_message.messages
-			(thread_id, domain_id, sender_id, member_id, type, body, metadata, reply_to)
-			values (@ThreadID, @DomainID, @SenderID, @MemberID, @Type, @Body, @Metadata, @ReplyTo)
+			(thread_id, domain_id, sender_id, member_id, type, body, metadata, reply_to,
+			 ` + forwardOriginColumns + `)
+			values (@ThreadID, @DomainID, @SenderID, @MemberID, @Type, @Body, @Metadata, @ReplyTo,
+			 ` + forwardOriginValues + `)
 			returning *
 		),
 		location_ins as (
@@ -390,7 +428,7 @@ func prepareSaveMessageLocationQuery(msg *model.Message) (string, pgx.NamedArgs)
 		) l on true;
 	`
 
-	args := pgx.NamedArgs{
+	args := addForwardOriginArgs(pgx.NamedArgs{
 		"ThreadID":  msg.ThreadID,
 		"DomainID":  msg.DomainID,
 		"SenderID":  msg.From.ID,
@@ -403,7 +441,7 @@ func prepareSaveMessageLocationQuery(msg *model.Message) (string, pgx.NamedArgs)
 		"Latitude":  msg.Location.Latitude,
 		"Longitude": msg.Location.Longitude,
 		"Name":      msg.Location.Name,
-	}
+	}, msg)
 
 	return queryobject.CompactSQL(query), args
 }
@@ -432,8 +470,10 @@ func prepareSaveMessageContactQuery(msg *model.Message) (string, pgx.NamedArgs) 
 	query := `
 		with msg_ins as (
 			insert into im_message.messages
-			(thread_id, domain_id, sender_id, member_id, type, body, metadata, reply_to)
-			values (@ThreadID, @DomainID, @SenderID, @MemberID, @Type, @Body, @Metadata, @ReplyTo)
+			(thread_id, domain_id, sender_id, member_id, type, body, metadata, reply_to,
+			 ` + forwardOriginColumns + `)
+			values (@ThreadID, @DomainID, @SenderID, @MemberID, @Type, @Body, @Metadata, @ReplyTo,
+			 ` + forwardOriginValues + `)
 			returning *
 		),
 		contact_ins as (
@@ -459,7 +499,7 @@ func prepareSaveMessageContactQuery(msg *model.Message) (string, pgx.NamedArgs) 
 			select to_jsonb(c) as contact from contact_ins c
 		) c on true;
 	`
-	args := pgx.NamedArgs{
+	args := addForwardOriginArgs(pgx.NamedArgs{
 		"ThreadID": msg.ThreadID,
 		"DomainID": msg.DomainID,
 		"SenderID": msg.From.ID,
@@ -471,7 +511,7 @@ func prepareSaveMessageContactQuery(msg *model.Message) (string, pgx.NamedArgs) 
 		"Phone":    msg.Contact.PhoneNumber,
 		"Name":     msg.Contact.Name,
 		"Email":    msg.Contact.Email,
-	}
+	}, msg)
 
 	return queryobject.CompactSQL(query), args
 }
