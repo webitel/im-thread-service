@@ -1,11 +1,4 @@
 -- +goose Up
--- The origin is a snapshot, not a live reference like reply_to: an inbound
--- forward from an external channel has no internal source row, and a copy can
--- land in a thread whose reader cannot see the source. forward_from_message_id
--- is still an FK, so a purged source degrades to NULL.
--- forward_origin_kind: 1 internal, 2 external user, 3 external hidden user,
--- 4 external chat/channel. sender_id and forward_from_message_id are non-null
--- only for kind 1.
 alter table "im_message"."messages"
     add column if not exists "forward_origin_kind"        smallint,
     add column if not exists "forward_origin_sender_id"   uuid,
@@ -20,7 +13,11 @@ create index if not exists idx_messages_forward_from
 
 drop view if exists "im_thread"."v_messages";
 
--- Rebuilt from 20260727120000 with one addition: forward_origin.
+-- Rebuilt from 20260731120000 with one addition: forward_origin. This migration
+-- was authored as 20260730120000 on a branch that predated reactions and was
+-- renumbered above it on merge, so the definition below has to carry the
+-- reactions aggregate too — rebuilding from the older 20260727120000 baseline
+-- would drop it.
 create or replace view "im_thread"."v_messages" as (
 SELECT m.id,
     m.thread_id,
@@ -101,7 +98,21 @@ SELECT m.id,
                 'error', st.error
              ) ORDER BY st.updated_at)
            FROM im_message.message_statuses st
-          WHERE st.message_id = m.id) AS statuses
+          WHERE st.message_id = m.id) AS statuses,
+    ( SELECT jsonb_agg(jsonb_build_object(
+                'emoji', e.emoji,
+                'count', e.cnt,
+                'reactor_ids', e.reactor_ids,
+                'last_reacted_at', e.last_ms
+             ) ORDER BY e.first_at)
+           FROM ( SELECT mr.emoji,
+                         count(*)::int AS cnt,
+                         to_jsonb((array_agg(mr.reactor_id ORDER BY mr.created_at))[1:12]) AS reactor_ids,
+                         min(mr.created_at) AS first_at,
+                         (extract(epoch from max(mr.updated_at)) * 1000)::bigint AS last_ms
+                    FROM im_message.message_reactions mr
+                   WHERE mr.message_id = m.id
+                   GROUP BY mr.emoji ) e ) AS reactions
    FROM im_message.messages m
      LEFT JOIN LATERAL ( SELECT jsonb_build_object('id', td.id, 'role', td.thread_role, 'member_id', m.sender_id) AS member_data
            FROM im_thread.thread_dialog td
@@ -114,7 +125,7 @@ SELECT m.id,
 -- +goose Down
 drop view if exists "im_thread"."v_messages";
 
--- Restores the 20260727120000 definition verbatim.
+-- Restores the 20260731120000 definition verbatim (reactions, no forward_origin).
 create or replace view "im_thread"."v_messages" as (
 SELECT m.id,
     m.thread_id,
@@ -187,7 +198,21 @@ SELECT m.id,
                 'error', st.error
              ) ORDER BY st.updated_at)
            FROM im_message.message_statuses st
-          WHERE st.message_id = m.id) AS statuses
+          WHERE st.message_id = m.id) AS statuses,
+    ( SELECT jsonb_agg(jsonb_build_object(
+                'emoji', e.emoji,
+                'count', e.cnt,
+                'reactor_ids', e.reactor_ids,
+                'last_reacted_at', e.last_ms
+             ) ORDER BY e.first_at)
+           FROM ( SELECT mr.emoji,
+                         count(*)::int AS cnt,
+                         to_jsonb((array_agg(mr.reactor_id ORDER BY mr.created_at))[1:12]) AS reactor_ids,
+                         min(mr.created_at) AS first_at,
+                         (extract(epoch from max(mr.updated_at)) * 1000)::bigint AS last_ms
+                    FROM im_message.message_reactions mr
+                   WHERE mr.message_id = m.id
+                   GROUP BY mr.emoji ) e ) AS reactions
    FROM im_message.messages m
      LEFT JOIN LATERAL ( SELECT jsonb_build_object('id', td.id, 'role', td.thread_role, 'member_id', m.sender_id) AS member_data
            FROM im_thread.thread_dialog td
