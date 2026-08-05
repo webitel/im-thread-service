@@ -50,6 +50,7 @@ type MessageExternalStore interface {
 	Save(ctx context.Context, rec *model.MessageExternalID) error
 	LookupMessageID(ctx context.Context, gateID, externalID string) (uuid.UUID, error)
 	LookupExternalID(ctx context.Context, messageID uuid.UUID, gateID string) (string, error)
+	UpdateDelivery(ctx context.Context, in *model.MessageDelivery) (*model.MessageExternalID, error)
 }
 
 type ThreadDialogStore interface {

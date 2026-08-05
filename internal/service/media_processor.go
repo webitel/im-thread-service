@@ -21,6 +21,7 @@ type AttachmentProcessor interface {
 	GetURL() string
 	GetMimeType() string
 	GetName() string
+	GetSize() int64
 	SetID(int64)
 	SetMime(string)
 	SetURL(string)

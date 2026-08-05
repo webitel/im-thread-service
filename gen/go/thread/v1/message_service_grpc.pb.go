@@ -28,6 +28,7 @@ const (
 	Message_SendContact_FullMethodName             = "/webitel.im.service.thread.v1.Message/SendContact"
 	Message_SendSystemMessage_FullMethodName       = "/webitel.im.service.thread.v1.Message/SendSystemMessage"
 	Message_EditMessage_FullMethodName             = "/webitel.im.service.thread.v1.Message/EditMessage"
+	Message_UpdateMessageDelivery_FullMethodName   = "/webitel.im.service.thread.v1.Message/UpdateMessageDelivery"
 )
 
 // MessageClient is the client API for Message service.
@@ -58,6 +59,10 @@ type MessageClient interface {
 	SendSystemMessage(ctx context.Context, in *SendSystemMessageRequest, opts ...grpc.CallOption) (*SendMessageResponse, error)
 	// Edits a previously sent message.
 	EditMessage(ctx context.Context, in *EditMessageRequest, opts ...grpc.CallOption) (*EditMessageResponse, error)
+	// Records what an external channel reported about a message we sent through it:
+	// delivered to the device, seen by the recipient, or failed. The message is
+	// identified by the id the channel itself uses.
+	UpdateMessageDelivery(ctx context.Context, in *UpdateMessageDeliveryRequest, opts ...grpc.CallOption) (*UpdateMessageDeliveryResponse, error)
 }
 
 type messageClient struct {
@@ -158,6 +163,16 @@ func (c *messageClient) EditMessage(ctx context.Context, in *EditMessageRequest,
 	return out, nil
 }
 
+func (c *messageClient) UpdateMessageDelivery(ctx context.Context, in *UpdateMessageDeliveryRequest, opts ...grpc.CallOption) (*UpdateMessageDeliveryResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(UpdateMessageDeliveryResponse)
+	err := c.cc.Invoke(ctx, Message_UpdateMessageDelivery_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // MessageServer is the server API for Message service.
 // All implementations must embed UnimplementedMessageServer
 // for forward compatibility.
@@ -186,6 +201,10 @@ type MessageServer interface {
 	SendSystemMessage(context.Context, *SendSystemMessageRequest) (*SendMessageResponse, error)
 	// Edits a previously sent message.
 	EditMessage(context.Context, *EditMessageRequest) (*EditMessageResponse, error)
+	// Records what an external channel reported about a message we sent through it:
+	// delivered to the device, seen by the recipient, or failed. The message is
+	// identified by the id the channel itself uses.
+	UpdateMessageDelivery(context.Context, *UpdateMessageDeliveryRequest) (*UpdateMessageDeliveryResponse, error)
 	mustEmbedUnimplementedMessageServer()
 }
 
@@ -222,6 +241,9 @@ func (UnimplementedMessageServer) SendSystemMessage(context.Context, *SendSystem
 }
 func (UnimplementedMessageServer) EditMessage(context.Context, *EditMessageRequest) (*EditMessageResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method EditMessage not implemented")
+}
+func (UnimplementedMessageServer) UpdateMessageDelivery(context.Context, *UpdateMessageDeliveryRequest) (*UpdateMessageDeliveryResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method UpdateMessageDelivery not implemented")
 }
 func (UnimplementedMessageServer) mustEmbedUnimplementedMessageServer() {}
 func (UnimplementedMessageServer) testEmbeddedByValue()                 {}
@@ -406,6 +428,24 @@ func _Message_EditMessage_Handler(srv interface{}, ctx context.Context, dec func
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Message_UpdateMessageDelivery_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateMessageDeliveryRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MessageServer).UpdateMessageDelivery(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Message_UpdateMessageDelivery_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MessageServer).UpdateMessageDelivery(ctx, req.(*UpdateMessageDeliveryRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // Message_ServiceDesc is the grpc.ServiceDesc for Message service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -448,6 +488,10 @@ var Message_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "EditMessage",
 			Handler:    _Message_EditMessage_Handler,
+		},
+		{
+			MethodName: "UpdateMessageDelivery",
+			Handler:    _Message_UpdateMessageDelivery_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

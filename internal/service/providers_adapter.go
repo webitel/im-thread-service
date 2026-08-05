@@ -125,6 +125,7 @@ func (a *baseRPCProvidersAdapter) SendMessage(ctx context.Context, message *mode
 					Caption:           message.Body,
 					DomainId:          message.DomainID,
 					ReplyToExternalId: replyToExternal,
+					SenderName:        senderName(message),
 				})
 
 			case model.MessageTypeText:
@@ -136,6 +137,7 @@ func (a *baseRPCProvidersAdapter) SendMessage(ctx context.Context, message *mode
 					Text:              message.Body,
 					DomainId:          message.DomainID,
 					ReplyToExternalId: replyToExternal,
+					SenderName:        senderName(message),
 				})
 
 			case model.MessageTypeContact:
@@ -154,6 +156,7 @@ func (a *baseRPCProvidersAdapter) SendMessage(ctx context.Context, message *mode
 					PhoneNumber:       strval(message.Contact.PhoneNumber),
 					Email:             message.Contact.Email,
 					ReplyToExternalId: replyToExternal,
+					SenderName:        senderName(message),
 				})
 			case model.MessageTypeInteractive:
 				if message.Interactive == nil {
@@ -174,6 +177,7 @@ func (a *baseRPCProvidersAdapter) SendMessage(ctx context.Context, message *mode
 					SendId:            &sendID,
 					Interactive:       mapInteractive(message.Interactive),
 					ReplyToExternalId: replyToExternal,
+					SenderName:        senderName(message),
 				})
 			case model.MessageTypeLocation:
 				if message.Location == nil {
@@ -192,6 +196,7 @@ func (a *baseRPCProvidersAdapter) SendMessage(ctx context.Context, message *mode
 					Name:              message.Location.Name,
 					Address:           message.Location.Address,
 					ReplyToExternalId: replyToExternal,
+					SenderName:        senderName(message),
 				})
 			case model.MessageTypeSystem:
 				if message.System == nil {
@@ -294,7 +299,11 @@ func (a *baseRPCProvidersAdapter) persistExternalID(ctx context.Context, message
 }
 
 func mapInteractive(m *model.MessageInteractive) *provider.ProviderInteractive {
-	out := &provider.ProviderInteractive{SingleUse: m.SingleUse}
+	out := &provider.ProviderInteractive{
+		SingleUse:       m.SingleUse,
+		Placement:       mapMenuPlacement(m.Placement),
+		InputFieldState: mapInputFieldState(m.InputFieldState),
+	}
 
 	if m.Kind.Markup != nil {
 		rows := make([]*provider.ProviderKeyboardRow, 0, len(m.Kind.Markup.Rows))
@@ -327,6 +336,30 @@ func mapInteractive(m *model.MessageInteractive) *provider.ProviderInteractive {
 	}
 
 	return out
+}
+
+func mapMenuPlacement(in model.MenuPlacement) provider.MenuPlacement {
+	switch in {
+	case model.MenuPlacementInline:
+		return provider.MenuPlacement_MENU_PLACEMENT_INLINE
+	case model.MenuPlacementPersistent:
+		return provider.MenuPlacement_MENU_PLACEMENT_PERSISTENT
+	default:
+		return provider.MenuPlacement_MENU_PLACEMENT_UNSPECIFIED
+	}
+}
+
+func mapInputFieldState(in model.InputFieldState) provider.InputFieldState {
+	switch in {
+	case model.InputFieldStateRegular:
+		return provider.InputFieldState_INPUT_FIELD_STATE_REGULAR
+	case model.InputFieldStateMinimized:
+		return provider.InputFieldState_INPUT_FIELD_STATE_MINIMIZED
+	case model.InputFieldStateHidden:
+		return provider.InputFieldState_INPUT_FIELD_STATE_HIDDEN
+	default:
+		return provider.InputFieldState_INPUT_FIELD_STATE_UNSPECIFIED
+	}
 }
 
 func mapButtons(buttons []*model.KeyboardButton) []*provider.ProviderKeyboardButton {
@@ -393,6 +426,14 @@ func metadataToStringMap(m map[string]any) map[string]string {
 	return out
 }
 
+func senderName(message *model.Message) string {
+	if message == nil || message.From.Identity == nil {
+		return ""
+	}
+
+	return message.From.Identity.ChatName
+}
+
 func extratcFiles[T AttachmentProcessor](files []T) []*provider.ProviderFile {
 	providerFiles := make([]*provider.ProviderFile, 0, len(files))
 
@@ -409,5 +450,6 @@ func extractFile[T AttachmentProcessor](first T) *provider.ProviderFile {
 		Url:      first.GetURL(),
 		Name:     first.GetName(),
 		MimeType: first.GetMimeType(),
+		Size:     first.GetSize(),
 	}
 }

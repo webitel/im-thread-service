@@ -6,8 +6,10 @@ import (
 	"log/slog"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
+	"google.golang.org/grpc/codes"
 
 	"github.com/webitel/webitel-go-kit/pkg/errors"
 
@@ -435,6 +437,46 @@ func (s *MessageService) Read(ctx context.Context, in *dto.ReadMessageRequest) e
 
 		return nil
 	})
+}
+
+func (s *MessageService) UpdateMessageDelivery(ctx context.Context, in *model.MessageDelivery) error {
+	log := s.logger.With("operation", "update_message_delivery")
+
+	if in == nil {
+		return errors.InvalidArgument("delivery report required", errors.WithID("service.message.update_message_delivery"))
+	}
+	if in.GateID == "" || in.ExternalID == "" {
+		return errors.InvalidArgument("gate id and external message id are required", errors.WithID("service.message.update_message_delivery"))
+	}
+	if !in.Status.Valid() {
+		return errors.InvalidArgument("unknown delivery status", errors.WithID("service.message.update_message_delivery"))
+	}
+	if in.At.IsZero() {
+		in.At = time.Now().UTC()
+	}
+
+	rec, err := s.uow.MessageExternal().UpdateDelivery(ctx, in)
+	if err != nil {
+		if errors.Code(err) == codes.NotFound {
+			log.WarnContext(ctx, "delivery report for an unknown message, ignoring",
+				slog.String("gate_id", in.GateID),
+				slog.String("external_id", in.ExternalID),
+				slog.String("status", in.Status.String()),
+			)
+
+			return nil
+		}
+
+		return err
+	}
+
+	log.DebugContext(ctx, "delivery state recorded",
+		slog.String("message_id", rec.MessageID.String()),
+		slog.String("thread_id", rec.ThreadID.String()),
+		slog.String("status", in.Status.String()),
+	)
+
+	return nil
 }
 
 func (s *MessageService) SendLocation(ctx context.Context, msg *model.Message) (*model.Message, error) {

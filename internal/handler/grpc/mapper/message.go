@@ -85,7 +85,9 @@ func convertPbButtonRowToDomain(row *impb.KeyboardRow) *model.KeyboardButtonRow 
 
 func ConvertInteractivePbToDomain(in *impb.Interactive) (*model.MessageInteractive, error) {
 	interactive := &model.MessageInteractive{
-		SingleUse: in.GetSingleUse(),
+		SingleUse:       in.GetSingleUse(),
+		Placement:       convertMenuPlacementPbToDomain(in.GetPlacement()),
+		InputFieldState: convertInputFieldStatePbToDomain(in.GetInputFieldState()),
 	}
 
 	switch in.GetAttachments().(type) {
@@ -117,6 +119,30 @@ func ConvertInteractivePbToDomain(in *impb.Interactive) (*model.MessageInteracti
 	}
 
 	return interactive, nil
+}
+
+func convertMenuPlacementPbToDomain(in impb.MenuPlacement) model.MenuPlacement {
+	switch in {
+	case impb.MenuPlacement_MENU_PLACEMENT_INLINE:
+		return model.MenuPlacementInline
+	case impb.MenuPlacement_MENU_PLACEMENT_PERSISTENT:
+		return model.MenuPlacementPersistent
+	default:
+		return model.MenuPlacementUnspecified
+	}
+}
+
+func convertInputFieldStatePbToDomain(in impb.InputFieldState) model.InputFieldState {
+	switch in {
+	case impb.InputFieldState_INPUT_FIELD_STATE_REGULAR:
+		return model.InputFieldStateRegular
+	case impb.InputFieldState_INPUT_FIELD_STATE_MINIMIZED:
+		return model.InputFieldStateMinimized
+	case impb.InputFieldState_INPUT_FIELD_STATE_HIDDEN:
+		return model.InputFieldStateHidden
+	default:
+		return model.InputFieldStateUnspecified
+	}
 }
 
 func convertInteractivePbListReplyToDomain(in *impb.KeyboardListReply) (*model.KeyboardListReply, error) {

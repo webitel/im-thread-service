@@ -25,6 +25,7 @@ type MessageService interface {
 	SendInteractiveCallback(ctx context.Context, callback *model.InteractiveCallback) (*model.InteractiveCallback, error)
 	SendSystemMessage(ctx context.Context, msg *model.Message) (*model.Message, error)
 	EditMessage(ctx context.Context, msg *model.Message) (*model.Message, error)
+	UpdateMessageDelivery(ctx context.Context, in *model.MessageDelivery) error
 }
 
 type MessageServer struct {
@@ -70,6 +71,16 @@ func (m *MessageServer) Read(ctx context.Context, in *impb.ReadMessageRequest) (
 	}
 
 	return &impb.ReadMessageResponse{}, nil
+}
+
+func (m *MessageServer) UpdateMessageDelivery(ctx context.Context, in *impb.UpdateMessageDeliveryRequest) (*impb.UpdateMessageDeliveryResponse, error) {
+	if err := m.handler.UpdateMessageDelivery(ctx, mapper.MapToMessageDelivery(in)); err != nil {
+		m.logger.Error("failed to update message delivery", "error", err)
+
+		return nil, err
+	}
+
+	return &impb.UpdateMessageDeliveryResponse{}, nil
 }
 
 func (m *MessageServer) SendLocation(ctx context.Context, in *impb.SendLocationRequest) (*impb.SendMessageResponse, error) {

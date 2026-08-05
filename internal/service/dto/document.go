@@ -101,6 +101,7 @@ func (d *Document) GetID() int64        { return d.ID }
 func (d *Document) GetURL() string      { return d.URL }
 func (d *Document) GetMimeType() string { return d.MimeType }
 func (d *Document) GetName() string     { return d.Name }
+func (d *Document) GetSize() int64      { return d.Size }
 func (d *Document) SetID(id int64)      { d.ID = id }
 func (d *Document) SetMime(mime string) { d.MimeType = mime }
 func (d *Document) SetName(name string) { d.Name = name }
