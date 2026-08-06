@@ -28,6 +28,7 @@ func (mi *MessageImage) GetID() int64        { return mi.FileID }
 func (mi *MessageImage) GetURL() string      { return mi.URL }
 func (mi *MessageImage) GetName() string     { return mi.Name }
 func (mi *MessageImage) GetMimeType() string { return mi.Mime }
+func (mi *MessageImage) GetSize() int64      { return mi.Size }
 func (mi *MessageImage) GetFileID() int64    { return mi.FileID }
 func (mi *MessageImage) SetURL(url string)   { mi.URL = url }
 func (mi *MessageImage) SetName(name string) { mi.Name = name }
@@ -52,6 +53,7 @@ func (md *MessageDocument) SetID(id int64)      { md.FileID = id }
 func (md *MessageDocument) GetURL() string      { return md.URL }
 func (md *MessageDocument) GetName() string     { return md.Name }
 func (md *MessageDocument) GetMimeType() string { return md.Mime }
+func (md *MessageDocument) GetSize() int64      { return md.Size }
 func (md *MessageDocument) SetURL(url string)   { md.URL = url }
 func (md *MessageDocument) SetName(name string) { md.Name = name }
 func (md *MessageDocument) SetMime(mime string) { md.Mime = mime }

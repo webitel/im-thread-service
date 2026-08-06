@@ -140,6 +140,7 @@ func (a *baseRPCProvidersAdapter) SendMessage(ctx context.Context, message *mode
 					MessageId:         message.ID.String(),
 					ThreadId:          message.ThreadID.String(),
 					ReplyToExternalId: replyToExternal,
+					SenderName:        senderName(message),
 				})
 
 			case model.MessageTypeText:
@@ -153,10 +154,28 @@ func (a *baseRPCProvidersAdapter) SendMessage(ctx context.Context, message *mode
 					MessageId:         message.ID.String(),
 					ThreadId:          message.ThreadID.String(),
 					ReplyToExternalId: replyToExternal,
+					SenderName:        senderName(message),
 				})
 
 			case model.MessageTypeContact:
-				peerLog.Debug("message type contact: not implemented, skipping")
+				if message.Contact == nil {
+					peerLog.Warn("contact message has nil contact payload")
+
+					return
+				}
+
+				peerLog.Debug("sending contact")
+
+				resp, err = a.providersClient.SendContact(ctx, &provider.ProviderSendContactRequest{
+					GateId:            externalPeer.Via,
+					ExternalUserId:    userID,
+					DomainId:          message.DomainID,
+					Name:              strval(message.Contact.Name),
+					PhoneNumber:       strval(message.Contact.PhoneNumber),
+					Email:             message.Contact.Email,
+					ReplyToExternalId: replyToExternal,
+					SenderName:        senderName(message),
+				})
 			case model.MessageTypeInteractive:
 				if message.Interactive == nil {
 					peerLog.Warn("interactive message has nil interactive payload, skipping")
@@ -178,9 +197,28 @@ func (a *baseRPCProvidersAdapter) SendMessage(ctx context.Context, message *mode
 					MessageId:         message.ID.String(),
 					ThreadId:          message.ThreadID.String(),
 					ReplyToExternalId: replyToExternal,
+					SenderName:        senderName(message),
 				})
 			case model.MessageTypeLocation:
-				peerLog.Debug("message type location: not implemented, skipping")
+				if message.Location == nil {
+					peerLog.Warn("location message has nil location payload, skipping")
+
+					return
+				}
+
+				peerLog.Debug("sending location")
+
+				resp, err = a.providersClient.SendLocation(ctx, &provider.ProviderSendLocationRequest{
+					GateId:            externalPeer.Via,
+					ExternalUserId:    userID,
+					DomainId:          message.DomainID,
+					Latitude:          message.Location.Latitude,
+					Longitude:         message.Location.Longitude,
+					Name:              message.Location.Name,
+					Address:           message.Location.Address,
+					ReplyToExternalId: replyToExternal,
+					SenderName:        senderName(message),
+				})
 			case model.MessageTypeSystem:
 				if message.System == nil {
 					peerLog.Warn("system message has nil system payload, skipping")
@@ -427,7 +465,11 @@ func (a *baseRPCProvidersAdapter) persistExternalID(ctx context.Context, message
 }
 
 func mapInteractive(m *model.MessageInteractive) *provider.ProviderInteractive {
-	out := &provider.ProviderInteractive{SingleUse: m.SingleUse}
+	out := &provider.ProviderInteractive{
+		SingleUse:       m.SingleUse,
+		Placement:       mapMenuPlacement(m.Placement),
+		InputFieldState: mapInputFieldState(m.InputFieldState),
+	}
 
 	if m.Kind.Markup != nil {
 		rows := make([]*provider.ProviderKeyboardRow, 0, len(m.Kind.Markup.Rows))
@@ -460,6 +502,34 @@ func mapInteractive(m *model.MessageInteractive) *provider.ProviderInteractive {
 	}
 
 	return out
+}
+
+func mapMenuPlacement(in model.MenuPlacement) provider.MenuPlacement {
+	switch in {
+	case model.MenuPlacementInline:
+		return provider.MenuPlacement_MENU_PLACEMENT_INLINE
+	case model.MenuPlacementPersistent:
+		return provider.MenuPlacement_MENU_PLACEMENT_PERSISTENT
+	case model.MenuPlacementUnspecified:
+		return provider.MenuPlacement_MENU_PLACEMENT_UNSPECIFIED
+	default:
+		return provider.MenuPlacement_MENU_PLACEMENT_UNSPECIFIED
+	}
+}
+
+func mapInputFieldState(in model.InputFieldState) provider.InputFieldState {
+	switch in {
+	case model.InputFieldStateRegular:
+		return provider.InputFieldState_INPUT_FIELD_STATE_REGULAR
+	case model.InputFieldStateMinimized:
+		return provider.InputFieldState_INPUT_FIELD_STATE_MINIMIZED
+	case model.InputFieldStateHidden:
+		return provider.InputFieldState_INPUT_FIELD_STATE_HIDDEN
+	case model.InputFieldStateUnspecified:
+		return provider.InputFieldState_INPUT_FIELD_STATE_UNSPECIFIED
+	default:
+		return provider.InputFieldState_INPUT_FIELD_STATE_UNSPECIFIED
+	}
 }
 
 func mapButtons(buttons []*model.KeyboardButton) []*provider.ProviderKeyboardButton {
@@ -502,6 +572,14 @@ func mapButtons(buttons []*model.KeyboardButton) []*provider.ProviderKeyboardBut
 	return out
 }
 
+func strval(s *string) string {
+	if s == nil {
+		return ""
+	}
+
+	return *s
+}
+
 // metadataToStringMap converts map[string]any to map[string]string by calling
 // fmt.Sprint on each value. Non-string types (UUIDs, roles) stringify naturally.
 func metadataToStringMap(m map[string]any) map[string]string {
@@ -515,6 +593,14 @@ func metadataToStringMap(m map[string]any) map[string]string {
 	}
 
 	return out
+}
+
+func senderName(message *model.Message) string {
+	if message == nil || message.From.Identity == nil {
+		return ""
+	}
+
+	return message.From.Identity.ChatName
 }
 
 func extratcFiles[T AttachmentProcessor](files []T) []*provider.ProviderFile {
@@ -533,5 +619,6 @@ func extractFile[T AttachmentProcessor](first T) *provider.ProviderFile {
 		Url:      first.GetURL(),
 		Name:     first.GetName(),
 		MimeType: first.GetMimeType(),
+		Size:     first.GetSize(),
 	}
 }

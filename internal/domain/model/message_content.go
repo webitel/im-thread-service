@@ -37,10 +37,29 @@ type MessageContact struct {
 }
 
 type MessageInteractive struct {
-	Attachments *MessageContent `json:"attachments" db:"attachments"`
-	SingleUse   bool            `json:"single_use" db:"single_use"`
-	Kind        InteractiveKind `json:"kind" db:"kind"`
+	Attachments     *MessageContent `json:"attachments" db:"attachments"`
+	SingleUse       bool            `json:"single_use" db:"single_use"`
+	Kind            InteractiveKind `json:"kind" db:"kind"`
+	Placement       MenuPlacement   `json:"placement,omitempty" db:"placement"`
+	InputFieldState InputFieldState `json:"input_field_state,omitempty" db:"input_field_state"`
 }
+
+type MenuPlacement int16
+
+const (
+	MenuPlacementUnspecified MenuPlacement = 0
+	MenuPlacementInline      MenuPlacement = 1
+	MenuPlacementPersistent  MenuPlacement = 2
+)
+
+type InputFieldState int16
+
+const (
+	InputFieldStateUnspecified InputFieldState = 0
+	InputFieldStateRegular     InputFieldState = 1
+	InputFieldStateMinimized   InputFieldState = 2
+	InputFieldStateHidden      InputFieldState = 3
+)
 
 func (m *MessageInteractive) Value() (driver.Value, error) {
 	payload, err := json.Marshal(m)

@@ -6,6 +6,8 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/webitel/webitel-go-kit/pkg/errors"
+
 	impb "github.com/webitel/im-thread-service/gen/go/thread/v1"
 	"github.com/webitel/im-thread-service/internal/domain/model"
 	"github.com/webitel/im-thread-service/internal/domain/shared"
@@ -25,6 +27,7 @@ type MessageService interface {
 	SendInteractiveCallback(ctx context.Context, callback *model.InteractiveCallback) (*model.InteractiveCallback, error)
 	SendSystemMessage(ctx context.Context, msg *model.Message) (*model.Message, error)
 	EditMessage(ctx context.Context, msg *model.Message) (*model.Message, error)
+	UpdateMessageDelivery(ctx context.Context, in *model.MessageDelivery) error
 	DeleteMessages(ctx context.Context, in *dto.DeleteMessagesRequest) (*dto.DeleteMessagesResponse, error)
 	ForwardMessages(ctx context.Context, in *dto.ForwardMessagesRequest) (*dto.ForwardMessagesResponse, error)
 	SendTyping(ctx context.Context, in *dto.SendTypingRequest) (*dto.SendTypingResponse, error)
@@ -74,6 +77,16 @@ func (m *MessageServer) Read(ctx context.Context, in *impb.ReadMessageRequest) (
 	}
 
 	return &impb.ReadMessageResponse{}, nil
+}
+
+func (m *MessageServer) UpdateMessageDelivery(ctx context.Context, in *impb.UpdateMessageDeliveryRequest) (*impb.UpdateMessageDeliveryResponse, error) {
+	if err := m.handler.UpdateMessageDelivery(ctx, mapper.MapToMessageDelivery(in)); err != nil {
+		m.logger.Error("failed to update message delivery", "error", err)
+
+		return nil, err
+	}
+
+	return &impb.UpdateMessageDeliveryResponse{}, nil
 }
 
 func (m *MessageServer) SendLocation(ctx context.Context, in *impb.SendLocationRequest) (*impb.SendMessageResponse, error) {
@@ -182,9 +195,18 @@ func (m *MessageServer) SendInteractive(ctx context.Context, in *impb.SendIntera
 func (m *MessageServer) SendInteractiveCallback(ctx context.Context, in *impb.InteractiveCallbackRequest) (*impb.InteractiveCallbackResponse, error) {
 	from := mapper.MapPeerFromProto(in.GetReactedBy())
 
+	inReplyTo, err := uuid.Parse(in.GetInReplyTo())
+	if err != nil {
+		return nil, errors.InvalidArgument(
+			"in_reply_to must be a valid message id",
+			errors.WithCause(err),
+			errors.WithID("handler.grpc.message.send_interactive_callback"),
+		)
+	}
+
 	callback := &model.InteractiveCallback{
 		ReactedBy:    from.ID,
-		InReplyTo:    uuid.MustParse(in.GetInReplyTo()),
+		InReplyTo:    inReplyTo,
 		ButtonCode:   in.GetButtonCode(),
 		CallbackData: in.GetCallbackData(),
 	}

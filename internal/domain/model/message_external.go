@@ -1,6 +1,10 @@
 package model
 
-import "github.com/google/uuid"
+import (
+	"time"
+
+	"github.com/google/uuid"
+)
 
 type MessageExternalDirection int16
 
@@ -15,4 +19,13 @@ type MessageExternalID struct {
 	GateID     string
 	ExternalID string
 	Direction  MessageExternalDirection
+}
+
+type MessageDelivery struct {
+	GateID     string
+	ExternalID string
+	Status     MessageDeliveryStatus
+	Reason     string
+	At         time.Time
+	DomainID   int32
 }

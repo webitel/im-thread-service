@@ -20,9 +20,10 @@ const (
 )
 
 type Identity struct {
-	Issuer string
-	Name   string
-	Via    *string
+	Issuer   string
+	Name     string
+	ChatName string
+	Via      *string
 }
 
 type Peer struct {

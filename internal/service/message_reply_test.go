@@ -18,6 +18,10 @@ type fakeMessageExternalStore struct {
 	messageIDByExt   map[string]uuid.UUID
 	externalIDByMsg  map[uuid.UUID]string
 	lookupMessageErr error
+
+	deliveries        []*model.MessageDelivery
+	deliveryRecord    *model.MessageExternalID
+	updateDeliveryErr error
 }
 
 func (f *fakeMessageExternalStore) Save(ctx context.Context, rec *model.MessageExternalID) error {
@@ -36,6 +40,20 @@ func (f *fakeMessageExternalStore) LookupMessageID(ctx context.Context, gateID, 
 
 func (f *fakeMessageExternalStore) LookupExternalID(ctx context.Context, messageID uuid.UUID, gateID string) (string, error) {
 	return f.externalIDByMsg[messageID], nil
+}
+
+func (f *fakeMessageExternalStore) UpdateDelivery(ctx context.Context, in *model.MessageDelivery) (*model.MessageExternalID, error) {
+	f.deliveries = append(f.deliveries, in)
+
+	if f.updateDeliveryErr != nil {
+		return nil, f.updateDeliveryErr
+	}
+
+	if f.deliveryRecord != nil {
+		return f.deliveryRecord, nil
+	}
+
+	return &model.MessageExternalID{MessageID: uuid.New(), ThreadID: uuid.New(), GateID: in.GateID, ExternalID: in.ExternalID}, nil
 }
 
 func newReplyTestService(messageStore *fakeMessageStore, externalStore *fakeMessageExternalStore) *MessageService {

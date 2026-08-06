@@ -34,6 +34,19 @@ func (s MessageDeliveryStatus) String() string {
 	return "unspecified"
 }
 
+// Valid reports whether s is a receipt an external provider may report.
+// SENT is excluded: it is assigned by this service on accept, never received.
+func (s MessageDeliveryStatus) Valid() bool {
+	switch s {
+	case MessageDeliveryStatusDelivered, MessageDeliveryStatusRead, MessageDeliveryStatusFailed:
+		return true
+	case MessageDeliveryStatusUnspecified, MessageDeliveryStatusSent:
+		return false
+	default:
+		return false
+	}
+}
+
 // MessageStatus is a single per-recipient delivery state row.
 type MessageStatus struct {
 	DomainID    int32                 `json:"domain_id" db:"domain_id"`
