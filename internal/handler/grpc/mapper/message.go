@@ -127,6 +127,8 @@ func convertMenuPlacementPbToDomain(in impb.MenuPlacement) model.MenuPlacement {
 		return model.MenuPlacementInline
 	case impb.MenuPlacement_MENU_PLACEMENT_PERSISTENT:
 		return model.MenuPlacementPersistent
+	case impb.MenuPlacement_MENU_PLACEMENT_UNSPECIFIED:
+		return model.MenuPlacementUnspecified
 	default:
 		return model.MenuPlacementUnspecified
 	}
@@ -140,6 +142,8 @@ func convertInputFieldStatePbToDomain(in impb.InputFieldState) model.InputFieldS
 		return model.InputFieldStateMinimized
 	case impb.InputFieldState_INPUT_FIELD_STATE_HIDDEN:
 		return model.InputFieldStateHidden
+	case impb.InputFieldState_INPUT_FIELD_STATE_UNSPECIFIED:
+		return model.InputFieldStateUnspecified
 	default:
 		return model.InputFieldStateUnspecified
 	}

@@ -40,6 +40,8 @@ func (s MessageDeliveryStatus) Valid() bool {
 	switch s {
 	case MessageDeliveryStatusDelivered, MessageDeliveryStatusRead, MessageDeliveryStatusFailed:
 		return true
+	case MessageDeliveryStatusUnspecified, MessageDeliveryStatusSent:
+		return false
 	default:
 		return false
 	}

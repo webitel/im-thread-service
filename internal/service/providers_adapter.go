@@ -165,6 +165,7 @@ func (a *baseRPCProvidersAdapter) SendMessage(ctx context.Context, message *mode
 				}
 
 				peerLog.Debug("sending contact")
+
 				resp, err = a.providersClient.SendContact(ctx, &provider.ProviderSendContactRequest{
 					GateId:            externalPeer.Via,
 					ExternalUserId:    userID,
@@ -206,6 +207,7 @@ func (a *baseRPCProvidersAdapter) SendMessage(ctx context.Context, message *mode
 				}
 
 				peerLog.Debug("sending location")
+
 				resp, err = a.providersClient.SendLocation(ctx, &provider.ProviderSendLocationRequest{
 					GateId:            externalPeer.Via,
 					ExternalUserId:    userID,
@@ -508,6 +510,8 @@ func mapMenuPlacement(in model.MenuPlacement) provider.MenuPlacement {
 		return provider.MenuPlacement_MENU_PLACEMENT_INLINE
 	case model.MenuPlacementPersistent:
 		return provider.MenuPlacement_MENU_PLACEMENT_PERSISTENT
+	case model.MenuPlacementUnspecified:
+		return provider.MenuPlacement_MENU_PLACEMENT_UNSPECIFIED
 	default:
 		return provider.MenuPlacement_MENU_PLACEMENT_UNSPECIFIED
 	}
@@ -521,6 +525,8 @@ func mapInputFieldState(in model.InputFieldState) provider.InputFieldState {
 		return provider.InputFieldState_INPUT_FIELD_STATE_MINIMIZED
 	case model.InputFieldStateHidden:
 		return provider.InputFieldState_INPUT_FIELD_STATE_HIDDEN
+	case model.InputFieldStateUnspecified:
+		return provider.InputFieldState_INPUT_FIELD_STATE_UNSPECIFIED
 	default:
 		return provider.InputFieldState_INPUT_FIELD_STATE_UNSPECIFIED
 	}

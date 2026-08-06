@@ -54,6 +54,7 @@ func (s *messageExternalStore) UpdateDelivery(ctx context.Context, in *model.Mes
 	if in == nil || in.GateID == "" || in.ExternalID == "" {
 		return nil, errors.InvalidArgument("gate id and external id are required", errors.WithID("postgres.message_external.update_delivery"))
 	}
+
 	if !in.Status.Valid() {
 		return nil, errors.InvalidArgument("unknown delivery status", errors.WithID("postgres.message_external.update_delivery"))
 	}
@@ -85,6 +86,7 @@ func (s *messageExternalStore) UpdateDelivery(ctx context.Context, in *model.Mes
 	}
 
 	var rec model.MessageExternalID
+
 	err := s.db.QueryRow(ctx, query, args).Scan(
 		&rec.MessageID,
 		&rec.ThreadID,

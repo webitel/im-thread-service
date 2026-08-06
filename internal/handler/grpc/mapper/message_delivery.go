@@ -37,6 +37,8 @@ func mapToDeliveryStatus(pb impb.MessageDeliveryStatus) model.MessageDeliverySta
 		return model.MessageDeliveryStatusRead
 	case impb.MessageDeliveryStatus_MESSAGE_DELIVERY_STATUS_FAILED:
 		return model.MessageDeliveryStatusFailed
+	case impb.MessageDeliveryStatus_MESSAGE_DELIVERY_STATUS_UNSPECIFIED:
+		return model.MessageDeliveryStatusUnspecified
 	default:
 		return model.MessageDeliveryStatusUnspecified
 	}

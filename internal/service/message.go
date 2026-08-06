@@ -470,12 +470,15 @@ func (s *MessageService) UpdateMessageDelivery(ctx context.Context, in *model.Me
 	if in == nil {
 		return errors.InvalidArgument("delivery report required", errors.WithID("service.message.update_message_delivery"))
 	}
+
 	if in.GateID == "" || in.ExternalID == "" {
 		return errors.InvalidArgument("gate id and external message id are required", errors.WithID("service.message.update_message_delivery"))
 	}
+
 	if !in.Status.Valid() {
 		return errors.InvalidArgument("unknown delivery status", errors.WithID("service.message.update_message_delivery"))
 	}
+
 	if in.At.IsZero() {
 		in.At = time.Now().UTC()
 	}
