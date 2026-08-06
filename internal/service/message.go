@@ -496,6 +496,8 @@ func (s *MessageService) SendLocation(ctx context.Context, msg *model.Message) (
 			return err
 		}
 
+		msg.ID = savedMsg.ID
+
 		savedMsg.To = msg.To
 		savedMsg.IdempotencyKey = msg.IdempotencyKey
 		savedMsg.ReplyTo = msg.ReplyTo
@@ -533,6 +535,8 @@ func (s *MessageService) SendContact(ctx context.Context, msg *model.Message) (*
 		if savedMsg, err = uow.Messages().SaveMessageContact(txCtx, msg); err != nil {
 			return err
 		}
+
+		msg.ID = savedMsg.ID
 
 		savedMsg.To = msg.To
 		savedMsg.IdempotencyKey = msg.IdempotencyKey
@@ -592,6 +596,8 @@ func (s *MessageService) SendInteractive(ctx context.Context, msg *model.Message
 		if savedMsg, err = uow.Messages().SaveInteractiveMessage(ctx, msg); err != nil {
 			return err
 		}
+
+		msg.ID = savedMsg.ID
 
 		savedMsg.To = msg.To
 		savedMsg.WithCreatedEvent(ctx, msg.IdempotencyKey)

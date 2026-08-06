@@ -5,6 +5,7 @@ import (
 	"log/slog"
 
 	"github.com/google/uuid"
+	"github.com/webitel/webitel-go-kit/pkg/errors"
 
 	impb "github.com/webitel/im-thread-service/gen/go/thread/v1"
 	"github.com/webitel/im-thread-service/internal/domain/model"
@@ -187,9 +188,18 @@ func (m *MessageServer) SendInteractive(ctx context.Context, in *impb.SendIntera
 func (m *MessageServer) SendInteractiveCallback(ctx context.Context, in *impb.InteractiveCallbackRequest) (*impb.InteractiveCallbackResponse, error) {
 	from := mapper.MapPeerFromProto(in.GetReactedBy())
 
+	inReplyTo, err := uuid.Parse(in.GetInReplyTo())
+	if err != nil {
+		return nil, errors.InvalidArgument(
+			"in_reply_to must be a valid message id",
+			errors.WithCause(err),
+			errors.WithID("handler.grpc.message.send_interactive_callback"),
+		)
+	}
+
 	callback := &model.InteractiveCallback{
 		ReactedBy:    from.ID,
-		InReplyTo:    uuid.MustParse(in.GetInReplyTo()),
+		InReplyTo:    inReplyTo,
 		ButtonCode:   in.GetButtonCode(),
 		CallbackData: in.GetCallbackData(),
 	}

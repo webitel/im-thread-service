@@ -402,7 +402,6 @@ func mapButtons(buttons []*model.KeyboardButton) []*provider.ProviderKeyboardBut
 	return out
 }
 
-// strval safely dereferences an optional string, returning "" for nil.
 func strval(s *string) string {
 	if s == nil {
 		return ""
