@@ -13,6 +13,7 @@ import (
 
 	"github.com/webitel/webitel-go-kit/pkg/errors"
 
+	"github.com/webitel/im-thread-service/config"
 	imcontact "github.com/webitel/im-thread-service/infra/webitel/im-contact"
 	"github.com/webitel/im-thread-service/internal/domain/event"
 	"github.com/webitel/im-thread-service/internal/domain/model"
@@ -40,6 +41,11 @@ type MessageService struct {
 	contactClient    *imcontact.Client
 	mediaProcessor   MediaProcessor
 	providersAdapter ProvidersAdapter
+
+	// Ephemeral typing-indicator collaborators (see typing.go).
+	typingBus   TypingBus
+	rateLimiter RateLimiter
+	typingCfg   config.TypingConfig
 }
 
 func NewMessageService(
@@ -49,6 +55,9 @@ func NewMessageService(
 	contactClient *imcontact.Client,
 	mediaProcessor MediaProcessor,
 	providersAdapter ProvidersAdapter,
+	typingBus TypingBus,
+	rateLimiter RateLimiter,
+	typingCfg config.TypingConfig,
 ) *MessageService {
 	return &MessageService{
 		uow:              uow,
@@ -57,6 +66,9 @@ func NewMessageService(
 		contactClient:    contactClient,
 		mediaProcessor:   mediaProcessor,
 		providersAdapter: providersAdapter,
+		typingBus:        typingBus,
+		rateLimiter:      rateLimiter,
+		typingCfg:        typingCfg,
 	}
 }
 
@@ -156,6 +168,7 @@ func (s *MessageService) SendText(ctx context.Context, in *dto.SendTextRequest) 
 		SendAs:                in.SendAs,
 		BotControllerMemberID: t.BotControllerID,
 		ReplyTo:               replyPreview,
+		ForwardOrigin:         in.ForwardOrigin,
 	}
 
 	msg.SetMemberFromSlice(t.Members)
@@ -170,6 +183,10 @@ func (s *MessageService) SendText(ctx context.Context, in *dto.SendTextRequest) 
 		saved.ReplyTo = msg.ReplyTo
 
 		if err = s.recordInboundExternalID(ctx, uow, saved, &in.From, in.ExternalID); err != nil {
+			return err
+		}
+
+		if err = s.insertSentStatuses(ctx, uow, saved); err != nil {
 			return err
 		}
 
@@ -247,6 +264,11 @@ func (s *MessageService) handleBotStopCommand(ctx context.Context, in *dto.SendT
 		}
 
 		saved.To = msg.To
+
+		if e = s.insertSentStatuses(txCtx, uow, saved); e != nil {
+			return e
+		}
+
 		saved.WithCreatedEvent(ctx, msg.IdempotencyKey)
 
 		return s.dispatchMessageEvents(txCtx, uow, saved)
@@ -369,6 +391,7 @@ func (s *MessageService) SendDocument(ctx context.Context, in *dto.SendDocumentR
 	msg.BotControllerMemberID = t.BotControllerID
 	msg.SendAs = in.SendAs
 	msg.ReplyTo = replyPreview
+	msg.ForwardOrigin = in.ForwardOrigin
 	msg.SetMemberFromSlice(t.Members)
 
 	err = s.uow.WithinTransaction(ctx, func(txCtx context.Context, uow store.UnitOfWork) error {
@@ -387,6 +410,10 @@ func (s *MessageService) SendDocument(ctx context.Context, in *dto.SendDocumentR
 
 		if err = s.recordInboundExternalID(txCtx, uow, msg, &in.From, in.ExternalID); err != nil {
 			return errors.Internal("save external message id", errors.WithCause(err), errors.WithID("service.message.send_document"))
+		}
+
+		if err := s.insertSentStatuses(txCtx, uow, msg); err != nil {
+			return errors.Internal("insert sent statuses", errors.WithCause(err), errors.WithID("service.message.send_document"))
 		}
 
 		msg.WithCreatedEvent(ctx, in.SendID)
@@ -410,6 +437,9 @@ func (s *MessageService) SendDocument(ctx context.Context, in *dto.SendDocumentR
 	return &dto.SendDocumentResponse{ID: msg.ID, To: in.To}, nil
 }
 
+// Read marks the thread as read by the user up to the given message
+// (inclusive): every earlier unread message of the recipient is covered by
+// a single bulk update and a single status event.
 func (s *MessageService) Read(ctx context.Context, in *dto.ReadMessageRequest) error {
 	if err := guards.ValidateReadMessage(in); err != nil {
 		return fmt.Errorf("validation: %w", err)
@@ -420,22 +450,17 @@ func (s *MessageService) Read(ctx context.Context, in *dto.ReadMessageRequest) e
 	uID, _ := uuid.Parse(in.UserID)
 
 	return s.uow.WithinTransaction(ctx, func(txCtx context.Context, uow store.UnitOfWork) error {
-		err := uow.Messages().ReadMessage(txCtx, struct {
-			DomainID  int32
-			ThreadID  uuid.UUID
-			MessageID uuid.UUID
-			UserID    uuid.UUID
-		}{
-			DomainID:  in.DomainID,
-			ThreadID:  tID,
-			MessageID: mID,
-			UserID:    uID,
-		})
+		changes, err := uow.MessageStatuses().MarkRead(txCtx, []*model.ReadReceipt{{
+			DomainID:      in.DomainID,
+			ThreadID:      tID,
+			MemberID:      uID,
+			UpToMessageID: mID,
+		}})
 		if err != nil {
 			return fmt.Errorf("read_message: %w", err)
 		}
 
-		return nil
+		return dispatchStatusChangeEvents(txCtx, uow, changes)
 	})
 }
 
@@ -502,6 +527,10 @@ func (s *MessageService) SendLocation(ctx context.Context, msg *model.Message) (
 		savedMsg.IdempotencyKey = msg.IdempotencyKey
 		savedMsg.ReplyTo = msg.ReplyTo
 
+		if err = s.insertSentStatuses(txCtx, uow, savedMsg); err != nil {
+			return err
+		}
+
 		savedMsg.WithCreatedEvent(ctx, msg.IdempotencyKey)
 
 		return s.dispatchMessageEvents(txCtx, uow, savedMsg)
@@ -541,6 +570,10 @@ func (s *MessageService) SendContact(ctx context.Context, msg *model.Message) (*
 		savedMsg.To = msg.To
 		savedMsg.IdempotencyKey = msg.IdempotencyKey
 		savedMsg.ReplyTo = msg.ReplyTo
+
+		if err = s.insertSentStatuses(txCtx, uow, savedMsg); err != nil {
+			return err
+		}
 
 		savedMsg.WithCreatedEvent(ctx, msg.IdempotencyKey)
 
@@ -600,6 +633,11 @@ func (s *MessageService) SendInteractive(ctx context.Context, msg *model.Message
 		msg.ID = savedMsg.ID
 
 		savedMsg.To = msg.To
+
+		if err = s.insertSentStatuses(ctx, uow, savedMsg); err != nil {
+			return err
+		}
+
 		savedMsg.WithCreatedEvent(ctx, msg.IdempotencyKey)
 
 		return s.dispatchMessageEvents(ctx, uow, savedMsg)
@@ -668,6 +706,10 @@ func (s *MessageService) SendSystemMessage(ctx context.Context, msg *model.Messa
 		savedMsg.To = msg.To
 		savedMsg.IdempotencyKey = msg.IdempotencyKey
 
+		if err = s.insertSentStatuses(txCtx, uow, savedMsg); err != nil {
+			return err
+		}
+
 		savedMsg.WithCreatedEvent(ctx, msg.IdempotencyKey)
 
 		return s.dispatchMessageEvents(txCtx, uow, savedMsg)
@@ -722,6 +764,186 @@ func (s *MessageService) EditMessage(ctx context.Context, msg *model.Message) (*
 	}
 
 	return editedMsg, nil
+}
+
+// DeleteMessages soft-deletes the caller's own messages, provided the caller
+// still holds can_delete_messages in that thread. It is best-effort: messages
+// the caller may not remove are reported as skipped rather than failing the
+// whole batch, and only an empty result is an error. It is also idempotent, so
+// a message an earlier attempt already deleted still counts as satisfied.
+func (s *MessageService) DeleteMessages(ctx context.Context, in *dto.DeleteMessagesRequest) (*dto.DeleteMessagesResponse, error) {
+	log := s.logger.With("operation", "delete_messages")
+
+	if in == nil || len(in.IDs) == 0 {
+		return nil, errors.InvalidArgument("message ids are required", errors.WithID("service.message.delete_messages"))
+	}
+
+	deleter := in.DeletedBy
+	if deleter.ID == uuid.Nil {
+		return nil, errors.InvalidArgument("deleter identity is required", errors.WithID("service.message.delete_messages"))
+	}
+
+	var deleted []*model.Message
+
+	err := s.uow.WithinTransaction(ctx, func(txCtx context.Context, uow store.UnitOfWork) error {
+		var err error
+		if deleted, err = uow.Messages().DeleteMessages(txCtx, in.IDs, deleter.ID); err != nil {
+			return err
+		}
+
+		if len(deleted) == 0 {
+			return errors.Forbidden(
+				"no messages could be deleted: not found, not authored by the caller, the chat is closed, or the caller may not delete messages there",
+				errors.WithID("service.message.delete.not_allowed"),
+			)
+		}
+
+		// A batch may span several threads, so resolve the recipient list once
+		// per thread rather than once per message.
+		membersByThread := make(map[uuid.UUID][]*model.ThreadDialog)
+
+		for _, msg := range deleted {
+			// An already-deleted message sent its event on the first call.
+			if !msg.JustDeleted {
+				continue
+			}
+
+			members, ok := membersByThread[msg.ThreadID]
+			if !ok {
+				if members, err = uow.ThreadDialogStore().GetQuickView(txCtx, &model.ThreadDialogStoreFilter{
+					ThreadIDs:      []uuid.UUID{msg.ThreadID},
+					IncludeDeleted: false,
+				}); err != nil {
+					return err
+				}
+
+				membersByThread[msg.ThreadID] = members
+			}
+
+			msg.To = members
+			msg.From = deleter
+			msg.WithDeletedEvent(txCtx)
+
+			if err = s.dispatchMessageEvents(txCtx, uow, msg); err != nil {
+				return err
+			}
+		}
+
+		return nil
+	})
+	if err != nil {
+		log.ErrorContext(ctx, "transaction_failed", "err", err)
+
+		return nil, err
+	}
+
+	return buildDeleteMessagesResponse(in.IDs, deleted), nil
+}
+
+// SetReaction sets, replaces or clears the caller's single emoji reaction on a
+// message. It is idempotent per send_id: every at-least-once redelivery of the
+// same request is a no-op (dedup ledger), so a retried toggle-off never
+// resurrects a reaction and a reordered retry never reverts a newer state.
+// Distinct requests apply in arrival order (last-writer-wins). A no-op change
+// publishes nothing; a real change is fanned out to both sides via a
+// MessageReaction event and forwarded best-effort to the external messenger
+// (subject to the messenger's capabilities).
+func (s *MessageService) SetReaction(ctx context.Context, in *dto.SetReactionRequest) (*dto.SetReactionResponse, error) {
+	log := s.logger.With("operation", "set_reaction")
+
+	if err := guards.ValidateSetReaction(in); err != nil {
+		return nil, err
+	}
+
+	reaction := &model.Reaction{
+		MessageID:      in.MessageID,
+		DomainID:       in.DomainID,
+		ReactorID:      in.Reactor.ID,
+		Emoji:          in.Emoji,
+		IdempotencyKey: in.IdempotencyKey,
+		ExternalID:     in.ExternalID,
+		Reactor:        in.Reactor,
+	}
+
+	if in.ThreadID != nil {
+		reaction.ThreadID = *in.ThreadID
+	}
+
+	var result *model.ReactionResult
+
+	err := s.uow.WithinTransaction(ctx, func(txCtx context.Context, uow store.UnitOfWork) error {
+		var err error
+		if result, err = uow.MessageReactions().SetReaction(txCtx, reaction); err != nil {
+			if errors.Is(err, store.ErrReactionNotAllowed) {
+				return errors.Forbidden(
+					"reaction not allowed: message not found, deleted, or the reactor may not react in this thread",
+					errors.WithID("service.message.set_reaction.not_allowed"),
+				)
+			}
+
+			return err
+		}
+
+		if !result.Changed {
+			return nil
+		}
+
+		reaction.ThreadID = result.ThreadID
+
+		members, err := uow.ThreadDialogStore().GetQuickView(txCtx, &model.ThreadDialogStoreFilter{
+			ThreadIDs:      []uuid.UUID{reaction.ThreadID},
+			IncludeDeleted: false,
+		})
+		if err != nil {
+			return err
+		}
+
+		reaction.To = members
+		reaction.WithReactionEvent(txCtx, result)
+
+		return s.dispatchReactionEvents(txCtx, uow, reaction)
+	})
+	if err != nil {
+		log.ErrorContext(ctx, "transaction_failed", "err", err)
+
+		return nil, err
+	}
+
+	if result.Changed {
+		if err = s.providersAdapter.SendReaction(ctx, reaction, result); err != nil {
+			log.Error("forwarding reaction to external providers", "error", err)
+		}
+	}
+
+	return &dto.SetReactionResponse{
+		Action:    result.Action,
+		Emoji:     result.Emoji,
+		ReactedAt: result.ReactedAt,
+	}, nil
+}
+
+func buildDeleteMessagesResponse(requested uuid.UUIDs, deleted []*model.Message) *dto.DeleteMessagesResponse {
+	deletedIDs := make(uuid.UUIDs, 0, len(deleted))
+	deletedSet := make(map[uuid.UUID]struct{}, len(deleted))
+
+	for _, msg := range deleted {
+		deletedIDs = append(deletedIDs, msg.ID)
+		deletedSet[msg.ID] = struct{}{}
+	}
+
+	skippedIDs := make(uuid.UUIDs, 0, len(requested)-len(deleted))
+
+	for _, id := range requested {
+		if _, ok := deletedSet[id]; !ok {
+			skippedIDs = append(skippedIDs, id)
+		}
+	}
+
+	return &dto.DeleteMessagesResponse{
+		DeletedIDs: deletedIDs,
+		SkippedIDs: skippedIDs,
+		DeletedAt:  deleted[0].DeletedAtOrNow(),
+	}
 }
 
 func (s *MessageService) prepareMessageForSending(ctx context.Context, msg *model.Message) error {
@@ -874,6 +1096,59 @@ func gateIDForPeer(peer *shared.Peer, members []*model.ThreadDialog) string {
 }
 
 // --- Internal Helpers ---
+
+// statusViaBot is the confirmation source recorded for bot recipients.
+const statusViaBot = "bot"
+
+// insertSentStatuses creates per-recipient SENT status rows for a freshly
+// saved message: every thread member except the effective sender. No status
+// event is published — MessageCreated already implies the initial SENT state.
+//
+// Bot members are promoted to DELIVERED right away: the transactional
+// outbox hand-off is the delivery into the bot pipeline, and bots publish
+// no receipts of their own, so DELIVERED is their terminal state. The
+// promotion does publish a status event so timelines update live.
+func (s *MessageService) insertSentStatuses(ctx context.Context, uow store.UnitOfWork, msg *model.Message) error {
+	sender := msg.GetSender()
+
+	recipients := make([]uuid.UUID, 0, len(msg.To))
+
+	var botReceipts []*model.StatusReceipt
+
+	for _, member := range msg.To {
+		if member == nil || member.ContactID == sender {
+			continue
+		}
+
+		recipients = append(recipients, member.ContactID)
+
+		if member.IsBot {
+			botReceipts = append(botReceipts, &model.StatusReceipt{
+				DomainID:  msg.DomainID,
+				ThreadID:  msg.ThreadID,
+				MessageID: msg.ID,
+				MemberID:  member.ContactID,
+				Via:       statusViaBot,
+			})
+		}
+	}
+
+	if err := uow.MessageStatuses().InsertSent(ctx, msg, recipients); err != nil {
+		return err
+	}
+
+	if len(botReceipts) == 0 {
+		return nil
+	}
+
+	changes, err := uow.MessageStatuses().MarkDelivered(ctx, botReceipts)
+	if err != nil {
+		return fmt.Errorf("marking bot recipients delivered: %w", err)
+	}
+
+	return dispatchStatusChangeEvents(ctx, uow, changes)
+}
+
 func (s *MessageService) dispatchInteractiveCallbackEvents(ctx context.Context, uow store.UnitOfWork, callback *model.InteractiveCallback) error {
 	evs := callback.Events()
 	if len(evs) == 0 {
@@ -886,6 +1161,20 @@ func (s *MessageService) dispatchInteractiveCallbackEvents(ctx context.Context, 
 		return fmt.Sprintf("im_message.%s.interactive_callback.%s.%s",
 			e.RecipientID(),
 			e.EventType(),
+			e.Version(),
+		)
+	})
+}
+
+func (s *MessageService) dispatchReactionEvents(ctx context.Context, uow store.UnitOfWork, reaction *model.Reaction) error {
+	evs := reaction.Events()
+	if len(evs) == 0 {
+		return nil
+	}
+
+	return s.dispatchEvents(ctx, uow, evs, func(e event.Outboxer) string {
+		return fmt.Sprintf("im_message.%s.message.reaction.%s",
+			e.RecipientID(),
 			e.Version(),
 		)
 	})
@@ -910,6 +1199,10 @@ func messageEventAction(e event.Outboxer) string {
 	switch e.EventType() {
 	case event.MessageEditedEvent:
 		return "edited"
+	case event.MessageDeletedEvent:
+		return "deleted"
+	case event.MessageReactionEvent:
+		return "reaction"
 	default:
 		return "created"
 	}

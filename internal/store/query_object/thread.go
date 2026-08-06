@@ -504,6 +504,7 @@ func (q *threadQueryObject) linkLastMessageLateral() {
 				) as last_msg
 			from im_message.messages m
 			where m.thread_id = t.id
+			  and m.deleted_at is null
 			order by m.id desc
 			limit 1
 		) as msg on true

@@ -27,6 +27,10 @@ type MessageService interface {
 	SendSystemMessage(ctx context.Context, msg *model.Message) (*model.Message, error)
 	EditMessage(ctx context.Context, msg *model.Message) (*model.Message, error)
 	UpdateMessageDelivery(ctx context.Context, in *model.MessageDelivery) error
+	DeleteMessages(ctx context.Context, in *dto.DeleteMessagesRequest) (*dto.DeleteMessagesResponse, error)
+	ForwardMessages(ctx context.Context, in *dto.ForwardMessagesRequest) (*dto.ForwardMessagesResponse, error)
+	SendTyping(ctx context.Context, in *dto.SendTypingRequest) (*dto.SendTypingResponse, error)
+	SetReaction(ctx context.Context, in *dto.SetReactionRequest) (*dto.SetReactionResponse, error)
 }
 
 type MessageServer struct {
@@ -101,8 +105,9 @@ func (m *MessageServer) SendLocation(ctx context.Context, in *impb.SendLocationR
 			Longitude: in.GetLongitude(),
 			Name:      in.Name,
 		},
-		SendAs:  &sendAs,
-		ReplyTo: model.NewReplyTarget(mapper.ParseOptionalUUID(in.GetReplyToMessageId())),
+		SendAs:        &sendAs,
+		ReplyTo:       model.NewReplyTarget(mapper.ParseOptionalUUID(in.GetReplyToMessageId())),
+		ForwardOrigin: mapper.MapExternalForwardOrigin(in.GetForwardOrigin()),
 	}
 
 	saved, err := m.handler.SendLocation(ctx, msg)
@@ -133,8 +138,9 @@ func (m *MessageServer) SendContact(ctx context.Context, in *impb.SendContactReq
 			PhoneNumber: in.PhoneNumber,
 			Email:       in.Email,
 		},
-		SendAs:  &sendAs,
-		ReplyTo: model.NewReplyTarget(mapper.ParseOptionalUUID(in.GetReplyToMessageId())),
+		SendAs:        &sendAs,
+		ReplyTo:       model.NewReplyTarget(mapper.ParseOptionalUUID(in.GetReplyToMessageId())),
+		ForwardOrigin: mapper.MapExternalForwardOrigin(in.GetForwardOrigin()),
 	}
 
 	saved, err := m.handler.SendContact(ctx, msg)
@@ -232,6 +238,14 @@ func (m *MessageServer) SendSystemMessage(ctx context.Context, in *impb.SendSyst
 	}, nil
 }
 
+func (m *MessageServer) SendTyping(ctx context.Context, in *impb.SendTypingRequest) (*impb.SendTypingResponse, error) {
+	if _, err := m.handler.SendTyping(ctx, mapper.MapToSendTypingRequest(in)); err != nil {
+		return nil, err
+	}
+
+	return &impb.SendTypingResponse{}, nil
+}
+
 func (m *MessageServer) EditMessage(ctx context.Context, in *impb.EditMessageRequest) (*impb.EditMessageResponse, error) {
 	edited, err := m.handler.EditMessage(ctx, mapper.ConvertPbEditMessageToDomain(in))
 	if err != nil {
@@ -241,4 +255,37 @@ func (m *MessageServer) EditMessage(ctx context.Context, in *impb.EditMessageReq
 	}
 
 	return mapper.MapToEditMessageResponse(edited), nil
+}
+
+func (m *MessageServer) DeleteMessages(ctx context.Context, in *impb.DeleteMessagesRequest) (*impb.DeleteMessagesResponse, error) {
+	out, err := m.handler.DeleteMessages(ctx, mapper.ConvertPbDeleteMessagesToDomain(in))
+	if err != nil {
+		m.logger.Error("failed to delete messages", "error", err)
+
+		return nil, err
+	}
+
+	return mapper.MapToDeleteMessagesResponse(out), nil
+}
+
+func (m *MessageServer) ForwardMessages(ctx context.Context, in *impb.ForwardMessagesRequest) (*impb.ForwardMessagesResponse, error) {
+	out, err := m.handler.ForwardMessages(ctx, mapper.MapToForwardMessagesRequest(in))
+	if err != nil {
+		m.logger.Error("failed to forward messages", "error", err)
+
+		return nil, err
+	}
+
+	return mapper.MapToForwardMessagesResponse(out), nil
+}
+
+func (m *MessageServer) SetReaction(ctx context.Context, in *impb.SetReactionRequest) (*impb.SetReactionResponse, error) {
+	out, err := m.handler.SetReaction(ctx, mapper.ConvertPbSetReactionToDomain(in))
+	if err != nil {
+		m.logger.Error("failed to set reaction", "error", err)
+
+		return nil, err
+	}
+
+	return mapper.MapToSetReactionResponse(out), nil
 }

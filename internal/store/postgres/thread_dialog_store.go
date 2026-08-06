@@ -39,6 +39,7 @@ type threadDialog struct {
 	CanChangeMembersPermissions bool             `db:"can_change_members_permissions"`
 	CanRemoveMembers            bool             `db:"can_remove_members"`
 	CanChangeThreadInfo         bool             `db:"can_change_thread_info"`
+	CanDeleteMessages           bool             `db:"can_delete_messages"`
 	Via                         *string          `db:"via"`
 	Title                       string           `db:"title"`
 	IsBot                       bool             `db:"is_bot"`
@@ -67,13 +68,14 @@ func (t *threadDialogStore) Create(ctx context.Context, member *model.ThreadDial
 		),
 		inserted_permissions AS
 		(
-			INSERT INTO im_thread.thread_permission(thread_id, thread_dialog_id, can_send_messages, can_add_members, can_change_members_permissions, can_remove_members, can_change_thread_info)
+			INSERT INTO im_thread.thread_permission(thread_id, thread_dialog_id, can_send_messages, can_add_members, can_change_members_permissions, can_remove_members, can_change_thread_info, can_delete_messages)
 			(SELECT thread_id, id,
 			@CanSendMessages,
 			@CanAddMembers,
 			@CanChangeMembersPermissions,
 			@CanRemoveMembers,
-			@CanChangeThreadInfo
+			@CanChangeThreadInfo,
+			@CanDeleteMessages
 		  FROM inserted_dialog)
 		  	RETURNING *
 		),
@@ -85,7 +87,7 @@ func (t *threadDialogStore) Create(ctx context.Context, member *model.ThreadDial
 
 		SELECT dial.id, dial.domain_id, dial.created_at, dial.updated_at, dial.invited_by, dial.leave_reason, dial.member_id, dial.thread_id, dial.thread_role,
 		dial.is_bot, dial.auto_leave,
-		perm.can_send_messages, perm.can_add_members, perm.can_change_members_permissions, perm.can_remove_members, perm.can_change_thread_info,
+		perm.can_send_messages, perm.can_add_members, perm.can_change_members_permissions, perm.can_remove_members, perm.can_change_thread_info, perm.can_delete_messages,
 		sett.title
 		FROM inserted_dialog dial
 		LEFT JOIN inserted_permissions perm ON dial.id = perm.thread_dialog_id
@@ -102,6 +104,7 @@ func (t *threadDialogStore) Create(ctx context.Context, member *model.ThreadDial
 		"CanChangeMembersPermissions": member.Permissions.CanChangeMembersPermissions,
 		"CanRemoveMembers":            member.Permissions.CanRemoveMembers,
 		"CanChangeThreadInfo":         member.Permissions.CanChangeThreadInfo,
+		"CanDeleteMessages":           member.Permissions.CanDeleteMessages,
 		"ThreadTitle":                 member.Settings.Title,
 		"Via":                         member.Via,
 		"IsBot":                       member.IsBot,
@@ -158,6 +161,7 @@ func mapToThreadDialogExtendedModel(dialog *threadDialog) (*model.ThreadDialogEx
 			CanChangeMembersPermissions: dialog.CanChangeMembersPermissions,
 			CanRemoveMembers:            dialog.CanRemoveMembers,
 			CanChangeThreadInfo:         dialog.CanChangeThreadInfo,
+			CanDeleteMessages:           dialog.CanDeleteMessages,
 		},
 		Settings: model.BaseThreadSetting{
 			Title: dialog.Title,
@@ -185,6 +189,8 @@ func mapToThreadDialogModel(dialog *threadDialog) (*model.ThreadDialog, error) {
 		LeaveReason: dialog.LeaveReason,
 		ThreadID:    dialog.ThreadID,
 		ThreadRole:  dialog.Role,
+		Via:         dialog.Via,
+		IsBot:       dialog.IsBot,
 	}, nil
 }
 
@@ -217,18 +223,21 @@ func (t *threadDialogStore) GetQuickView(ctx context.Context, filter *model.Thre
 	var (
 		query = `SELECT
 	-- basic thread dialog fields
-		 dial.id, dial.domain_id, dial.created_at, dial.updated_at, dial.invited_by, dial.leave_reason, dial.member_id, dial.thread_id, dial.thread_role
+		 dial.id, dial.domain_id, dial.created_at, dial.updated_at, dial.invited_by, dial.leave_reason, dial.member_id, dial.thread_id, dial.thread_role,
+		 dial.is_bot, dial.via
 
 
 	FROM im_thread.thread_dialog dial
 	WHERE (@ThreadIDs::uuid[] IS NULL OR dial.thread_id = ANY(@ThreadIDs))
 	AND (@ContactIDs::uuid[] IS NULL OR dial.member_id = ANY(@ContactIDs))
+	AND (@DomainID = 0 OR dial.domain_id = @DomainID)
 	AND (@IncludeDeleted OR dial.deleted_at IS NULL)
 
 	OFFSET @Offset`
 		args = pgx.NamedArgs{
 			"ThreadIDs":      filter.ThreadIDs,
 			"ContactIDs":     filter.ContactIDs,
+			"DomainID":       filter.DomainID,
 			"Offset":         filter.Offset,
 			"IncludeDeleted": filter.IncludeDeleted,
 		}
@@ -258,7 +267,7 @@ func (t *threadDialogStore) GetFullView(ctx context.Context, filter *model.Threa
 	 dial.is_bot, dial.auto_leave,
 
 	-- permissions fields
-	perm.can_send_messages, perm.can_add_members, perm.can_change_members_permissions, perm.can_remove_members, perm.can_change_thread_info,
+	perm.can_send_messages, perm.can_add_members, perm.can_change_members_permissions, perm.can_remove_members, perm.can_change_thread_info, perm.can_delete_messages,
 
 	-- settings fields
 	sett.title
@@ -304,7 +313,7 @@ func (t *threadDialogStore) FindActorsPair(ctx context.Context, initiatorContact
 	 dial.id, dial.domain_id, dial.created_at, dial.updated_at, dial.invited_by, dial.leave_reason, dial.member_id, dial.thread_id, dial.thread_role,
 
 	-- permissions fields
-	perm.can_send_messages, perm.can_add_members, perm.can_change_members_permissions, perm.can_remove_members, perm.can_change_thread_info,
+	perm.can_send_messages, perm.can_add_members, perm.can_change_members_permissions, perm.can_remove_members, perm.can_change_thread_info, perm.can_delete_messages,
 
 	-- settings fields
 	sett.title

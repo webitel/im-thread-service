@@ -22,6 +22,7 @@ type ThreadManagementService interface {
 	Get(ctx context.Context, req *dto.ThreadGetRequest) (*model.Thread, error)
 	Search(ctx context.Context, searchRequest *dto.ThreadSearchRequest) ([]*model.Thread, error)
 	SearchLeft(ctx context.Context, req *dto.SearchLeftRequest) ([]*model.Thread, error)
+	GetUnreadSummary(ctx context.Context, req *dto.UnreadSummaryRequest) (model.UnreadSummary, error)
 	AddMember(context.Context, *dto.AddMemberRequest) (uuid.UUID, error)
 	RemoveMember(context.Context, *dto.RemoveMemberRequest) error
 	Transfer(context.Context, *dto.TransferThreadRequest) (uuid.UUID, error)
@@ -111,6 +112,26 @@ func (ts *ThreadManagementServer) Search(ctx context.Context, req *impb.ThreadSe
 	}
 
 	return &res, nil
+}
+
+func (ts *ThreadManagementServer) GetUnreadSummary(ctx context.Context, req *impb.GetUnreadSummaryRequest) (*impb.GetUnreadSummaryResponse, error) {
+	selfID, err := uuid.Parse(req.GetSelfId())
+	if err != nil {
+		return nil, errors.InvalidArgument("invalid self id", errors.WithCause(err), errors.WithID("grpc.thread.unread_summary.self_id"))
+	}
+
+	summary, err := ts.threadManager.GetUnreadSummary(ctx, &dto.UnreadSummaryRequest{
+		SelfID:   selfID,
+		DomainID: req.GetDomainId(),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &impb.GetUnreadSummaryResponse{
+		UnreadChats:    summary.Chats,
+		UnreadMessages: summary.Messages,
+	}, nil
 }
 
 // Transfer implements [thread.ThreadManagementServer].

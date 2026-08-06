@@ -97,7 +97,7 @@ func (q *leftThreadsMessageHistoryQueryObject) DefaultFields() []string {
 		"id", "thread_id", "sender_id", "type", "body", "metadata",
 		"created_at", "updated_at", "domain_id",
 		"documents", "images", "location", "contact", "system",
-		"interactive", "member",
+		"interactive", "member", "edited", "deleted_at",
 	}
 }
 
@@ -113,6 +113,8 @@ func (q *leftThreadsMessageHistoryQueryObject) FieldsMetadata() map[string]field
 		"updated_at":  {sqlExpr: "m.updated_at", aliasedExpr: "m.updated_at as updated_at", sortable: true, filterExpr: "m.updated_at"},
 		"domain_id":   {sqlExpr: "m.domain_id", aliasedExpr: "m.domain_id as domain_id", filterExpr: "m.domain_id"},
 		"interactive": {sqlExpr: "m.interactive", aliasedExpr: "m.interactive as interactive"},
+		"edited":      {sqlExpr: "m.edited", aliasedExpr: "m.edited as edited", filterExpr: "m.edited"},
+		"deleted_at":  {sqlExpr: "m.deleted_at", aliasedExpr: "m.deleted_at as deleted_at", sortable: true, filterExpr: "m.deleted_at"},
 
 		"documents": {aliasedExpr: `(
 			select jsonb_agg(jsonb_build_object(

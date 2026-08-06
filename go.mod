@@ -60,7 +60,6 @@ require (
 	github.com/lib/pq v1.12.3 // indirect
 	github.com/mfridman/interpolate v0.0.2 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
-	github.com/redis/go-redis/v9 v9.18.0 // indirect
 	github.com/sethvargo/go-retry v0.3.0 // indirect
 	github.com/webitel/wlog v0.0.0-20250325101442-de4f125c1ec7 // indirect
 	go.opentelemetry.io/contrib/bridges/otelzap v0.19.0 // indirect
@@ -132,6 +131,8 @@ require (
 )
 
 require (
+	github.com/forPelevin/gomoji v1.4.1
+	github.com/redis/go-redis/v9 v9.18.0
 	github.com/webitel/webitel-go-kit/appconfig v0.0.0-20260623172444-1a81b7322f37
 	github.com/webitel/webitel-go-kit/pkg/cache v0.0.0-20260706110827-c434ee012806
 )

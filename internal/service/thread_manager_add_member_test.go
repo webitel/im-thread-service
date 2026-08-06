@@ -22,6 +22,8 @@ type fakeUnitOfWork struct {
 	threadDialogStore    store.ThreadDialogStore
 	messageStore         store.MessageStore
 	messageExternalStore store.MessageExternalStore
+	messageStatusStore   store.MessageStatusStore
+	messageReactionStore store.MessageReactionStore
 	outboxStore          store.OutboxStore
 	botControlStore      store.BotControlStore
 	threadStore          store.ThreadStore
@@ -53,12 +55,54 @@ func (f fakeUnitOfWork) MessageExternal() store.MessageExternalStore {
 	return f.messageExternalStore
 }
 
+func (f fakeUnitOfWork) MessageStatuses() store.MessageStatusStore {
+	if f.messageStatusStore == nil {
+		return noopMessageStatusStore{}
+	}
+
+	return f.messageStatusStore
+}
+
+type noopMessageStatusStore struct{}
+
+func (noopMessageStatusStore) InsertSent(context.Context, *model.Message, []uuid.UUID) error {
+	return nil
+}
+
+func (noopMessageStatusStore) MarkDelivered(context.Context, []*model.StatusReceipt) ([]*model.StatusChange, error) {
+	return nil, nil
+}
+
+func (noopMessageStatusStore) MarkRead(context.Context, []*model.ReadReceipt) ([]*model.StatusChange, error) {
+	return nil, nil
+}
+
+func (noopMessageStatusStore) MarkFailed(context.Context, []*model.StatusReceipt) ([]*model.StatusChange, error) {
+	return nil, nil
+}
+
+func (noopMessageStatusStore) ReadUnread(context.Context, int32, uuid.UUID, []uuid.UUID) (map[uuid.UUID]int64, error) {
+	return make(map[uuid.UUID]int64), nil
+}
+
+func (noopMessageStatusStore) UnreadSummary(context.Context, int32, uuid.UUID) (model.UnreadSummary, error) {
+	return model.UnreadSummary{}, nil
+}
+
+func (noopMessageStatusStore) ReconcileUnread(context.Context, int32) (int64, error) {
+	return 0, nil
+}
+
 func (f fakeUnitOfWork) Outbox() store.OutboxStore {
 	return f.outboxStore
 }
 
 func (f fakeUnitOfWork) InteractiveCallback() store.InteractiveCallback {
 	return nil
+}
+
+func (f fakeUnitOfWork) MessageReactions() store.MessageReactionStore {
+	return f.messageReactionStore
 }
 
 func (f fakeUnitOfWork) BotControl() store.BotControlStore {
@@ -74,6 +118,7 @@ type fakeThreadDialogStore struct {
 	lastReason      *string
 	lastCreate      *model.ThreadDialogExtended
 	quickViewResult []*model.ThreadDialog
+	quickViewCalls  int
 }
 
 func (f *fakeThreadDialogStore) Create(ctx context.Context, threadDialog *model.ThreadDialogExtended) (*model.ThreadDialogExtended, error) {
@@ -98,6 +143,7 @@ func (f *fakeThreadDialogStore) Delete(ctx context.Context, memberID uuid.UUID, 
 
 func (f *fakeThreadDialogStore) GetQuickView(ctx context.Context, filter *model.ThreadDialogStoreFilter) ([]*model.ThreadDialog, error) {
 	f.lastFilter = filter
+	f.quickViewCalls++
 
 	return f.quickViewResult, nil
 }
@@ -176,10 +222,57 @@ type fakeMessageStore struct {
 	editMessageErr    error
 	editMessageCalls  int
 	lastEditedMessage *model.Message
+
+	deleteMessagesResult []*model.Message
+	deleteMessagesErr    error
+	deleteMessagesCalls  int
+	lastDeletedIDs       []uuid.UUID
+	lastDeleterID        uuid.UUID
+
+	forwardSources    []*model.Message
+	forwardSourcesErr error
+	lastForwardIDs    []uuid.UUID
+	lastForwardCaller uuid.UUID
+
+	copyAttachmentsErr   error
+	copiedAttachmentsFor []uuid.UUID
+	savedMessages        []*model.Message
 }
 
 func (f *fakeMessageStore) SaveMessage(ctx context.Context, msg *model.Message) (*model.Message, error) {
+	if msg.ID == uuid.Nil {
+		msg.ID = uuid.Must(uuid.NewV7())
+	}
+
+	f.savedMessages = append(f.savedMessages, msg)
+
 	return msg, nil
+}
+
+func (f *fakeMessageStore) LoadForwardSources(
+	ctx context.Context,
+	ids []uuid.UUID,
+	callerID uuid.UUID,
+	domainID int32,
+) ([]*model.Message, error) {
+	f.lastForwardIDs = ids
+	f.lastForwardCaller = callerID
+
+	if f.forwardSourcesErr != nil {
+		return nil, f.forwardSourcesErr
+	}
+
+	return f.forwardSources, nil
+}
+
+func (f *fakeMessageStore) CopyAttachments(ctx context.Context, sourceID, targetID uuid.UUID) error {
+	if f.copyAttachmentsErr != nil {
+		return f.copyAttachmentsErr
+	}
+
+	f.copiedAttachmentsFor = append(f.copiedAttachmentsFor, sourceID)
+
+	return nil
 }
 
 func (f *fakeMessageStore) GetReplyPreview(ctx context.Context, id uuid.UUID, domainID int32) (*model.ReplyToPreview, error) {
@@ -233,6 +326,18 @@ func (f *fakeMessageStore) EditMessage(ctx context.Context, msg *model.Message) 
 	}
 
 	return msg, nil
+}
+
+func (f *fakeMessageStore) DeleteMessages(ctx context.Context, ids []uuid.UUID, deleterID uuid.UUID) ([]*model.Message, error) {
+	f.deleteMessagesCalls++
+	f.lastDeletedIDs = ids
+	f.lastDeleterID = deleterID
+
+	if f.deleteMessagesErr != nil {
+		return nil, f.deleteMessagesErr
+	}
+
+	return f.deleteMessagesResult, nil
 }
 
 func (f *fakeMessageStore) SaveSystemMessage(ctx context.Context, msg *model.Message) (*model.Message, error) {

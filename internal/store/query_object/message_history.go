@@ -29,13 +29,21 @@ var (
 		"system":           true,
 		"reacted_metadata": true,
 		"reply_to":         true,
+		"forward_origin":   true,
+		"delivery_status":  true,
+		"statuses":         true,
+		"reactions":        true,
+		"edited":           true,
+		"deleted_at":       true,
 	}
 	defaultFields = []string{
 		"id", "thread_id", "sender_id",
 		"type", "body", "metadata",
 		"created_at", "updated_at", "images", "documents",
 		"member", "interactive", "location", "contact", "system", "reacted_metadata",
-		"reply_to",
+		"reply_to", "forward_origin",
+		"delivery_status", "statuses", "reactions",
+		"edited", "deleted_at",
 	}
 )
 

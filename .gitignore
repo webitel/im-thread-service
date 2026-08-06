@@ -177,4 +177,3 @@ pids
 .data
 data/.idea
 drafts/
-cmd/eventtail/main.go

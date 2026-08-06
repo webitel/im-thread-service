@@ -2,11 +2,10 @@ package postgres
 
 import (
 	"context"
-	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/webitel/webitel-go-kit/pkg/errors"
 
@@ -61,6 +60,39 @@ func replyToArg(msg *model.Message) *uuid.UUID {
 	return &id
 }
 
+const (
+	forwardOriginColumns = `forward_origin_kind, forward_origin_sender_id, forward_origin_sender_name,
+		forward_origin_sent_at, forward_from_message_id`
+	forwardOriginValues = `@ForwardOriginKind, @ForwardOriginSenderID, @ForwardOriginSenderName,
+		@ForwardOriginSentAt, @ForwardFromMessageID`
+)
+
+func addForwardOriginArgs(args pgx.NamedArgs, msg *model.Message) pgx.NamedArgs {
+	origin := msg.ForwardOrigin
+	if origin == nil {
+		args["ForwardOriginKind"] = nil
+		args["ForwardOriginSenderID"] = nil
+		args["ForwardOriginSenderName"] = nil
+		args["ForwardOriginSentAt"] = nil
+		args["ForwardFromMessageID"] = nil
+
+		return args
+	}
+
+	args["ForwardOriginKind"] = int16(origin.Kind)
+	args["ForwardOriginSenderID"] = origin.SenderID
+	args["ForwardOriginSenderName"] = origin.SenderName
+	args["ForwardFromMessageID"] = origin.SourceMessageID
+
+	if origin.OriginalSentAt > 0 {
+		args["ForwardOriginSentAt"] = time.UnixMilli(origin.OriginalSentAt).UTC()
+	} else {
+		args["ForwardOriginSentAt"] = nil
+	}
+
+	return args
+}
+
 func (m *messageStore) SaveMessage(ctx context.Context, msg *model.Message) (*model.Message, error) {
 	if err := validateMessageForSave(msg, "postgres.message.save_message"); err != nil {
 		return nil, err
@@ -68,17 +100,19 @@ func (m *messageStore) SaveMessage(ctx context.Context, msg *model.Message) (*mo
 
 	const query = `
 		insert into im_message.messages (
-			domain_id, thread_id, sender_id, member_id, type, body, metadata, origin_sender, reply_to
+			domain_id, thread_id, sender_id, member_id, type, body, metadata, origin_sender, reply_to,
+			` + forwardOriginColumns + `
 		)
 		values (
-			@DomainID, @ThreadID, @SenderID, @MemberID, @Type, @Body, @Metadata, @OriginSender, @ReplyTo
+			@DomainID, @ThreadID, @SenderID, @MemberID, @Type, @Body, @Metadata, @OriginSender, @ReplyTo,
+			` + forwardOriginValues + `
 		)
 		returning
 			id, domain_id, thread_id, member_id, type, body, metadata, created_at, updated_at,
 			jsonb_build_object('id', sender_id) as "from"
 	`
 
-	args := pgx.NamedArgs{
+	args := addForwardOriginArgs(pgx.NamedArgs{
 		"DomainID":     msg.DomainID,
 		"ThreadID":     msg.ThreadID,
 		"SenderID":     msg.GetSender(),
@@ -88,7 +122,7 @@ func (m *messageStore) SaveMessage(ctx context.Context, msg *model.Message) (*mo
 		"Metadata":     msg.Metadata,
 		"OriginSender": msg.GetOriginSender(),
 		"ReplyTo":      replyToArg(msg),
-	}
+	}, msg)
 
 	rows, err := m.db.Query(ctx, query, args)
 	if err != nil {
@@ -125,7 +159,7 @@ func (m *messageStore) GetReplyPreview(ctx context.Context, id uuid.UUID, domain
 					limit 1)
 			) as attachment
 		from im_message.messages m
-		where m.id = @ID and m.domain_id = @DomainID
+		where m.id = @ID and m.domain_id = @DomainID and m.deleted_at is null
 	`
 
 	args := pgx.NamedArgs{
@@ -209,6 +243,78 @@ func (m *messageStore) EditMessage(ctx context.Context, msg *model.Message) (*mo
 	return edited, nil
 }
 
+func (m *messageStore) DeleteMessages(ctx context.Context, ids []uuid.UUID, deleterID uuid.UUID) ([]*model.Message, error) {
+	if len(ids) == 0 {
+		return nil, errors.InvalidArgument("message ids cannot be empty", errors.WithID("postgres.message.delete_messages"))
+	}
+
+	if deleterID == uuid.Nil {
+		return nil, errors.InvalidArgument("deleter id cannot be nil", errors.WithID("postgres.message.delete_messages"))
+	}
+
+	// Returns every message the caller is allowed to remove, including ones
+	// already deleted by an earlier call, so that a retry does not report
+	// failure for a deletion that already succeeded. just_deleted tells the
+	// caller which rows this statement actually changed, so events fire once.
+	const query = `
+		with target as (
+			select m.id, (m.deleted_at is null) as was_live
+			from im_message.messages m
+			where m.id = any(@IDs)
+			  and (m.sender_id = @DeleterID or m.origin_sender = @DeleterID)
+			  and exists (
+				select 1
+				from im_thread.thread_dialog td
+				left join im_thread.thread_permission tp on tp.thread_dialog_id = td.id
+				where td.thread_id = m.thread_id
+				  and td.member_id = @DeleterID
+				  and td.deleted_at is null
+				  -- can_delete_messages is granted by default and revoked per
+				  -- member; a dialog with no permission row at all (rows
+				  -- predating the table) keeps the default.
+				  and coalesce(tp.can_delete_messages, true)
+			  )
+		),
+		updated as (
+			update im_message.messages m
+			set deleted_at = now(),
+			    deleted_by = @DeleterID,
+			    updated_at = now()
+			from target t
+			where m.id = t.id and t.was_live
+			returning
+				m.id, m.domain_id, m.thread_id, m.member_id, m.sender_id, m.type,
+				m.created_at, m.updated_at, m.deleted_at, m.deleted_by
+		)
+		select u.*, true as just_deleted
+		from updated u
+		union all
+		select
+			m.id, m.domain_id, m.thread_id, m.member_id, m.sender_id, m.type,
+			m.created_at, m.updated_at, m.deleted_at, m.deleted_by, false as just_deleted
+		from im_message.messages m
+		join target t on t.id = m.id
+		where not t.was_live
+	`
+
+	args := pgx.NamedArgs{
+		"IDs":       ids,
+		"DeleterID": deleterID,
+	}
+
+	rows, err := m.db.Query(ctx, query, args)
+	if err != nil {
+		return nil, errors.Internal("executing delete messages query", errors.WithCause(err), errors.WithID("postgres.message.delete.query"))
+	}
+
+	deleted, err := pgx.CollectRows(rows, pgx.RowToAddrOfStructByNameLax[model.Message])
+	if err != nil {
+		return nil, errors.Internal("collecting deleted messages", errors.WithCause(err), errors.WithID("postgres.message.delete.collecting"))
+	}
+
+	return deleted, nil
+}
+
 func (m *messageStore) SaveDocuments(ctx context.Context, messageID uuid.UUID, docs []*model.MessageDocument) ([]*model.MessageDocument, error) {
 	docsLen := len(docs)
 	if docsLen == 0 {
@@ -269,42 +375,6 @@ func (m *messageStore) SaveDocuments(ctx context.Context, messageID uuid.UUID, d
 	return savedDocuments, nil
 }
 
-func (m *messageStore) ReadMessage(ctx context.Context, read struct {
-	DomainID  int32
-	ThreadID  uuid.UUID
-	MessageID uuid.UUID
-	UserID    uuid.UUID
-},
-) error {
-	const query = `
-		INSERT INTO im_message.message_reads (domain_id, thread_id, message_id, user_id)
-		VALUES (@DomainID, @ThreadID, @MessageID, @UserID)
-		ON CONFLICT (message_id, user_id) DO NOTHING;
-	`
-
-	args := pgx.NamedArgs{
-		"DomainID":  read.DomainID,
-		"MessageID": read.MessageID,
-		"ThreadID":  read.ThreadID,
-		"UserID":    read.UserID,
-	}
-
-	_, err := m.db.Exec(ctx, query, args)
-	if err != nil {
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) {
-			// 23503 is the PostgreSQL code for foreign_key_violation
-			if pgErr.Code == "23503" {
-				return fmt.Errorf("read_message: message or thread not found: %w", err)
-			}
-		}
-
-		return fmt.Errorf("read_message: failed to execute insert: %w", err)
-	}
-
-	return nil
-}
-
 func (m *messageStore) SaveMessageLocation(ctx context.Context, msg *model.Message) (*model.Message, error) {
 	if err := validateMessageForSave(msg, "postgres.message.save_message_location"); err != nil {
 		return nil, err
@@ -329,8 +399,10 @@ func prepareSaveMessageLocationQuery(msg *model.Message) (string, pgx.NamedArgs)
 	query := `
 		with msg_ins as (
 			insert into im_message.messages
-			(thread_id, domain_id, sender_id, member_id, type, body, metadata, reply_to)
-			values (@ThreadID, @DomainID, @SenderID, @MemberID, @Type, @Body, @Metadata, @ReplyTo)
+			(thread_id, domain_id, sender_id, member_id, type, body, metadata, reply_to,
+			 ` + forwardOriginColumns + `)
+			values (@ThreadID, @DomainID, @SenderID, @MemberID, @Type, @Body, @Metadata, @ReplyTo,
+			 ` + forwardOriginValues + `)
 			returning *
 		),
 		location_ins as (
@@ -356,7 +428,7 @@ func prepareSaveMessageLocationQuery(msg *model.Message) (string, pgx.NamedArgs)
 		) l on true;
 	`
 
-	args := pgx.NamedArgs{
+	args := addForwardOriginArgs(pgx.NamedArgs{
 		"ThreadID":  msg.ThreadID,
 		"DomainID":  msg.DomainID,
 		"SenderID":  msg.From.ID,
@@ -369,7 +441,7 @@ func prepareSaveMessageLocationQuery(msg *model.Message) (string, pgx.NamedArgs)
 		"Latitude":  msg.Location.Latitude,
 		"Longitude": msg.Location.Longitude,
 		"Name":      msg.Location.Name,
-	}
+	}, msg)
 
 	return queryobject.CompactSQL(query), args
 }
@@ -398,8 +470,10 @@ func prepareSaveMessageContactQuery(msg *model.Message) (string, pgx.NamedArgs) 
 	query := `
 		with msg_ins as (
 			insert into im_message.messages
-			(thread_id, domain_id, sender_id, member_id, type, body, metadata, reply_to)
-			values (@ThreadID, @DomainID, @SenderID, @MemberID, @Type, @Body, @Metadata, @ReplyTo)
+			(thread_id, domain_id, sender_id, member_id, type, body, metadata, reply_to,
+			 ` + forwardOriginColumns + `)
+			values (@ThreadID, @DomainID, @SenderID, @MemberID, @Type, @Body, @Metadata, @ReplyTo,
+			 ` + forwardOriginValues + `)
 			returning *
 		),
 		contact_ins as (
@@ -425,7 +499,7 @@ func prepareSaveMessageContactQuery(msg *model.Message) (string, pgx.NamedArgs) 
 			select to_jsonb(c) as contact from contact_ins c
 		) c on true;
 	`
-	args := pgx.NamedArgs{
+	args := addForwardOriginArgs(pgx.NamedArgs{
 		"ThreadID": msg.ThreadID,
 		"DomainID": msg.DomainID,
 		"SenderID": msg.From.ID,
@@ -437,7 +511,7 @@ func prepareSaveMessageContactQuery(msg *model.Message) (string, pgx.NamedArgs) 
 		"Phone":    msg.Contact.PhoneNumber,
 		"Name":     msg.Contact.Name,
 		"Email":    msg.Contact.Email,
-	}
+	}, msg)
 
 	return queryobject.CompactSQL(query), args
 }

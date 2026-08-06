@@ -21,10 +21,12 @@ type unitOfWork struct {
 	threadPermissionsStore          store.ThreadPermissionStore
 	messageStore                    store.MessageStore
 	messageExternalStore            store.MessageExternalStore
+	messageStatusStore              store.MessageStatusStore
 	outboxStore                     store.OutboxStore
 	messageHistoryStore             store.MessageHistory
 	directThreadDialogOrchestration store.DirectThreadDialogOrchestration
 	interactiveCallbackStore        store.InteractiveCallback
+	messageReactionStore            store.MessageReactionStore
 	botControlStore                 store.BotControlStore
 }
 
@@ -87,12 +89,28 @@ func (u *unitOfWork) Messages() store.MessageStore {
 	return u.messageStore
 }
 
+func (u *unitOfWork) MessageReactions() store.MessageReactionStore {
+	if u.messageReactionStore == nil {
+		u.messageReactionStore = NewMessageReactionStore(u.querier)
+	}
+
+	return u.messageReactionStore
+}
+
 func (u *unitOfWork) MessageExternal() store.MessageExternalStore {
 	if u.messageExternalStore == nil {
 		u.messageExternalStore = NewMessageExternalStore(u.querier)
 	}
 
 	return u.messageExternalStore
+}
+
+func (u *unitOfWork) MessageStatuses() store.MessageStatusStore {
+	if u.messageStatusStore == nil {
+		u.messageStatusStore = NewMessageStatusStore(u.querier)
+	}
+
+	return u.messageStatusStore
 }
 
 func (u *unitOfWork) Outbox() store.OutboxStore {

@@ -32,6 +32,9 @@ func MainModule(cfg *config.Config) fx.Option {
 			ProvideWatermillLogger,
 			ProvideSD,
 			ProvideProfiler,
+			ProvideTypingConfig,
+			ProvideRedisClient,
+			ProvideTypingRateLimiter,
 		),
 		fx.Invoke(func(_ discovery.DiscoveryProvider) error { return nil }),
 		tls.Module,
@@ -89,6 +92,11 @@ var serviceToHandlerBridgeModule = fx.Module(
 			return s
 		},
 		func(s *service.MessageService) grpchandler.MessageService {
+			return s
+		},
+
+		provideTypingBus,
+		func(s *service.MessageStatusService) grpchandler.MessageStatusReporter {
 			return s
 		},
 		func(s *decorators.MessageHistoryEnricher) grpchandler.MessageHistoryService {

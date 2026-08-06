@@ -275,6 +275,7 @@ func (s *ThreadOutConverter) ConvertToThread(source *model.Thread) *impb.Thread 
 		Members:     s.convertThreadMembers(source.Members, source.BotControllerID),
 		LastMsg:     lastMsg,
 		Variables:   vars,
+		UnreadCount: int32(source.UnreadCount),
 	}
 
 	if source.BotControllerID != nil {

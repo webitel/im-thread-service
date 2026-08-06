@@ -60,6 +60,10 @@ type Thread struct {
 	BotControllerID *uuid.UUID `json:"bot_controller_id,omitempty" db:"bot_controller_id"`
 	OwnerBotID      *uuid.UUID `json:"owner_bot_id,omitempty" db:"owner_bot_id"`
 
+	// UnreadCount is the number of unread messages in this thread for the
+	// requesting participant. Enriched after the thread query; not scanned.
+	UnreadCount int64 `json:"unread_count" db:"-"`
+
 	events []event.Base `db:"-"`
 }
 

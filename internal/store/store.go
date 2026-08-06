@@ -15,6 +15,11 @@ import (
 // message matches the requested id and domain.
 var ErrReplyTargetNotFound = errors.New("reply target message not found")
 
+// ErrReactionNotAllowed is returned by MessageReactionStore.SetReaction when the
+// reactor may not react: the message does not exist in the domain, is deleted,
+// or the reactor is not an active member holding can_react_messages.
+var ErrReactionNotAllowed = errors.New("reaction not allowed")
+
 type Store interface {
 	Messages() MessageStore
 	Outbox() OutboxStore
@@ -27,18 +32,69 @@ type MessageStore interface {
 	SaveMessage(ctx context.Context, msg *model.Message) (*model.Message, error)
 	GetReplyPreview(ctx context.Context, id uuid.UUID, domainID int32) (*model.ReplyToPreview, error)
 	SaveDocuments(ctx context.Context, messageID uuid.UUID, docs []*model.MessageDocument) ([]*model.MessageDocument, error)
-	ReadMessage(ctx context.Context, read struct {
-		DomainID  int32
-		ThreadID  uuid.UUID
-		MessageID uuid.UUID
-		UserID    uuid.UUID
-	}) error
+
+	// CopyAttachments duplicates every document and image row of sourceID onto
+	// targetID. Nothing is re-uploaded: the copies reference the same stored
+	// files by file_id.
+	CopyAttachments(ctx context.Context, sourceID, targetID uuid.UUID) error
+
+	// LoadForwardSources returns the messages callerID may forward, with their
+	// content already assembled. Ids the caller cannot read, ids that do not
+	// exist, deleted messages and system messages are silently omitted, so the
+	// result may be shorter than ids or empty, which is not an error at this
+	// layer. Rows come back oldest-first so copies keep the original order.
+	LoadForwardSources(ctx context.Context, ids []uuid.UUID, callerID uuid.UUID, domainID int32) ([]*model.Message, error)
+
 	SaveMessageContact(ctx context.Context, msg *model.Message) (*model.Message, error)
 	SaveMessageLocation(ctx context.Context, msg *model.Message) (*model.Message, error)
 	SaveInteractiveMessage(ctx context.Context, msg *model.Message) (*model.Message, error)
 	SaveSystemMessage(ctx context.Context, msg *model.Message) (*model.Message, error)
 
 	EditMessage(ctx context.Context, msg *model.Message) (*model.Message, error)
+
+	// DeleteMessages soft-deletes the given messages on behalf of deleterID.
+	// Only messages authored by the deleter, in threads the deleter is still a
+	// member of and still holds can_delete_messages in, are affected, so one
+	// batch may be partly refused. The result also holds messages an earlier
+	// call already deleted, flagged with JustDeleted=false; it may be shorter
+	// than ids or empty, which is not an error at this layer.
+	DeleteMessages(ctx context.Context, ids []uuid.UUID, deleterID uuid.UUID) ([]*model.Message, error)
+}
+
+// MessageStatusStore tracks per-recipient delivery states of messages
+// (im_message.message_statuses). All transitions are monotonic upserts:
+// duplicate and out-of-order receipts change nothing and return no changes.
+type MessageStatusStore interface {
+	// InsertSent creates SENT rows for the message recipients within the
+	// message-save transaction. Existing rows are left intact.
+	InsertSent(ctx context.Context, msg *model.Message, recipientIDs []uuid.UUID) error
+
+	// MarkDelivered applies delivery receipts and returns the rows that
+	// actually changed.
+	MarkDelivered(ctx context.Context, receipts []*model.StatusReceipt) ([]*model.StatusChange, error)
+
+	// MarkRead applies read receipts with read-up-to semantics and returns
+	// the rows that actually changed.
+	MarkRead(ctx context.Context, receipts []*model.ReadReceipt) ([]*model.StatusChange, error)
+
+	// MarkFailed applies failure receipts (sent -> failed only) and returns
+	// the rows that actually changed.
+	MarkFailed(ctx context.Context, receipts []*model.StatusReceipt) ([]*model.StatusChange, error)
+
+	// ReadUnread returns the denormalized unread_count per thread for the
+	// member, read straight from thread_dialog (no message scan). Threads with
+	// no active row for the member are omitted.
+	ReadUnread(ctx context.Context, domainID int32, memberID uuid.UUID, threadIDs []uuid.UUID) (map[uuid.UUID]int64, error)
+
+	// UnreadSummary returns the member's denormalized unread totals across the
+	// threads they are still an active participant of: the number of chats with
+	// unread messages and the total number of unread messages.
+	UnreadSummary(ctx context.Context, domainID int32, memberID uuid.UUID) (model.UnreadSummary, error)
+
+	// ReconcileUnread recomputes unread_count for every active dialog from the
+	// read horizon (optionally scoped to a domain). Drift safety net for a
+	// periodic job; returns the number of rows updated.
+	ReconcileUnread(ctx context.Context, domainID int32) (int64, error)
 }
 
 type OutboxStore interface {
@@ -85,6 +141,13 @@ type DirectThreadDialogOrchestration interface {
 
 type InteractiveCallback interface {
 	Save(ctx context.Context, callback *model.InteractiveCallback) (*model.InteractiveCallback, error)
+}
+
+// MessageReactionStore persists emoji reactions. A member holds at most one
+// reaction per message; SetReaction applies set/replace/remove toggle semantics
+// idempotently and reports the resulting state.
+type MessageReactionStore interface {
+	SetReaction(ctx context.Context, reaction *model.Reaction) (*model.ReactionResult, error)
 }
 
 type ThreadVariablesStore interface {

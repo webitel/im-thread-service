@@ -20,22 +20,24 @@ func MapToMessageDelivery(pb *impb.UpdateMessageDeliveryRequest) *model.MessageD
 	return &model.MessageDelivery{
 		GateID:     pb.GetGateId(),
 		ExternalID: pb.GetExternalMessageId(),
-		Status:     mapDeliveryStatus(pb.GetStatus()),
+		Status:     mapToDeliveryStatus(pb.GetStatus()),
 		Reason:     pb.GetReason(),
 		At:         at,
 		DomainID:   pb.GetDomainId(),
 	}
 }
 
-func mapDeliveryStatus(pb impb.MessageDeliveryStatus) model.MessageDeliveryStatus {
+func mapToDeliveryStatus(pb impb.MessageDeliveryStatus) model.MessageDeliveryStatus {
 	switch pb {
+	case impb.MessageDeliveryStatus_MESSAGE_DELIVERY_STATUS_SENT:
+		return model.MessageDeliveryStatusSent
 	case impb.MessageDeliveryStatus_MESSAGE_DELIVERY_STATUS_DELIVERED:
-		return model.MessageDeliveryDelivered
+		return model.MessageDeliveryStatusDelivered
 	case impb.MessageDeliveryStatus_MESSAGE_DELIVERY_STATUS_READ:
-		return model.MessageDeliveryRead
+		return model.MessageDeliveryStatusRead
 	case impb.MessageDeliveryStatus_MESSAGE_DELIVERY_STATUS_FAILED:
-		return model.MessageDeliveryFailed
+		return model.MessageDeliveryStatusFailed
 	default:
-		return model.MessageDeliveryUnspecified
+		return model.MessageDeliveryStatusUnspecified
 	}
 }

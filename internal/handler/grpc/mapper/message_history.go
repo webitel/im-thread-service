@@ -1,6 +1,7 @@
 package mapper
 
 import (
+	"encoding/json"
 	"time"
 
 	"github.com/google/uuid"
@@ -85,41 +86,90 @@ func MapSearchLeftThreadsMessageHistoryRequest2LeftThreadsMessageHistoryInputDTO
 	}
 }
 
-func MapMessage2SearchMessageHistoryResponse(messages []*model.Message) *impb.SearchMessageHistoryResponse {
+func MapMessage2SearchMessageHistoryResponse(messages []*model.Message, callerID uuid.UUID) *impb.SearchMessageHistoryResponse {
 	responseMessages := utils.Map(messages, func(m *model.Message) *impb.HistoryMessage {
-		var (
-			docs   = mapDocs(m.Documents)
-			images = mapImages(m.Images)
-		)
-
-		md, err := structpb.NewStruct(m.Metadata)
-		if err != nil {
-			return nil
-		}
-
-		return &impb.HistoryMessage{
-			Id:              m.ID.String(),
-			ThreadId:        m.ThreadID.String(),
-			SenderId:        m.SenderID.String(),
-			Body:            m.Body,
-			Type:            int32(m.Type),
-			Metadata:        md,
-			CreatedAt:       max(m.CreatedAt.UnixMilli(), 0),
-			UpdatedAt:       max(m.UpdatedAt.UnixMilli(), 0),
-			Documents:       docs,
-			Images:          images,
-			Location:        mapLocation(m.Location),
-			Contact:         mapContact(m.Contact),
-			System:          mapSystem(m.System),
-			Interactive:     mapInteractive(m.Interactive),
-			ReactedMetadata: mapReactedMetadata(m.ReactedMetadata),
-			ReplyTo:         mapReplyTo(m.ReplyTo),
-		}
+		return mapHistoryMessage(m, callerID)
 	})
 
 	return &impb.SearchMessageHistoryResponse{
 		Items: responseMessages,
 	}
+}
+
+func mapHistoryMessage(m *model.Message, callerID uuid.UUID) *impb.HistoryMessage {
+	out := &impb.HistoryMessage{
+		Id:             m.ID.String(),
+		ThreadId:       m.ThreadID.String(),
+		SenderId:       m.SenderID.String(),
+		Type:           int32(m.Type),
+		CreatedAt:      max(m.CreatedAt.UnixMilli(), 0),
+		UpdatedAt:      max(m.UpdatedAt.UnixMilli(), 0),
+		DeliveryStatus: mapDeliveryStatus(m.DeliveryStatus),
+		Statuses:       mapRecipientStatuses(m.Statuses),
+	}
+
+	// A deleted message keeps its place in the timeline but carries no content
+	// field: clients only learn that something was removed and by when.
+	if m.IsDeleted() {
+		out.Deleted = true
+		out.DeletedAt = m.DeletedAtUnixMillis()
+
+		return out
+	}
+
+	md, err := structpb.NewStruct(m.Metadata)
+	if err != nil {
+		return nil
+	}
+
+	out.Body = m.Body
+	out.Metadata = md
+	out.Documents = mapDocs(m.Documents)
+	out.Images = mapImages(m.Images)
+	out.Location = mapLocation(m.Location)
+	out.Contact = mapContact(m.Contact)
+	out.System = mapSystem(m.System)
+	out.Interactive = mapInteractive(m.Interactive)
+	out.ReactedMetadata = mapReactedMetadata(m.ReactedMetadata)
+	out.ReplyTo = mapReplyTo(m.ReplyTo)
+	out.ForwardOrigin = mapForwardOrigin(m.ForwardOrigin)
+	out.Reactions = mapReactions(m.Reactions, callerID)
+
+	return out
+}
+
+func mapForwardOrigin(in *model.ForwardOrigin) *impb.ForwardOrigin {
+	if in == nil {
+		return nil
+	}
+
+	out := &impb.ForwardOrigin{
+		Kind:           impb.ForwardOriginKind(in.Kind),
+		SenderName:     in.SenderName,
+		OriginalSentAt: in.OriginalSentAt,
+	}
+
+	if in.SenderID != nil {
+		out.SenderId = in.SenderID.String()
+	}
+
+	if in.SourceMessageID != nil {
+		out.SourceMessageId = in.SourceMessageID.String()
+	}
+
+	return out
+}
+
+func mapReactions(in []*model.MessageReaction, callerID uuid.UUID) []*impb.MessageReaction {
+	return utils.Map(in, func(r *model.MessageReaction) *impb.MessageReaction {
+		return &impb.MessageReaction{
+			Reaction:      &impb.ReactionContent{Kind: &impb.ReactionContent_Emoji{Emoji: r.Emoji}},
+			Count:         r.Count,
+			ReactedByMe:   callerID != uuid.Nil && r.ReactedBy(callerID),
+			ReactorIds:    utils.Map(r.ReactorIDs, uuid.UUID.String),
+			LastReactedAt: r.LastReactedAt,
+		}
+	})
 }
 
 func mapReplyTo(in *model.ReplyToPreview) *impb.ReplyToMessage {
@@ -139,6 +189,59 @@ func mapReplyTo(in *model.ReplyToPreview) *impb.ReplyToMessage {
 		out.AttachmentKind = &a.Kind
 		out.AttachmentName = a.Name
 		out.AttachmentMime = a.Mime
+	}
+
+	return out
+}
+
+func mapDeliveryStatus(in *model.MessageDeliveryStatus) impb.MessageDeliveryStatus {
+	if in == nil {
+		return impb.MessageDeliveryStatus_MESSAGE_DELIVERY_STATUS_UNSPECIFIED
+	}
+
+	return impb.MessageDeliveryStatus(*in)
+}
+
+func mapRecipientStatuses(in []*model.MessageRecipientStatus) []*impb.MessageRecipientStatus {
+	if len(in) == 0 {
+		return nil
+	}
+
+	out := make([]*impb.MessageRecipientStatus, 0, len(in))
+
+	for _, st := range in {
+		if st == nil {
+			continue
+		}
+
+		pb := &impb.MessageRecipientStatus{
+			MemberId: st.MemberID.String(),
+			Status:   impb.MessageDeliveryStatus(st.Status),
+		}
+
+		if st.DeliveredAt != nil {
+			pb.DeliveredAt = max(st.DeliveredAt.UnixMilli(), 0)
+		}
+
+		if st.ReadAt != nil {
+			pb.ReadAt = max(st.ReadAt.UnixMilli(), 0)
+		}
+
+		if st.FailedAt != nil {
+			pb.FailedAt = max(st.FailedAt.UnixMilli(), 0)
+		}
+
+		if st.Via != nil {
+			pb.Via = *st.Via
+		}
+
+		if len(st.Error) > 0 {
+			if raw, err := json.Marshal(st.Error); err == nil {
+				pb.Error = string(raw)
+			}
+		}
+
+		out = append(out, pb)
 	}
 
 	return out
