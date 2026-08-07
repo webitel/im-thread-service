@@ -108,13 +108,9 @@ func mapHistoryMessage(m *model.Message, callerID uuid.UUID) *impb.HistoryMessag
 		Statuses:       mapRecipientStatuses(m.Statuses),
 	}
 
-	// A deleted message keeps its place in the timeline but carries no content
-	// field: clients only learn that something was removed and by when.
 	if m.IsDeleted() {
 		out.Deleted = true
 		out.DeletedAt = m.DeletedAtUnixMillis()
-
-		return out
 	}
 
 	md, err := structpb.NewStruct(m.Metadata)

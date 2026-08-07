@@ -101,22 +101,29 @@ func (q *leftThreadsMessageHistoryQueryObject) DefaultFields() []string {
 	}
 }
 
+func redactIfDeleted(expr, nullExpr, alias string) string {
+	return fmt.Sprintf(
+		"case when %[1]s.deleted_at is not null then %[2]s else (%[3]s) end as %[4]s",
+		leftThreadsMsgAlias, nullExpr, expr, alias,
+	)
+}
+
 func (q *leftThreadsMessageHistoryQueryObject) FieldsMetadata() map[string]fieldMetadata {
 	return map[string]fieldMetadata{
 		"id":          {sqlExpr: "m.id", aliasedExpr: "m.id as id", sortable: true, filterExpr: "m.id"},
 		"thread_id":   {sqlExpr: "m.thread_id", aliasedExpr: "m.thread_id as thread_id", filterExpr: "m.thread_id"},
 		"sender_id":   {sqlExpr: "m.sender_id", aliasedExpr: "m.sender_id as sender_id", filterExpr: "m.sender_id"},
 		"type":        {sqlExpr: "m.type", aliasedExpr: "m.type as type", filterExpr: "m.type"},
-		"body":        {sqlExpr: "m.body", aliasedExpr: "m.body as body"},
-		"metadata":    {sqlExpr: "m.metadata", aliasedExpr: "m.metadata as metadata"},
+		"body":        {sqlExpr: "m.body", aliasedExpr: redactIfDeleted("m.body", "''", "body")},
+		"metadata":    {sqlExpr: "m.metadata", aliasedExpr: redactIfDeleted("m.metadata", "null", "metadata")},
 		"created_at":  {sqlExpr: "m.created_at", aliasedExpr: "m.created_at as created_at", sortable: true, filterExpr: "m.created_at"},
 		"updated_at":  {sqlExpr: "m.updated_at", aliasedExpr: "m.updated_at as updated_at", sortable: true, filterExpr: "m.updated_at"},
 		"domain_id":   {sqlExpr: "m.domain_id", aliasedExpr: "m.domain_id as domain_id", filterExpr: "m.domain_id"},
-		"interactive": {sqlExpr: "m.interactive", aliasedExpr: "m.interactive as interactive"},
+		"interactive": {sqlExpr: "m.interactive", aliasedExpr: redactIfDeleted("m.interactive", "null", "interactive")},
 		"edited":      {sqlExpr: "m.edited", aliasedExpr: "m.edited as edited", filterExpr: "m.edited"},
 		"deleted_at":  {sqlExpr: "m.deleted_at", aliasedExpr: "m.deleted_at as deleted_at", sortable: true, filterExpr: "m.deleted_at"},
 
-		"documents": {aliasedExpr: `(
+		"documents": {aliasedExpr: redactIfDeleted(`
 			select jsonb_agg(jsonb_build_object(
 				'id', md.id, 'file_id', md.file_id, 'name', md.name,
 				'mime', md.mime, 'size', md.size, 'created_at', md.created_at
@@ -124,9 +131,9 @@ func (q *leftThreadsMessageHistoryQueryObject) FieldsMetadata() map[string]field
 			from im_message.message_documents md
 			where md.message_id = m.id
 			  and (m.type = 2 or (m.type = 5 and m.interactive->'attachments'->'documents' is not null))
-		) as documents`},
+		`, "null", "documents")},
 
-		"images": {aliasedExpr: `(
+		"images": {aliasedExpr: redactIfDeleted(`
 			select jsonb_agg(jsonb_build_object(
 				'id', mi.id, 'file_id', mi.file_id, 'mime', mi.mime,
 				'thumbnails', mi.thumbnails, 'width', mi.width,
@@ -135,9 +142,9 @@ func (q *leftThreadsMessageHistoryQueryObject) FieldsMetadata() map[string]field
 			from im_message.message_images mi
 			where mi.message_id = m.id
 			  and (m.type = 3 or (m.type = 5 and m.interactive->'attachments'->'images' is not null))
-		) as images`},
+		`, "null", "images")},
 
-		"location": {aliasedExpr: `(
+		"location": {aliasedExpr: redactIfDeleted(`
 			select jsonb_build_object(
 				'address', ml.address, 'name', ml.name,
 				'latitude', ml.latitude, 'longitude', ml.longitude
@@ -145,23 +152,23 @@ func (q *leftThreadsMessageHistoryQueryObject) FieldsMetadata() map[string]field
 			from im_message.message_locations ml
 			where m.type = 6 and ml.message_id = m.id
 			limit 1
-		) as location`},
+		`, "null", "location")},
 
-		"contact": {aliasedExpr: `(
+		"contact": {aliasedExpr: redactIfDeleted(`
 			select jsonb_build_object(
 				'name', mc.name, 'phone_number', mc.phone_number, 'email', mc.email
 			)
 			from im_message.message_contacts mc
 			where m.type = 7 and mc.message_id = m.id
 			limit 1
-		) as contact`},
+		`, "null", "contact")},
 
-		"system": {aliasedExpr: `(
+		"system": {aliasedExpr: redactIfDeleted(`
 			select jsonb_build_object('type', sm.type, 'metadata', sm.metadata)
 			from im_message.system_messages sm
 			where m.type = 4 and sm.message_id = m.id
 			limit 1
-		) as system`},
+		`, "null", "system")},
 
 		"member": {
 			// Keys match ThreadDialog's json tags so the jsonb decodes into *model.ThreadDialog.
