@@ -162,11 +162,11 @@ func mapMessageRevision(in *model.MessageRevision) *impb.MessageRevision {
 	}
 
 	return &impb.MessageRevision{
-		RevisionNo: in.RevisionNo,
-		Action:     impb.MessageRevisionAction(in.Action),
-		Body:       in.Body,
-		ChangedBy:  in.ChangedBy.String(),
-		ChangedAt:  in.ChangedAtUnixMillis(),
+		Version:   in.Version,
+		Action:    impb.MessageRevisionAction(in.Action),
+		Body:      in.Body,
+		ChangedBy: in.ChangedBy.String(),
+		ChangedAt: in.ChangedAtUnixMillis(),
 	}
 }
 

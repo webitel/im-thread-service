@@ -3,17 +3,16 @@ create table if not exists "im_message"."message_revisions" (
     id bigserial primary key,
     message_id uuid not null references im_message.messages (id) on delete cascade,
     domain_id int not null check (domain_id > 0),
-    revision_no int not null check (revision_no > 0),
+    version int not null check (version > 0),
     action smallint not null check (action between 1 and 3),
     body text not null default '',
     changed_by uuid not null,
     changed_at timestamptz not null default now(),
-    unique (message_id, revision_no)
+    unique (message_id, version)
 );
 
 drop view if exists "im_thread"."v_messages";
 
--- Rebuilt from 20260805134353 with one addition: revision_count.
 create or replace view "im_thread"."v_messages" as (
 SELECT m.id,
     m.thread_id,
@@ -122,9 +121,6 @@ SELECT m.id,
 );
 
 -- +goose Down
-drop view if exists "im_thread"."v_messages";
-
--- Restores the 20260805134353 definition verbatim (no revision_count).
 create or replace view "im_thread"."v_messages" as (
 SELECT m.id,
     m.thread_id,

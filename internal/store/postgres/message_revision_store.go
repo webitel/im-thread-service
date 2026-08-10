@@ -64,10 +64,10 @@ func (s *messageRevisionStore) Search(ctx context.Context, messageID uuid.UUID, 
 	}
 
 	const query = `
-		select r.message_id, r.domain_id, r.revision_no, r.action, r.body, r.changed_by, r.changed_at
+		select r.message_id, r.domain_id, r.version, r.action, r.body, r.changed_by, r.changed_at
 		from im_message.message_revisions r
 		where r.message_id = @MessageID
-		order by r.revision_no
+		order by r.version
 	`
 
 	rows, err := s.db.Query(ctx, query, pgx.NamedArgs{"MessageID": messageID})

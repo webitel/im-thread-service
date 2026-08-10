@@ -19,13 +19,13 @@ const (
 // message carried at that point, plus who changed it and when. Entries are
 // append-only and are never rewritten by later changes.
 type MessageRevision struct {
-	MessageID  uuid.UUID             `json:"message_id" db:"message_id"`
-	DomainID   int32                 `json:"domain_id" db:"domain_id"`
-	RevisionNo int32                 `json:"revision_no" db:"revision_no"`
-	Action     MessageRevisionAction `json:"action" db:"action"`
-	Body       string                `json:"body" db:"body"`
-	ChangedBy  uuid.UUID             `json:"changed_by" db:"changed_by"`
-	ChangedAt  time.Time             `json:"changed_at" db:"changed_at"`
+	MessageID uuid.UUID             `json:"message_id" db:"message_id"`
+	DomainID  int32                 `json:"domain_id" db:"domain_id"`
+	Version   int32                 `json:"version" db:"version"`
+	Action    MessageRevisionAction `json:"action" db:"action"`
+	Body      string                `json:"body" db:"body"`
+	ChangedBy uuid.UUID             `json:"changed_by" db:"changed_by"`
+	ChangedAt time.Time             `json:"changed_at" db:"changed_at"`
 }
 
 func (r *MessageRevision) ChangedAtUnixMillis() int64 {

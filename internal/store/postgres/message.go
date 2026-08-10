@@ -202,7 +202,7 @@ func (m *messageStore) EditMessage(ctx context.Context, msg *model.Message) (*mo
 			select
 				m.id, m.domain_id, m.sender_id, m.body, m.created_at, m.updated_at, m.edited,
 				coalesce((
-					select max(r.revision_no)
+					select max(r.version)
 					from im_message.message_revisions r
 					where r.message_id = m.id
 				), 0) as last_revision
@@ -220,7 +220,7 @@ func (m *messageStore) EditMessage(ctx context.Context, msg *model.Message) (*mo
 		),
 		original as (
 			insert into im_message.message_revisions
-				(message_id, domain_id, revision_no, action, body, changed_by, changed_at)
+				(message_id, domain_id, version, action, body, changed_by, changed_at)
 			select
 				t.id, t.domain_id, 1,
 				case when t.edited then @ActionEdited else @ActionCreated end,
@@ -243,7 +243,7 @@ func (m *messageStore) EditMessage(ctx context.Context, msg *model.Message) (*mo
 		),
 		revision as (
 			insert into im_message.message_revisions
-				(message_id, domain_id, revision_no, action, body, changed_by, changed_at)
+				(message_id, domain_id, version, action, body, changed_by, changed_at)
 			select
 				u.id, u.domain_id,
 				t.last_revision + case when t.last_revision = 0 then 2 else 1 end,
@@ -305,7 +305,7 @@ func (m *messageStore) DeleteMessages(ctx context.Context, ids []uuid.UUID, dele
 				m.id, m.domain_id, m.sender_id, m.body, m.created_at, m.updated_at, m.edited,
 				(m.deleted_at is null) as was_live,
 				coalesce((
-					select max(r.revision_no)
+					select max(r.version)
 					from im_message.message_revisions r
 					where r.message_id = m.id
 				), 0) as last_revision
@@ -327,7 +327,7 @@ func (m *messageStore) DeleteMessages(ctx context.Context, ids []uuid.UUID, dele
 		),
 		original as (
 			insert into im_message.message_revisions
-				(message_id, domain_id, revision_no, action, body, changed_by, changed_at)
+				(message_id, domain_id, version, action, body, changed_by, changed_at)
 			select
 				t.id, t.domain_id, 1,
 				case when t.edited then @ActionEdited else @ActionCreated end,
@@ -350,7 +350,7 @@ func (m *messageStore) DeleteMessages(ctx context.Context, ids []uuid.UUID, dele
 		),
 		revision as (
 			insert into im_message.message_revisions
-				(message_id, domain_id, revision_no, action, body, changed_by, changed_at)
+				(message_id, domain_id, version, action, body, changed_by, changed_at)
 			select
 				u.id, u.domain_id,
 				t.last_revision + case when t.last_revision = 0 then 2 else 1 end,
