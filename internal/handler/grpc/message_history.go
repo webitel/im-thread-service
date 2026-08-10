@@ -15,6 +15,7 @@ import (
 type MessageHistoryService interface {
 	Search(context.Context, *dto.HistoryMessageInputDTO) (model.MessageSlice, queryobject.PageInfo[queryobject.MessageHistoryCursor], error)
 	SearchLeftThreads(ctx context.Context, req *dto.LeftThreadsMessageHistoryInputDTO) (model.MessageSlice, queryobject.PageInfo[queryobject.MessageHistoryCursor], error)
+	GetRevisions(ctx context.Context, req *dto.GetMessageRevisionsRequest) ([]*model.MessageRevision, error)
 }
 
 type (
@@ -55,6 +56,15 @@ func (s *MessageHistoryServer) SearchThreadMessagesHistory(ctx context.Context, 
 	}
 
 	return resp, nil
+}
+
+func (s *MessageHistoryServer) GetMessageRevisions(ctx context.Context, req *impb.GetMessageRevisionsRequest) (*impb.GetMessageRevisionsResponse, error) {
+	revisions, err := s.messageHistorySearcher.GetRevisions(ctx, mapper.MapGetMessageRevisionsRequest2DTO(req))
+	if err != nil {
+		return nil, err
+	}
+
+	return mapper.MapRevisions2GetMessageRevisionsResponse(revisions), nil
 }
 
 func (s *MessageHistoryServer) SearchLeftThreadsMessageHistory(ctx context.Context, req *impb.SearchLeftThreadsMessageHistoryRequest) (*impb.SearchMessageHistoryResponse, error) {

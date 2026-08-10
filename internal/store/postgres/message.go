@@ -198,28 +198,71 @@ func (m *messageStore) EditMessage(ctx context.Context, msg *model.Message) (*mo
 	}
 
 	const query = `
-		update im_message.messages m
-		set body = @Body,
-		    edited = true,
-		    updated_at = now()
-		where m.id = @ID
-		  and (m.sender_id = @EditorID or m.origin_sender = @EditorID)
-		  and exists (
-			select 1
-			from im_thread.thread_dialog td
-			where td.thread_id = m.thread_id
-			  and td.member_id = @EditorID
-			  and td.deleted_at is null
-		  )
-		returning
+		with target as (
+			select
+				m.id, m.domain_id, m.sender_id, m.body, m.created_at, m.updated_at, m.edited,
+				coalesce((
+					select max(r.revision_no)
+					from im_message.message_revisions r
+					where r.message_id = m.id
+				), 0) as last_revision
+			from im_message.messages m
+			where m.id = @ID
+			  and m.deleted_at is null
+			  and (m.sender_id = @EditorID or m.origin_sender = @EditorID)
+			  and exists (
+				select 1
+				from im_thread.thread_dialog td
+				where td.thread_id = m.thread_id
+				  and td.member_id = @EditorID
+				  and td.deleted_at is null
+			  )
+		),
+		original as (
+			insert into im_message.message_revisions
+				(message_id, domain_id, revision_no, action, body, changed_by, changed_at)
+			select
+				t.id, t.domain_id, 1,
+				case when t.edited then @ActionEdited else @ActionCreated end,
+				coalesce(t.body, ''),
+				t.sender_id,
+				case when t.edited then t.updated_at else t.created_at end
+			from target t
+			where t.last_revision = 0
+		),
+		updated as (
+			update im_message.messages m
+			set body = @Body,
+			    edited = true,
+			    updated_at = now()
+			from target t
+			where m.id = t.id
+			returning
+				m.id, m.domain_id, m.thread_id, m.member_id, m.type, m.body, m.metadata,
+				m.created_at, m.updated_at, m.edited
+		),
+		revision as (
+			insert into im_message.message_revisions
+				(message_id, domain_id, revision_no, action, body, changed_by, changed_at)
+			select
+				u.id, u.domain_id,
+				t.last_revision + case when t.last_revision = 0 then 2 else 1 end,
+				@ActionEdited, coalesce(u.body, ''), @EditorID, u.updated_at
+			from updated u
+			join target t on t.id = u.id
+		)
+		select
 			id, domain_id, thread_id, member_id, type, body, metadata,
 			created_at, updated_at, edited
+		from updated
 	`
 
 	args := pgx.NamedArgs{
-		"ID":       msg.ID,
-		"EditorID": msg.From.ID,
-		"Body":     msg.Body,
+		"ID":            msg.ID,
+		"EditorID":      msg.From.ID,
+		"Body":          msg.Body,
+		"ActionCreated": int16(model.MessageRevisionActionCreated),
+		"ActionEdited":  int16(model.MessageRevisionActionEdited),
 	}
 
 	rows, err := m.db.Query(ctx, query, args)
@@ -237,6 +280,10 @@ func (m *messageStore) EditMessage(ctx context.Context, msg *model.Message) (*mo
 			)
 		}
 
+		if conflict := uniqueViolation(err, "message was edited concurrently, retry"); conflict != nil {
+			return nil, conflict
+		}
+
 		return nil, errors.Internal("collecting edited message", errors.WithCause(err), errors.WithID("postgres.message.edit.collecting"))
 	}
 
@@ -252,13 +299,16 @@ func (m *messageStore) DeleteMessages(ctx context.Context, ids []uuid.UUID, dele
 		return nil, errors.InvalidArgument("deleter id cannot be nil", errors.WithID("postgres.message.delete_messages"))
 	}
 
-	// Returns every message the caller is allowed to remove, including ones
-	// already deleted by an earlier call, so that a retry does not report
-	// failure for a deletion that already succeeded. just_deleted tells the
-	// caller which rows this statement actually changed, so events fire once.
 	const query = `
 		with target as (
-			select m.id, (m.deleted_at is null) as was_live
+			select
+				m.id, m.domain_id, m.sender_id, m.body, m.created_at, m.updated_at, m.edited,
+				(m.deleted_at is null) as was_live,
+				coalesce((
+					select max(r.revision_no)
+					from im_message.message_revisions r
+					where r.message_id = m.id
+				), 0) as last_revision
 			from im_message.messages m
 			where m.id = any(@IDs)
 			  and (m.sender_id = @DeleterID or m.origin_sender = @DeleterID)
@@ -275,6 +325,18 @@ func (m *messageStore) DeleteMessages(ctx context.Context, ids []uuid.UUID, dele
 				  and coalesce(tp.can_delete_messages, true)
 			  )
 		),
+		original as (
+			insert into im_message.message_revisions
+				(message_id, domain_id, revision_no, action, body, changed_by, changed_at)
+			select
+				t.id, t.domain_id, 1,
+				case when t.edited then @ActionEdited else @ActionCreated end,
+				coalesce(t.body, ''),
+				t.sender_id,
+				case when t.edited then t.updated_at else t.created_at end
+			from target t
+			where t.was_live and t.last_revision = 0
+		),
 		updated as (
 			update im_message.messages m
 			set deleted_at = now(),
@@ -284,9 +346,21 @@ func (m *messageStore) DeleteMessages(ctx context.Context, ids []uuid.UUID, dele
 			where m.id = t.id and t.was_live
 			returning
 				m.id, m.domain_id, m.thread_id, m.member_id, m.sender_id, m.type,
-				m.created_at, m.updated_at, m.deleted_at, m.deleted_by
+				m.body, m.created_at, m.updated_at, m.deleted_at, m.deleted_by
+		),
+		revision as (
+			insert into im_message.message_revisions
+				(message_id, domain_id, revision_no, action, body, changed_by, changed_at)
+			select
+				u.id, u.domain_id,
+				t.last_revision + case when t.last_revision = 0 then 2 else 1 end,
+				@ActionDeleted, coalesce(u.body, ''), @DeleterID, u.deleted_at
+			from updated u
+			join target t on t.id = u.id
 		)
-		select u.*, true as just_deleted
+		select
+			u.id, u.domain_id, u.thread_id, u.member_id, u.sender_id, u.type,
+			u.created_at, u.updated_at, u.deleted_at, u.deleted_by, true as just_deleted
 		from updated u
 		union all
 		select
@@ -298,8 +372,11 @@ func (m *messageStore) DeleteMessages(ctx context.Context, ids []uuid.UUID, dele
 	`
 
 	args := pgx.NamedArgs{
-		"IDs":       ids,
-		"DeleterID": deleterID,
+		"IDs":           ids,
+		"DeleterID":     deleterID,
+		"ActionCreated": int16(model.MessageRevisionActionCreated),
+		"ActionEdited":  int16(model.MessageRevisionActionEdited),
+		"ActionDeleted": int16(model.MessageRevisionActionDeleted),
 	}
 
 	rows, err := m.db.Query(ctx, query, args)
@@ -309,6 +386,10 @@ func (m *messageStore) DeleteMessages(ctx context.Context, ids []uuid.UUID, dele
 
 	deleted, err := pgx.CollectRows(rows, pgx.RowToAddrOfStructByNameLax[model.Message])
 	if err != nil {
+		if conflict := uniqueViolation(err, "message was changed concurrently, retry"); conflict != nil {
+			return nil, conflict
+		}
+
 		return nil, errors.Internal("collecting deleted messages", errors.WithCause(err), errors.WithID("postgres.message.delete.collecting"))
 	}
 

@@ -108,11 +108,15 @@ func mapHistoryMessage(m *model.Message, callerID uuid.UUID) *impb.HistoryMessag
 		Statuses:       mapRecipientStatuses(m.Statuses),
 	}
 
-	// A deleted message keeps its place in the timeline but carries no content
-	// field: clients only learn that something was removed and by when.
+	out.RevisionCount = m.RevisionCount
+
 	if m.IsDeleted() {
 		out.Deleted = true
 		out.DeletedAt = m.DeletedAtUnixMillis()
+
+		if m.DeletedBy != nil {
+			out.DeletedBy = m.DeletedBy.String()
+		}
 
 		return out
 	}
@@ -136,6 +140,34 @@ func mapHistoryMessage(m *model.Message, callerID uuid.UUID) *impb.HistoryMessag
 	out.Reactions = mapReactions(m.Reactions, callerID)
 
 	return out
+}
+
+func MapGetMessageRevisionsRequest2DTO(in *impb.GetMessageRevisionsRequest) *dto.GetMessageRevisionsRequest {
+	return &dto.GetMessageRevisionsRequest{
+		MessageID: utils.IDsParser(in.GetMessageId()),
+		DomainID:  in.GetDomainId(),
+		CallerID:  utils.IDsParser(in.GetCallerId()),
+	}
+}
+
+func MapRevisions2GetMessageRevisionsResponse(revisions []*model.MessageRevision) *impb.GetMessageRevisionsResponse {
+	return &impb.GetMessageRevisionsResponse{
+		Items: utils.Map(revisions, mapMessageRevision),
+	}
+}
+
+func mapMessageRevision(in *model.MessageRevision) *impb.MessageRevision {
+	if in == nil {
+		return nil
+	}
+
+	return &impb.MessageRevision{
+		RevisionNo: in.RevisionNo,
+		Action:     impb.MessageRevisionAction(in.Action),
+		Body:       in.Body,
+		ChangedBy:  in.ChangedBy.String(),
+		ChangedAt:  in.ChangedAtUnixMillis(),
+	}
 }
 
 func mapForwardOrigin(in *model.ForwardOrigin) *impb.ForwardOrigin {

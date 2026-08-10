@@ -48,6 +48,10 @@ var Module = fx.Module("store",
 			fx.As(new(store.MessageHistory)),
 		),
 		fx.Annotate(
+			NewMessageRevisionStore,
+			fx.As(new(store.MessageRevisionStore)),
+		),
+		fx.Annotate(
 			NewDirectThreadDialogOrchestration,
 			fx.As(new(store.DirectThreadDialogOrchestration)),
 		),
