@@ -200,12 +200,12 @@ func (m *messageStore) EditMessage(ctx context.Context, msg *model.Message) (*mo
 	const query = `
 		with target as (
 			select
-				m.id, m.domain_id, m.sender_id, m.body, m.created_at, m.updated_at, m.edited,
+				m.id, m.domain_id, m.body,
 				coalesce((
 					select max(r.version)
 					from im_message.message_revisions r
 					where r.message_id = m.id
-				), 0) as last_revision
+				), 0) as last_version
 			from im_message.messages m
 			where m.id = @ID
 			  and m.deleted_at is null
@@ -217,18 +217,6 @@ func (m *messageStore) EditMessage(ctx context.Context, msg *model.Message) (*mo
 				  and td.member_id = @EditorID
 				  and td.deleted_at is null
 			  )
-		),
-		original as (
-			insert into im_message.message_revisions
-				(message_id, domain_id, version, action, body, changed_by, changed_at)
-			select
-				t.id, t.domain_id, 1,
-				case when t.edited then @ActionEdited else @ActionCreated end,
-				coalesce(t.body, ''),
-				t.sender_id,
-				case when t.edited then t.updated_at else t.created_at end
-			from target t
-			where t.last_revision = 0
 		),
 		updated as (
 			update im_message.messages m
@@ -243,11 +231,10 @@ func (m *messageStore) EditMessage(ctx context.Context, msg *model.Message) (*mo
 		),
 		revision as (
 			insert into im_message.message_revisions
-				(message_id, domain_id, version, action, body, changed_by, changed_at)
+				(message_id, domain_id, version, body, changed_by, changed_at)
 			select
-				u.id, u.domain_id,
-				t.last_revision + case when t.last_revision = 0 then 2 else 1 end,
-				@ActionEdited, coalesce(u.body, ''), @EditorID, u.updated_at
+				u.id, u.domain_id, t.last_version + 1,
+				coalesce(t.body, ''), @EditorID, u.updated_at
 			from updated u
 			join target t on t.id = u.id
 		)
@@ -258,11 +245,9 @@ func (m *messageStore) EditMessage(ctx context.Context, msg *model.Message) (*mo
 	`
 
 	args := pgx.NamedArgs{
-		"ID":            msg.ID,
-		"EditorID":      msg.From.ID,
-		"Body":          msg.Body,
-		"ActionCreated": int16(model.MessageRevisionActionCreated),
-		"ActionEdited":  int16(model.MessageRevisionActionEdited),
+		"ID":       msg.ID,
+		"EditorID": msg.From.ID,
+		"Body":     msg.Body,
 	}
 
 	rows, err := m.db.Query(ctx, query, args)
@@ -301,14 +286,7 @@ func (m *messageStore) DeleteMessages(ctx context.Context, ids []uuid.UUID, dele
 
 	const query = `
 		with target as (
-			select
-				m.id, m.domain_id, m.sender_id, m.body, m.created_at, m.updated_at, m.edited,
-				(m.deleted_at is null) as was_live,
-				coalesce((
-					select max(r.version)
-					from im_message.message_revisions r
-					where r.message_id = m.id
-				), 0) as last_revision
+			select m.id, (m.deleted_at is null) as was_live
 			from im_message.messages m
 			where m.id = any(@IDs)
 			  and (m.sender_id = @DeleterID or m.origin_sender = @DeleterID)
@@ -325,18 +303,6 @@ func (m *messageStore) DeleteMessages(ctx context.Context, ids []uuid.UUID, dele
 				  and coalesce(tp.can_delete_messages, true)
 			  )
 		),
-		original as (
-			insert into im_message.message_revisions
-				(message_id, domain_id, version, action, body, changed_by, changed_at)
-			select
-				t.id, t.domain_id, 1,
-				case when t.edited then @ActionEdited else @ActionCreated end,
-				coalesce(t.body, ''),
-				t.sender_id,
-				case when t.edited then t.updated_at else t.created_at end
-			from target t
-			where t.was_live and t.last_revision = 0
-		),
 		updated as (
 			update im_message.messages m
 			set deleted_at = now(),
@@ -346,21 +312,9 @@ func (m *messageStore) DeleteMessages(ctx context.Context, ids []uuid.UUID, dele
 			where m.id = t.id and t.was_live
 			returning
 				m.id, m.domain_id, m.thread_id, m.member_id, m.sender_id, m.type,
-				m.body, m.created_at, m.updated_at, m.deleted_at, m.deleted_by
-		),
-		revision as (
-			insert into im_message.message_revisions
-				(message_id, domain_id, version, action, body, changed_by, changed_at)
-			select
-				u.id, u.domain_id,
-				t.last_revision + case when t.last_revision = 0 then 2 else 1 end,
-				@ActionDeleted, coalesce(u.body, ''), @DeleterID, u.deleted_at
-			from updated u
-			join target t on t.id = u.id
+				m.created_at, m.updated_at, m.deleted_at, m.deleted_by
 		)
-		select
-			u.id, u.domain_id, u.thread_id, u.member_id, u.sender_id, u.type,
-			u.created_at, u.updated_at, u.deleted_at, u.deleted_by, true as just_deleted
+		select u.*, true as just_deleted
 		from updated u
 		union all
 		select
@@ -372,11 +326,8 @@ func (m *messageStore) DeleteMessages(ctx context.Context, ids []uuid.UUID, dele
 	`
 
 	args := pgx.NamedArgs{
-		"IDs":           ids,
-		"DeleterID":     deleterID,
-		"ActionCreated": int16(model.MessageRevisionActionCreated),
-		"ActionEdited":  int16(model.MessageRevisionActionEdited),
-		"ActionDeleted": int16(model.MessageRevisionActionDeleted),
+		"IDs":       ids,
+		"DeleterID": deleterID,
 	}
 
 	rows, err := m.db.Query(ctx, query, args)

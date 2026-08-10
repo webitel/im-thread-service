@@ -141,7 +141,7 @@ type MessageHistory interface {
 }
 
 type MessageRevisionStore interface {
-	Search(ctx context.Context, messageID uuid.UUID, domainID int32, callerID uuid.UUID) ([]*model.MessageRevision, error)
+	Search(ctx context.Context, messageID uuid.UUID, domainID int32, callerID uuid.UUID) ([]*model.MessageChangeEntry, error)
 }
 
 type DirectThreadDialogOrchestration interface {

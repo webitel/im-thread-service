@@ -19,7 +19,7 @@ type MessageHistoryStore interface {
 }
 
 type MessageRevisionStore interface {
-	Search(ctx context.Context, messageID uuid.UUID, domainID int32, callerID uuid.UUID) ([]*model.MessageRevision, error)
+	Search(ctx context.Context, messageID uuid.UUID, domainID int32, callerID uuid.UUID) ([]*model.MessageChangeEntry, error)
 }
 
 type MessageHistoryService struct {
@@ -34,7 +34,7 @@ func NewMessageHistory(messageHistoryStore store.MessageHistory, messageRevision
 	}
 }
 
-func (s *MessageHistoryService) GetRevisions(ctx context.Context, in *dto.GetMessageRevisionsRequest) ([]*model.MessageRevision, error) {
+func (s *MessageHistoryService) GetRevisions(ctx context.Context, in *dto.GetMessageRevisionsRequest) ([]*model.MessageChangeEntry, error) {
 	if in == nil || in.MessageID == uuid.Nil {
 		return nil, errors.InvalidArgument("message id is required", errors.WithID("service.message_history.get_revisions"))
 	}
@@ -43,7 +43,7 @@ func (s *MessageHistoryService) GetRevisions(ctx context.Context, in *dto.GetMes
 		return nil, errors.InvalidArgument("caller identity is required", errors.WithID("service.message_history.get_revisions"))
 	}
 
-	revisions, err := s.messageRevisionStore.Search(ctx, in.MessageID, in.DomainID, in.CallerID)
+	entries, err := s.messageRevisionStore.Search(ctx, in.MessageID, in.DomainID, in.CallerID)
 	if err != nil {
 		if errors.Is(err, store.ErrMessageNotVisible) {
 			return nil, errors.Forbidden(
@@ -55,7 +55,7 @@ func (s *MessageHistoryService) GetRevisions(ctx context.Context, in *dto.GetMes
 		return nil, err
 	}
 
-	return revisions, nil
+	return entries, nil
 }
 
 func (s *MessageHistoryService) Search(ctx context.Context, hmiDTO *dto.HistoryMessageInputDTO) (model.MessageSlice, queryobject.PageInfo[queryobject.MessageHistoryCursor], error) {

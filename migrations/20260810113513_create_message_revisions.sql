@@ -4,7 +4,6 @@ create table if not exists "im_message"."message_revisions" (
     message_id uuid not null references im_message.messages (id) on delete cascade,
     domain_id int not null check (domain_id > 0),
     version int not null check (version > 0),
-    action smallint not null check (action between 1 and 3),
     body text not null default '',
     changed_by uuid not null,
     changed_at timestamptz not null default now(),
@@ -110,7 +109,8 @@ SELECT m.id,
                    GROUP BY mr.emoji ) e ) AS reactions,
     ( SELECT count(*)::int
            FROM im_message.message_revisions rev
-          WHERE rev.message_id = m.id) AS revision_count
+          WHERE rev.message_id = m.id)
+      + CASE WHEN m.deleted_at IS NOT NULL THEN 1 ELSE 0 END AS revision_count
    FROM im_message.messages m
      LEFT JOIN LATERAL ( SELECT jsonb_build_object('id', td.id, 'role', td.thread_role, 'member_id', m.sender_id) AS member_data
            FROM im_thread.thread_dialog td
@@ -121,6 +121,8 @@ SELECT m.id,
 );
 
 -- +goose Down
+drop view if exists "im_thread"."v_messages";
+
 create or replace view "im_thread"."v_messages" as (
 SELECT m.id,
     m.thread_id,

@@ -150,13 +150,13 @@ func MapGetMessageRevisionsRequest2DTO(in *impb.GetMessageRevisionsRequest) *dto
 	}
 }
 
-func MapRevisions2GetMessageRevisionsResponse(revisions []*model.MessageRevision) *impb.GetMessageRevisionsResponse {
+func MapRevisions2GetMessageRevisionsResponse(entries []*model.MessageChangeEntry) *impb.GetMessageRevisionsResponse {
 	return &impb.GetMessageRevisionsResponse{
-		Items: utils.Map(revisions, mapMessageRevision),
+		Items: utils.Map(entries, mapMessageChangeEntry),
 	}
 }
 
-func mapMessageRevision(in *model.MessageRevision) *impb.MessageRevision {
+func mapMessageChangeEntry(in *model.MessageChangeEntry) *impb.MessageRevision {
 	if in == nil {
 		return nil
 	}

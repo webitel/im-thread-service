@@ -15,12 +15,11 @@ const (
 	MessageRevisionActionDeleted
 )
 
-// MessageRevision is one entry of a message's change history: the body the
-// message carried at that point, plus who changed it and when. Entries are
-// append-only and are never rewritten by later changes.
-type MessageRevision struct {
-	MessageID uuid.UUID             `json:"message_id" db:"message_id"`
-	DomainID  int32                 `json:"domain_id" db:"domain_id"`
+// MessageChangeEntry is one line of a message's replayed history: what the
+// message read at that point, who put it there and when. The log is assembled
+// by MessageRevisionStore.Search; only overwritten bodies are stored, so
+// creation and deletion entries come from the message row itself.
+type MessageChangeEntry struct {
 	Version   int32                 `json:"version" db:"version"`
 	Action    MessageRevisionAction `json:"action" db:"action"`
 	Body      string                `json:"body" db:"body"`
@@ -28,10 +27,10 @@ type MessageRevision struct {
 	ChangedAt time.Time             `json:"changed_at" db:"changed_at"`
 }
 
-func (r *MessageRevision) ChangedAtUnixMillis() int64 {
-	if r == nil {
+func (e *MessageChangeEntry) ChangedAtUnixMillis() int64 {
+	if e == nil {
 		return 0
 	}
 
-	return max(r.ChangedAt.UTC().UnixMilli(), 0)
+	return max(e.ChangedAt.UTC().UnixMilli(), 0)
 }
