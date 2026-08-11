@@ -19,6 +19,7 @@ var _ impb.MessageServer = (*MessageServer)(nil)
 
 type MessageService interface {
 	SendText(ctx context.Context, in *dto.SendTextRequest) (*dto.SendTextResponse, error)
+	SendInternalNote(ctx context.Context, in *dto.SendInternalNoteRequest) (*dto.SendTextResponse, error)
 	SendDocument(ctx context.Context, in *dto.SendDocumentRequest) (*dto.SendDocumentResponse, error)
 	Read(ctx context.Context, in *dto.ReadMessageRequest) error
 	SendLocation(ctx context.Context, msg *model.Message) (*model.Message, error)
@@ -55,6 +56,18 @@ func (m *MessageServer) SendText(ctx context.Context, in *impb.SendTextRequest) 
 	}
 
 	return mapper.MapToSendTextResponse(out), nil
+}
+
+func (m *MessageServer) SendInternalNote(ctx context.Context, in *impb.SendInternalNoteRequest) (*impb.SendMessageResponse, error) {
+	out, err := m.handler.SendInternalNote(ctx, mapper.MapToSendInternalNoteRequest(in))
+	if err != nil {
+		return nil, err
+	}
+
+	return &impb.SendMessageResponse{
+		Id: out.ID.String(),
+		To: []*impb.Peer{mapper.MapPeerToProto(out.To)},
+	}, nil
 }
 
 func (m *MessageServer) SendDocument(ctx context.Context, in *impb.SendDocumentRequest) (*impb.SendDocumentResponse, error) {

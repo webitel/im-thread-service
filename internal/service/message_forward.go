@@ -76,6 +76,13 @@ func (s *MessageService) ForwardMessages(ctx context.Context, in *dto.ForwardMes
 			copies = append(copies, copied)
 		}
 
+		// Post internal note to the destination thread if provided
+		if in.InternalNote != "" {
+			if err := s.postInternalNoteForForward(txCtx, uow, in, t); err != nil {
+				return err
+			}
+		}
+
 		return nil
 	})
 	if err != nil {
@@ -262,6 +269,46 @@ func (s *MessageService) resolveOriginNames(
 	}
 
 	return names
+}
+
+func (s *MessageService) postInternalNoteForForward(
+	ctx context.Context,
+	uow store.UnitOfWork,
+	in *dto.ForwardMessagesRequest,
+	t *model.Thread,
+) error {
+	// Internal note recipients: only Webitel users (Via == nil) and non-bots
+	internalMembers := webitelUserMembers(t.Members)
+
+	msg := &model.Message{
+		ThreadID:              t.ID,
+		DomainID:              int32(in.DomainID),
+		From:                  in.From,
+		Body:                  in.InternalNote,
+		To:                    internalMembers,
+		Type:                  model.MessageTypeText,
+		Metadata:              model.BuildMetadata(in.InternalNote),
+		SendAs:                in.SendAs,
+		BotControllerMemberID: t.BotControllerID,
+		Internal:              true,
+	}
+
+	msg.SetMemberFromSlice(t.Members)
+
+	saved, err := uow.Messages().SaveMessage(ctx, msg)
+	if err != nil {
+		return err
+	}
+
+	saved.To = internalMembers
+
+	if err = s.insertSentStatuses(ctx, uow, saved); err != nil {
+		return err
+	}
+
+	saved.WithCreatedEvent(ctx, in.SendID)
+
+	return s.dispatchMessageEvents(ctx, uow, saved)
 }
 
 func buildForwardResponse(

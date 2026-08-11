@@ -190,6 +190,20 @@ func isInternalRecipient(m *model.ThreadDialog, sender uuid.UUID) bool {
 	return m.DeletedAt == nil && m.ContactID != sender && !m.IsBot && m.Via == nil
 }
 
+// webitelUserMembers returns all active internal (Via == nil) non-bot members
+// of the thread, including the sender. Used to determine recipients of internal notes.
+func webitelUserMembers(members []*model.ThreadDialog) []*model.ThreadDialog { //nolint:unused
+	var out []*model.ThreadDialog
+
+	for _, m := range members {
+		if m != nil && m.DeletedAt == nil && !m.IsBot && m.Via == nil {
+			out = append(out, m)
+		}
+	}
+
+	return out
+}
+
 // truncateUTF8 trims s to at most maxBytes bytes without splitting a rune.
 func truncateUTF8(s string, maxBytes int) string {
 	if maxBytes <= 0 || len(s) <= maxBytes {

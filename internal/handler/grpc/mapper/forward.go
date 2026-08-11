@@ -34,12 +34,13 @@ func MapToForwardMessagesRequest(in *impb.ForwardMessagesRequest) *dto.ForwardMe
 	sendAs, _ := uuid.Parse(in.GetSendAs())
 
 	return &dto.ForwardMessagesRequest{
-		From:       MapPeerFromProto(in.GetFrom()),
-		To:         MapPeerFromProto(in.GetTo()),
-		DomainID:   int64(in.GetDomainId()),
-		SendID:     in.GetSendId(),
-		SendAs:     &sendAs,
-		MessageIDs: utils.Map(in.GetMessageIds(), utils.IDsParser),
+		From:         MapPeerFromProto(in.GetFrom()),
+		To:           MapPeerFromProto(in.GetTo()),
+		DomainID:     int64(in.GetDomainId()),
+		SendID:       in.GetSendId(),
+		SendAs:       &sendAs,
+		MessageIDs:   utils.Map(in.GetMessageIds(), utils.IDsParser),
+		InternalNote: in.GetInternalNote(),
 	}
 }
 
