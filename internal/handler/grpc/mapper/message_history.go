@@ -106,6 +106,7 @@ func mapHistoryMessage(m *model.Message, callerID uuid.UUID) *impb.HistoryMessag
 		UpdatedAt:      max(m.UpdatedAt.UnixMilli(), 0),
 		DeliveryStatus: mapDeliveryStatus(m.DeliveryStatus),
 		Statuses:       mapRecipientStatuses(m.Statuses),
+		Internal:       m.Internal,
 	}
 
 	// A deleted message keeps its place in the timeline but carries no content

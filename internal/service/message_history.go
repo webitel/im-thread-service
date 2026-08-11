@@ -33,6 +33,7 @@ func (s *MessageHistoryService) Search(ctx context.Context, hmiDTO *dto.HistoryM
 		WithSenderIDsFilter(hmiDTO.SenderIDs...).
 		WithThreadIDsFilter(hmiDTO.ThreadIDs...).
 		WithCallerLimitation(hmiDTO.CallerID, hmiDTO.ThreadIDs).
+		WithInternalVisibility(hmiDTO.CallerID).
 		WithLimit(hmiDTO.Size).
 		WithTypeFilter(hmiDTO.Types...)
 

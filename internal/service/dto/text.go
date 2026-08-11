@@ -27,4 +27,15 @@ type (
 		To shared.Peer `json:"to"`
 		ID uuid.UUID   `json:"id"`
 	}
+
+	SendInternalNoteRequest struct {
+		From     shared.Peer `json:"from"`
+		To       shared.Peer `json:"to"`
+		Body     string      `json:"body"`
+		DomainID int64       `json:"domain_id"`
+		SendID   string      `json:"send_id"`
+		SendAs   *uuid.UUID
+
+		ReplyToMessageID *uuid.UUID `json:"reply_to_message_id,omitempty"`
+	}
 )

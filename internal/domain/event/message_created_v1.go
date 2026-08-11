@@ -56,6 +56,7 @@ type MessageCreated struct {
 	BotControllerMemberID *uuid.UUID            `json:"bot_controller_member_id,omitempty"`
 	ReplyTo               *ReplyToPayload       `json:"reply_to,omitempty"`
 	ForwardOrigin         *ForwardOriginPayload `json:"forward_origin,omitempty"`
+	Internal              bool                  `json:"internal,omitempty"`
 	ExternalMetadata      map[string]string     `json:"-"`
 }
 

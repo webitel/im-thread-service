@@ -100,15 +100,15 @@ func (m *messageStore) SaveMessage(ctx context.Context, msg *model.Message) (*mo
 
 	const query = `
 		insert into im_message.messages (
-			domain_id, thread_id, sender_id, member_id, type, body, metadata, origin_sender, reply_to,
+			domain_id, thread_id, sender_id, member_id, type, body, metadata, origin_sender, reply_to, internal,
 			` + forwardOriginColumns + `
 		)
 		values (
-			@DomainID, @ThreadID, @SenderID, @MemberID, @Type, @Body, @Metadata, @OriginSender, @ReplyTo,
+			@DomainID, @ThreadID, @SenderID, @MemberID, @Type, @Body, @Metadata, @OriginSender, @ReplyTo, @Internal,
 			` + forwardOriginValues + `
 		)
 		returning
-			id, domain_id, thread_id, member_id, type, body, metadata, created_at, updated_at,
+			id, domain_id, thread_id, member_id, type, body, metadata, created_at, updated_at, internal,
 			jsonb_build_object('id', sender_id) as "from"
 	`
 
@@ -122,6 +122,7 @@ func (m *messageStore) SaveMessage(ctx context.Context, msg *model.Message) (*mo
 		"Metadata":     msg.Metadata,
 		"OriginSender": msg.GetOriginSender(),
 		"ReplyTo":      replyToArg(msg),
+		"Internal":     msg.Internal,
 	}, msg)
 
 	rows, err := m.db.Query(ctx, query, args)

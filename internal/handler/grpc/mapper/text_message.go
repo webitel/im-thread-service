@@ -29,6 +29,24 @@ func MapToSendTextRequest(in *impb.SendTextRequest) *dto.SendTextRequest {
 	}
 }
 
+func MapToSendInternalNoteRequest(in *impb.SendInternalNoteRequest) *dto.SendInternalNoteRequest {
+	if in == nil {
+		return nil
+	}
+
+	sendAs, _ := uuid.Parse(in.GetSendAs())
+
+	return &dto.SendInternalNoteRequest{
+		From:             MapPeerFromProto(in.GetFrom()),
+		To:               MapPeerFromProto(in.GetTo()),
+		Body:             in.GetBody(),
+		DomainID:         in.GetDomainId(),
+		SendID:           in.GetSendId(),
+		SendAs:           &sendAs,
+		ReplyToMessageID: ParseOptionalUUID(in.GetReplyToMessageId()),
+	}
+}
+
 // MapToSendTypingRequest maps a proto typing request to its DTO. The target
 // thread is taken from the `to` peer's thread_id variant; other peer kinds
 // leave ThreadID zero and are rejected by the guard.

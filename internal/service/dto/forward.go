@@ -10,12 +10,13 @@ const MaxForwardBatch = 20
 
 type (
 	ForwardMessagesRequest struct {
-		From       shared.Peer `json:"from"`
-		To         shared.Peer `json:"to"`
-		DomainID   int64       `json:"domain_id"`
-		SendID     string      `json:"send_id"`
-		SendAs     *uuid.UUID
-		MessageIDs []uuid.UUID `json:"message_ids"`
+		From         shared.Peer `json:"from"`
+		To           shared.Peer `json:"to"`
+		DomainID     int64       `json:"domain_id"`
+		SendID       string      `json:"send_id"`
+		SendAs       *uuid.UUID
+		MessageIDs   []uuid.UUID `json:"message_ids"`
+		InternalNote string      `json:"internal_note,omitempty"`
 	}
 
 	ForwardMessagesResponse struct {

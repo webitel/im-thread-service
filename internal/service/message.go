@@ -219,6 +219,103 @@ func (s *MessageService) SendText(ctx context.Context, in *dto.SendTextRequest) 
 	return &dto.SendTextResponse{ID: msg.ID, To: in.To}, nil
 }
 
+func (s *MessageService) SendInternalNote(ctx context.Context, in *dto.SendInternalNoteRequest) (*dto.SendTextResponse, error) {
+	if err := guards.SendTextGuard(&dto.SendTextRequest{
+		From:     in.From,
+		To:       in.To,
+		Body:     in.Body,
+		DomainID: in.DomainID,
+		SendID:   in.SendID,
+	}); err != nil {
+		return nil, errors.InvalidArgument("validating internal note", errors.WithCause(err), errors.WithID("service.message.send_internal_note"))
+	}
+
+	if strings.TrimSpace(in.Body) == "" {
+		return nil, errors.InvalidArgument("internal note body cannot be empty", errors.WithID("service.message.send_internal_note"))
+	}
+
+	log := s.logger.With("operation", "message.SendInternalNote")
+
+	t, err := s.threader.EnsureDirectThread(ctx, &dto.EnsureDirectThreadRequest{
+		From:     &in.From,
+		To:       &in.To,
+		DomainID: int(in.DomainID),
+		SendAs:   in.SendAs,
+		ToIsBot:  func() bool { return s.resolveToIsBot(ctx, in.To.ID, int(in.DomainID)) },
+	})
+	if err != nil {
+		log.Error(
+			"failed to ensure direct thread", "err", err,
+			slog.Any("from", in.From),
+			slog.Any("to", in.To),
+			slog.Any("domain_id", in.DomainID),
+		)
+
+		return nil, err
+	}
+
+	replyPreview, err := s.resolveReply(ctx, in.ReplyToMessageID, "", &in.From, t, int32(in.DomainID))
+	if err != nil {
+		return nil, err
+	}
+
+	// Internal note recipients: only Webitel users (Via == nil) and non-bots
+	internalMembers := webitelUserMembers(t.Members)
+
+	msg := &model.Message{
+		ThreadID:              t.ID,
+		DomainID:              int32(in.DomainID),
+		From:                  in.From,
+		Body:                  in.Body,
+		To:                    internalMembers,
+		Type:                  model.MessageTypeText,
+		Metadata:              model.BuildMetadata(in.Body),
+		SendAs:                in.SendAs,
+		BotControllerMemberID: t.BotControllerID,
+		ReplyTo:               replyPreview,
+		Internal:              true,
+	}
+
+	msg.SetMemberFromSlice(t.Members)
+
+	err = s.uow.WithinTransaction(ctx, func(ctx context.Context, uow store.UnitOfWork) error {
+		saved, err := uow.Messages().SaveMessage(ctx, msg)
+		if err != nil {
+			return err
+		}
+
+		saved.To = internalMembers
+		saved.ReplyTo = msg.ReplyTo
+
+		if err = s.insertSentStatuses(ctx, uow, saved); err != nil {
+			return err
+		}
+
+		saved.WithCreatedEvent(ctx, in.SendID)
+
+		if err = s.dispatchMessageEvents(ctx, uow, saved); err != nil {
+			return err
+		}
+
+		msg = saved
+
+		return nil
+	})
+	if err != nil {
+		log.ErrorContext(
+			ctx,
+			"error saving internal note",
+			slog.Any("error", err),
+			slog.String("thread_id", t.ID.String()),
+			slog.String("from", msg.From.ID.String()),
+		)
+
+		return nil, errors.Internal("error saving internal note", errors.WithCause(err), errors.WithID("service.message.send_internal_note"))
+	}
+
+	return &dto.SendTextResponse{ID: msg.ID, To: in.To}, nil
+}
+
 const botStoppedSystemType = "bot_stopped"
 
 func (s *MessageService) shouldStopBot(t *model.Thread, fromContactID uuid.UUID) bool {

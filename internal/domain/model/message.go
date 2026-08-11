@@ -97,6 +97,10 @@ type Message struct {
 
 	ForwardOrigin *ForwardOrigin `json:"forward_origin,omitempty" db:"forward_origin"`
 
+	// Internal marks a message as an operator-only note, visible only to Webitel users
+	// (Via == nil) and never forwarded to external providers.
+	Internal bool `json:"internal" db:"internal"`
+
 	domainEvents []event.Outboxer
 }
 
@@ -294,6 +298,7 @@ func (m *Message) WithCreatedEvent(ctx context.Context, sendID string) *Message 
 		OccurredAt:            m.CreatedAt,
 		Metadata:              maps.Clone(m.Metadata),
 		BotControllerMemberID: m.BotControllerMemberID,
+		Internal:              m.Internal,
 	}
 
 	if len(m.Images) > 0 {

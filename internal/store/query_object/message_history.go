@@ -35,6 +35,7 @@ var (
 		"reactions":        true,
 		"edited":           true,
 		"deleted_at":       true,
+		"internal":         true,
 	}
 	defaultFields = []string{
 		"id", "thread_id", "sender_id",
@@ -43,7 +44,7 @@ var (
 		"member", "interactive", "location", "contact", "system", "reacted_metadata",
 		"reply_to", "forward_origin",
 		"delivery_status", "statuses", "reactions",
-		"edited", "deleted_at",
+		"edited", "deleted_at", "internal",
 	}
 )
 
@@ -161,6 +162,32 @@ func (q *MessageHistoryQuery) WithCallerLimitation(callerID uuid.UUID, threadIDs
 		)
 	`,
 		threadIDs,
+		callerID,
+	)
+
+	return q
+}
+
+func (q *MessageHistoryQuery) WithInternalVisibility(callerID uuid.UUID) *MessageHistoryQuery {
+	// Fail closed: without a caller identity we cannot prove the requester is a
+	// Webitel user, so internal notes are stripped entirely.
+	if callerID == uuid.Nil {
+		q.base = q.base.Where("NOT v_messages.internal")
+
+		return q
+	}
+
+	q.base = q.base.Where(
+		`
+		(NOT v_messages.internal OR EXISTS (
+			select 1
+			from im_thread.thread_dialog acl
+			where acl.thread_id = v_messages.thread_id
+			and acl.member_id = ?::uuid
+			and acl.deleted_at is null
+			and acl.via is null
+		))
+	`,
 		callerID,
 	)
 
