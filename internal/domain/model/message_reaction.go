@@ -125,6 +125,7 @@ func (r *Reaction) WithReactionEvent(ctx context.Context, res *ReactionResult) *
 		Emoji:      res.Emoji,
 		Action:     action,
 		OccurredAt: res.ReactedAt,
+		SendID:     r.IdempotencyKey,
 	}
 
 	WithContextPropogatedMetadata(ctx, &e)
