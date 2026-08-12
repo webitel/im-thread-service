@@ -24,6 +24,7 @@ type unitOfWork struct {
 	messageStatusStore              store.MessageStatusStore
 	outboxStore                     store.OutboxStore
 	messageHistoryStore             store.MessageHistory
+	messageRevisionStore            store.MessageRevisionStore
 	directThreadDialogOrchestration store.DirectThreadDialogOrchestration
 	interactiveCallbackStore        store.InteractiveCallback
 	messageReactionStore            store.MessageReactionStore
@@ -127,6 +128,14 @@ func (u *unitOfWork) MessageHistory() store.MessageHistory {
 	}
 
 	return u.messageHistoryStore
+}
+
+func (u *unitOfWork) MessageRevisions() store.MessageRevisionStore {
+	if u.messageRevisionStore == nil {
+		u.messageRevisionStore = NewMessageRevisionStore(u.querier)
+	}
+
+	return u.messageRevisionStore
 }
 
 func (u *unitOfWork) BotControl() store.BotControlStore {

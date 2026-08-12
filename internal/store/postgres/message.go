@@ -198,22 +198,50 @@ func (m *messageStore) EditMessage(ctx context.Context, msg *model.Message) (*mo
 	}
 
 	const query = `
-		update im_message.messages m
-		set body = @Body,
-		    edited = true,
-		    updated_at = now()
-		where m.id = @ID
-		  and (m.sender_id = @EditorID or m.origin_sender = @EditorID)
-		  and exists (
-			select 1
-			from im_thread.thread_dialog td
-			where td.thread_id = m.thread_id
-			  and td.member_id = @EditorID
-			  and td.deleted_at is null
-		  )
-		returning
+		with target as (
+			select
+				m.id, m.domain_id, m.body,
+				coalesce((
+					select max(r.version)
+					from im_message.message_revisions r
+					where r.message_id = m.id
+				), 0) as last_version
+			from im_message.messages m
+			where m.id = @ID
+			  and m.deleted_at is null
+			  and (m.sender_id = @EditorID or m.origin_sender = @EditorID)
+			  and exists (
+				select 1
+				from im_thread.thread_dialog td
+				where td.thread_id = m.thread_id
+				  and td.member_id = @EditorID
+				  and td.deleted_at is null
+			  )
+		),
+		updated as (
+			update im_message.messages m
+			set body = @Body,
+			    edited = true,
+			    updated_at = now()
+			from target t
+			where m.id = t.id
+			returning
+				m.id, m.domain_id, m.thread_id, m.member_id, m.type, m.body, m.metadata,
+				m.created_at, m.updated_at, m.edited
+		),
+		revision as (
+			insert into im_message.message_revisions
+				(message_id, domain_id, version, body, changed_by, changed_at)
+			select
+				u.id, u.domain_id, t.last_version + 1,
+				coalesce(t.body, ''), @EditorID, u.updated_at
+			from updated u
+			join target t on t.id = u.id
+		)
+		select
 			id, domain_id, thread_id, member_id, type, body, metadata,
 			created_at, updated_at, edited
+		from updated
 	`
 
 	args := pgx.NamedArgs{
@@ -237,6 +265,10 @@ func (m *messageStore) EditMessage(ctx context.Context, msg *model.Message) (*mo
 			)
 		}
 
+		if conflict := uniqueViolation(err, "message was edited concurrently, retry"); conflict != nil {
+			return nil, conflict
+		}
+
 		return nil, errors.Internal("collecting edited message", errors.WithCause(err), errors.WithID("postgres.message.edit.collecting"))
 	}
 
@@ -252,10 +284,6 @@ func (m *messageStore) DeleteMessages(ctx context.Context, ids []uuid.UUID, dele
 		return nil, errors.InvalidArgument("deleter id cannot be nil", errors.WithID("postgres.message.delete_messages"))
 	}
 
-	// Returns every message the caller is allowed to remove, including ones
-	// already deleted by an earlier call, so that a retry does not report
-	// failure for a deletion that already succeeded. just_deleted tells the
-	// caller which rows this statement actually changed, so events fire once.
 	const query = `
 		with target as (
 			select m.id, (m.deleted_at is null) as was_live
@@ -309,6 +337,10 @@ func (m *messageStore) DeleteMessages(ctx context.Context, ids []uuid.UUID, dele
 
 	deleted, err := pgx.CollectRows(rows, pgx.RowToAddrOfStructByNameLax[model.Message])
 	if err != nil {
+		if conflict := uniqueViolation(err, "message was changed concurrently, retry"); conflict != nil {
+			return nil, conflict
+		}
+
 		return nil, errors.Internal("collecting deleted messages", errors.WithCause(err), errors.WithID("postgres.message.delete.collecting"))
 	}
 

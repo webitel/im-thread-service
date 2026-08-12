@@ -60,15 +60,14 @@ type Message struct {
 	SenderID       uuid.UUID       `json:"sender_id" db:"sender_id"`
 	MemberID       uuid.UUID       `json:"member_id" db:"member_id"`
 
-	// DeletedAt marks a soft-deleted message. The row and its attachments are
-	// kept for analytics; the API layer renders a tombstone instead.
 	DeletedAt *time.Time `json:"deleted_at,omitempty" db:"deleted_at"`
 	DeletedBy *uuid.UUID `json:"deleted_by,omitempty" db:"deleted_by"`
 
-	// JustDeleted distinguishes a message this call removed from one that was
-	// already deleted. Both satisfy a delete request, but only the former
-	// emits an event.
 	JustDeleted bool `json:"-" db:"just_deleted"`
+
+	// RevisionCount is how many entries the message has in its change history.
+	// Zero means it was never edited or deleted.
+	RevisionCount int32 `json:"revision_count" db:"revision_count"`
 
 	Images          []*MessageImage      `json:"images,omitempty" db:"images"`
 	Documents       []*MessageDocument   `json:"documents,omitempty" db:"documents"`

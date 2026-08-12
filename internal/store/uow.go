@@ -8,6 +8,7 @@ type UnitOfWork interface {
 	ThreadStore() ThreadStore
 	ThreadPermissionStore() ThreadPermissionStore
 	MessageHistory() MessageHistory
+	MessageRevisions() MessageRevisionStore
 	Messages() MessageStore
 	MessageExternal() MessageExternalStore
 	MessageStatuses() MessageStatusStore

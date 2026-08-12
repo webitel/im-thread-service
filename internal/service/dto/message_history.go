@@ -68,6 +68,12 @@ type (
 		Direction bool
 	}
 
+	GetMessageRevisionsRequest struct {
+		MessageID uuid.UUID
+		DomainID  int32
+		CallerID  uuid.UUID
+	}
+
 	LeftThreadsMessageHistoryInputDTO struct {
 		DomainID   int
 		Fields     []string

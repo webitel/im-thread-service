@@ -20,6 +20,11 @@ var ErrReplyTargetNotFound = errors.New("reply target message not found")
 // or the reactor is not an active member holding can_react_messages.
 var ErrReactionNotAllowed = errors.New("reaction not allowed")
 
+// ErrMessageNotVisible is returned by MessageRevisionStore.Search when the
+// message does not exist in the domain or the caller is not an active member
+// of its thread.
+var ErrMessageNotVisible = errors.New("message not visible to caller")
+
 type Store interface {
 	Messages() MessageStore
 	Outbox() OutboxStore
@@ -133,6 +138,10 @@ type ThreadPermissionStore interface {
 
 type MessageHistory interface {
 	Search(ctx context.Context, query queryobject.QueryObject) ([]*model.Message, error)
+}
+
+type MessageRevisionStore interface {
+	Search(ctx context.Context, messageID uuid.UUID, domainID int32, callerID uuid.UUID) ([]*model.MessageChangeEntry, error)
 }
 
 type DirectThreadDialogOrchestration interface {

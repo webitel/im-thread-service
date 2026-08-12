@@ -47,6 +47,10 @@ func (f fakeUnitOfWork) MessageHistory() store.MessageHistory {
 	return nil
 }
 
+func (f fakeUnitOfWork) MessageRevisions() store.MessageRevisionStore {
+	return nil
+}
+
 func (f fakeUnitOfWork) Messages() store.MessageStore {
 	return f.messageStore
 }
