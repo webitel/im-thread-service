@@ -31,6 +31,11 @@ type MessageReaction struct {
 	Action     string          `json:"action"` // set|removed
 	OccurredAt time.Time       `json:"occurred_at"`
 
+	// SendID echoes the client-supplied correlation token back to the reactor's
+	// devices so an optimistic UI update can be reconciled. It is opaque and
+	// plays no part in dedup or ordering.
+	SendID string `json:"send_id,omitempty"`
+
 	ExternalMetadata map[string]string `json:"-"`
 }
 

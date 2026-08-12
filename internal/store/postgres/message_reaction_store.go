@@ -30,21 +30,21 @@ type reactionOutcome struct {
 	ReactedAt int64      `db:"reacted_at"` // epoch millis, 0 when nothing is stored
 }
 
-// setReactionSQL applies the toggle/replace/remove semantics for one
-// (message, reactor) pair in a single round-trip:
+// setReactionSQL applies declarative set/replace/remove semantics for one
+// (message, reactor) pair in a single round-trip. It is idempotent by
+// construction: the request carries the desired end state, so an at-least-once
+// redelivery converges to the same result with no dedup ledger and no send_id.
 //
 //   - guard  resolves the reactor's active dialog and enforces
 //     can_react_messages, message existence, domain and not-deleted;
-//   - claim  records the send_id in the idempotency ledger; a send_id already
-//     present means this exact request was applied before, so del/ups are
-//     skipped (dedup for at-least-once redelivery — survives a prior toggle-off
-//     that deleted the row, and blocks reordered retries of an older request);
-//   - del    removes the row when the emoji is empty or repeats the stored one
-//     (toggle off);
-//   - ups    inserts or replaces the row for any other non-empty emoji.
+//   - del    removes the row only when the emoji is empty (an explicit clear);
+//   - ups    inserts or replaces the row for a non-empty emoji that differs
+//     from the stored one.
 //
-// del and ups are mutually exclusive by construction, so they never touch the
-// same row within the statement.
+// An emoji equal to the one already stored matches neither del nor ups, so the
+// outcome is 'unchanged' — a no-op, NOT a toggle-off (toggling off is the
+// client sending an empty emoji). del and ups are mutually exclusive by
+// construction, so they never touch the same row within the statement.
 const setReactionSQL = `
 with guard as (
     select m.thread_id, td.id as member_dialog_id
@@ -61,22 +61,6 @@ with guard as (
     order by td.id desc
     limit 1
 ),
-claim as (
-    insert into im_message.message_reaction_dedup (message_id, reactor_id, send_id)
-    select @MessageID, @ReactorID, @SendID
-    from guard g
-    where @SendID <> ''
-    on conflict (message_id, reactor_id, send_id) do nothing
-    returning send_id
-),
--- A keyed request already present in the ledger but not (re)claimed here was
--- applied by an earlier delivery: treat this delivery as a no-op.
-dup as (
-    select 1
-    where @SendID <> ''
-      and exists (select 1 from guard)
-      and not exists (select 1 from claim)
-),
 prev as (
     select r.id, r.emoji, r.updated_at
     from im_message.message_reactions r
@@ -87,8 +71,7 @@ del as (
     using guard g
     where r.message_id = @MessageID
       and r.reactor_id = @ReactorID
-      and (@Emoji = '' or r.emoji = @Emoji)
-      and not exists (select 1 from dup)
+      and @Emoji = ''
     returning 'removed'::text as action, ''::text as emoji, now() as reacted_at
 ),
 ups as (
@@ -98,7 +81,6 @@ ups as (
     from guard g
     where @Emoji <> ''
       and not exists (select 1 from prev p where p.emoji = @Emoji)
-      and not exists (select 1 from dup)
     on conflict (message_id, reactor_id) do update
         set emoji = excluded.emoji,
             updated_at = now()
@@ -122,9 +104,9 @@ select
 `
 
 // SetReaction sets, replaces or clears the reactor's single reaction on a
-// message and reports what changed. It is idempotent: an empty result, a repeat
-// of the current emoji handled as toggle-off, and a send_id already applied are
-// all resolved without a spurious second event.
+// message and reports what changed. It is idempotent by construction: setting
+// the already-stored emoji, or clearing an already-absent reaction, both settle
+// as 'unchanged' so no spurious second event is emitted — no send_id needed.
 func (s *messageReactionStore) SetReaction(ctx context.Context, r *model.Reaction) (*model.ReactionResult, error) {
 	if r == nil {
 		return nil, errors.InvalidArgument("reaction cannot be nil", errors.WithID("postgres.message_reaction.set"))
@@ -144,7 +126,6 @@ func (s *messageReactionStore) SetReaction(ctx context.Context, r *model.Reactio
 		"DomainID":  r.DomainID,
 		"ReactorID": r.ReactorID,
 		"Emoji":     r.Emoji,
-		"SendID":    r.IdempotencyKey,
 	}
 
 	rows, err := s.db.Query(ctx, setReactionSQL, args)
