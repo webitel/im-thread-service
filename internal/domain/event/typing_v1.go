@@ -16,6 +16,12 @@ const (
 	TypingVersion = "v1"
 )
 
+// MemberIdentity carries sender identification data for the typing indicator.
+type MemberIdentity struct {
+	Name   string `json:"name,omitempty"`
+	Issuer string `json:"issuer,omitempty"`
+}
+
 // Typing is an ephemeral "…is typing" indicator (optionally carrying a live
 // draft preview). Unlike every other event in this service it is NOT an
 // Outboxer: it is published fire-and-forget straight to the broker, never
@@ -33,6 +39,10 @@ type Typing struct {
 	// participants except the sender). Delivery fans the indicator out to their
 	// online sessions.
 	To []uuid.UUID `json:"to,omitempty"`
+
+	// Member carries enriched sender identity (name, issuer, etc.) for client rendering.
+	// Populated from the authenticated session at the gateway.
+	Member *MemberIdentity `json:"member,omitempty"`
 
 	// PreviewText is the sender's unsent draft (Live Typing Preview).
 	// PRIVACY: present only when the preview feature is on and there is at least

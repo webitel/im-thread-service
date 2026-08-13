@@ -69,6 +69,9 @@ type Message struct {
 	// Zero means it was never edited or deleted.
 	RevisionCount int32 `json:"revision_count" db:"revision_count"`
 
+	// Seq is the per-thread monotonic sequence number, assigned on message creation.
+	Seq int64 `json:"seq" db:"seq"`
+
 	Images          []*MessageImage      `json:"images,omitempty" db:"images"`
 	Documents       []*MessageDocument   `json:"documents,omitempty" db:"documents"`
 	Location        *MessageLocation     `json:"location,omitempty" db:"location"`

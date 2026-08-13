@@ -76,10 +76,13 @@ type MessageRecipientStatus struct {
 
 // StatusReceipt is a delivery/failure confirmation for a single message
 // and recipient, reported by im-delivery or im-providers.
+// For watermark receipts (UpToMessageID set), MessageID must be zero.
 type StatusReceipt struct {
-	DomainID  int32
-	ThreadID  uuid.UUID
-	MessageID uuid.UUID
+	DomainID      int32
+	ThreadID      uuid.UUID
+	MessageID     uuid.UUID
+	UpToMessageID uuid.UUID
+	UpToSeq       int64
 	// MemberID is the recipient contact id (thread_dialog.member_id).
 	MemberID uuid.UUID
 	// At is the confirmation time; zero means "now".
@@ -98,6 +101,7 @@ type ReadReceipt struct {
 	// MemberID is the recipient contact id (thread_dialog.member_id).
 	MemberID      uuid.UUID
 	UpToMessageID uuid.UUID
+	UpToSeq       int64
 	// At is the confirmation time; zero means "now".
 	At time.Time
 	// Via is the confirmation source: ws|push|provider|bot.
@@ -106,15 +110,18 @@ type ReadReceipt struct {
 
 // StatusChange is a status row that was actually changed by an upsert.
 // Duplicate and out-of-order receipts produce no changes.
+// For watermark changes, MessageID is zero and UpToMessageID is set.
 type StatusChange struct {
-	DomainID  int32                 `db:"domain_id"`
-	ThreadID  uuid.UUID             `db:"thread_id"`
-	MessageID uuid.UUID             `db:"message_id"`
-	MemberID  uuid.UUID             `db:"member_id"`
-	Status    MessageDeliveryStatus `db:"status"`
-	Via       *string               `db:"via"`
-	Error     map[string]any        `db:"error"`
-	UpdatedAt time.Time             `db:"updated_at"`
+	DomainID      int32                 `db:"domain_id"`
+	ThreadID      uuid.UUID             `db:"thread_id"`
+	MessageID     uuid.UUID             `db:"message_id"`
+	UpToMessageID uuid.UUID             `db:"up_to_message_id"`
+	UpToSeq       int64                 `db:"up_to_seq"`
+	MemberID      uuid.UUID             `db:"member_id"`
+	Status        MessageDeliveryStatus `db:"status"`
+	Via           *string               `db:"via"`
+	Error         map[string]any        `db:"error"`
+	UpdatedAt     time.Time             `db:"updated_at"`
 }
 
 // UnreadSummary is a participant's unread totals across all their chats.

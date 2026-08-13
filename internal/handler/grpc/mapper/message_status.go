@@ -35,13 +35,17 @@ func MapToDeliveryReceipts(in []*impb.DeliveryReceipt) ([]*model.StatusReceipt, 
 			return nil, err
 		}
 
+		upToMessageID, _ := uuid.Parse(r.GetUpToMessageId())
+
 		out = append(out, &model.StatusReceipt{
-			DomainID:  r.GetDomainId(),
-			ThreadID:  threadID,
-			MessageID: messageID,
-			MemberID:  memberID,
-			At:        unixMillisToTime(r.GetDeliveredAt()),
-			Via:       r.GetVia(),
+			DomainID:      r.GetDomainId(),
+			ThreadID:      threadID,
+			MessageID:     messageID,
+			UpToMessageID: upToMessageID,
+			UpToSeq:       r.GetUpToSeq(),
+			MemberID:      memberID,
+			At:            unixMillisToTime(r.GetDeliveredAt()),
+			Via:           r.GetVia(),
 		})
 	}
 
@@ -76,6 +80,7 @@ func MapToReadReceipts(in []*impb.ReadReceipt) ([]*model.ReadReceipt, error) {
 			ThreadID:      threadID,
 			MemberID:      memberID,
 			UpToMessageID: upToMessageID,
+			UpToSeq:       r.GetUpToSeq(),
 			At:            unixMillisToTime(r.GetReadAt()),
 			Via:           r.GetVia(),
 		})
