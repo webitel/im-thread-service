@@ -66,16 +66,19 @@ type MessageStore interface {
 	DeleteMessages(ctx context.Context, ids []uuid.UUID, deleterID uuid.UUID) ([]*model.Message, error)
 }
 
-// MessageStatusStore tracks per-recipient delivery states of messages
-// (im_message.message_statuses). All transitions are monotonic upserts:
-// duplicate and out-of-order receipts change nothing and return no changes.
+// MessageStatusStore tracks message delivery state. Read/delivered are
+// monotonic watermarks on im_thread.thread_dialog (last_read_message_id /
+// last_delivered_message_id); only failures are stored per-recipient in
+// im_message.message_errors. Duplicate and out-of-order receipts change
+// nothing and return no changes.
 type MessageStatusStore interface {
-	// InsertSent creates SENT rows for the message recipients within the
-	// message-save transaction. Existing rows are left intact.
+	// InsertSent bumps each recipient's unread counter within the message-save
+	// transaction. SENT is implied by the message's existence, so no per-message
+	// status row is written.
 	InsertSent(ctx context.Context, msg *model.Message, recipientIDs []uuid.UUID) error
 
-	// MarkDelivered applies delivery receipts and returns the rows that
-	// actually changed.
+	// MarkDelivered advances each recipient's delivered watermark and returns
+	// the synthesized changes for fan-out.
 	MarkDelivered(ctx context.Context, receipts []*model.StatusReceipt) ([]*model.StatusChange, error)
 
 	// MarkRead applies read receipts with read-up-to semantics and returns

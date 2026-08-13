@@ -31,6 +31,7 @@ const (
 	Message_UpdateMessageDelivery_FullMethodName   = "/webitel.im.service.thread.v1.Message/UpdateMessageDelivery"
 	Message_DeleteMessages_FullMethodName          = "/webitel.im.service.thread.v1.Message/DeleteMessages"
 	Message_ForwardMessages_FullMethodName         = "/webitel.im.service.thread.v1.Message/ForwardMessages"
+	Message_SendInternalNote_FullMethodName        = "/webitel.im.service.thread.v1.Message/SendInternalNote"
 	Message_SetReaction_FullMethodName             = "/webitel.im.service.thread.v1.Message/SetReaction"
 	Message_SendTyping_FullMethodName              = "/webitel.im.service.thread.v1.Message/SendTyping"
 )
@@ -71,14 +72,20 @@ type MessageClient interface {
 	// stamping each copy with the original author. Best-effort: sources that are
 	// missing, unreadable or unforwardable come back as skipped.
 	ForwardMessages(ctx context.Context, in *ForwardMessagesRequest, opts ...grpc.CallOption) (*ForwardMessagesResponse, error)
-	// Sets or clears the caller's emoji reaction on a single message.
+	// Posts an internal note into the thread — a comment visible only to Webitel
+	// users (operators/supervisors). It is never delivered to the client contact
+	// and never forwarded to an external messenger.
+	SendInternalNote(ctx context.Context, in *SendInternalNoteRequest, opts ...grpc.CallOption) (*SendMessageResponse, error)
+	// Sets, replaces or clears the caller's emoji reaction on a single message.
 	//
-	// A member may hold at most one reaction per message: a new emoji replaces
-	// the previous one, sending the same emoji again clears it (toggle), and an
-	// empty emoji clears it explicitly. The call is idempotent (send_id) and
-	// serves both webitel participants and inbound reactions relayed from an
-	// external messenger. Whether a reaction is forwarded to the far side
-	// depends on the messenger's capabilities.
+	// A member holds at most one reaction per message. The call is declarative:
+	// a different emoji replaces the previous one, an empty emoji clears it, and
+	// the same emoji is a no-op (to toggle off, the client sends an empty emoji).
+	// It is therefore idempotent by construction — an at-least-once redelivery
+	// converges to the same state, so send_id is a pure echo, not a dedup key.
+	// Serves both webitel participants and inbound reactions relayed from an
+	// external messenger; whether a reaction is forwarded to the far side depends
+	// on the messenger's capabilities.
 	SetReaction(ctx context.Context, in *SetReactionRequest, opts ...grpc.CallOption) (*SetReactionResponse, error)
 	// Sends an ephemeral typing indicator to the other participants of a thread.
 	//
@@ -222,6 +229,16 @@ func (c *messageClient) ForwardMessages(ctx context.Context, in *ForwardMessages
 	return out, nil
 }
 
+func (c *messageClient) SendInternalNote(ctx context.Context, in *SendInternalNoteRequest, opts ...grpc.CallOption) (*SendMessageResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SendMessageResponse)
+	err := c.cc.Invoke(ctx, Message_SendInternalNote_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *messageClient) SetReaction(ctx context.Context, in *SetReactionRequest, opts ...grpc.CallOption) (*SetReactionResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(SetReactionResponse)
@@ -278,14 +295,20 @@ type MessageServer interface {
 	// stamping each copy with the original author. Best-effort: sources that are
 	// missing, unreadable or unforwardable come back as skipped.
 	ForwardMessages(context.Context, *ForwardMessagesRequest) (*ForwardMessagesResponse, error)
-	// Sets or clears the caller's emoji reaction on a single message.
+	// Posts an internal note into the thread — a comment visible only to Webitel
+	// users (operators/supervisors). It is never delivered to the client contact
+	// and never forwarded to an external messenger.
+	SendInternalNote(context.Context, *SendInternalNoteRequest) (*SendMessageResponse, error)
+	// Sets, replaces or clears the caller's emoji reaction on a single message.
 	//
-	// A member may hold at most one reaction per message: a new emoji replaces
-	// the previous one, sending the same emoji again clears it (toggle), and an
-	// empty emoji clears it explicitly. The call is idempotent (send_id) and
-	// serves both webitel participants and inbound reactions relayed from an
-	// external messenger. Whether a reaction is forwarded to the far side
-	// depends on the messenger's capabilities.
+	// A member holds at most one reaction per message. The call is declarative:
+	// a different emoji replaces the previous one, an empty emoji clears it, and
+	// the same emoji is a no-op (to toggle off, the client sends an empty emoji).
+	// It is therefore idempotent by construction — an at-least-once redelivery
+	// converges to the same state, so send_id is a pure echo, not a dedup key.
+	// Serves both webitel participants and inbound reactions relayed from an
+	// external messenger; whether a reaction is forwarded to the far side depends
+	// on the messenger's capabilities.
 	SetReaction(context.Context, *SetReactionRequest) (*SetReactionResponse, error)
 	// Sends an ephemeral typing indicator to the other participants of a thread.
 	//
@@ -344,6 +367,9 @@ func (UnimplementedMessageServer) DeleteMessages(context.Context, *DeleteMessage
 }
 func (UnimplementedMessageServer) ForwardMessages(context.Context, *ForwardMessagesRequest) (*ForwardMessagesResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ForwardMessages not implemented")
+}
+func (UnimplementedMessageServer) SendInternalNote(context.Context, *SendInternalNoteRequest) (*SendMessageResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SendInternalNote not implemented")
 }
 func (UnimplementedMessageServer) SetReaction(context.Context, *SetReactionRequest) (*SetReactionResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SetReaction not implemented")
@@ -588,6 +614,24 @@ func _Message_ForwardMessages_Handler(srv interface{}, ctx context.Context, dec 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Message_SendInternalNote_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SendInternalNoteRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MessageServer).SendInternalNote(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Message_SendInternalNote_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MessageServer).SendInternalNote(ctx, req.(*SendInternalNoteRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _Message_SetReaction_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(SetReactionRequest)
 	if err := dec(in); err != nil {
@@ -678,6 +722,10 @@ var Message_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ForwardMessages",
 			Handler:    _Message_ForwardMessages_Handler,
+		},
+		{
+			MethodName: "SendInternalNote",
+			Handler:    _Message_SendInternalNote_Handler,
 		},
 		{
 			MethodName: "SetReaction",

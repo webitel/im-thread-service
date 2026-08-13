@@ -26,24 +26,6 @@ func (s *messageStatusStore) InsertSent(ctx context.Context, msg *model.Message,
 		return nil
 	}
 
-	const query = `
-		insert into im_message.message_statuses (domain_id, thread_id, message_id, member_id, status)
-		select @DomainID, @ThreadID, @MessageID, u.member_id, 1
-		from unnest(@MemberIDs::uuid[]) as u(member_id)
-		on conflict (message_id, member_id) do nothing
-	`
-
-	args := pgx.NamedArgs{
-		"DomainID":  msg.DomainID,
-		"ThreadID":  msg.ThreadID,
-		"MessageID": msg.ID,
-		"MemberIDs": recipientIDs,
-	}
-
-	if _, err := s.db.Exec(ctx, query, args); err != nil {
-		return errors.Internal("inserting sent statuses", errors.WithCause(err), errors.WithID("postgres.message_status.insert_sent"))
-	}
-
 	// Bump each recipient's denormalized unread counter. Content messages only —
 	// system messages are never counted as unread; the sender is not among the
 	// recipients, so own messages never bump.
@@ -71,9 +53,15 @@ func (s *messageStatusStore) InsertSent(ctx context.Context, msg *model.Message,
 	return nil
 }
 
-// MarkDelivered performs a monotonic batch upsert to DELIVERED.
-// Allowed transitions: none -> delivered (late receipt for a message that
-// predates status tracking), sent -> delivered, failed -> delivered (retry).
+// MarkDelivered performs a monotonic batch upsert to DELIVERED using watermark
+// semantics: every receipt advances the delivered horizon in thread_dialog and
+// synthesizes one StatusChange per receipt with UpToMessageID set.
+//
+// For receipts with UpToMessageID set (ws, push from clients), use that boundary.
+// For receipts with only MessageID set (provider/bot), resolve thread_id and seq
+// from im_message.messages and use MessageID as the delivered-up-to boundary.
+//
+// Allowed transitions: none -> delivered (late receipt), sent -> delivered, failed -> delivered (retry).
 // Receipts are validated against im_message.messages: unknown messages and
 // the sender itself are ignored, thread/domain ids are taken from the message.
 func (s *messageStatusStore) MarkDelivered(ctx context.Context, receipts []*model.StatusReceipt) ([]*model.StatusChange, error) {
@@ -82,135 +70,93 @@ func (s *messageStatusStore) MarkDelivered(ctx context.Context, receipts []*mode
 		return nil, nil
 	}
 
-	const query = `
-		insert into im_message.message_statuses as ms
-			(domain_id, thread_id, message_id, member_id, status, delivered_at, via)
-		select m.domain_id, m.thread_id, m.id, u.member_id, 2, u.confirmed_at, nullif(u.via, '')
-		from unnest(@MessageIDs::uuid[], @MemberIDs::uuid[], @ConfirmedAts::timestamptz[], @Vias::text[])
-			as u(message_id, member_id, confirmed_at, via)
-		join im_message.messages m on m.id = u.message_id
-		where m.sender_id <> u.member_id
-		and exists (
-			select 1 from im_thread.thread_dialog td
-			where td.thread_id = m.thread_id and td.member_id = u.member_id
-		)
-		on conflict (message_id, member_id) do update set
-			status = excluded.status,
-			delivered_at = coalesce(ms.delivered_at, excluded.delivered_at),
-			failed_at = null,
-			error = null,
-			via = coalesce(excluded.via, ms.via),
-			updated_at = now()
-		where ms.status in (1, 4)
-		returning ms.domain_id, ms.thread_id, ms.message_id, ms.member_id, ms.status, ms.via, ms.error, ms.updated_at
-	`
+	// Resolve ThreadID for receipts that lack it (provider/bot per-message receipts).
+	if err := s.resolveThreadIDsForDelivery(ctx, receipts); err != nil {
+		return nil, err
+	}
 
-	var (
-		messageIDs   = make([]uuid.UUID, len(receipts))
-		memberIDs    = make([]uuid.UUID, len(receipts))
-		confirmedAts = make([]time.Time, len(receipts))
-		vias         = make([]string, len(receipts))
-	)
-
+	// Convert per-message receipts to watermark form: use MessageID as the UpToMessageID.
 	for i, r := range receipts {
-		messageIDs[i] = r.MessageID
-		memberIDs[i] = r.MemberID
-		confirmedAts[i] = confirmedAtOrNow(r.At)
-		vias[i] = r.Via
+		if r.MessageID != uuid.Nil && r.UpToMessageID == uuid.Nil {
+			receipts[i].UpToMessageID = r.MessageID
+		}
 	}
 
-	args := pgx.NamedArgs{
-		"MessageIDs":   messageIDs,
-		"MemberIDs":    memberIDs,
-		"ConfirmedAts": confirmedAts,
-		"Vias":         vias,
+	// Resolve seq from message_id for receipts lacking UpToSeq (legacy/envelope path).
+	if err := s.resolveSeqFromMessageID(ctx, receipts); err != nil {
+		return nil, err
 	}
 
-	return s.collectChanges(ctx, query, args, "postgres.message_status.mark_delivered")
+	// Advance delivered horizon for all receipts (all are now watermark form).
+	if err := s.advanceDeliveredHorizon(ctx, receipts); err != nil {
+		return nil, err
+	}
+
+	// Synthesize StatusChange for each receipt.
+	now := time.Now().UTC()
+
+	allChanges := make([]*model.StatusChange, 0, len(receipts))
+	for _, r := range receipts {
+		allChanges = append(allChanges, &model.StatusChange{
+			DomainID:      r.DomainID,
+			ThreadID:      r.ThreadID,
+			UpToMessageID: r.UpToMessageID,
+			UpToSeq:       r.UpToSeq,
+			MemberID:      r.MemberID,
+			Status:        model.MessageDeliveryStatusDelivered,
+			Via:           &r.Via,
+			UpdatedAt:     now,
+		})
+	}
+
+	return allChanges, nil
 }
 
 // MarkRead performs a monotonic bulk upsert to READ with read-up-to
-// semantics: for every receipt, all messages of the thread up to (and
-// including) UpToMessageID that were not sent by the recipient are marked
-// as read. Message ids are UUIDv7, so id order matches creation order.
-// Allowed transitions: none/sent/delivered -> read, failed -> read
-// (a read receipt implies the message reached the recipient).
+// semantics: for every receipt, advances the read horizon and synthesizes
+// one StatusChange per receipt with UpToMessageID and UpToSeq set. The watermark
+// path bypasses per-message inserts, instead updating thread_dialog.last_read_seq
+// and refreshing the denormalized unread counter.
+// Allowed transitions: the read horizon is monotonic, never backward.
 func (s *messageStatusStore) MarkRead(ctx context.Context, receipts []*model.ReadReceipt) ([]*model.StatusChange, error) {
 	receipts = dedupReadReceipts(receipts)
 	if len(receipts) == 0 {
 		return nil, nil
 	}
 
-	const query = `
-		insert into im_message.message_statuses as ms
-			(domain_id, thread_id, message_id, member_id, status, read_at, via)
-		select m.domain_id, m.thread_id, m.id, u.member_id, 3, u.confirmed_at, nullif(u.via, '')
-		from unnest(@ThreadIDs::uuid[], @MemberIDs::uuid[], @UpToMessageIDs::uuid[], @ConfirmedAts::timestamptz[], @Vias::text[])
-			as u(thread_id, member_id, up_to_message_id, confirmed_at, via)
-		join im_message.messages m
-			on m.thread_id = u.thread_id
-			and m.id <= u.up_to_message_id
-			and m.sender_id <> u.member_id
-		where exists (
-			select 1 from im_thread.thread_dialog td
-			where td.thread_id = u.thread_id and td.member_id = u.member_id
-		)
-		and not exists (
-			select 1 from im_message.message_statuses cur
-			where cur.message_id = m.id and cur.member_id = u.member_id and cur.status = 3
-		)
-		on conflict (message_id, member_id) do update set
-			status = excluded.status,
-			read_at = coalesce(ms.read_at, excluded.read_at),
-			failed_at = null,
-			error = null,
-			via = coalesce(excluded.via, ms.via),
-			updated_at = now()
-		where ms.status < 3 or ms.status = 4
-		returning ms.domain_id, ms.thread_id, ms.message_id, ms.member_id, ms.status, ms.via, ms.error, ms.updated_at
-	`
-
-	var (
-		threadIDs      = make([]uuid.UUID, len(receipts))
-		memberIDs      = make([]uuid.UUID, len(receipts))
-		upToMessageIDs = make([]uuid.UUID, len(receipts))
-		confirmedAts   = make([]time.Time, len(receipts))
-		vias           = make([]string, len(receipts))
-	)
-
-	for i, r := range receipts {
-		threadIDs[i] = r.ThreadID
-		memberIDs[i] = r.MemberID
-		upToMessageIDs[i] = r.UpToMessageID
-		confirmedAts[i] = confirmedAtOrNow(r.At)
-		vias[i] = r.Via
-	}
-
-	args := pgx.NamedArgs{
-		"ThreadIDs":      threadIDs,
-		"MemberIDs":      memberIDs,
-		"UpToMessageIDs": upToMessageIDs,
-		"ConfirmedAts":   confirmedAts,
-		"Vias":           vias,
-	}
-
-	changes, err := s.collectChanges(ctx, query, args, "postgres.message_status.mark_read")
-	if err != nil {
+	// Resolve seq from message_id for receipts lacking UpToSeq (legacy/envelope path).
+	if err := s.resolveReadSeqFromMessageID(ctx, receipts); err != nil {
 		return nil, err
 	}
 
-	// Advance each member's read horizon and refresh the denormalized unread
-	// counter in the same transaction.
+	// Advance each member's read horizon and refresh the denormalized unread counter.
 	if err := s.advanceReadHorizon(ctx, receipts); err != nil {
 		return nil, err
 	}
 
-	return changes, nil
+	// Synthesize StatusChange for each receipt, mirroring the watermark path in MarkDelivered.
+	now := time.Now().UTC()
+
+	allChanges := make([]*model.StatusChange, 0, len(receipts))
+	for _, r := range receipts {
+		allChanges = append(allChanges, &model.StatusChange{
+			DomainID:      r.DomainID,
+			ThreadID:      r.ThreadID,
+			UpToMessageID: r.UpToMessageID,
+			UpToSeq:       r.UpToSeq,
+			MemberID:      r.MemberID,
+			Status:        model.MessageDeliveryStatusRead,
+			Via:           &r.Via,
+			UpdatedAt:     now,
+		})
+	}
+
+	return allChanges, nil
 }
 
-// MarkFailed performs a monotonic batch upsert to FAILED with provider
-// error details. Only sent -> failed is allowed: a failure receipt for a
-// message that already reached the recipient is ignored.
+// MarkFailed performs a batch upsert to message_errors (ERRORS-ONLY table)
+// with provider error details. Receipts are deduplicated by (message_id, member_id).
+// Returns StatusChange rows for failed receipts for fan-out to clients.
 func (s *messageStatusStore) MarkFailed(ctx context.Context, receipts []*model.StatusReceipt) ([]*model.StatusChange, error) {
 	receipts = dedupStatusReceipts(receipts)
 	if len(receipts) == 0 {
@@ -218,9 +164,9 @@ func (s *messageStatusStore) MarkFailed(ctx context.Context, receipts []*model.S
 	}
 
 	const query = `
-		insert into im_message.message_statuses as ms
-			(domain_id, thread_id, message_id, member_id, status, failed_at, error, via)
-		select m.domain_id, m.thread_id, m.id, u.member_id, 4, u.confirmed_at, u.error, nullif(u.via, '')
+		insert into im_message.message_errors
+			(domain_id, thread_id, message_id, member_id, failed_at, error, via)
+		select m.domain_id, m.thread_id, m.id, u.member_id, u.confirmed_at, u.error, nullif(u.via, '')
 		from unnest(@MessageIDs::uuid[], @MemberIDs::uuid[], @ConfirmedAts::timestamptz[], @Errors::jsonb[], @Vias::text[])
 			as u(message_id, member_id, confirmed_at, error, via)
 		join im_message.messages m on m.id = u.message_id
@@ -230,13 +176,11 @@ func (s *messageStatusStore) MarkFailed(ctx context.Context, receipts []*model.S
 			where td.thread_id = m.thread_id and td.member_id = u.member_id
 		)
 		on conflict (message_id, member_id) do update set
-			status = excluded.status,
 			failed_at = excluded.failed_at,
 			error = excluded.error,
-			via = coalesce(excluded.via, ms.via),
+			via = coalesce(excluded.via, message_errors.via),
 			updated_at = now()
-		where ms.status = 1
-		returning ms.domain_id, ms.thread_id, ms.message_id, ms.member_id, ms.status, ms.via, ms.error, ms.updated_at
+		returning domain_id, thread_id, message_id, member_id, 4::smallint as status, via, error, updated_at
 	`
 
 	var (
@@ -349,12 +293,11 @@ func (s *messageStatusStore) UnreadSummary(ctx context.Context, domainID int32, 
 	return summary, nil
 }
 
-// advanceReadHorizon moves each member's read horizon
-// (thread_dialog.last_read_message_id) forward to the receipt's up-to boundary —
-// monotonically, never backward — and refreshes the denormalized unread_count
-// from the new horizon: content messages after it that the member did not send.
-// Mirrors Telegram's read_inbox_max_id + dialog unread_count. Runs in the same
-// transaction as the MarkRead status upsert.
+// advanceReadHorizon moves each member's read horizon (thread_dialog.last_read_seq)
+// forward to the receipt's up-to boundary — monotonically, never backward — and
+// refreshes the denormalized unread_count from the new horizon: content messages
+// after it that the member did not send. Uses seq for watermarks but resolves from
+// message_id for legacy receipts. Runs in the same transaction as MarkRead.
 func (s *messageStatusStore) advanceReadHorizon(ctx context.Context, receipts []*model.ReadReceipt) error {
 	if len(receipts) == 0 {
 		return nil
@@ -363,48 +306,302 @@ func (s *messageStatusStore) advanceReadHorizon(ctx context.Context, receipts []
 	var (
 		threadIDs = make([]uuid.UUID, len(receipts))
 		memberIDs = make([]uuid.UUID, len(receipts))
-		upTos     = make([]uuid.UUID, len(receipts))
+		upToSeqs  = make([]*int64, len(receipts))
+		upToMsgs  = make([]uuid.UUID, len(receipts))
 	)
 
 	for i, r := range receipts {
 		threadIDs[i] = r.ThreadID
+
 		memberIDs[i] = r.MemberID
-		upTos[i] = r.UpToMessageID
+		if r.UpToSeq != 0 {
+			upToSeqs[i] = &r.UpToSeq
+		}
+
+		upToMsgs[i] = r.UpToMessageID
 	}
 
-	// The horizon CASE is repeated in SET and in the count subquery: the UPDATE
-	// target (td) is only in scope of SET/WHERE, not of a lateral FROM item.
 	const query = `
 		update im_thread.thread_dialog td
-		set last_read_message_id = case
-				when td.last_read_message_id is null or r.up_to > td.last_read_message_id
-				then r.up_to else td.last_read_message_id end,
+		set last_read_seq = case
+				when td.last_read_seq is null or r.up_to_seq > td.last_read_seq
+				then r.up_to_seq else td.last_read_seq end,
 		    unread_count = coalesce((
 		        select count(*)
 		        from im_message.messages m
 		        where m.thread_id = td.thread_id
 		          and m.sender_id <> td.member_id
 		          and m.type <> @SystemType
-		          and m.id > case
-		                when td.last_read_message_id is null or r.up_to > td.last_read_message_id
-		                then r.up_to else td.last_read_message_id end
+		          and m.seq > case
+		                when td.last_read_seq is null or r.up_to_seq > td.last_read_seq
+		                then r.up_to_seq else td.last_read_seq end
 		    ), 0)
-		from unnest(@ThreadIDs::uuid[], @MemberIDs::uuid[], @UpTos::uuid[])
-			as r(thread_id, member_id, up_to)
+		from unnest(@ThreadIDs::uuid[], @MemberIDs::uuid[], @UpToSeqs::bigint[], @UpToMsgs::uuid[])
+			as r(thread_id, member_id, up_to_seq, up_to_msg)
 		where td.thread_id = r.thread_id
 		  and td.member_id = r.member_id
 		  and td.deleted_at is null
+		  and r.up_to_seq is not null
 	`
 
 	args := pgx.NamedArgs{
 		"ThreadIDs":  threadIDs,
 		"MemberIDs":  memberIDs,
-		"UpTos":      upTos,
+		"UpToSeqs":   upToSeqs,
+		"UpToMsgs":   upToMsgs,
 		"SystemType": int(model.MessageTypeSystem),
 	}
 
 	if _, err := s.db.Exec(ctx, query, args); err != nil {
 		return errors.Internal("advancing read horizon", errors.WithCause(err), errors.WithID("postgres.message_status.advance_read_horizon"))
+	}
+
+	return nil
+}
+
+// advanceDeliveredHorizon moves each member's delivered horizon
+// (thread_dialog.last_delivered_seq) forward to the receipt's up-to boundary —
+// monotonically, never backward. Unlike advanceReadHorizon, it does not recompute
+// unread_count (delivered does not affect unread — only read does).
+// Uses seq for watermarks. Runs in the same transaction as MarkDelivered.
+func (s *messageStatusStore) advanceDeliveredHorizon(ctx context.Context, receipts []*model.StatusReceipt) error {
+	if len(receipts) == 0 {
+		return nil
+	}
+
+	var (
+		threadIDs = make([]uuid.UUID, len(receipts))
+		memberIDs = make([]uuid.UUID, len(receipts))
+		upToSeqs  = make([]*int64, len(receipts))
+	)
+
+	for i, r := range receipts {
+		threadIDs[i] = r.ThreadID
+
+		memberIDs[i] = r.MemberID
+		if r.UpToSeq != 0 {
+			upToSeqs[i] = &r.UpToSeq
+		}
+	}
+
+	const query = `
+		update im_thread.thread_dialog td
+		set last_delivered_seq = case
+				when td.last_delivered_seq is null or r.up_to_seq > td.last_delivered_seq
+				then r.up_to_seq else td.last_delivered_seq end
+		from unnest(@ThreadIDs::uuid[], @MemberIDs::uuid[], @UpToSeqs::bigint[])
+			as r(thread_id, member_id, up_to_seq)
+		where td.thread_id = r.thread_id
+		  and td.member_id = r.member_id
+		  and td.deleted_at is null
+		  and r.up_to_seq is not null
+	`
+
+	args := pgx.NamedArgs{
+		"ThreadIDs": threadIDs,
+		"MemberIDs": memberIDs,
+		"UpToSeqs":  upToSeqs,
+	}
+
+	if _, err := s.db.Exec(ctx, query, args); err != nil {
+		return errors.Internal("advancing delivered horizon", errors.WithCause(err), errors.WithID("postgres.message_status.advance_delivered_horizon"))
+	}
+
+	return nil
+}
+
+// resolveReadSeqFromMessageID fills in missing UpToSeq for read receipts by
+// looking up the message's seq from im_message.messages. For receipts with UpToSeq
+// already set, it does nothing. This is used for legacy/envelope receipts that
+// have UpToMessageID but not UpToSeq.
+func (s *messageStatusStore) resolveReadSeqFromMessageID(ctx context.Context, receipts []*model.ReadReceipt) error {
+	// Collect indices of receipts that need seq resolution.
+	var needsResolve []int
+
+	for i, r := range receipts {
+		if r.UpToSeq == 0 && r.UpToMessageID != uuid.Nil {
+			needsResolve = append(needsResolve, i)
+		}
+	}
+
+	if len(needsResolve) == 0 {
+		return nil
+	}
+
+	// Extract MessageIDs for the lookup.
+	messageIDs := make([]uuid.UUID, len(needsResolve))
+	for i, idx := range needsResolve {
+		messageIDs[i] = receipts[idx].UpToMessageID
+	}
+
+	const query = `
+		select id, seq
+		from im_message.messages
+		where id = any(@MessageIDs::uuid[])
+	`
+
+	rows, err := s.db.Query(ctx, query, pgx.NamedArgs{
+		"MessageIDs": messageIDs,
+	})
+	if err != nil {
+		return errors.Internal("resolving seq from message IDs", errors.WithCause(err), errors.WithID("postgres.message_status.resolve_read_seq"))
+	}
+
+	type msgRow struct {
+		ID  uuid.UUID
+		Seq int64
+	}
+
+	msgs, err := pgx.CollectRows(rows, pgx.RowToStructByName[msgRow])
+	if err != nil {
+		return errors.Internal("collecting resolved seq values", errors.WithCause(err), errors.WithID("postgres.message_status.resolve_read_seq"))
+	}
+
+	// Build a map for quick lookup.
+	msgMap := make(map[uuid.UUID]int64, len(msgs))
+	for _, m := range msgs {
+		msgMap[m.ID] = m.Seq
+	}
+
+	// Fill in UpToSeq for receipts that need resolution.
+	for _, idx := range needsResolve {
+		if seq, ok := msgMap[receipts[idx].UpToMessageID]; ok {
+			receipts[idx].UpToSeq = seq
+		}
+	}
+
+	return nil
+}
+
+// resolveSeqFromMessageID fills in missing UpToSeq for watermark receipts by
+// looking up the message's seq from im_message.messages. For receipts with UpToSeq
+// already set, it does nothing. This is used for legacy/envelope receipts that
+// have UpToMessageID but not UpToSeq.
+func (s *messageStatusStore) resolveSeqFromMessageID(ctx context.Context, receipts []*model.StatusReceipt) error {
+	// Collect indices of receipts that need seq resolution.
+	var needsResolve []int
+
+	for i, r := range receipts {
+		if r.UpToSeq == 0 && r.UpToMessageID != uuid.Nil {
+			needsResolve = append(needsResolve, i)
+		}
+	}
+
+	if len(needsResolve) == 0 {
+		return nil
+	}
+
+	// Extract MessageIDs for the lookup.
+	messageIDs := make([]uuid.UUID, len(needsResolve))
+	for i, idx := range needsResolve {
+		messageIDs[i] = receipts[idx].UpToMessageID
+	}
+
+	const query = `
+		select id, seq
+		from im_message.messages
+		where id = any(@MessageIDs::uuid[])
+	`
+
+	rows, err := s.db.Query(ctx, query, pgx.NamedArgs{
+		"MessageIDs": messageIDs,
+	})
+	if err != nil {
+		return errors.Internal("resolving seq from message IDs", errors.WithCause(err), errors.WithID("postgres.message_status.resolve_seq"))
+	}
+
+	type msgRow struct {
+		ID  uuid.UUID
+		Seq int64
+	}
+
+	msgs, err := pgx.CollectRows(rows, pgx.RowToStructByName[msgRow])
+	if err != nil {
+		return errors.Internal("collecting resolved seq values", errors.WithCause(err), errors.WithID("postgres.message_status.resolve_seq"))
+	}
+
+	// Build a map for quick lookup.
+	msgMap := make(map[uuid.UUID]int64, len(msgs))
+	for _, m := range msgs {
+		msgMap[m.ID] = m.Seq
+	}
+
+	// Fill in UpToSeq for receipts that need resolution.
+	for _, idx := range needsResolve {
+		if seq, ok := msgMap[receipts[idx].UpToMessageID]; ok {
+			receipts[idx].UpToSeq = seq
+		}
+	}
+
+	return nil
+}
+
+// resolveThreadIDsForDelivery fills in missing ThreadID, DomainID, and UpToSeq
+// for per-message receipts (provider/bot) by looking them up from im_message.messages.
+// This ensures all receipts have ThreadID and seq set before advancing the delivered horizon.
+func (s *messageStatusStore) resolveThreadIDsForDelivery(ctx context.Context, receipts []*model.StatusReceipt) error {
+	// Collect indices of receipts that need ThreadID/seq resolution.
+	var needsResolve []int
+
+	for i, r := range receipts {
+		if r.ThreadID == uuid.Nil && r.MessageID != uuid.Nil {
+			needsResolve = append(needsResolve, i)
+		}
+	}
+
+	if len(needsResolve) == 0 {
+		return nil
+	}
+
+	// Extract MessageIDs for the lookup.
+	messageIDs := make([]uuid.UUID, len(needsResolve))
+	for i, idx := range needsResolve {
+		messageIDs[i] = receipts[idx].MessageID
+	}
+
+	const query = `
+		select id, thread_id, domain_id, sender_id, seq
+		from im_message.messages
+		where id = any(@MessageIDs::uuid[])
+	`
+
+	rows, err := s.db.Query(ctx, query, pgx.NamedArgs{
+		"MessageIDs": messageIDs,
+	})
+	if err != nil {
+		return errors.Internal("resolving thread IDs for delivery receipts", errors.WithCause(err), errors.WithID("postgres.message_status.resolve_thread_ids"))
+	}
+
+	type msgRow struct {
+		ID       uuid.UUID
+		ThreadID uuid.UUID
+		DomainID int32
+		SenderID uuid.UUID
+		Seq      int64
+	}
+
+	msgs, err := pgx.CollectRows(rows, pgx.RowToStructByName[msgRow])
+	if err != nil {
+		return errors.Internal("collecting resolved messages", errors.WithCause(err), errors.WithID("postgres.message_status.resolve_thread_ids"))
+	}
+
+	// Build a map for quick lookup.
+	msgMap := make(map[uuid.UUID]msgRow, len(msgs))
+	for _, m := range msgs {
+		msgMap[m.ID] = m
+	}
+
+	// Fill in ThreadID, DomainID, and UpToSeq for receipts that need resolution.
+	for _, idx := range needsResolve {
+		m, ok := msgMap[receipts[idx].MessageID]
+		if !ok {
+			// If message not found, leave ThreadID as Nil (it will fail validation in advanceDeliveredHorizon).
+			continue
+		}
+
+		receipts[idx].ThreadID = m.ThreadID
+		receipts[idx].DomainID = m.DomainID
+		receipts[idx].UpToSeq = m.Seq
 	}
 
 	return nil
@@ -461,13 +658,22 @@ func confirmedAtOrNow(at time.Time) time.Time {
 	return at
 }
 
-// dedupStatusReceipts drops repeated (message_id, member_id) pairs, keeping
-// the first occurrence: an upsert cannot affect the same row twice within
-// one statement.
+// dedupStatusReceipts collapses receipts that would touch the same row twice
+// within one statement. It handles the two receipt shapes separately:
+//   - watermark receipts (UpToMessageID set, MessageID zero) collapse by
+//     (thread_id, member_id) keeping the greatest UpToMessageID — the same rule
+//     as read receipts, because a member's delivered horizon is per thread, NOT
+//     per message. Keying these by message_id (always zero) would wrongly merge
+//     a member's watermarks across different threads.
+//   - per-message receipts (MessageID set) collapse by (message_id, member_id),
+//     keeping the first occurrence.
 func dedupStatusReceipts(receipts []*model.StatusReceipt) []*model.StatusReceipt {
-	type key struct{ messageID, memberID uuid.UUID }
+	type wmKey struct{ threadID, memberID uuid.UUID }
 
-	seen := make(map[key]struct{}, len(receipts))
+	type pmKey struct{ messageID, memberID uuid.UUID }
+
+	wmIdx := make(map[wmKey]int, len(receipts))
+	pmSeen := make(map[pmKey]struct{}, len(receipts))
 	out := make([]*model.StatusReceipt, 0, len(receipts))
 
 	for _, r := range receipts {
@@ -475,12 +681,29 @@ func dedupStatusReceipts(receipts []*model.StatusReceipt) []*model.StatusReceipt
 			continue
 		}
 
-		k := key{r.MessageID, r.MemberID}
-		if _, ok := seen[k]; ok {
+		if r.UpToMessageID != uuid.Nil {
+			k := wmKey{r.ThreadID, r.MemberID}
+			if idx, ok := wmIdx[k]; ok {
+				// UUIDv7 ids are time-ordered, so keep the latest boundary.
+				if greaterUUID(r.UpToMessageID, out[idx].UpToMessageID) {
+					out[idx] = r
+				}
+
+				continue
+			}
+
+			wmIdx[k] = len(out)
+			out = append(out, r)
+
 			continue
 		}
 
-		seen[k] = struct{}{}
+		k := pmKey{r.MessageID, r.MemberID}
+		if _, ok := pmSeen[k]; ok {
+			continue
+		}
+
+		pmSeen[k] = struct{}{}
 
 		out = append(out, r)
 	}

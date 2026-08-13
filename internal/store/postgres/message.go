@@ -60,12 +60,8 @@ func replyToArg(msg *model.Message) *uuid.UUID {
 	return &id
 }
 
-const (
-	forwardOriginColumns = `forward_origin_kind, forward_origin_sender_id, forward_origin_sender_name,
-		forward_origin_sent_at, forward_from_message_id`
-	forwardOriginValues = `@ForwardOriginKind, @ForwardOriginSenderID, @ForwardOriginSenderName,
-		@ForwardOriginSentAt, @ForwardFromMessageID`
-)
+const forwardOriginColumns = `forward_origin_kind, forward_origin_sender_id, forward_origin_sender_name,
+	forward_origin_sent_at, forward_from_message_id`
 
 func addForwardOriginArgs(args pgx.NamedArgs, msg *model.Message) pgx.NamedArgs {
 	origin := msg.ForwardOrigin
@@ -99,16 +95,19 @@ func (m *messageStore) SaveMessage(ctx context.Context, msg *model.Message) (*mo
 	}
 
 	const query = `
+		with s as (
+			update im_thread.thread set last_seq = last_seq + 1 where id = @ThreadID returning last_seq
+		)
 		insert into im_message.messages (
-			domain_id, thread_id, sender_id, member_id, type, body, metadata, origin_sender, reply_to,
+			domain_id, thread_id, sender_id, member_id, type, body, metadata, origin_sender, reply_to, seq,
 			` + forwardOriginColumns + `
 		)
-		values (
-			@DomainID, @ThreadID, @SenderID, @MemberID, @Type, @Body, @Metadata, @OriginSender, @ReplyTo,
-			` + forwardOriginValues + `
-		)
+		select
+			@DomainID, @ThreadID, @SenderID, @MemberID, @Type, @Body, @Metadata, @OriginSender, @ReplyTo, s.last_seq,
+			@ForwardOriginKind, @ForwardOriginSenderID, @ForwardOriginSenderName, @ForwardOriginSentAt, @ForwardFromMessageID
+		from s
 		returning
-			id, domain_id, thread_id, member_id, type, body, metadata, created_at, updated_at,
+			id, domain_id, thread_id, member_id, type, body, metadata, created_at, updated_at, seq,
 			jsonb_build_object('id', sender_id) as "from"
 	`
 
@@ -429,12 +428,16 @@ func (m *messageStore) SaveMessageLocation(ctx context.Context, msg *model.Messa
 
 func prepareSaveMessageLocationQuery(msg *model.Message) (string, pgx.NamedArgs) {
 	query := `
-		with msg_ins as (
+		with s as (
+			update im_thread.thread set last_seq = last_seq + 1 where id = @ThreadID returning last_seq
+		),
+		msg_ins as (
 			insert into im_message.messages
-			(thread_id, domain_id, sender_id, member_id, type, body, metadata, reply_to,
+			(thread_id, domain_id, sender_id, member_id, type, body, metadata, reply_to, seq,
 			 ` + forwardOriginColumns + `)
-			values (@ThreadID, @DomainID, @SenderID, @MemberID, @Type, @Body, @Metadata, @ReplyTo,
-			 ` + forwardOriginValues + `)
+			select @ThreadID, @DomainID, @SenderID, @MemberID, @Type, @Body, @Metadata, @ReplyTo, s.last_seq,
+			 @ForwardOriginKind, @ForwardOriginSenderID, @ForwardOriginSenderName, @ForwardOriginSentAt, @ForwardFromMessageID
+			from s
 			returning *
 		),
 		location_ins as (
@@ -453,6 +456,7 @@ func prepareSaveMessageLocationQuery(msg *model.Message) (string, pgx.NamedArgs)
 			m.metadata,
 			m.created_at,
 			m.updated_at,
+			m.seq,
 			l.location as location
 		from msg_ins m
 		left join lateral (
@@ -500,12 +504,16 @@ func (m *messageStore) SaveMessageContact(ctx context.Context, msg *model.Messag
 
 func prepareSaveMessageContactQuery(msg *model.Message) (string, pgx.NamedArgs) {
 	query := `
-		with msg_ins as (
+		with s as (
+			update im_thread.thread set last_seq = last_seq + 1 where id = @ThreadID returning last_seq
+		),
+		msg_ins as (
 			insert into im_message.messages
-			(thread_id, domain_id, sender_id, member_id, type, body, metadata, reply_to,
+			(thread_id, domain_id, sender_id, member_id, type, body, metadata, reply_to, seq,
 			 ` + forwardOriginColumns + `)
-			values (@ThreadID, @DomainID, @SenderID, @MemberID, @Type, @Body, @Metadata, @ReplyTo,
-			 ` + forwardOriginValues + `)
+			select @ThreadID, @DomainID, @SenderID, @MemberID, @Type, @Body, @Metadata, @ReplyTo, s.last_seq,
+			 @ForwardOriginKind, @ForwardOriginSenderID, @ForwardOriginSenderName, @ForwardOriginSentAt, @ForwardFromMessageID
+			from s
 			returning *
 		),
 		contact_ins as (
@@ -525,6 +533,7 @@ func prepareSaveMessageContactQuery(msg *model.Message) (string, pgx.NamedArgs) 
 			m.metadata as metadata,
 			m.created_at as created_at,
 			m.updated_at as updated_at,
+			m.seq as seq,
 			c.contact as contact
 		from msg_ins m
 		left join lateral (
@@ -583,10 +592,14 @@ func prepareSaveSystemMessageQuery(msg *model.Message) (string, pgx.NamedArgs) {
 	}
 
 	query := `
-		with msg_ins as (
+		with s as (
+			update im_thread.thread set last_seq = last_seq + 1 where id = @ThreadID returning last_seq
+		),
+		msg_ins as (
 			insert into im_message.messages
-			(thread_id, domain_id, sender_id, member_id, type, body, metadata)
-			values (@ThreadID, @DomainID, @SenderID, @MemberID, @Type, @Body, @Metadata)
+			(thread_id, domain_id, sender_id, member_id, type, body, metadata, seq)
+			select @ThreadID, @DomainID, @SenderID, @MemberID, @Type, @Body, @Metadata, s.last_seq
+			from s
 			returning *
 		),
 		sys_ins as (
@@ -605,6 +618,7 @@ func prepareSaveSystemMessageQuery(msg *model.Message) (string, pgx.NamedArgs) {
 			m.metadata,
 			m.created_at,
 			m.updated_at,
+			m.seq,
 			sys.system as system
 		from msg_ins m
 		left join lateral (
@@ -649,10 +663,14 @@ func (m *messageStore) SaveInteractiveMessage(ctx context.Context, msg *model.Me
 
 func prepareSaveInteractiveMessageQuery(msg *model.Message) (string, pgx.NamedArgs) {
 	query := `
-		with msg_ins as (
+		with s as (
+			update im_thread.thread set last_seq = last_seq + 1 where id = @ThreadID returning last_seq
+		),
+		msg_ins as (
 			insert into im_message.messages
-			(thread_id, domain_id, sender_id, member_id, type, body, metadata, interactive)
-			values (@ThreadID, @DomainID, @SenderID, @MemberID, @Type, @Body, @Metadata, @Interactive)
+			(thread_id, domain_id, sender_id, member_id, type, body, metadata, interactive, seq)
+			select @ThreadID, @DomainID, @SenderID, @MemberID, @Type, @Body, @Metadata, @Interactive, s.last_seq
+			from s
 			returning *
 		),
 		documents_ins as (
@@ -705,6 +723,7 @@ func prepareSaveInteractiveMessageQuery(msg *model.Message) (string, pgx.NamedAr
 			m.interactive as interactive,
 			m.created_at as created_at,
 			m.updated_at as updated_at,
+			m.seq as seq,
 			doc_ins.documents as documents,
 			img_ins.images as images
 		from msg_ins m

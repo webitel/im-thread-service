@@ -104,6 +104,7 @@ func mapHistoryMessage(m *model.Message, callerID uuid.UUID) *impb.HistoryMessag
 		Type:           int32(m.Type),
 		CreatedAt:      max(m.CreatedAt.UnixMilli(), 0),
 		UpdatedAt:      max(m.UpdatedAt.UnixMilli(), 0),
+		Seq:            m.Seq,
 		DeliveryStatus: mapDeliveryStatus(m.DeliveryStatus),
 		Statuses:       mapRecipientStatuses(m.Statuses),
 	}

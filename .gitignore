@@ -177,4 +177,10 @@ pids
 .data
 data/.idea
 drafts/
+cmd/eventtail/main.go
+
+# Claude Code local config (personal, not committed)
+.claude/
+
+# graphify generated knowledge graph (local)
 graphify-out/

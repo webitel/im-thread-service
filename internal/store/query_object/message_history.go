@@ -20,6 +20,7 @@ var (
 		"metadata":         true,
 		"created_at":       true,
 		"updated_at":       true,
+		"seq":              true,
 		"documents":        true,
 		"images":           true,
 		"member":           true,
@@ -41,7 +42,7 @@ var (
 	defaultFields = []string{
 		"id", "thread_id", "sender_id",
 		"type", "body", "metadata",
-		"created_at", "updated_at", "images", "documents",
+		"created_at", "updated_at", "seq", "images", "documents",
 		"member", "interactive", "location", "contact", "system", "reacted_metadata",
 		"reply_to", "forward_origin",
 		"delivery_status", "statuses", "reactions",
