@@ -70,22 +70,13 @@ func (s *MessageService) SendTyping(ctx context.Context, in *dto.SendTypingReque
 	// providers path below, offline members are dropped by delivery.
 	recipients := internalRecipients(members, in.From.ID)
 
-	// Populate member identity from the authenticated sender.
-	var memberIdentity *event.MemberIdentity
-	if in.From.Identity != nil {
-		memberIdentity = &event.MemberIdentity{
-			Name:   in.From.Identity.Name,
-			Issuer: in.From.Identity.Issuer,
-		}
-	}
-
 	ev := event.Typing{
 		ThreadID:   in.ThreadID,
 		MemberID:   in.From.ID,
+		DomainID:   int32(in.DomainID),
 		TimeoutMS:  s.resolveTypingTimeout(in.TimeoutMS),
 		OccurredAt: time.Now().UTC(),
 		To:         recipients,
-		Member:     memberIdentity,
 	}
 
 	// Live Typing Preview: attach the draft only when the feature is on AND the
