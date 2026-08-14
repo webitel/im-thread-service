@@ -26,6 +26,7 @@ const (
 type Typing struct {
 	ThreadID   uuid.UUID `json:"thread_id"`
 	MemberID   uuid.UUID `json:"member_id"`
+	Role       int32     `json:"role"`
 	TimeoutMS  int32     `json:"timeout_ms"`
 	OccurredAt time.Time `json:"occurred_at"`
 

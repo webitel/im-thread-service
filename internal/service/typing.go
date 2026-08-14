@@ -73,6 +73,7 @@ func (s *MessageService) SendTyping(ctx context.Context, in *dto.SendTypingReque
 	ev := event.Typing{
 		ThreadID:   in.ThreadID,
 		MemberID:   in.From.ID,
+		Role:       int32(memberRole(members, in.From.ID)),
 		DomainID:   int32(in.DomainID),
 		TimeoutMS:  s.resolveTypingTimeout(in.TimeoutMS),
 		OccurredAt: time.Now().UTC(),
@@ -168,6 +169,18 @@ func isActiveMember(members []*model.ThreadDialog, id uuid.UUID) bool {
 	}
 
 	return false
+}
+
+// memberRole returns the thread role of the given participant, or the
+// unspecified role when the member is not found.
+func memberRole(members []*model.ThreadDialog, id uuid.UUID) model.ThreadRole {
+	for _, m := range members {
+		if m.ContactID == id {
+			return m.ThreadRole
+		}
+	}
+
+	return model.UnspecifiedRole
 }
 
 // internalRecipients returns the thread's active, internal (Via == nil),
