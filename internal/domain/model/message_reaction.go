@@ -97,7 +97,7 @@ func (r *Reaction) Events() []event.Outboxer {
 
 // WithReactionEvent stages a MessageReaction event describing the given action.
 // It is only meaningful for set/removed; an unchanged result stages nothing.
-func (r *Reaction) WithReactionEvent(ctx context.Context, res *ReactionResult) *Reaction {
+func (r *Reaction) WithReactionEvent(ctx context.Context, res *ReactionResult, aggregate []*MessageReaction) *Reaction {
 	if r == nil || res == nil || !res.Changed {
 		return r
 	}
@@ -116,6 +116,16 @@ func (r *Reaction) WithReactionEvent(ctx context.Context, res *ReactionResult) *
 		}
 	}
 
+	reactions := make([]event.ReactionAggregate, 0, len(aggregate))
+	for _, mr := range aggregate {
+		reactions = append(reactions, event.ReactionAggregate{
+			Emoji:         mr.Emoji,
+			Count:         mr.Count,
+			ReactorIDs:    mr.ReactorIDs,
+			LastReactedAt: mr.LastReactedAt,
+		})
+	}
+
 	e := event.MessageReaction{
 		MessageID:  r.MessageID,
 		ThreadID:   r.ThreadID,
@@ -126,6 +136,7 @@ func (r *Reaction) WithReactionEvent(ctx context.Context, res *ReactionResult) *
 		Action:     action,
 		OccurredAt: res.ReactedAt,
 		SendID:     r.IdempotencyKey,
+		Reactions:  reactions,
 	}
 
 	WithContextPropogatedMetadata(ctx, &e)

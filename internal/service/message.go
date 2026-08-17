@@ -902,7 +902,13 @@ func (s *MessageService) SetReaction(ctx context.Context, in *dto.SetReactionReq
 		}
 
 		reaction.To = members
-		reaction.WithReactionEvent(txCtx, result)
+
+		aggregate, err := uow.MessageReactions().AggregateForMessage(txCtx, reaction.MessageID)
+		if err != nil {
+			return err
+		}
+
+		reaction.WithReactionEvent(txCtx, result, aggregate)
 
 		return s.dispatchReactionEvents(txCtx, uow, reaction)
 	})
