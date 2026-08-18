@@ -16,6 +16,16 @@ const (
 	ReactionActionRemoved = "removed"
 )
 
+// ReactionAggregate is one emoji's authoritative state on the message after the
+// change: how many members hold it and a capped sample of their contact ids.
+// reacted_by_me is caller-relative and derived downstream from ReactorIDs.
+type ReactionAggregate struct {
+	Emoji         string      `json:"emoji"`
+	Count         int32       `json:"count"`
+	ReactorIDs    []uuid.UUID `json:"reactor_ids"`
+	LastReactedAt int64       `json:"last_reacted_at"`
+}
+
 var _ Outboxer = (*MessageReaction)(nil)
 
 // MessageReaction announces that a member set or cleared an emoji reaction on a
@@ -35,6 +45,11 @@ type MessageReaction struct {
 	// devices so an optimistic UI update can be reconciled. It is opaque and
 	// plays no part in dedup or ordering.
 	SendID string `json:"send_id,omitempty"`
+
+	// Reactions is the full per-emoji aggregate on the message AFTER this change,
+	// so a client can replace its reaction state authoritatively rather than
+	// applying just the (Emoji, Action) delta.
+	Reactions []ReactionAggregate `json:"reactions,omitempty"`
 
 	ExternalMetadata map[string]string `json:"-"`
 }

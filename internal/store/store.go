@@ -160,6 +160,9 @@ type InteractiveCallback interface {
 // idempotently and reports the resulting state.
 type MessageReactionStore interface {
 	SetReaction(ctx context.Context, reaction *model.Reaction) (*model.ReactionResult, error)
+	// AggregateForMessage returns the per-emoji reaction aggregate for a message,
+	// ordered by first-reaction time (the read-model the history view exposes).
+	AggregateForMessage(ctx context.Context, messageID uuid.UUID) ([]*model.MessageReaction, error)
 }
 
 type ThreadVariablesStore interface {

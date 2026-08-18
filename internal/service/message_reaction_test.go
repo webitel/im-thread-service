@@ -25,6 +25,7 @@ type fakeMessageReactionStore struct {
 	err          error
 	calls        int
 	lastReaction *model.Reaction
+	aggregate    []*model.MessageReaction
 }
 
 func (f *fakeMessageReactionStore) SetReaction(_ context.Context, r *model.Reaction) (*model.ReactionResult, error) {
@@ -36,6 +37,10 @@ func (f *fakeMessageReactionStore) SetReaction(_ context.Context, r *model.React
 	}
 
 	return f.result, nil
+}
+
+func (f *fakeMessageReactionStore) AggregateForMessage(_ context.Context, _ uuid.UUID) ([]*model.MessageReaction, error) {
+	return f.aggregate, nil
 }
 
 type fakeReactionProvidersAdapter struct {

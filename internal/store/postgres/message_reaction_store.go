@@ -158,3 +158,49 @@ func (s *messageReactionStore) SetReaction(ctx context.Context, r *model.Reactio
 
 	return res, nil
 }
+
+const aggregateForMessageSQL = `
+select emoji,
+       cnt::int as count,
+       to_jsonb(reactor_ids) as reactor_ids,
+       last_ms as last_reacted_at
+from (
+    select mr.emoji,
+           count(*) as cnt,
+           (array_agg(mr.reactor_id order by mr.created_at))[1:12] as reactor_ids,
+           min(mr.created_at) as first_at,
+           (extract(epoch from max(mr.updated_at)) * 1000)::bigint as last_ms
+    from im_message.message_reactions mr
+    where mr.message_id = @MessageID
+    group by mr.emoji
+) e
+order by e.first_at
+`
+
+// AggregateForMessage returns the per-emoji reaction aggregate for a message,
+// ordered by first-reaction time (the read-model the history view exposes).
+func (s *messageReactionStore) AggregateForMessage(ctx context.Context, messageID uuid.UUID) ([]*model.MessageReaction, error) {
+	if messageID == uuid.Nil {
+		return nil, errors.InvalidArgument("message id cannot be nil", errors.WithID("postgres.message_reaction.aggregate_for_message"))
+	}
+
+	args := pgx.NamedArgs{
+		"MessageID": messageID,
+	}
+
+	rows, err := s.db.Query(ctx, aggregateForMessageSQL, args)
+	if err != nil {
+		return nil, errors.Internal("executing aggregate for message query", errors.WithCause(err), errors.WithID("postgres.message_reaction.aggregate_for_message.query"))
+	}
+
+	agg, err := pgx.CollectRows(rows, pgx.RowToAddrOfStructByNameLax[model.MessageReaction])
+	if err != nil {
+		return nil, errors.Internal("collecting message reactions aggregate", errors.WithCause(err), errors.WithID("postgres.message_reaction.aggregate_for_message.collecting"))
+	}
+
+	if len(agg) == 0 {
+		return nil, nil
+	}
+
+	return agg, nil
+}
