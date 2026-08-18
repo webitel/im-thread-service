@@ -449,8 +449,11 @@ type ThreadSearchRequest struct {
 	Kinds []ThreadKind `protobuf:"varint,4,rep,packed,name=kinds,proto3,enum=webitel.im.service.thread.v1.ThreadKind" json:"kinds,omitempty"`
 	// Filter threads by owner user IDs.
 	Owners []string `protobuf:"bytes,5,rep,name=owners,proto3" json:"owners,omitempty"`
-	// Full-text search query.
-	// Typically applied to subject.
+	// Full-text search query, matched case-insensitively against any part of
+	// the thread subject (or the direct title), the name or username of any of
+	// its members, and the values of the thread variables — so a chat can be
+	// found by who is in it or by data collected with it (phone number, tax id,
+	// any custom variable).
 	Q string `protobuf:"bytes,6,opt,name=q,proto3" json:"q,omitempty"`
 	// ID of the caller
 	SelfId string `protobuf:"bytes,7,opt,name=self_id,json=selfId,proto3" json:"self_id,omitempty"`

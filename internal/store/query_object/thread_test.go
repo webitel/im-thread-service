@@ -41,6 +41,45 @@ func argValues(args []any) []string {
 	return out
 }
 
+func TestThreadQuery_WithSearchFilter_MatchesSubjectMembersAndVariables(t *testing.T) {
+	sql, args, err := NewThreadQueryObject().
+		WithSearchFilter("380671234567").
+		ToSQL()
+	require.NoError(t, err)
+
+	assertSQLContains(t, sql, "t.subject ilike")
+	assertSQLContains(t, sql, "ds.title ilike")
+	assertSQLContains(t, sql, "join im_contact.contact contact on contact.id = member.member_id")
+	assertSQLContains(t, sql, "contact.name ilike $3 or contact.username ilike $4")
+	assertSQLContains(t, sql, "from im_thread.thread_variables vars, jsonb_each(vars.variables) entry")
+	assertSQLContains(t, sql, "coalesce(entry.value->>'value', entry.value #>> '{}', '') ilike")
+
+	// One pattern per matched column; the direct-settings join must be present for ds.title to resolve.
+	require.Len(t, args, 5)
+	assert.Equal(t, []string{"%380671234567%", "%380671234567%", "%380671234567%", "%380671234567%", "%380671234567%"}, argValues(args))
+	assertSQLContains(t, sql, "LEFT JOIN im_thread.direct_settings ds")
+}
+
+func TestThreadQuery_WithSearchFilter_EscapesWildcards(t *testing.T) {
+	_, args, err := NewThreadQueryObject().
+		WithSearchFilter("50%_off").
+		ToSQL()
+	require.NoError(t, err)
+
+	require.NotEmpty(t, args)
+	assert.Equal(t, `%50\%\_off%`, args[0])
+}
+
+func TestThreadQuery_WithSearchFilter_EmptyTermIsNoOp(t *testing.T) {
+	sql, args, err := NewThreadQueryObject().
+		WithSearchFilter("").
+		ToSQL()
+	require.NoError(t, err)
+
+	assert.NotContains(t, sql, "ilike")
+	assert.Empty(t, args)
+}
+
 func TestThreadQuery_WithParticipantsFilter_SingleParticipant(t *testing.T) {
 	selfID := uuid.New()
 

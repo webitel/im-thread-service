@@ -5,6 +5,12 @@ import (
 	"strings"
 )
 
+var likeEscaper = strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
+
+func LikeContains(term string) string {
+	return "%" + likeEscaper.Replace(term) + "%"
+}
+
 func CompactSQL(s string) string {
 	var (
 		r = strings.NewReader(s)

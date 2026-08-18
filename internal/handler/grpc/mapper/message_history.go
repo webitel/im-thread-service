@@ -45,6 +45,40 @@ func MapSearchMessageHistoryRequest2HistoryMessageInputDTO(mhr *impb.SearchMessa
 	}
 }
 
+func MapSearchMessagesRequest2SearchMessagesInputDTO(mr *impb.SearchMessagesRequest) *dto.SearchMessagesInputDTO {
+	var (
+		senderIDs = utils.Map(mr.GetSenderIds(), utils.IDsParser)
+		types     = utils.Map(mr.GetTypes(), func(i int32) int { return int(i) })
+		threadIDs uuid.UUIDs
+		cursor    *dto.HistoryMessageCursor
+	)
+
+	if id := utils.IDsParser(mr.GetThreadId()); id != uuid.Nil {
+		threadIDs = uuid.UUIDs{id}
+	}
+
+	if mr.GetCursor() != nil {
+		cursor = new(dto.HistoryMessageCursor)
+		{
+			id, _ := uuid.Parse(mr.GetCursor().GetId())
+			cursor.ID = id
+			cursor.Direction = mr.GetCursor().GetBefore()
+		}
+	}
+
+	return &dto.SearchMessagesInputDTO{
+		DomainID:  int(mr.GetDomainId()),
+		Fields:    mr.GetFields(),
+		Term:      mr.GetQ(),
+		ThreadIDs: threadIDs,
+		SenderIDs: senderIDs,
+		Types:     types,
+		Cursor:    cursor,
+		Size:      int(mr.GetSize()),
+		CallerID:  utils.IDsParser(mr.GetCallerId()),
+	}
+}
+
 func MapSearchLeftThreadsMessageHistoryRequest2LeftThreadsMessageHistoryInputDTO(mhr *impb.SearchLeftThreadsMessageHistoryRequest) *dto.LeftThreadsMessageHistoryInputDTO {
 	var (
 		threadID  uuid.UUID

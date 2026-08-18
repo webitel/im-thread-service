@@ -32,6 +32,7 @@ const (
 
 type MessageHistorySearcher interface {
 	Search(ctx context.Context, hmiDTO *dto.HistoryMessageInputDTO) (model.MessageSlice, queryobject.PageInfo[queryobject.MessageHistoryCursor], error)
+	SearchMessages(ctx context.Context, req *dto.SearchMessagesInputDTO) (model.MessageSlice, queryobject.PageInfo[queryobject.MessageHistoryCursor], error)
 	SearchLeftThreads(ctx context.Context, req *dto.LeftThreadsMessageHistoryInputDTO) (model.MessageSlice, queryobject.PageInfo[queryobject.MessageHistoryCursor], error)
 
 	GetRevisions(ctx context.Context, req *dto.GetMessageRevisionsRequest) ([]*model.MessageChangeEntry, error)
@@ -87,6 +88,44 @@ func (m *MessageHistoryEnricher) Search(ctx context.Context, hmiDTO *dto.History
 			"failed to enrich messages",
 			errors.WithCause(err),
 			errors.WithID("decorators.message_history_enricher.Search"),
+		)
+	}
+
+	return messages, pageInfo, nil
+}
+
+func (m *MessageHistoryEnricher) SearchMessages(ctx context.Context, req *dto.SearchMessagesInputDTO) (model.MessageSlice, queryobject.PageInfo[queryobject.MessageHistoryCursor], error) {
+	messages, pageInfo, err := m.MessageHistorySearcher.SearchMessages(ctx, req)
+	if err != nil {
+		return nil, pageInfo, err
+	}
+
+	if len(messages) == 0 {
+		return messages, pageInfo, nil
+	}
+
+	fileIDs := collectUniqueFileIDs(messages)
+	if len(fileIDs) == 0 {
+		return messages, pageInfo, nil
+	}
+
+	requestedMetadata := shouldLoadMetadata(req.Fields, 0)
+	loadMetadata := (requestedMetadata & (UseDocumentStorageMD | UseImageStorageMD)) != 0
+
+	linkMap, err := m.fetchFileLinks(ctx, fileIDs, req.DomainID, loadMetadata)
+	if err != nil {
+		return nil, pageInfo, errors.Internal(
+			"failed to fetch file links",
+			errors.WithCause(err),
+			errors.WithID("decorators.message_history_enricher.SearchMessages"),
+		)
+	}
+
+	if err := m.enrichMessages(messages, linkMap, requestedMetadata); err != nil {
+		return nil, pageInfo, errors.Internal(
+			"failed to enrich messages",
+			errors.WithCause(err),
+			errors.WithID("decorators.message_history_enricher.SearchMessages"),
 		)
 	}
 

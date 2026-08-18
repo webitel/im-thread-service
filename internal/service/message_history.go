@@ -3,6 +3,8 @@ package service
 import (
 	"context"
 	"slices"
+	"strings"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 
@@ -85,6 +87,53 @@ func (s *MessageHistoryService) Search(ctx context.Context, hmiDTO *dto.HistoryM
 	}
 
 	return historyMessages, pageInfo, nil
+}
+
+func (s *MessageHistoryService) SearchMessages(ctx context.Context, req *dto.SearchMessagesInputDTO) (model.MessageSlice, queryobject.PageInfo[queryobject.MessageHistoryCursor], error) {
+	var empty queryobject.PageInfo[queryobject.MessageHistoryCursor]
+
+	if req == nil {
+		return nil, empty, errors.InvalidArgument(
+			"search term is required",
+			errors.WithID("service.message_history.search_messages"),
+		)
+	}
+
+	term := strings.TrimSpace(req.Term)
+	if term == "" || utf8.RuneCountInString(term) > 256 {
+		return nil, empty, errors.InvalidArgument("search term is required", errors.WithID("service.message_history.search_messages"))
+	}
+
+	if req.CallerID == uuid.Nil {
+		return nil, empty, errors.InvalidArgument("caller identity is required", errors.WithID("service.message_history.search_messages"))
+	}
+
+	query := queryobject.NewMessageSearchQuery().
+		WithFields(req.Fields).
+		WithTermFilter(term).
+		WithDomainIDFilter(req.DomainID).
+		WithThreadIDsFilter(req.ThreadIDs...).
+		WithSenderIDsFilter(req.SenderIDs...).
+		WithTypeFilter(req.Types...).
+		WithCallerScope(req.CallerID).
+		WithLimit(req.Size).
+		WithCursor(req.Cursor)
+
+	messages, err := s.messageHistoryStore.Search(ctx, query)
+	if err != nil {
+		return nil, empty, err
+	}
+
+	pageInfo, err := query.BuildPageInfo(&messages, func(m *model.Message) (queryobject.MessageHistoryCursor, error) {
+		return queryobject.MessageHistoryCursor{
+			ID: m.ID,
+		}, nil
+	})
+	if err != nil {
+		return nil, empty, err
+	}
+
+	return messages, pageInfo, nil
 }
 
 func (s *MessageHistoryService) SearchLeftThreads(ctx context.Context, req *dto.LeftThreadsMessageHistoryInputDTO) (model.MessageSlice, queryobject.PageInfo[queryobject.MessageHistoryCursor], error) {

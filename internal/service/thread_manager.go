@@ -105,7 +105,7 @@ func (t *ThreadManagementService) Search(ctx context.Context, searchRequest *dto
 		WithDomainIDFilter(searchRequest.DomainIDs...).
 		WithKindFilter(searchRequest.Kinds...).
 		WithOwnerFilter(searchRequest.Owners...).
-		WithSubjectFilter(searchRequest.Q).
+		WithSearchFilter(searchRequest.Q).
 		WithLimit(searchRequest.Size).
 		WithSort(searchRequest.Sort).
 		WithoutDeletedAtFilter().

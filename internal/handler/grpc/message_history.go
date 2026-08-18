@@ -14,6 +14,7 @@ import (
 
 type MessageHistoryService interface {
 	Search(context.Context, *dto.HistoryMessageInputDTO) (model.MessageSlice, queryobject.PageInfo[queryobject.MessageHistoryCursor], error)
+	SearchMessages(ctx context.Context, req *dto.SearchMessagesInputDTO) (model.MessageSlice, queryobject.PageInfo[queryobject.MessageHistoryCursor], error)
 	SearchLeftThreads(ctx context.Context, req *dto.LeftThreadsMessageHistoryInputDTO) (model.MessageSlice, queryobject.PageInfo[queryobject.MessageHistoryCursor], error)
 	GetRevisions(ctx context.Context, req *dto.GetMessageRevisionsRequest) ([]*model.MessageChangeEntry, error)
 }
@@ -41,6 +42,32 @@ func (s *MessageHistoryServer) SearchThreadMessagesHistory(ctx context.Context, 
 	}
 
 	resp := mapper.MapMessage2SearchMessageHistoryResponse(messages, hmiDTO.CallerID)
+	resp.From = mapper.GetUniqueFrom(messages)
+
+	if pageInfo.HasNextPage {
+		resp.NextCursor = &impb.HistoryMessageCursorResponse{
+			Id: pageInfo.NextCursor.ID.String(),
+		}
+	}
+
+	if pageInfo.HasPrevPage {
+		resp.PrevCursor = &impb.HistoryMessageCursorResponse{
+			Id: pageInfo.PrevCursor.ID.String(),
+		}
+	}
+
+	return resp, nil
+}
+
+func (s *MessageHistoryServer) SearchMessages(ctx context.Context, req *impb.SearchMessagesRequest) (*impb.SearchMessageHistoryResponse, error) {
+	searchDTO := mapper.MapSearchMessagesRequest2SearchMessagesInputDTO(req)
+
+	messages, pageInfo, err := s.messageHistorySearcher.SearchMessages(ctx, searchDTO)
+	if err != nil {
+		return nil, err
+	}
+
+	resp := mapper.MapMessage2SearchMessageHistoryResponse(messages, searchDTO.CallerID)
 	resp.From = mapper.GetUniqueFrom(messages)
 
 	if pageInfo.HasNextPage {
