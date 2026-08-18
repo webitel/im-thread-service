@@ -19,6 +19,7 @@ type MessageSearchQuery struct {
 	pag *SquirrelPaginator[MessageHistoryCursor]
 }
 
+// NewMessageSearchQuery creates a message history query that excludes deleted messages and supports cursor pagination.
 func NewMessageSearchQuery() *MessageSearchQuery {
 	return &MessageSearchQuery{
 		base: sq.StatementBuilder.

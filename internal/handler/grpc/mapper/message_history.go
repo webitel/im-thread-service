@@ -14,6 +14,7 @@ import (
 	"github.com/webitel/im-thread-service/internal/utils/set"
 )
 
+// MapSearchMessageHistoryRequest2HistoryMessageInputDTO converts a message history search request into its service input DTO.
 func MapSearchMessageHistoryRequest2HistoryMessageInputDTO(mhr *impb.SearchMessageHistoryRequest) *dto.HistoryMessageInputDTO {
 	var (
 		ids       = utils.Map(mhr.GetIds(), utils.IDsParser)
@@ -45,6 +46,7 @@ func MapSearchMessageHistoryRequest2HistoryMessageInputDTO(mhr *impb.SearchMessa
 	}
 }
 
+// MapSearchMessagesRequest2SearchMessagesInputDTO converts a protobuf search request into the corresponding search input DTO. It maps search criteria, thread and sender filters, message types, pagination, domain, and caller identifiers.
 func MapSearchMessagesRequest2SearchMessagesInputDTO(mr *impb.SearchMessagesRequest) *dto.SearchMessagesInputDTO {
 	var (
 		senderIDs = utils.Map(mr.GetSenderIds(), utils.IDsParser)
@@ -79,6 +81,7 @@ func MapSearchMessagesRequest2SearchMessagesInputDTO(mr *impb.SearchMessagesRequ
 	}
 }
 
+// MapSearchLeftThreadsMessageHistoryRequest2LeftThreadsMessageHistoryInputDTO converts a left-threads message history request into its input DTO, including filters, pagination, and time periods.
 func MapSearchLeftThreadsMessageHistoryRequest2LeftThreadsMessageHistoryInputDTO(mhr *impb.SearchLeftThreadsMessageHistoryRequest) *dto.LeftThreadsMessageHistoryInputDTO {
 	var (
 		threadID  uuid.UUID

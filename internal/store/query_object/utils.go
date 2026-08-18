@@ -7,10 +7,12 @@ import (
 
 var likeEscaper = strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
 
+// LikeContains returns an SQL LIKE pattern that matches the term as a substring.
 func LikeContains(term string) string {
 	return "%" + likeEscaper.Replace(term) + "%"
 }
 
+// CompactSQL removes SQL comments and normalizes whitespace while preserving quoted literals and SQL punctuation. It returns the compacted SQL text.
 func CompactSQL(s string) string {
 	var (
 		r = strings.NewReader(s)
