@@ -23,7 +23,11 @@ This endpoint is designed to retrieve a list of dialogues (threads) with support
 *   **Example:** For a standard chat list ordered from newest to oldest, use `"-last_msg_at"` or `"-updated_at"`.
 
 ### 4. Filtering and Search
-*   **`q`** (string): Full-text search (up to 256 characters). Searches for matches in the `subject` field (for groups/channels) or `title` (for direct chats) using case-insensitive matching (`ilike`).
+*   **`q`** (string): Full-text search (up to 256 characters), case-insensitive partial match (`ilike`). A thread matches when the term appears in any of:
+    *   the `subject` (groups/channels) or the direct `title`;
+    *   the `name` or `username` of any of its active members — so a chat is findable by who is in it;
+    *   any value of the thread variables — so a chat is findable by data collected with it (phone number, tax id, any custom variable).
+    *   Wildcards typed by the user (`%`, `_`) are escaped and matched literally.
 *   **`ids`** (UUID array): Filter by specific thread IDs.
 *   **`domain_ids`** (int32 array): Filter by domain (must be > 0).
 *   **`kinds`** (enum array): Filter by thread type (1 - DIRECT, 2 - GROUP, 3 - CHANNEL). **0 (UNKNOWN) is prohibited.**

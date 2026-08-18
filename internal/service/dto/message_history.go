@@ -62,6 +62,18 @@ type (
 		CallerID  uuid.UUID
 	}
 
+	SearchMessagesInputDTO struct {
+		DomainID  int
+		Fields    []string
+		Term      string
+		ThreadIDs uuid.UUIDs
+		SenderIDs uuid.UUIDs
+		Types     []int
+		Cursor    *HistoryMessageCursor
+		Size      int
+		CallerID  uuid.UUID
+	}
+
 	HistoryMessageCursor struct {
 		CreatedAt time.Time
 		ID        uuid.UUID

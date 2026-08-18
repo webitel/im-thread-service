@@ -21,7 +21,9 @@ const _ = grpc.SupportPackageIsVersion9
 const (
 	MessageHistory_SearchThreadMessagesHistory_FullMethodName     = "/webitel.im.service.thread.v1.MessageHistory/SearchThreadMessagesHistory"
 	MessageHistory_SearchLeftThreadsMessageHistory_FullMethodName = "/webitel.im.service.thread.v1.MessageHistory/SearchLeftThreadsMessageHistory"
+	MessageHistory_SearchMessages_FullMethodName                  = "/webitel.im.service.thread.v1.MessageHistory/SearchMessages"
 	MessageHistory_GetMessageRevisions_FullMethodName             = "/webitel.im.service.thread.v1.MessageHistory/GetMessageRevisions"
+	MessageHistory_GetThreadUpdates_FullMethodName                = "/webitel.im.service.thread.v1.MessageHistory/GetThreadUpdates"
 )
 
 // MessageHistoryClient is the client API for MessageHistory service.
@@ -33,9 +35,17 @@ type MessageHistoryClient interface {
 	// Search for messages in a thread.
 	SearchThreadMessagesHistory(ctx context.Context, in *SearchMessageHistoryRequest, opts ...grpc.CallOption) (*SearchMessageHistoryResponse, error)
 	SearchLeftThreadsMessageHistory(ctx context.Context, in *SearchLeftThreadsMessageHistoryRequest, opts ...grpc.CallOption) (*SearchMessageHistoryResponse, error)
+	// Full-text search over message bodies. Scoped to a single thread when
+	// thread_id is set, otherwise it spans every thread the caller belongs to.
+	SearchMessages(ctx context.Context, in *SearchMessagesRequest, opts ...grpc.CallOption) (*SearchMessageHistoryResponse, error)
 	// Returns the edit and deletion history of a single message, oldest first.
 	// Readable by every member of the thread the message belongs to.
 	GetMessageRevisions(ctx context.Context, in *GetMessageRevisionsRequest, opts ...grpc.CallOption) (*GetMessageRevisionsResponse, error)
+	// GetThreadUpdates returns the journal delta for a thread since the caller's
+	// cursor — the mutations (edits, reactions, deletions, status changes) a
+	// returning client missed while offline. When the cursor fell outside the
+	// retained window, resync=true tells the client to re-pull history instead.
+	GetThreadUpdates(ctx context.Context, in *GetThreadUpdatesRequest, opts ...grpc.CallOption) (*GetThreadUpdatesResponse, error)
 }
 
 type messageHistoryClient struct {
@@ -66,10 +76,30 @@ func (c *messageHistoryClient) SearchLeftThreadsMessageHistory(ctx context.Conte
 	return out, nil
 }
 
+func (c *messageHistoryClient) SearchMessages(ctx context.Context, in *SearchMessagesRequest, opts ...grpc.CallOption) (*SearchMessageHistoryResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SearchMessageHistoryResponse)
+	err := c.cc.Invoke(ctx, MessageHistory_SearchMessages_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *messageHistoryClient) GetMessageRevisions(ctx context.Context, in *GetMessageRevisionsRequest, opts ...grpc.CallOption) (*GetMessageRevisionsResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(GetMessageRevisionsResponse)
 	err := c.cc.Invoke(ctx, MessageHistory_GetMessageRevisions_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *messageHistoryClient) GetThreadUpdates(ctx context.Context, in *GetThreadUpdatesRequest, opts ...grpc.CallOption) (*GetThreadUpdatesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetThreadUpdatesResponse)
+	err := c.cc.Invoke(ctx, MessageHistory_GetThreadUpdates_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -85,9 +115,17 @@ type MessageHistoryServer interface {
 	// Search for messages in a thread.
 	SearchThreadMessagesHistory(context.Context, *SearchMessageHistoryRequest) (*SearchMessageHistoryResponse, error)
 	SearchLeftThreadsMessageHistory(context.Context, *SearchLeftThreadsMessageHistoryRequest) (*SearchMessageHistoryResponse, error)
+	// Full-text search over message bodies. Scoped to a single thread when
+	// thread_id is set, otherwise it spans every thread the caller belongs to.
+	SearchMessages(context.Context, *SearchMessagesRequest) (*SearchMessageHistoryResponse, error)
 	// Returns the edit and deletion history of a single message, oldest first.
 	// Readable by every member of the thread the message belongs to.
 	GetMessageRevisions(context.Context, *GetMessageRevisionsRequest) (*GetMessageRevisionsResponse, error)
+	// GetThreadUpdates returns the journal delta for a thread since the caller's
+	// cursor — the mutations (edits, reactions, deletions, status changes) a
+	// returning client missed while offline. When the cursor fell outside the
+	// retained window, resync=true tells the client to re-pull history instead.
+	GetThreadUpdates(context.Context, *GetThreadUpdatesRequest) (*GetThreadUpdatesResponse, error)
 	mustEmbedUnimplementedMessageHistoryServer()
 }
 
@@ -104,8 +142,14 @@ func (UnimplementedMessageHistoryServer) SearchThreadMessagesHistory(context.Con
 func (UnimplementedMessageHistoryServer) SearchLeftThreadsMessageHistory(context.Context, *SearchLeftThreadsMessageHistoryRequest) (*SearchMessageHistoryResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SearchLeftThreadsMessageHistory not implemented")
 }
+func (UnimplementedMessageHistoryServer) SearchMessages(context.Context, *SearchMessagesRequest) (*SearchMessageHistoryResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SearchMessages not implemented")
+}
 func (UnimplementedMessageHistoryServer) GetMessageRevisions(context.Context, *GetMessageRevisionsRequest) (*GetMessageRevisionsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetMessageRevisions not implemented")
+}
+func (UnimplementedMessageHistoryServer) GetThreadUpdates(context.Context, *GetThreadUpdatesRequest) (*GetThreadUpdatesResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetThreadUpdates not implemented")
 }
 func (UnimplementedMessageHistoryServer) mustEmbedUnimplementedMessageHistoryServer() {}
 func (UnimplementedMessageHistoryServer) testEmbeddedByValue()                        {}
@@ -164,6 +208,24 @@ func _MessageHistory_SearchLeftThreadsMessageHistory_Handler(srv interface{}, ct
 	return interceptor(ctx, in, info, handler)
 }
 
+func _MessageHistory_SearchMessages_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SearchMessagesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MessageHistoryServer).SearchMessages(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MessageHistory_SearchMessages_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MessageHistoryServer).SearchMessages(ctx, req.(*SearchMessagesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _MessageHistory_GetMessageRevisions_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(GetMessageRevisionsRequest)
 	if err := dec(in); err != nil {
@@ -178,6 +240,24 @@ func _MessageHistory_GetMessageRevisions_Handler(srv interface{}, ctx context.Co
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(MessageHistoryServer).GetMessageRevisions(ctx, req.(*GetMessageRevisionsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MessageHistory_GetThreadUpdates_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetThreadUpdatesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MessageHistoryServer).GetThreadUpdates(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MessageHistory_GetThreadUpdates_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MessageHistoryServer).GetThreadUpdates(ctx, req.(*GetThreadUpdatesRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -198,8 +278,16 @@ var MessageHistory_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _MessageHistory_SearchLeftThreadsMessageHistory_Handler,
 		},
 		{
+			MethodName: "SearchMessages",
+			Handler:    _MessageHistory_SearchMessages_Handler,
+		},
+		{
 			MethodName: "GetMessageRevisions",
 			Handler:    _MessageHistory_GetMessageRevisions_Handler,
+		},
+		{
+			MethodName: "GetThreadUpdates",
+			Handler:    _MessageHistory_GetThreadUpdates_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

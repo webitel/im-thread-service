@@ -244,13 +244,37 @@ func (q *threadQueryObject) WithOwnerFilter(owners ...uuid.UUID) *threadQueryObj
 	return q
 }
 
-func (q *threadQueryObject) WithSubjectFilter(subject string) *threadQueryObject {
-	if subject != "" && utf8.ValidString(subject) {
-		q.mustIncludeComputedSubject = true
-		q.builder = q.builder.Where(
-			fmt.Sprintf("(%s.subject ~* ? or %s.title ~* ?)", threadAlias, threadDirectSettingsAlias), subject, subject,
-		)
+func (q *threadQueryObject) WithSearchFilter(term string) *threadQueryObject {
+	if term == "" || !utf8.ValidString(term) {
+		return q
 	}
+
+	q.mustIncludeComputedSubject = true
+	q.EnsureJoins(threadLinkDirectSettings)
+
+	pattern := LikeContains(term)
+
+	q.builder = q.builder.Where(
+		fmt.Sprintf(`(
+			%[1]s.subject ilike ?
+			or %[2]s.title ilike ?
+			or exists (
+				select 1
+				from %[3]s member
+				join %[4]s contact on contact.id = member.member_id
+				where member.thread_id = %[1]s.id
+				and member.deleted_at is null
+				and (contact.name ilike ? or contact.username ilike ?)
+			)
+			or exists (
+				select 1
+				from %[5]s vars, jsonb_each(vars.variables) entry
+				where vars.thread_id = %[1]s.id
+				and coalesce(entry.value->>'value', entry.value #>> '{}', '') ilike ?
+			)
+		)`, threadAlias, threadDirectSettingsAlias, ThreadDialogTable, ContactTable, ThreadVariables),
+		pattern, pattern, pattern, pattern, pattern,
+	)
 
 	return q
 }
