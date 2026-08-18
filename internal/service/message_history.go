@@ -4,6 +4,7 @@ import (
 	"context"
 	"slices"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 
@@ -91,7 +92,15 @@ func (s *MessageHistoryService) Search(ctx context.Context, hmiDTO *dto.HistoryM
 func (s *MessageHistoryService) SearchMessages(ctx context.Context, req *dto.SearchMessagesInputDTO) (model.MessageSlice, queryobject.PageInfo[queryobject.MessageHistoryCursor], error) {
 	var empty queryobject.PageInfo[queryobject.MessageHistoryCursor]
 
-	if req == nil || strings.TrimSpace(req.Term) == "" {
+	if req == nil {
+		return nil, empty, errors.InvalidArgument(
+			"search term is required",
+			errors.WithID("service.message_history.search_messages"),
+		)
+	}
+
+	term := strings.TrimSpace(req.Term)
+	if term == "" || utf8.RuneCountInString(term) > 256 {
 		return nil, empty, errors.InvalidArgument("search term is required", errors.WithID("service.message_history.search_messages"))
 	}
 
@@ -101,7 +110,7 @@ func (s *MessageHistoryService) SearchMessages(ctx context.Context, req *dto.Sea
 
 	query := queryobject.NewMessageSearchQuery().
 		WithFields(req.Fields).
-		WithTermFilter(req.Term).
+		WithTermFilter(term).
 		WithDomainIDFilter(req.DomainID).
 		WithThreadIDsFilter(req.ThreadIDs...).
 		WithSenderIDsFilter(req.SenderIDs...).
