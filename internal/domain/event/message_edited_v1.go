@@ -20,6 +20,8 @@ type MessageEdited struct {
 	To         []*ThreadMember `json:"to,omitempty"`
 	Body       string          `json:"body"`
 	Type       string          `json:"type"` // text|document|image|system|interactive|location|contact
+	Revision   int32           `json:"version"`
+	CreatedAt  time.Time       `json:"created_at"`
 	OccurredAt time.Time       `json:"occurred_at"`
 	Metadata   map[string]any  `json:"metadata,omitempty"`
 

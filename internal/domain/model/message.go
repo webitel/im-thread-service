@@ -69,6 +69,11 @@ type Message struct {
 	// Zero means it was never edited or deleted.
 	RevisionCount int32 `json:"revision_count" db:"revision_count"`
 
+	// Version is the position of the live body in the message's change history,
+	// the number GetMessageRevisions reports for it: 2 right after the first
+	// edit, since version 1 is the original text. Set by EditMessage only.
+	Version int32 `json:"version" db:"version"`
+
 	// Seq is the per-thread monotonic sequence number, assigned on message creation.
 	Seq int64 `json:"seq" db:"seq"`
 
@@ -122,6 +127,8 @@ type ForwardOrigin struct {
 	Kind            ForwardOriginKind `json:"kind"`
 	SenderID        *uuid.UUID        `json:"sender_id,omitempty"`
 	SenderName      string            `json:"sender_name,omitempty"`
+	SenderIss       string            `json:"sender_iss,omitempty"`
+	SenderSub       string            `json:"sender_sub,omitempty"`
 	OriginalSentAt  int64             `json:"original_sent_at,omitempty"`
 	SourceMessageID *uuid.UUID        `json:"source_message_id,omitempty"`
 }
@@ -393,6 +400,8 @@ func (m *Message) WithEditedEvent(ctx context.Context) *Message {
 		To:         to,
 		Body:       m.Body,
 		Type:       m.Type.String(),
+		Revision:   m.Version,
+		CreatedAt:  m.CreatedAt,
 		OccurredAt: m.UpdatedAt,
 		Metadata:   maps.Clone(m.Metadata),
 	}
@@ -429,6 +438,7 @@ func (m *Message) WithDeletedEvent(ctx context.Context) *Message {
 		DeletedBy:  deletedBy,
 		To:         threadDialogsAsEventMembers(m.To),
 		Type:       m.Type.String(),
+		CreatedAt:  m.CreatedAt,
 		OccurredAt: m.DeletedAtOrNow(),
 	}
 

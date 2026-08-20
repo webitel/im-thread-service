@@ -24,7 +24,8 @@ func ConvertPbEditMessageToDomain(in *impb.EditMessageRequest) *model.Message {
 }
 
 // MapToEditMessageResponse maps an edited domain message back to the
-// EditMessageResponse: the message id and the server-authoritative edit time.
+// EditMessageResponse: the message id, the server-authoritative edit time and
+// the history position the new body took.
 func MapToEditMessageResponse(msg *model.Message) *impb.EditMessageResponse {
 	if msg == nil {
 		return nil
@@ -33,5 +34,6 @@ func MapToEditMessageResponse(msg *model.Message) *impb.EditMessageResponse {
 	return &impb.EditMessageResponse{
 		Id:       msg.ID.String(),
 		EditedAt: msg.UpdatedAtUnixMillis(),
+		Version:  msg.Version,
 	}
 }

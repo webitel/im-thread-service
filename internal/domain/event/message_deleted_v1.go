@@ -22,6 +22,7 @@ type MessageDeleted struct {
 	DeletedBy  *ThreadMember   `json:"deleted_by,omitempty"`
 	To         []*ThreadMember `json:"to,omitempty"`
 	Type       string          `json:"type"` // text|document|image|system|interactive|location|contact
+	CreatedAt  time.Time       `json:"created_at"`
 	OccurredAt time.Time       `json:"occurred_at"`
 
 	ExternalMetadata map[string]string `json:"-"`

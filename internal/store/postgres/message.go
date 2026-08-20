@@ -61,7 +61,15 @@ func replyToArg(msg *model.Message) *uuid.UUID {
 }
 
 const forwardOriginColumns = `forward_origin_kind, forward_origin_sender_id, forward_origin_sender_name,
-	forward_origin_sent_at, forward_from_message_id`
+	forward_origin_sender_iss, forward_origin_sender_sub, forward_origin_sent_at, forward_from_message_id`
+
+func nullIfEmpty(s string) *string {
+	if s == "" {
+		return nil
+	}
+
+	return &s
+}
 
 func addForwardOriginArgs(args pgx.NamedArgs, msg *model.Message) pgx.NamedArgs {
 	origin := msg.ForwardOrigin
@@ -69,6 +77,8 @@ func addForwardOriginArgs(args pgx.NamedArgs, msg *model.Message) pgx.NamedArgs 
 		args["ForwardOriginKind"] = nil
 		args["ForwardOriginSenderID"] = nil
 		args["ForwardOriginSenderName"] = nil
+		args["ForwardOriginSenderIss"] = nil
+		args["ForwardOriginSenderSub"] = nil
 		args["ForwardOriginSentAt"] = nil
 		args["ForwardFromMessageID"] = nil
 
@@ -78,6 +88,8 @@ func addForwardOriginArgs(args pgx.NamedArgs, msg *model.Message) pgx.NamedArgs 
 	args["ForwardOriginKind"] = int16(origin.Kind)
 	args["ForwardOriginSenderID"] = origin.SenderID
 	args["ForwardOriginSenderName"] = origin.SenderName
+	args["ForwardOriginSenderIss"] = nullIfEmpty(origin.SenderIss)
+	args["ForwardOriginSenderSub"] = nullIfEmpty(origin.SenderSub)
 	args["ForwardFromMessageID"] = origin.SourceMessageID
 
 	if origin.OriginalSentAt > 0 {
@@ -104,7 +116,7 @@ func (m *messageStore) SaveMessage(ctx context.Context, msg *model.Message) (*mo
 		)
 		select
 			@DomainID, @ThreadID, @SenderID, @MemberID, @Type, @Body, @Metadata, @OriginSender, @ReplyTo, s.last_seq,
-			@ForwardOriginKind, @ForwardOriginSenderID, @ForwardOriginSenderName, @ForwardOriginSentAt, @ForwardFromMessageID
+			@ForwardOriginKind, @ForwardOriginSenderID, @ForwardOriginSenderName, @ForwardOriginSenderIss, @ForwardOriginSenderSub, @ForwardOriginSentAt, @ForwardFromMessageID
 		from s
 		returning
 			id, domain_id, thread_id, member_id, type, body, metadata, created_at, updated_at, seq,
@@ -204,7 +216,12 @@ func (m *messageStore) EditMessage(ctx context.Context, msg *model.Message) (*mo
 					select max(r.version)
 					from im_message.message_revisions r
 					where r.message_id = m.id
-				), 0) as last_version
+				), 0) as last_version,
+				(
+					select count(*)::int
+					from im_message.message_revisions r
+					where r.message_id = m.id
+				) as rev_count
 			from im_message.messages m
 			where m.id = @ID
 			  and m.deleted_at is null
@@ -238,9 +255,11 @@ func (m *messageStore) EditMessage(ctx context.Context, msg *model.Message) (*mo
 			join target t on t.id = u.id
 		)
 		select
-			id, domain_id, thread_id, member_id, type, body, metadata,
-			created_at, updated_at, edited
-		from updated
+			u.id, u.domain_id, u.thread_id, u.member_id, u.type, u.body, u.metadata,
+			u.created_at, u.updated_at, u.edited,
+			t.rev_count + 2 as version
+		from updated u
+		join target t on t.id = u.id
 	`
 
 	args := pgx.NamedArgs{
@@ -436,7 +455,7 @@ func prepareSaveMessageLocationQuery(msg *model.Message) (string, pgx.NamedArgs)
 			(thread_id, domain_id, sender_id, member_id, type, body, metadata, reply_to, seq,
 			 ` + forwardOriginColumns + `)
 			select @ThreadID, @DomainID, @SenderID, @MemberID, @Type, @Body, @Metadata, @ReplyTo, s.last_seq,
-			 @ForwardOriginKind, @ForwardOriginSenderID, @ForwardOriginSenderName, @ForwardOriginSentAt, @ForwardFromMessageID
+			 @ForwardOriginKind, @ForwardOriginSenderID, @ForwardOriginSenderName, @ForwardOriginSenderIss, @ForwardOriginSenderSub, @ForwardOriginSentAt, @ForwardFromMessageID
 			from s
 			returning *
 		),
@@ -512,7 +531,7 @@ func prepareSaveMessageContactQuery(msg *model.Message) (string, pgx.NamedArgs) 
 			(thread_id, domain_id, sender_id, member_id, type, body, metadata, reply_to, seq,
 			 ` + forwardOriginColumns + `)
 			select @ThreadID, @DomainID, @SenderID, @MemberID, @Type, @Body, @Metadata, @ReplyTo, s.last_seq,
-			 @ForwardOriginKind, @ForwardOriginSenderID, @ForwardOriginSenderName, @ForwardOriginSentAt, @ForwardFromMessageID
+			 @ForwardOriginKind, @ForwardOriginSenderID, @ForwardOriginSenderName, @ForwardOriginSenderIss, @ForwardOriginSenderSub, @ForwardOriginSentAt, @ForwardFromMessageID
 			from s
 			returning *
 		),

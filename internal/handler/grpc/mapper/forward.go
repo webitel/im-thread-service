@@ -22,6 +22,8 @@ func MapExternalForwardOrigin(in *impb.ForwardOriginInput) *model.ForwardOrigin 
 	return &model.ForwardOrigin{
 		Kind:           kind,
 		SenderName:     in.GetSenderName(),
+		SenderIss:      in.GetSenderIss(),
+		SenderSub:      in.GetSenderSub(),
 		OriginalSentAt: in.GetOriginalSentAt(),
 	}
 }
