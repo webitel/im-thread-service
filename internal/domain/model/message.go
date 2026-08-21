@@ -366,38 +366,12 @@ func (m *Message) WithEditedEvent(ctx context.Context) *Message {
 		return m
 	}
 
-	var editedBy *event.ThreadMember
-	if m.From.ID != uuid.Nil {
-		editedBy = &event.ThreadMember{ContactID: m.From.ID}
-		if m.MemberID != uuid.Nil {
-			memberID := m.MemberID
-			editedBy.ID = &memberID
-		}
-	}
-
-	to := make([]*event.ThreadMember, 0, len(m.To))
-	for _, member := range m.To {
-		var memberID *uuid.UUID
-
-		if member.ID != uuid.Nil {
-			id := member.ID
-			memberID = &id
-		}
-
-		to = append(to, &event.ThreadMember{
-			ID:        memberID,
-			ContactID: member.ContactID,
-			Role:      int(member.ThreadRole),
-			IsBot:     member.IsBot,
-		})
-	}
-
 	e := event.MessageEdited{
 		MessageID:  m.ID,
 		ThreadID:   m.ThreadID,
 		DomainID:   m.DomainID,
-		EditedBy:   editedBy,
-		To:         to,
+		EditedBy:   m.actorAsEventMember(),
+		To:         threadDialogsAsEventMembers(m.To),
 		Body:       m.Body,
 		Type:       m.Type.String(),
 		Revision:   m.Version,
@@ -422,20 +396,11 @@ func (m *Message) WithDeletedEvent(ctx context.Context) *Message {
 		return m
 	}
 
-	var deletedBy *event.ThreadMember
-	if m.From.ID != uuid.Nil {
-		deletedBy = &event.ThreadMember{ContactID: m.From.ID}
-		if m.MemberID != uuid.Nil {
-			memberID := m.MemberID
-			deletedBy.ID = &memberID
-		}
-	}
-
 	e := event.MessageDeleted{
 		MessageID:  m.ID,
 		ThreadID:   m.ThreadID,
 		DomainID:   m.DomainID,
-		DeletedBy:  deletedBy,
+		DeletedBy:  m.actorAsEventMember(),
 		To:         threadDialogsAsEventMembers(m.To),
 		Type:       m.Type.String(),
 		CreatedAt:  m.CreatedAt,
@@ -471,6 +436,37 @@ func (m *Message) DeletedAtUnixMillis() int64 {
 
 func (m *Message) IsDeleted() bool {
 	return m != nil && m.DeletedAt != nil
+}
+
+func (m *Message) actorAsEventMember() *event.ThreadMember {
+	if m == nil || m.From.ID == uuid.Nil {
+		return nil
+	}
+
+	actor := &event.ThreadMember{ContactID: m.From.ID}
+
+	if m.MemberID != uuid.Nil {
+		memberID := m.MemberID
+		actor.ID = &memberID
+	}
+
+	for _, member := range m.To {
+		if member == nil || member.ContactID != m.From.ID {
+			continue
+		}
+
+		if member.ID != uuid.Nil {
+			id := member.ID
+			actor.ID = &id
+		}
+
+		actor.Role = int(member.ThreadRole)
+		actor.IsBot = member.IsBot
+
+		break
+	}
+
+	return actor
 }
 
 func threadDialogsAsEventMembers(members []*ThreadDialog) []*event.ThreadMember {
