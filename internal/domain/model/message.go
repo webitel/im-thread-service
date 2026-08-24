@@ -63,7 +63,9 @@ type Message struct {
 	DeletedAt *time.Time `json:"deleted_at,omitempty" db:"deleted_at"`
 	DeletedBy *uuid.UUID `json:"deleted_by,omitempty" db:"deleted_by"`
 
-	JustDeleted bool `json:"-" db:"just_deleted"`
+	// SkipReason is set by DeleteMessages only: unspecified on a message the
+	// call deleted, otherwise why it was left untouched.
+	SkipReason MessageSkipReason `json:"-" db:"reason"`
 
 	// RevisionCount is how many entries the message has in its change history.
 	// Zero means it was never edited or deleted.
@@ -105,6 +107,43 @@ type Message struct {
 	ForwardOrigin *ForwardOrigin `json:"forward_origin,omitempty" db:"forward_origin"`
 
 	domainEvents []event.Outboxer
+}
+
+type MessageSkipReason int16
+
+const (
+	MessageSkipUnspecified    MessageSkipReason = iota // 0: message was deleted, nothing skipped
+	MessageSkipNotFound                                // 1: REASON_NOT_FOUND
+	MessageSkipNotAuthor                               // 2: REASON_NOT_AUTHOR
+	MessageSkipAlreadyDeleted                          // 3: REASON_ALREADY_DELETED
+	MessageSkipChatClosed                              // 4: REASON_CHAT_CLOSED
+	MessageSkipNotAllowed                              // 5: REASON_NOT_ALLOWED
+)
+
+var messageSkipReasonNames = map[MessageSkipReason]string{
+	MessageSkipNotFound:       "not_found",
+	MessageSkipNotAuthor:      "not_author",
+	MessageSkipAlreadyDeleted: "already_deleted",
+	MessageSkipChatClosed:     "chat_closed",
+	MessageSkipNotAllowed:     "not_allowed",
+}
+
+func (r MessageSkipReason) String() string {
+	if s, ok := messageSkipReasonNames[r]; ok {
+		return s
+	}
+
+	return "unspecified"
+}
+
+type MessageSkip struct {
+	ID     uuid.UUID
+	Reason MessageSkipReason
+}
+
+type MessageDeleteResult struct {
+	Deleted []*Message
+	Skipped []MessageSkip
 }
 
 type ForwardOriginKind int16

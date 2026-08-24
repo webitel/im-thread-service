@@ -22,15 +22,24 @@ func ConvertPbDeleteMessagesToDomain(in *impb.DeleteMessagesRequest) *dto.Delete
 }
 
 // MapToDeleteMessagesResponse reports which of the requested messages were
-// actually deleted and which ones were left untouched.
+// actually deleted and which ones were left untouched, with the reason for
+// each.
 func MapToDeleteMessagesResponse(out *dto.DeleteMessagesResponse) *impb.DeleteMessagesResponse {
 	if out == nil {
 		return nil
 	}
 
+	skipped := make([]*impb.SkippedMessage, 0, len(out.Skipped))
+	for _, skip := range out.Skipped {
+		skipped = append(skipped, &impb.SkippedMessage{
+			Id:     skip.ID.String(),
+			Reason: impb.SkippedMessage_Reason(skip.Reason),
+		})
+	}
+
 	return &impb.DeleteMessagesResponse{
 		DeletedIds: utils.Map(out.DeletedIDs, uuid.UUID.String),
-		SkippedIds: utils.Map(out.SkippedIDs, uuid.UUID.String),
+		Skipped:    skipped,
 		DeletedAt:  max(out.DeletedAt.UTC().UnixMilli(), 0),
 	}
 }

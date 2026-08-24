@@ -293,7 +293,7 @@ func (m *messageStore) EditMessage(ctx context.Context, msg *model.Message) (*mo
 	return edited, nil
 }
 
-func (m *messageStore) DeleteMessages(ctx context.Context, ids []uuid.UUID, deleterID uuid.UUID) ([]*model.Message, error) {
+func (m *messageStore) DeleteMessages(ctx context.Context, ids []uuid.UUID, deleterID uuid.UUID) (*model.MessageDeleteResult, error) {
 	if len(ids) == 0 {
 		return nil, errors.InvalidArgument("message ids cannot be empty", errors.WithID("postgres.message.delete_messages"))
 	}
@@ -304,22 +304,28 @@ func (m *messageStore) DeleteMessages(ctx context.Context, ids []uuid.UUID, dele
 
 	const query = `
 		with target as (
-			select m.id, (m.deleted_at is null) as was_live
+			select
+				m.id, m.domain_id, m.thread_id, m.member_id, m.sender_id, m.type,
+				m.created_at, m.updated_at, m.deleted_at, m.deleted_by,
+				(m.deleted_at is null) as was_live,
+				coalesce(m.sender_id = @DeleterID or m.origin_sender = @DeleterID, false) as is_author,
+				(d.id is not null) as is_member,
+				(d.deleted_at is not null) as chat_closed,
+				-- can_delete_messages is granted by default and revoked per
+				-- member; a dialog with no permission row at all (rows
+				-- predating the table) keeps the default.
+				coalesce(d.can_delete_messages, true) as can_delete
 			from im_message.messages m
-			where m.id = any(@IDs)
-			  and (m.sender_id = @DeleterID or m.origin_sender = @DeleterID)
-			  and exists (
-				select 1
+			left join lateral (
+				select td.id, td.deleted_at, tp.can_delete_messages
 				from im_thread.thread_dialog td
 				left join im_thread.thread_permission tp on tp.thread_dialog_id = td.id
 				where td.thread_id = m.thread_id
 				  and td.member_id = @DeleterID
-				  and td.deleted_at is null
-				  -- can_delete_messages is granted by default and revoked per
-				  -- member; a dialog with no permission row at all (rows
-				  -- predating the table) keeps the default.
-				  and coalesce(tp.can_delete_messages, true)
-			  )
+				order by td.deleted_at nulls first
+				limit 1
+			) d on true
+			where m.id = any(@IDs)
 		),
 		updated as (
 			update im_message.messages m
@@ -327,25 +333,45 @@ func (m *messageStore) DeleteMessages(ctx context.Context, ids []uuid.UUID, dele
 			    deleted_by = @DeleterID,
 			    updated_at = now()
 			from target t
-			where m.id = t.id and t.was_live
+			where m.id = t.id
+			  and t.was_live and t.is_author and t.is_member
+			  and not t.chat_closed and t.can_delete
 			returning
 				m.id, m.domain_id, m.thread_id, m.member_id, m.sender_id, m.type,
 				m.created_at, m.updated_at, m.deleted_at, m.deleted_by
 		)
-		select u.*, true as just_deleted
+		select
+			u.id, u.domain_id, u.thread_id, u.member_id, u.sender_id, u.type,
+			u.created_at, u.updated_at, u.deleted_at, u.deleted_by,
+			@Deleted::smallint as reason
 		from updated u
 		union all
 		select
-			m.id, m.domain_id, m.thread_id, m.member_id, m.sender_id, m.type,
-			m.created_at, m.updated_at, m.deleted_at, m.deleted_by, false as just_deleted
-		from im_message.messages m
-		join target t on t.id = m.id
-		where not t.was_live
+			t.id, t.domain_id, t.thread_id, t.member_id, t.sender_id, t.type,
+			t.created_at, t.updated_at, t.deleted_at, t.deleted_by,
+			case
+				when not t.is_member then @NotFound::smallint
+				when not t.is_author then @NotAuthor::smallint
+				when not t.was_live then @AlreadyDeleted::smallint
+				when t.chat_closed then @ChatClosed::smallint
+				else @NotAllowed::smallint
+			end as reason
+		from target t
+		where not (
+			t.was_live and t.is_author and t.is_member
+			and not t.chat_closed and t.can_delete
+		)
 	`
 
 	args := pgx.NamedArgs{
-		"IDs":       ids,
-		"DeleterID": deleterID,
+		"IDs":            ids,
+		"DeleterID":      deleterID,
+		"Deleted":        int16(model.MessageSkipUnspecified),
+		"NotFound":       int16(model.MessageSkipNotFound),
+		"NotAuthor":      int16(model.MessageSkipNotAuthor),
+		"AlreadyDeleted": int16(model.MessageSkipAlreadyDeleted),
+		"ChatClosed":     int16(model.MessageSkipChatClosed),
+		"NotAllowed":     int16(model.MessageSkipNotAllowed),
 	}
 
 	rows, err := m.db.Query(ctx, query, args)
@@ -353,7 +379,7 @@ func (m *messageStore) DeleteMessages(ctx context.Context, ids []uuid.UUID, dele
 		return nil, errors.Internal("executing delete messages query", errors.WithCause(err), errors.WithID("postgres.message.delete.query"))
 	}
 
-	deleted, err := pgx.CollectRows(rows, pgx.RowToAddrOfStructByNameLax[model.Message])
+	classified, err := pgx.CollectRows(rows, pgx.RowToAddrOfStructByNameLax[model.Message])
 	if err != nil {
 		if conflict := uniqueViolation(err, "message was changed concurrently, retry"); conflict != nil {
 			return nil, conflict
@@ -362,7 +388,48 @@ func (m *messageStore) DeleteMessages(ctx context.Context, ids []uuid.UUID, dele
 		return nil, errors.Internal("collecting deleted messages", errors.WithCause(err), errors.WithID("postgres.message.delete.collecting"))
 	}
 
-	return deleted, nil
+	return splitDeleteOutcome(ids, classified), nil
+}
+
+// splitDeleteOutcome sorts the classified rows into the two halves of the
+// result: the query reports no reason for the rows it just deleted. Ids it
+// returned no row for never existed, so they complete the skipped half as
+// not_found.
+func splitDeleteOutcome(ids []uuid.UUID, classified []*model.Message) *model.MessageDeleteResult {
+	out := &model.MessageDeleteResult{
+		Deleted: make([]*model.Message, 0, len(classified)),
+		Skipped: make([]model.MessageSkip, 0, len(ids)),
+	}
+
+	seen := make(map[uuid.UUID]struct{}, len(ids))
+
+	for _, msg := range classified {
+		if _, ok := seen[msg.ID]; ok {
+			continue
+		}
+
+		seen[msg.ID] = struct{}{}
+
+		if msg.SkipReason == model.MessageSkipUnspecified {
+			out.Deleted = append(out.Deleted, msg)
+
+			continue
+		}
+
+		out.Skipped = append(out.Skipped, model.MessageSkip{ID: msg.ID, Reason: msg.SkipReason})
+	}
+
+	for _, id := range ids {
+		if _, ok := seen[id]; ok {
+			continue
+		}
+
+		seen[id] = struct{}{}
+
+		out.Skipped = append(out.Skipped, model.MessageSkip{ID: id, Reason: model.MessageSkipNotFound})
+	}
+
+	return out
 }
 
 func (m *messageStore) SaveDocuments(ctx context.Context, messageID uuid.UUID, docs []*model.MessageDocument) ([]*model.MessageDocument, error) {
