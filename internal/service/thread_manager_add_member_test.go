@@ -227,7 +227,7 @@ type fakeMessageStore struct {
 	editMessageCalls  int
 	lastEditedMessage *model.Message
 
-	deleteMessagesResult []*model.Message
+	deleteMessagesResult *model.MessageDeleteResult
 	deleteMessagesErr    error
 	deleteMessagesCalls  int
 	lastDeletedIDs       []uuid.UUID
@@ -332,7 +332,7 @@ func (f *fakeMessageStore) EditMessage(ctx context.Context, msg *model.Message) 
 	return msg, nil
 }
 
-func (f *fakeMessageStore) DeleteMessages(ctx context.Context, ids []uuid.UUID, deleterID uuid.UUID) ([]*model.Message, error) {
+func (f *fakeMessageStore) DeleteMessages(ctx context.Context, ids []uuid.UUID, deleterID uuid.UUID) (*model.MessageDeleteResult, error) {
 	f.deleteMessagesCalls++
 	f.lastDeletedIDs = ids
 	f.lastDeleterID = deleterID

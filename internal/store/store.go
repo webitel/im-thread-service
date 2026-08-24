@@ -60,10 +60,11 @@ type MessageStore interface {
 	// DeleteMessages soft-deletes the given messages on behalf of deleterID.
 	// Only messages authored by the deleter, in threads the deleter is still a
 	// member of and still holds can_delete_messages in, are affected, so one
-	// batch may be partly refused. The result also holds messages an earlier
-	// call already deleted, flagged with JustDeleted=false; it may be shorter
-	// than ids or empty, which is not an error at this layer.
-	DeleteMessages(ctx context.Context, ids []uuid.UUID, deleterID uuid.UUID) ([]*model.Message, error)
+	// batch may be partly refused. Every requested id lands in exactly one half
+	// of the result: Deleted for the ones this call removed, Skipped for the
+	// rest, each with the reason. An all-skipped batch is not an error at this
+	// layer.
+	DeleteMessages(ctx context.Context, ids []uuid.UUID, deleterID uuid.UUID) (*model.MessageDeleteResult, error)
 }
 
 // MessageStatusStore tracks message delivery state. Read/delivered are

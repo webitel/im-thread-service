@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -771,9 +772,11 @@ func (s *MessageService) EditMessage(ctx context.Context, msg *model.Message) (*
 
 // DeleteMessages soft-deletes the caller's own messages, provided the caller
 // still holds can_delete_messages in that thread. It is best-effort: messages
-// the caller may not remove are reported as skipped rather than failing the
-// whole batch, and only an empty result is an error. It is also idempotent, so
-// a message an earlier attempt already deleted still counts as satisfied.
+// the caller may not remove come back as skipped, each with its reason, rather
+// than failing the whole batch. Repeating the call is safe: a message an
+// earlier attempt already deleted is neither deleted again nor re-announced, it
+// is skipped as already_deleted. A batch that removed nothing and hit nothing
+// already deleted is refused, and the error names the reasons.
 func (s *MessageService) DeleteMessages(ctx context.Context, in *dto.DeleteMessagesRequest) (*dto.DeleteMessagesResponse, error) {
 	log := s.logger.With("operation", "delete_messages")
 
@@ -786,17 +789,23 @@ func (s *MessageService) DeleteMessages(ctx context.Context, in *dto.DeleteMessa
 		return nil, errors.InvalidArgument("deleter identity is required", errors.WithID("service.message.delete_messages"))
 	}
 
-	var deleted []*model.Message
+	var (
+		deletedAt  time.Time
+		deletedIDs = make(uuid.UUIDs, 0, len(in.IDs))
+		skipped    []model.MessageSkip
+	)
 
 	err := s.uow.WithinTransaction(ctx, func(txCtx context.Context, uow store.UnitOfWork) error {
-		var err error
-		if deleted, err = uow.Messages().DeleteMessages(txCtx, in.IDs, deleter.ID); err != nil {
+		outcome, err := uow.Messages().DeleteMessages(txCtx, in.IDs, deleter.ID)
+		if err != nil {
 			return err
 		}
 
-		if len(deleted) == 0 {
+		skipped = outcome.Skipped
+
+		if len(outcome.Deleted) == 0 && !alreadyDeletedSkip(outcome.Skipped) {
 			return errors.Forbidden(
-				"no messages could be deleted: not found, not authored by the caller, the chat is closed, or the caller may not delete messages there",
+				"no messages could be deleted: "+skipReasonSummary(outcome.Skipped),
 				errors.WithID("service.message.delete.not_allowed"),
 			)
 		}
@@ -805,12 +814,7 @@ func (s *MessageService) DeleteMessages(ctx context.Context, in *dto.DeleteMessa
 		// per thread rather than once per message.
 		membersByThread := make(map[uuid.UUID][]*model.ThreadDialog)
 
-		for _, msg := range deleted {
-			// An already-deleted message sent its event on the first call.
-			if !msg.JustDeleted {
-				continue
-			}
-
+		for _, msg := range outcome.Deleted {
 			members, ok := membersByThread[msg.ThreadID]
 			if !ok {
 				if members, err = uow.ThreadDialogStore().GetQuickView(txCtx, &model.ThreadDialogStoreFilter{
@@ -830,6 +834,12 @@ func (s *MessageService) DeleteMessages(ctx context.Context, in *dto.DeleteMessa
 			if err = s.dispatchMessageEvents(txCtx, uow, msg); err != nil {
 				return err
 			}
+
+			deletedIDs = append(deletedIDs, msg.ID)
+
+			if deletedAt.IsZero() {
+				deletedAt = msg.DeletedAtOrNow()
+			}
 		}
 
 		return nil
@@ -840,7 +850,47 @@ func (s *MessageService) DeleteMessages(ctx context.Context, in *dto.DeleteMessa
 		return nil, err
 	}
 
-	return buildDeleteMessagesResponse(in.IDs, deleted), nil
+	return &dto.DeleteMessagesResponse{
+		DeletedIDs: deletedIDs,
+		Skipped:    skipped,
+		DeletedAt:  deletedAt,
+	}, nil
+}
+
+func alreadyDeletedSkip(skipped []model.MessageSkip) bool {
+	return slices.ContainsFunc(skipped, func(s model.MessageSkip) bool {
+		return s.Reason == model.MessageSkipAlreadyDeleted
+	})
+}
+
+func skipReasonSummary(skipped []model.MessageSkip) string {
+	if len(skipped) == 0 {
+		return model.MessageSkipNotFound.String()
+	}
+
+	if len(skipped) == 1 {
+		return skipped[0].Reason.String()
+	}
+
+	var (
+		counts = make(map[model.MessageSkipReason]int, len(skipped))
+		order  = make([]model.MessageSkipReason, 0, len(skipped))
+	)
+
+	for _, s := range skipped {
+		if _, ok := counts[s.Reason]; !ok {
+			order = append(order, s.Reason)
+		}
+
+		counts[s.Reason]++
+	}
+
+	parts := make([]string, 0, len(order))
+	for _, reason := range order {
+		parts = append(parts, fmt.Sprintf("%s (%d)", reason, counts[reason]))
+	}
+
+	return strings.Join(parts, ", ")
 }
 
 // SetReaction sets, replaces or clears the caller's single emoji reaction on a
@@ -929,30 +979,6 @@ func (s *MessageService) SetReaction(ctx context.Context, in *dto.SetReactionReq
 		Emoji:     result.Emoji,
 		ReactedAt: result.ReactedAt,
 	}, nil
-}
-
-func buildDeleteMessagesResponse(requested uuid.UUIDs, deleted []*model.Message) *dto.DeleteMessagesResponse {
-	deletedIDs := make(uuid.UUIDs, 0, len(deleted))
-	deletedSet := make(map[uuid.UUID]struct{}, len(deleted))
-
-	for _, msg := range deleted {
-		deletedIDs = append(deletedIDs, msg.ID)
-		deletedSet[msg.ID] = struct{}{}
-	}
-
-	skippedIDs := make(uuid.UUIDs, 0, len(requested)-len(deleted))
-
-	for _, id := range requested {
-		if _, ok := deletedSet[id]; !ok {
-			skippedIDs = append(skippedIDs, id)
-		}
-	}
-
-	return &dto.DeleteMessagesResponse{
-		DeletedIDs: deletedIDs,
-		SkippedIDs: skippedIDs,
-		DeletedAt:  deleted[0].DeletedAtOrNow(),
-	}
 }
 
 func (s *MessageService) prepareMessageForSending(ctx context.Context, msg *model.Message) error {
