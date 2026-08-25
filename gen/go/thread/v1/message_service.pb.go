@@ -253,20 +253,12 @@ func (ReactionAction) EnumDescriptor() ([]byte, []int) {
 type SkippedMessage_Reason int32
 
 const (
-	SkippedMessage_REASON_UNSPECIFIED SkippedMessage_Reason = 0
-	// No such message, or it lives in a chat the caller never joined: the two
-	// are deliberately indistinguishable, so a probe cannot confirm that a
-	// message it may not see exists.
-	SkippedMessage_REASON_NOT_FOUND SkippedMessage_Reason = 1
-	// Authored by somebody else.
-	SkippedMessage_REASON_NOT_AUTHOR SkippedMessage_Reason = 2
-	// An earlier call already deleted it. Retrying a delete is safe and lands
-	// here rather than on an error.
+	SkippedMessage_REASON_UNSPECIFIED     SkippedMessage_Reason = 0
+	SkippedMessage_REASON_NOT_FOUND       SkippedMessage_Reason = 1
+	SkippedMessage_REASON_NOT_AUTHOR      SkippedMessage_Reason = 2
 	SkippedMessage_REASON_ALREADY_DELETED SkippedMessage_Reason = 3
-	// The caller's chat is closed.
-	SkippedMessage_REASON_CHAT_CLOSED SkippedMessage_Reason = 4
-	// can_delete_messages is revoked for the caller in that chat.
-	SkippedMessage_REASON_NOT_ALLOWED SkippedMessage_Reason = 5
+	SkippedMessage_REASON_CHAT_CLOSED     SkippedMessage_Reason = 4
+	SkippedMessage_REASON_NOT_ALLOWED     SkippedMessage_Reason = 5
 )
 
 // Enum value maps for SkippedMessage_Reason.
