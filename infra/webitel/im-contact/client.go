@@ -1,6 +1,7 @@
 package imcontact
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -25,7 +26,27 @@ const (
 	isBotCacheSize = 2048
 	subCacheTTL    = 5 * time.Minute
 	subCacheSize   = 2048
+
+	identityCacheTTL  = 5 * time.Minute
+	identityCacheSize = 2048
 )
+
+// Identity is the subset of a contact an event has to carry so consumers do not
+// have to resolve it themselves.
+type Identity struct {
+	Sub      string
+	Issuer   string
+	Type     string
+	Name     string
+	Username string
+	IsBot    bool
+}
+
+// identityCached wraps a nullable Identity so a cached "contact not found" is
+// not mistaken for a Ristretto miss.
+type identityCached struct {
+	identity *Identity
+}
 
 // subCached wraps a nullable int64 subscription ID.
 // Stored as a struct to allow caching the "no subscription" state (sub == nil)
@@ -42,6 +63,7 @@ type Client struct {
 	contactService *rpc.Client[contactv1.ContactsClient]
 	isBotCache     cache.Cache[string, bool]
 	subCache       cache.Cache[string, subCached]
+	identityCache  cache.Cache[string, identityCached]
 }
 
 func New(logger *slog.Logger, discovery discovery.DiscoveryProvider, tlsConf *infratls.Config) (*Client, error) {
@@ -77,12 +99,24 @@ func New(logger *slog.Logger, discovery discovery.DiscoveryProvider, tlsConf *in
 		return nil, fmt.Errorf("[im-contact-client] failed to create sub cache: %w", err)
 	}
 
+	identityCache, err := cache.New[string, identityCached]().
+		L1(cache.RistrettoConfig{
+			MaxCost:     identityCacheSize,
+			NumCounters: identityCacheSize * 10,
+			TTL:         identityCacheTTL,
+		}).
+		Build()
+	if err != nil {
+		return nil, fmt.Errorf("[im-contact-client] failed to create identity cache: %w", err)
+	}
+
 	return &Client{
 		logger:         logger,
 		privacyService: privacyClient,
 		contactService: contactClient,
 		isBotCache:     isBotCache,
 		subCache:       subCache,
+		identityCache:  identityCache,
 	}, nil
 }
 
@@ -208,6 +242,42 @@ func (c *Client) GetSub(ctx context.Context, contactID uuid.UUID, domainID int) 
 	return sub, nil
 }
 
+func (c *Client) GetIdentity(ctx context.Context, contactID uuid.UUID, domainID int) (*Identity, error) {
+	key := contactID.String()
+
+	if cached, ok, _ := c.identityCache.Get(ctx, key); ok {
+		return cached.identity, nil
+	}
+
+	resp, err := c.SearchContact(ctx, &contactv1.SearchContactRequest{
+		Fields:   []string{"id", "issuer_id", "type", "subject_id", "username", "name", "is_bot"},
+		Ids:      []string{key},
+		DomainId: int32(domainID),
+		Size:     1,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("resolve contact %s identity: %w", key, err)
+	}
+
+	var identity *Identity
+
+	if items := resp.GetContacts(); len(items) > 0 {
+		item := items[0]
+		identity = &Identity{
+			Sub:      item.GetSubject(),
+			Issuer:   item.GetIssId(),
+			Type:     item.GetType(),
+			Name:     cmp.Or(item.GetName(), item.GetUsername()),
+			Username: item.GetUsername(),
+			IsBot:    item.GetIsBot(),
+		}
+	}
+
+	_ = c.identityCache.Set(ctx, key, identityCached{identity: identity})
+
+	return identity, nil
+}
+
 func (c *Client) Close() error {
 	var errs []error
 
@@ -229,6 +299,10 @@ func (c *Client) Close() error {
 
 	if c.subCache != nil {
 		_ = c.subCache.Close()
+	}
+
+	if c.identityCache != nil {
+		_ = c.identityCache.Close()
 	}
 
 	return errors.Join(errs...)

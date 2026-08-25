@@ -19,7 +19,7 @@ type MessageDeleted struct {
 	MessageID  uuid.UUID       `json:"message_id"`
 	ThreadID   uuid.UUID       `json:"thread_id"`
 	DomainID   int32           `json:"domain_id"`
-	DeletedBy  *ThreadMember   `json:"deleted_by,omitempty"`
+	DeletedBy  *Member         `json:"deleted_by,omitempty"`
 	To         []*ThreadMember `json:"to,omitempty"`
 	Type       string          `json:"type"` // text|document|image|system|interactive|location|contact
 	CreatedAt  time.Time       `json:"created_at"`
