@@ -18,6 +18,23 @@ const (
 	RoleOwner
 )
 
+func (r ThreadRole) String() string {
+	switch r {
+	case RoleMember:
+		return "ROLE_MEMBER"
+	case RoleAdmin:
+		return "ROLE_ADMIN"
+	case RoleSupervisor:
+		return "ROLE_SUPERVISOR"
+	case RoleOwner:
+		return "ROLE_OWNER"
+	case UnspecifiedRole:
+		return "ROLE_UNSPECIFIED"
+	default:
+		return "ROLE_UNSPECIFIED"
+	}
+}
+
 type ThreadDialogExtended struct {
 	shared.BaseModel
 

@@ -18,6 +18,7 @@ func ConvertPbDeleteMessagesToDomain(in *impb.DeleteMessagesRequest) *dto.Delete
 	return &dto.DeleteMessagesRequest{
 		DeletedBy: MapPeerFromProto(in.GetDeletedBy()),
 		IDs:       utils.Map(in.GetIds(), utils.IDsParser),
+		DomainID:  in.GetDomainId(),
 	}
 }
 

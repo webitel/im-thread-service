@@ -430,7 +430,7 @@ func (m *Message) WithEditedEvent(ctx context.Context) *Message {
 	return m
 }
 
-func (m *Message) WithDeletedEvent(ctx context.Context) *Message {
+func (m *Message) WithDeletedEvent(ctx context.Context, deleter *ContactIdentity) *Message {
 	if m == nil {
 		return m
 	}
@@ -439,7 +439,7 @@ func (m *Message) WithDeletedEvent(ctx context.Context) *Message {
 		MessageID:  m.ID,
 		ThreadID:   m.ThreadID,
 		DomainID:   m.DomainID,
-		DeletedBy:  m.actorAsEventMember(),
+		DeletedBy:  m.actorAsMember(deleter),
 		To:         threadDialogsAsEventMembers(m.To),
 		Type:       m.Type.String(),
 		CreatedAt:  m.CreatedAt,
@@ -506,6 +506,57 @@ func (m *Message) actorAsEventMember() *event.ThreadMember {
 	}
 
 	return actor
+}
+
+func (m *Message) actorAsMember(contact *ContactIdentity) *event.Member {
+	if m == nil || m.From.ID == uuid.Nil {
+		return nil
+	}
+
+	out := &event.Member{Role: UnspecifiedRole.String()}
+	if m.MemberID != uuid.Nil {
+		out.ID = m.MemberID.String()
+	}
+
+	isBot := false
+
+	for _, member := range m.To {
+		if member == nil || member.ContactID != m.From.ID {
+			continue
+		}
+
+		if member.ID != uuid.Nil {
+			out.ID = member.ID.String()
+		}
+
+		out.Role = member.ThreadRole.String()
+		isBot = member.IsBot
+
+		break
+	}
+
+	out.Contact = &event.MemberContact{ID: m.From.ID.String(), IsBot: isBot}
+
+	if contact != nil {
+		out.Contact.Sub = contact.Sub
+		out.Contact.Iss = contact.Issuer
+		out.Contact.Type = contact.Type
+		out.Contact.Name = contact.Name
+		out.Contact.Username = contact.Username
+		out.Contact.IsBot = contact.IsBot
+	}
+
+	if identity := m.From.Identity; identity != nil {
+		if out.Contact.Name == "" {
+			out.Contact.Name = identity.Name
+		}
+
+		if out.Contact.Iss == "" {
+			out.Contact.Iss = identity.Issuer
+		}
+	}
+
+	return out
 }
 
 func threadDialogsAsEventMembers(members []*ThreadDialog) []*event.ThreadMember {

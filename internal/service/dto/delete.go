@@ -13,6 +13,7 @@ type (
 	DeleteMessagesRequest struct {
 		DeletedBy shared.Peer `json:"deleted_by"`
 		IDs       uuid.UUIDs  `json:"ids"`
+		DomainID  int32       `json:"domain_id"`
 	}
 
 	// DeleteMessagesResponse reports the best-effort outcome: DeletedIDs holds

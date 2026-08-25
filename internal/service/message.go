@@ -789,6 +789,8 @@ func (s *MessageService) DeleteMessages(ctx context.Context, in *dto.DeleteMessa
 		return nil, errors.InvalidArgument("deleter identity is required", errors.WithID("service.message.delete_messages"))
 	}
 
+	deleterContact := s.resolveContactIdentity(ctx, deleter.ID, in.DomainID)
+
 	var (
 		deletedAt  time.Time
 		deletedIDs = make(uuid.UUIDs, 0, len(in.IDs))
@@ -829,7 +831,7 @@ func (s *MessageService) DeleteMessages(ctx context.Context, in *dto.DeleteMessa
 
 			msg.To = members
 			msg.From = deleter
-			msg.WithDeletedEvent(txCtx)
+			msg.WithDeletedEvent(txCtx, deleterContact)
 
 			if err = s.dispatchMessageEvents(txCtx, uow, msg); err != nil {
 				return err
@@ -855,6 +857,38 @@ func (s *MessageService) DeleteMessages(ctx context.Context, in *dto.DeleteMessa
 		Skipped:    skipped,
 		DeletedAt:  deletedAt,
 	}, nil
+}
+
+// resolveContactIdentity fetches the contact behind an actor so the emitted
+// event can carry it. It runs before the transaction opens: a nil result only
+// costs consumers the enriched fields, never the delete itself.
+func (s *MessageService) resolveContactIdentity(ctx context.Context, contactID uuid.UUID, domainID int32) *model.ContactIdentity {
+	if contactID == uuid.Nil {
+		return nil
+	}
+
+	identity, err := s.contactClient.GetIdentity(ctx, contactID, int(domainID))
+	if err != nil {
+		s.logger.WarnContext(ctx, "failed to resolve actor contact",
+			slog.Any("contact_id", contactID),
+			slog.Any("err", err),
+		)
+
+		return nil
+	}
+
+	if identity == nil {
+		return nil
+	}
+
+	return &model.ContactIdentity{
+		Sub:      identity.Sub,
+		Issuer:   identity.Issuer,
+		Type:     identity.Type,
+		Name:     identity.Name,
+		Username: identity.Username,
+		IsBot:    identity.IsBot,
+	}
 }
 
 func alreadyDeletedSkip(skipped []model.MessageSkip) bool {
