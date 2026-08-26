@@ -2,8 +2,6 @@ package model
 
 import (
 	"time"
-
-	"github.com/google/uuid"
 )
 
 type MessageRevisionAction int16
@@ -23,7 +21,7 @@ type MessageChangeEntry struct {
 	Version   int32                 `json:"version" db:"version"`
 	Action    MessageRevisionAction `json:"action" db:"action"`
 	Body      string                `json:"body" db:"body"`
-	ChangedBy uuid.UUID             `json:"changed_by" db:"changed_by"`
+	ChangedBy *ThreadDialog         `json:"changed_by" db:"changed_by"`
 	ChangedAt time.Time             `json:"changed_at" db:"changed_at"`
 }
 

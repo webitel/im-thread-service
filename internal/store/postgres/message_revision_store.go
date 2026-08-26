@@ -43,6 +43,7 @@ func (s *messageRevisionStore) Search(ctx context.Context, messageID uuid.UUID, 
 		with msg as (
 			select
 				m.id,
+				m.thread_id,
 				coalesce(m.origin_sender, m.sender_id) as created_by,
 				m.created_at,
 				m.updated_at,
@@ -80,44 +81,61 @@ func (s *messageRevisionStore) Search(ctx context.Context, messageID uuid.UUID, 
 				(array_agg(changed_by order by version desc))[1] as last_changed_by,
 				(array_agg(changed_at order by version desc))[1] as last_changed_at
 			from rev
+		),
+		entries as (
+			select
+				r.position as version,
+				case when r.position = 1 then @ActionCreated::smallint else @ActionEdited::smallint end as action,
+				r.body,
+				coalesce(r.prev_changed_by, m.created_by) as changed_by,
+				coalesce(r.prev_changed_at, m.created_at) as changed_at
+			from rev r
+			cross join msg m
+
+			union all
+
+			select
+				t.n + 1,
+				case when t.n > 0 or m.edited then @ActionEdited::smallint else @ActionCreated::smallint end,
+				m.body,
+				coalesce(t.last_changed_by, m.created_by),
+				case
+					when t.n > 0 then t.last_changed_at
+					when m.edited then m.updated_at
+					else m.created_at
+				end
+			from msg m
+			cross join tail t
+
+			union all
+
+			select
+				t.n + 2,
+				@ActionDeleted::smallint,
+				m.body,
+				coalesce(m.deleted_by, m.created_by),
+				m.deleted_at
+			from msg m
+			cross join tail t
+			where m.deleted_at is not null
 		)
 		select
-			r.position as version,
-			case when r.position = 1 then @ActionCreated::smallint else @ActionEdited::smallint end as action,
-			r.body,
-			coalesce(r.prev_changed_by, m.created_by) as changed_by,
-			coalesce(r.prev_changed_at, m.created_at) as changed_at
-		from rev r
+			e.version,
+			e.action,
+			e.body,
+			e.changed_at,
+			jsonb_build_object('id', td.id, 'member_id', e.changed_by, 'member_role', coalesce(td.thread_role, 0)) as changed_by
+		from entries e
 		cross join msg m
-
-		union all
-
-		select
-			t.n + 1,
-			case when t.n > 0 or m.edited then @ActionEdited::smallint else @ActionCreated::smallint end,
-			m.body,
-			coalesce(t.last_changed_by, m.created_by),
-			case
-				when t.n > 0 then t.last_changed_at
-				when m.edited then m.updated_at
-				else m.created_at
-			end
-		from msg m
-		cross join tail t
-
-		union all
-
-		select
-			t.n + 2,
-			@ActionDeleted::smallint,
-			m.body,
-			coalesce(m.deleted_by, m.created_by),
-			m.deleted_at
-		from msg m
-		cross join tail t
-		where m.deleted_at is not null
-
-		order by version
+		left join lateral (
+			select td.id, td.thread_role
+			from im_thread.thread_dialog td
+			where td.thread_id = m.thread_id
+			  and td.member_id = e.changed_by
+			order by td.id desc
+			limit 1
+		) td on true
+		order by e.version
 	`
 
 	args := pgx.NamedArgs{

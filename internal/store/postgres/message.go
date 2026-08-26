@@ -306,7 +306,7 @@ func (m *messageStore) DeleteMessages(ctx context.Context, ids []uuid.UUID, dele
 		with target as (
 			select
 				m.id, m.domain_id, m.thread_id, m.member_id, m.sender_id, m.type,
-				m.created_at, m.updated_at, m.deleted_at, m.deleted_by,
+				m.created_at, m.updated_at, m.deleted_at,
 				(m.deleted_at is null) as was_live,
 				coalesce(m.sender_id = @DeleterID or m.origin_sender = @DeleterID, false) as is_author,
 				(d.id is not null) as is_member,
@@ -338,17 +338,17 @@ func (m *messageStore) DeleteMessages(ctx context.Context, ids []uuid.UUID, dele
 			  and not t.chat_closed and t.can_delete
 			returning
 				m.id, m.domain_id, m.thread_id, m.member_id, m.sender_id, m.type,
-				m.created_at, m.updated_at, m.deleted_at, m.deleted_by
+				m.created_at, m.updated_at, m.deleted_at
 		)
 		select
 			u.id, u.domain_id, u.thread_id, u.member_id, u.sender_id, u.type,
-			u.created_at, u.updated_at, u.deleted_at, u.deleted_by,
+			u.created_at, u.updated_at, u.deleted_at,
 			@Deleted::smallint as reason
 		from updated u
 		union all
 		select
 			t.id, t.domain_id, t.thread_id, t.member_id, t.sender_id, t.type,
-			t.created_at, t.updated_at, t.deleted_at, t.deleted_by,
+			t.created_at, t.updated_at, t.deleted_at,
 			case
 				when not t.is_member then @NotFound::smallint
 				when not t.is_author then @NotAuthor::smallint
