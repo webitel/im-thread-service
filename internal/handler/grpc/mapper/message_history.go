@@ -148,10 +148,7 @@ func mapHistoryMessage(m *model.Message, callerID uuid.UUID) *impb.HistoryMessag
 	if m.IsDeleted() {
 		out.Deleted = true
 		out.DeletedAt = m.DeletedAtUnixMillis()
-
-		if m.DeletedBy != nil {
-			out.DeletedBy = m.DeletedBy.String()
-		}
+		out.DeletedBy = mapThreadDialog2ThreadMember(m.DeletedBy)
 
 		return out
 	}
@@ -200,7 +197,7 @@ func mapMessageChangeEntry(in *model.MessageChangeEntry) *impb.MessageRevision {
 		Version:   in.Version,
 		Action:    impb.MessageRevisionAction(in.Action),
 		Body:      in.Body,
-		ChangedBy: in.ChangedBy.String(),
+		ChangedBy: mapThreadDialog2ThreadMember(in.ChangedBy),
 		ChangedAt: in.ChangedAtUnixMillis(),
 	}
 }
@@ -502,25 +499,34 @@ func mapContact(contact *model.MessageContact) *impb.Contact {
 }
 
 func GetUniqueFrom(messages []*model.Message) []*impb.ThreadMember {
-	set := set.New[model.ThreadDialog](0)
+	members := set.New[model.ThreadDialog](0)
 
 	for _, message := range messages {
 		if mem := message.Member; mem != nil {
-			set.Insert(*mem)
+			members.Insert(*mem)
 		}
 	}
 
-	threadConverter := new(ThreadOutConverter)
-
-	return utils.Map(set.Slice(), func(p model.ThreadDialog) *impb.ThreadMember {
-		role := threadConverter.ConvertThreadRole(p.ThreadRole)
-
-		return &impb.ThreadMember{
-			Id:        p.ID.String(),
-			ContactId: p.ContactID.String(),
-			Role:      role,
-		}
+	return utils.Map(members.Slice(), func(p model.ThreadDialog) *impb.ThreadMember {
+		return mapThreadDialog2ThreadMember(&p)
 	})
+}
+
+func mapThreadDialog2ThreadMember(dialog *model.ThreadDialog) *impb.ThreadMember {
+	if dialog == nil {
+		return nil
+	}
+
+	out := &impb.ThreadMember{
+		ContactId: dialog.ContactID.String(),
+		Role:      new(ThreadOutConverter).ConvertThreadRole(dialog.ThreadRole),
+	}
+
+	if dialog.ID != uuid.Nil {
+		out.Id = dialog.ID.String()
+	}
+
+	return out
 }
 
 func mapDocs(docs []*model.MessageDocument) []*impb.Document {

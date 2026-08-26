@@ -60,8 +60,8 @@ type Message struct {
 	SenderID       uuid.UUID       `json:"sender_id" db:"sender_id"`
 	MemberID       uuid.UUID       `json:"member_id" db:"member_id"`
 
-	DeletedAt *time.Time `json:"deleted_at,omitempty" db:"deleted_at"`
-	DeletedBy *uuid.UUID `json:"deleted_by,omitempty" db:"deleted_by"`
+	DeletedAt *time.Time    `json:"deleted_at,omitempty" db:"deleted_at"`
+	DeletedBy *ThreadDialog `json:"deleted_by,omitempty" db:"deleted_by"`
 
 	// SkipReason is set by DeleteMessages only: unspecified on a message the
 	// call deleted, otherwise why it was left untouched.
