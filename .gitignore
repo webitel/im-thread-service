@@ -184,3 +184,7 @@ cmd/eventtail/main.go
 
 # graphify generated knowledge graph (local)
 graphify-out/
+docs/
+
+# AI
+CLAUDE.md
