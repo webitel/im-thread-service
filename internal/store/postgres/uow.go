@@ -29,6 +29,7 @@ type unitOfWork struct {
 	interactiveCallbackStore        store.InteractiveCallback
 	messageReactionStore            store.MessageReactionStore
 	botControlStore                 store.BotControlStore
+	threadTagStore                  store.ThreadTagStore
 }
 
 // NewPgxUnitOfWork returns a new unit of work, given a pgx pool.
@@ -144,6 +145,14 @@ func (u *unitOfWork) BotControl() store.BotControlStore {
 	}
 
 	return u.botControlStore
+}
+
+func (u *unitOfWork) ThreadTagStore() store.ThreadTagStore {
+	if u.threadTagStore == nil {
+		u.threadTagStore = NewThreadTagStore(u.querier)
+	}
+
+	return u.threadTagStore
 }
 
 func (u *unitOfWork) DirectThreadDialogOrchestration() store.DirectThreadDialogOrchestration {

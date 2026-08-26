@@ -16,4 +16,5 @@ type UnitOfWork interface {
 	InteractiveCallback() InteractiveCallback
 	MessageReactions() MessageReactionStore
 	BotControl() BotControlStore
+	ThreadTagStore() ThreadTagStore
 }

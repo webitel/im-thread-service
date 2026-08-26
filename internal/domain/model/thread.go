@@ -64,6 +64,14 @@ type Thread struct {
 	// requesting participant. Enriched after the thread query; not scanned.
 	UnreadCount int64 `json:"unread_count" db:"-"`
 
+	// Tags are the requesting contact's own tags; enriched after the query, not scanned.
+	Tags []*ThreadTag `json:"tags,omitempty" db:"-"`
+
+	// TagLookupID is the id enrichment keys tags off. Usually equals ID, but
+	// for SearchLeft results ID holds the thread_dialog membership-period
+	// row id (not the thread id), so this carries the real thread id.
+	TagLookupID uuid.UUID `json:"-" db:"-"`
+
 	events []event.Base `db:"-"`
 }
 

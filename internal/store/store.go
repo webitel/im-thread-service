@@ -192,3 +192,17 @@ type BotControlStore interface {
 	// stack entry (legacy data, or the owner-bot fallback), so /close stays effective.
 	ClearController(ctx context.Context, threadID uuid.UUID) (*uuid.UUID, error)
 }
+
+type ThreadTagStore interface {
+	Add(ctx context.Context, tag *model.ThreadTag) (*model.ThreadTag, error)
+
+	// Remove is scoped by contactID as well as tagID, so a contact can only delete their own tags.
+	Remove(ctx context.Context, tagID, contactID uuid.UUID) error
+
+	ListForContact(ctx context.Context, contactID uuid.UUID, threadIDs []uuid.UUID) (map[uuid.UUID][]*model.ThreadTag, error)
+
+	// SearchTags returns the contactID's distinct tag strings, ordered alphabetically,
+	// fetching up to size+1 rows so callers can derive a next-page flag (same convention
+	// as the rest of this service's offset pagination).
+	SearchTags(ctx context.Context, contactID uuid.UUID, page, size int) ([]string, error)
+}

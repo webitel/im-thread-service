@@ -91,6 +91,11 @@ var serviceToHandlerBridgeModule = fx.Module(
 		func(s *service.ThreadPermissionService) grpchandler.ThreadPermissionManagementService {
 			return s
 		},
+
+		func(s *service.ThreadTagService) grpchandler.ThreadTagService {
+			return s
+		},
+
 		func(s *service.MessageService) grpchandler.MessageService {
 			return s
 		},
