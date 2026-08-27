@@ -39,12 +39,14 @@ func CompactSQL(s string) string {
 			case 0:
 				is = true
 			// special
-			// ':' USES [squirrel] for :named parameters,
-			//     so we need to keep SPACE if there were any
-			case ',', '(', ')', '[', ']', ';', '\'', '"': // , ':':
+			// ':' USES [squirrel] for :named parameters, and
+			// '@' USES [pgx.NamedArgs] for @named parameters,
+			//     so we need to keep the SPACE before them if there were any
+			//     (e.g. "select @ThreadID" must not collapse to "select@ThreadID").
+			case ',', '(', ')', '[', ']', ';', '\'', '"': // , ':', '@':
 				is = true
 			// operators
-			case '+', '-', '*', '/', '<', '>', '=', '~', '!', '@', '#', '%', '^', '&', '|':
+			case '+', '-', '*', '/', '<', '>', '=', '~', '!', '#', '%', '^', '&', '|':
 				is = true
 			}
 
