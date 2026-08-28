@@ -167,6 +167,17 @@ func (m *messageStore) GetReplyPreview(ctx context.Context, id uuid.UUID, domain
 					from im_message.message_images i
 					where i.message_id = m.id
 					order by i.created_at
+					limit 1),
+				(select jsonb_build_object('kind', 'contact', 'name',
+						coalesce(nullif(c.name, ''), nullif(c.phone_number, ''), nullif(c.email, '')))
+					from im_message.message_contacts c
+					where c.message_id = m.id
+					limit 1),
+				(select jsonb_build_object('kind', 'location',
+						'name', nullif(l.name, ''),
+						'address', nullif(l.address, ''))
+					from im_message.message_locations l
+					where l.message_id = m.id
 					limit 1)
 			) as attachment
 		from im_message.messages m
