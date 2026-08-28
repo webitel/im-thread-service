@@ -86,7 +86,13 @@ func (m *migrator) Run(ctx context.Context) error {
 
 	noopDialect := goose.Dialect("")
 
-	provider, err := goose.NewProvider(noopDialect, db, migrations.EmbedMigrations, goose.WithStore(store))
+	provider, err := goose.NewProvider(
+		noopDialect,
+		db,
+		migrations.EmbedMigrations,
+		goose.WithStore(store),
+		goose.WithAllowOutofOrder(true),
+	)
 	if err != nil {
 		return err
 	}

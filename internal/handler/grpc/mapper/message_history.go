@@ -247,12 +247,14 @@ func mapReplyTo(in *model.ReplyToPreview) *impb.ReplyToMessage {
 		Type:      int32(in.Type),
 		Body:      in.Body,
 		CreatedAt: in.CreatedAt,
+		IsDeleted: in.IsDeleted,
 	}
 
 	if a := in.Attachment; a != nil {
 		out.AttachmentKind = &a.Kind
 		out.AttachmentName = a.Name
 		out.AttachmentMime = a.Mime
+		out.AttachmentAddress = a.Address
 	}
 
 	return out
