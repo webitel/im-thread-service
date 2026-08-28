@@ -90,15 +90,49 @@ func (threadDialogs ThreadDialogs) ExtractExternalPeers() []*ExternalPeerPair {
 		return nil
 	}
 
-	var external []*ExternalPeerPair
+	// Via is the gate id, a property of the thread's gate rather than of any
+	// single participant. Depending on how the thread was created it may be
+	// written to the external contact's row, the bot's row, or both. Recover it
+	// from whichever participant carries it so external recipients stay
+	// resolvable even when the value never reached their own row.
+	gateVia := ""
+
+	nonBots := make([]*ThreadDialog, 0, len(threadDialogs))
 
 	for _, threadDialog := range threadDialogs {
-		if threadDialog.Via != nil {
+		if threadDialog.Via != nil && *threadDialog.Via != "" && gateVia == "" {
+			gateVia = *threadDialog.Via
+		}
+
+		// A bot is internal and can never be an external recipient, even if a
+		// stale/incorrect via was written to its row. Skipping it here prevents
+		// outbound messages from being addressed to the bot's own subject id
+		// (e.g. the Facebook gate bot) instead of the customer.
+		if !threadDialog.IsBot {
+			nonBots = append(nonBots, threadDialog)
+		}
+	}
+
+	var external []*ExternalPeerPair
+
+	for _, threadDialog := range nonBots {
+		if threadDialog.Via != nil && *threadDialog.Via != "" {
 			external = append(external, &ExternalPeerPair{
 				ContactID: threadDialog.ContactID,
 				Via:       *threadDialog.Via,
 			})
 		}
+	}
+
+	// Self-heal a direct thread whose only non-bot participant lost its via:
+	// there is exactly one external contact and the gate id is known from the
+	// bot's row, so the recipient is unambiguous. Restricted to the single
+	// non-bot case to avoid tagging internal agents in group threads.
+	if len(external) == 0 && len(nonBots) == 1 && gateVia != "" {
+		external = append(external, &ExternalPeerPair{
+			ContactID: nonBots[0].ContactID,
+			Via:       gateVia,
+		})
 	}
 
 	return external
