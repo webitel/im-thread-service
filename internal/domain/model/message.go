@@ -382,6 +382,7 @@ func (m *Message) WithCreatedEvent(ctx context.Context, sendID string) *Message 
 			e.ReplyTo.AttachmentKind = &a.Kind
 			e.ReplyTo.AttachmentName = a.Name
 			e.ReplyTo.AttachmentMime = a.Mime
+			e.ReplyTo.AttachmentAddress = a.Address
 		}
 	}
 
