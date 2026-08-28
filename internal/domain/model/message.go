@@ -203,9 +203,10 @@ func (f *ForwardOrigin) AsEvent() *event.ForwardOriginPayload {
 }
 
 type ReplyAttachment struct {
-	Kind string  `json:"kind"`
-	Name *string `json:"name,omitempty"`
-	Mime *string `json:"mime,omitempty"`
+	Kind    string  `json:"kind"`
+	Name    *string `json:"name,omitempty"`
+	Mime    *string `json:"mime,omitempty"`
+	Address *string `json:"address,omitempty"`
 }
 
 type ReplyToPreview struct {
@@ -216,6 +217,7 @@ type ReplyToPreview struct {
 	Body       string           `json:"body"`
 	CreatedAt  int64            `json:"created_at"`
 	Attachment *ReplyAttachment `json:"attachment,omitempty"`
+	IsDeleted  bool             `json:"is_deleted"`
 }
 
 func NewReplyTarget(id *uuid.UUID) *ReplyToPreview {
@@ -380,6 +382,7 @@ func (m *Message) WithCreatedEvent(ctx context.Context, sendID string) *Message 
 			e.ReplyTo.AttachmentKind = &a.Kind
 			e.ReplyTo.AttachmentName = a.Name
 			e.ReplyTo.AttachmentMime = a.Mime
+			e.ReplyTo.AttachmentAddress = a.Address
 		}
 	}
 

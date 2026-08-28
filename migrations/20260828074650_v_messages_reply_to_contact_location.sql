@@ -41,17 +41,31 @@ create view "im_thread"."v_messages" as
            FROM im_message.system_messages sm
           WHERE m.type = 4 AND sm.message_id = m.id
          LIMIT 1) AS system,
-    ( SELECT jsonb_build_object('message_id', r.id, 'sender_id', r.sender_id, 'type', r.type, 'body', "left"(COALESCE(r.body, ''::text), 256), 'created_at', (EXTRACT(epoch FROM r.created_at) * 1000::numeric)::bigint, 'attachment', COALESCE(( SELECT jsonb_build_object('kind', 'document', 'name', d.name, 'mime', d.mime) AS jsonb_build_object
-               FROM im_message.message_documents d
-              WHERE d.message_id = r.id
-              ORDER BY d.created_at
-             LIMIT 1), ( SELECT jsonb_build_object('kind', 'image', 'mime', i.mime) AS jsonb_build_object
-               FROM im_message.message_images i
-              WHERE i.message_id = r.id
-              ORDER BY i.created_at
-             LIMIT 1))) AS jsonb_build_object
+    ( SELECT jsonb_build_object('message_id', r.id, 'sender_id', r.sender_id, 'type', r.type, 'body',
+                CASE
+                    WHEN r.deleted_at IS NOT NULL THEN ''::text
+                    ELSE "left"(COALESCE(r.body, ''::text), 256)
+                END, 'created_at', (EXTRACT(epoch FROM r.created_at) * 1000::numeric)::bigint, 'is_deleted', r.deleted_at IS NOT NULL, 'attachment',
+                CASE
+                    WHEN r.deleted_at IS NOT NULL THEN NULL::jsonb
+                    ELSE COALESCE(( SELECT jsonb_build_object('kind', 'document', 'name', d.name, 'mime', d.mime) AS jsonb_build_object
+                       FROM im_message.message_documents d
+                      WHERE d.message_id = r.id
+                      ORDER BY d.created_at
+                     LIMIT 1), ( SELECT jsonb_build_object('kind', 'image', 'mime', i.mime) AS jsonb_build_object
+                       FROM im_message.message_images i
+                      WHERE i.message_id = r.id
+                      ORDER BY i.created_at
+                     LIMIT 1), ( SELECT jsonb_build_object('kind', 'contact', 'name', COALESCE(NULLIF(c.name, ''::text), NULLIF(c.phone_number, ''::text), NULLIF(c.email, ''::text))) AS jsonb_build_object
+                       FROM im_message.message_contacts c
+                      WHERE c.message_id = r.id
+                     LIMIT 1), ( SELECT jsonb_build_object('kind', 'location', 'name', COALESCE(NULLIF(l.name, ''::text), NULLIF(l.address, ''::text))) AS jsonb_build_object
+                       FROM im_message.message_locations l
+                      WHERE l.message_id = r.id
+                     LIMIT 1))
+                END) AS jsonb_build_object
            FROM im_message.messages r
-          WHERE r.id = m.reply_to AND r.deleted_at IS NULL) AS reply_to,
+          WHERE r.id = m.reply_to) AS reply_to,
         CASE
             WHEN m.forward_origin_kind IS NULL THEN NULL::jsonb
             ELSE jsonb_build_object('kind', m.forward_origin_kind, 'sender_id', m.forward_origin_sender_id, 'sender_name', COALESCE(m.forward_origin_sender_name, ''::text), 'original_sent_at', (EXTRACT(epoch FROM m.forward_origin_sent_at) * 1000::numeric)::bigint, 'source_message_id', m.forward_from_message_id)
