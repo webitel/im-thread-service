@@ -24,10 +24,10 @@ func (c *CommandService) canStopBot(req commandRequest) bool {
 	return true
 }
 
-func (c *CommandService) handleBotStopCommand(ctx context.Context, req commandRequest) (*dto.SendTextResponse, error) {
+func (c *CommandService) handleBotStopCommand(ctx context.Context, req commandRequest) (*model.Message, error) {
 	in, t := req.Message, req.Thread
 
-	log := c.logger.With("operation", "message.handleBotStopCommand", slog.String("thread_id", t.ID.String()))
+	log := c.logger.With("operation", "command.close", slog.String("thread_id", t.ID.String()))
 
 	var initiatorMemberID uuid.UUID
 	if req.Sender != nil {
@@ -44,16 +44,9 @@ func (c *CommandService) handleBotStopCommand(ctx context.Context, req commandRe
 		return nil, err
 	}
 
-	saved, err := c.messenger.PersistSystemMessage(ctx, c.buildBotStoppedMessage(in, t))
-	if err != nil {
-		log.ErrorContext(ctx, "failed to send bot stopped system message", "err", err)
+	log.InfoContext(ctx, "bot control released via /close")
 
-		return &dto.SendTextResponse{To: in.To}, nil
-	}
-
-	log.InfoContext(ctx, "bot stopped via /close", slog.String("system_message_id", saved.ID.String()))
-
-	return &dto.SendTextResponse{ID: saved.ID, To: in.To}, nil
+	return c.buildBotStoppedMessage(in, t), nil
 }
 
 func (c *CommandService) buildBotStoppedMessage(in *dto.SendTextRequest, t *model.Thread) *model.Message {

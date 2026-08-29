@@ -13,10 +13,6 @@ type BotController interface {
 	ReleaseBotControl(ctx context.Context, req *dto.ReleaseBotControlRequest) error
 }
 
-type SystemMessenger interface {
-	PersistSystemMessage(ctx context.Context, msg *model.Message) (*model.Message, error)
-}
-
 type commandRequest struct {
 	Thread  *model.Thread
 	Message *dto.SendTextRequest
@@ -34,22 +30,20 @@ func newCommandRequest(thread *model.Thread, in *dto.SendTextRequest) commandReq
 
 type messageCommand struct {
 	applies func(req commandRequest) bool
-	handle  func(ctx context.Context, req commandRequest) (*dto.SendTextResponse, error)
+	handle  func(ctx context.Context, req commandRequest) (*model.Message, error)
 }
 
 type CommandService struct {
-	bots      BotController
-	messenger SystemMessenger
-	logger    *slog.Logger
+	bots   BotController
+	logger *slog.Logger
 
 	commands map[model.Command]messageCommand
 }
 
-func NewCommandService(bots BotController, messenger SystemMessenger, logger *slog.Logger) *CommandService {
+func NewCommandService(bots BotController, logger *slog.Logger) *CommandService {
 	c := &CommandService{
-		bots:      bots,
-		messenger: messenger,
-		logger:    logger,
+		bots:   bots,
+		logger: logger,
 	}
 
 	c.commands = c.buildCommands()
@@ -66,7 +60,7 @@ func (c *CommandService) buildCommands() map[model.Command]messageCommand {
 	}
 }
 
-func (c *CommandService) Dispatch(ctx context.Context, thread *model.Thread, in *dto.SendTextRequest) (*dto.SendTextResponse, bool, error) {
+func (c *CommandService) Dispatch(ctx context.Context, thread *model.Thread, in *dto.SendTextRequest) (*model.Message, bool, error) {
 	req := newCommandRequest(thread, in)
 
 	cmd, ok := c.lookupCommand(req)
@@ -74,9 +68,9 @@ func (c *CommandService) Dispatch(ctx context.Context, thread *model.Thread, in 
 		return nil, false, nil
 	}
 
-	resp, err := cmd.handle(ctx, req)
+	msg, err := cmd.handle(ctx, req)
 
-	return resp, true, err
+	return msg, true, err
 }
 
 func (c *CommandService) lookupCommand(req commandRequest) (messageCommand, bool) {

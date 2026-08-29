@@ -55,6 +55,7 @@ func NewMessageService(
 	typingBus TypingBus,
 	rateLimiter RateLimiter,
 	typingCfg config.TypingConfig,
+	commands *CommandService,
 ) *MessageService {
 	s := &MessageService{
 		uow:              uow,
@@ -66,9 +67,8 @@ func NewMessageService(
 		typingBus:        typingBus,
 		rateLimiter:      rateLimiter,
 		typingCfg:        typingCfg,
+		commands:         commands,
 	}
-
-	s.commands = NewCommandService(threader, s, logger)
 
 	return s
 }
@@ -149,8 +149,12 @@ func (s *MessageService) SendText(ctx context.Context, in *dto.SendTextRequest) 
 		)
 	}
 
-	if resp, handled, err := s.commands.Dispatch(ctx, thread, in); handled {
-		return resp, err
+	if msg, handled, err := s.commands.Dispatch(ctx, thread, in); handled {
+		if err != nil {
+			return nil, err
+		}
+
+		return s.sendCommandMessage(ctx, in, msg)
 	}
 
 	replyPreview, err := s.resolveReply(ctx, in.ReplyToMessageID, in.ReplyToExternalID, &in.From, thread, int32(in.DomainID))
@@ -220,7 +224,23 @@ func (s *MessageService) SendText(ctx context.Context, in *dto.SendTextRequest) 
 	return &dto.SendTextResponse{ID: msg.ID, To: in.To}, nil
 }
 
-func (s *MessageService) PersistSystemMessage(ctx context.Context, msg *model.Message) (*model.Message, error) {
+func (s *MessageService) sendCommandMessage(ctx context.Context, in *dto.SendTextRequest, msg *model.Message) (*dto.SendTextResponse, error) {
+	if msg == nil {
+		return &dto.SendTextResponse{To: in.To}, nil
+	}
+
+	saved, err := s.writeSystemMessage(ctx, msg)
+	if err != nil {
+		s.logger.ErrorContext(ctx, "failed to write command system message", "err", err,
+			slog.String("thread_id", msg.ThreadID.String()))
+
+		return &dto.SendTextResponse{To: in.To}, nil
+	}
+
+	return &dto.SendTextResponse{ID: saved.ID, To: in.To}, nil
+}
+
+func (s *MessageService) writeSystemMessage(ctx context.Context, msg *model.Message) (*model.Message, error) {
 	var saved *model.Message
 
 	err := s.uow.WithinTransaction(ctx, func(txCtx context.Context, uow store.UnitOfWork) error {
@@ -230,6 +250,7 @@ func (s *MessageService) PersistSystemMessage(ctx context.Context, msg *model.Me
 		}
 
 		saved.To = msg.To
+		saved.IdempotencyKey = msg.IdempotencyKey
 
 		if e = s.insertSentStatuses(txCtx, uow, saved); e != nil {
 			return e
@@ -630,25 +651,7 @@ func (s *MessageService) SendSystemMessage(ctx context.Context, msg *model.Messa
 		return nil, err
 	}
 
-	var savedMsg *model.Message
-
-	err := s.uow.WithinTransaction(ctx, func(txCtx context.Context, uow store.UnitOfWork) error {
-		var err error
-		if savedMsg, err = uow.Messages().SaveSystemMessage(txCtx, msg); err != nil {
-			return err
-		}
-
-		savedMsg.To = msg.To
-		savedMsg.IdempotencyKey = msg.IdempotencyKey
-
-		if err = s.insertSentStatuses(txCtx, uow, savedMsg); err != nil {
-			return err
-		}
-
-		savedMsg.WithCreatedEvent(ctx, msg.IdempotencyKey)
-
-		return s.dispatchMessageEvents(txCtx, uow, savedMsg)
-	})
+	savedMsg, err := s.writeSystemMessage(ctx, msg)
 	if err != nil {
 		log.ErrorContext(ctx, "transaction_failed", "err", err)
 

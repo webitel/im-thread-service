@@ -57,7 +57,7 @@ func TestCanStopBot(t *testing.T) {
 		}
 	}
 
-	svc := NewCommandService(nil, nil, nil)
+	svc := NewCommandService(nil, nil)
 
 	t.Run("user stops active bot", func(t *testing.T) {
 		require.True(t, svc.canStopBot(newCommandRequest(threadWithBot(), senderRequest(userContactID))))
@@ -105,7 +105,7 @@ func TestHandleBotStopCommand_ReleasesBotAndPersistsConfirmation(t *testing.T) {
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 
-	messenger := &MessageService{
+	sender := &MessageService{
 		logger: logger,
 		uow: fakeUnitOfWork{
 			messageStore: messageStore,
@@ -113,7 +113,7 @@ func TestHandleBotStopCommand_ReleasesBotAndPersistsConfirmation(t *testing.T) {
 		},
 	}
 
-	svc := NewCommandService(threader, messenger, logger)
+	svc := NewCommandService(threader, logger)
 
 	in := &dto.SendTextRequest{
 		From:     shared.Peer{ID: userContactID},
@@ -122,7 +122,11 @@ func TestHandleBotStopCommand_ReleasesBotAndPersistsConfirmation(t *testing.T) {
 		DomainID: 1,
 	}
 
-	resp, err := svc.handleBotStopCommand(context.Background(), newCommandRequest(thread, in))
+	msg, err := svc.handleBotStopCommand(context.Background(), newCommandRequest(thread, in))
+	require.NoError(t, err)
+	require.NotNil(t, msg, "command must produce a bot_stopped system message")
+
+	resp, err := sender.sendCommandMessage(context.Background(), in, msg)
 	require.NoError(t, err)
 
 	// Bot control is released for this thread on behalf of the initiating user member.
