@@ -35,7 +35,10 @@ func (f *fakeThreadManager) ReleaseBotControl(_ context.Context, req *dto.Releas
 	return nil
 }
 
-var _ ThreadManager = (*fakeThreadManager)(nil)
+var (
+	_ ThreadManager = (*fakeThreadManager)(nil)
+	_ BotController = (*fakeThreadManager)(nil)
+)
 
 func senderRequest(from uuid.UUID) *dto.SendTextRequest {
 	return &dto.SendTextRequest{From: shared.Peer{ID: from}}

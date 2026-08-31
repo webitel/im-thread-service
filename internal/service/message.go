@@ -26,7 +26,6 @@ import (
 
 type ThreadManager interface {
 	EnsureDirectThread(ctx context.Context, req *dto.EnsureDirectThreadRequest) (*model.Thread, error)
-	ReleaseBotControl(ctx context.Context, req *dto.ReleaseBotControlRequest) error
 }
 
 type MessageService struct {
@@ -57,7 +56,7 @@ func NewMessageService(
 	typingCfg config.TypingConfig,
 	commands *CommandService,
 ) *MessageService {
-	s := &MessageService{
+	return &MessageService{
 		uow:              uow,
 		logger:           logger,
 		threader:         threader,
@@ -69,8 +68,6 @@ func NewMessageService(
 		typingCfg:        typingCfg,
 		commands:         commands,
 	}
-
-	return s
 }
 
 func (s *MessageService) sendMessageToExternalProvider(ctx context.Context, message *model.Message) error {
@@ -265,16 +262,6 @@ func (s *MessageService) writeSystemMessage(ctx context.Context, msg *model.Mess
 	}
 
 	return saved, nil
-}
-
-func memberByContactID(members []*model.ThreadDialog, contactID uuid.UUID) *model.ThreadDialog {
-	for _, m := range members {
-		if m != nil && m.ContactID == contactID {
-			return m
-		}
-	}
-
-	return nil
 }
 
 func (s *MessageService) SendDocument(ctx context.Context, in *dto.SendDocumentRequest) (*dto.SendDocumentResponse, error) {
