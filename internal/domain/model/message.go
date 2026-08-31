@@ -377,6 +377,7 @@ func (m *Message) WithCreatedEvent(ctx context.Context, sendID string) *Message 
 			Type:      m.ReplyTo.Type.String(),
 			Body:      m.ReplyTo.Body,
 			CreatedAt: m.ReplyTo.CreatedAt,
+			IsDeleted: m.ReplyTo.IsDeleted,
 		}
 		if a := m.ReplyTo.Attachment; a != nil {
 			e.ReplyTo.AttachmentKind = &a.Kind
