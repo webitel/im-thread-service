@@ -983,7 +983,7 @@ func (t *ThreadManagementService) verifyRemoveMember(initiator, target *model.Th
 		return nil
 	}
 
-	err := t.verifyRemoveMemberInitiatorPermissions(initiator.ThreadRole, target.ThreadRole, &initiator.Permissions)
+	err := t.verifyRemoveMemberInitiatorPermissions(initiator.ThreadRole, target.ThreadRole, &initiator.Permissions, target.IsBot)
 	if err != nil {
 		return err
 	}
@@ -991,13 +991,25 @@ func (t *ThreadManagementService) verifyRemoveMember(initiator, target *model.Th
 	return nil
 }
 
-func (t *ThreadManagementService) verifyRemoveMemberInitiatorPermissions(initiatorRole, targetRole model.ThreadRole, initiatorPermissions *model.ThreadPermissions) error {
+func (t *ThreadManagementService) verifyRemoveMemberInitiatorPermissions(initiatorRole, targetRole model.ThreadRole, initiatorPermissions *model.ThreadPermissions, targetIsBot bool) error {
 	if initiatorPermissions == nil {
 		return errors.InvalidArgument("permissions cannot be nil", errors.WithID("service.thread_manager.verify_remove_member_initiator_permissions"))
 	}
 
 	if !initiatorPermissions.CanRemoveMembers {
 		return errors.Forbidden("initiator does not have permission to remove members", errors.WithID("service.thread_manager.verify_remove_member_initiator_permissions"))
+	}
+
+	// Releasing a bot is not a peer takeover: in a bot-control thread both the
+	// operator and the bot are RoleOwner, so the strict "must outrank" rule would
+	// block an owner from ever reclaiming the chat. Allow an equal-or-higher role
+	// to release a bot; human-to-human removal keeps the strict hierarchy.
+	if targetIsBot {
+		if initiatorRole < targetRole {
+			return errors.Forbidden("initiator does not have permission to remove members", errors.WithID("service.thread_manager.verify_remove_member_initiator_permissions"))
+		}
+
+		return nil
 	}
 
 	if initiatorRole <= targetRole {
