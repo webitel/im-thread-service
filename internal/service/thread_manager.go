@@ -1403,24 +1403,40 @@ func (t *ThreadManagementService) initializeDirectThreadDialogs(ctx context.Cont
 
 	baseModel := shared.BaseModel{DomainID: domainID}
 
+	// Via is the gate id, shared by the thread rather than owned by one peer. It
+	// may arrive on either side (the external contact's header-derived via, or
+	// the recipient peer's via). Resolve it once from whichever side carries it,
+	// then persist it only on the external (non-bot) participant. Never write it
+	// onto the bot: a stale via there makes ExtractExternalPeers address replies
+	// to the bot's own subject id instead of the customer.
+	gateVia := from.ResolveVia()
+	if gateVia == nil || *gateVia == "" {
+		gateVia = to.ResolveVia()
+	}
+
 	initiatorCreatedThreadDialog, err := uow.ThreadDialogStore().Create(ctx, &model.ThreadDialogExtended{
 		BaseModel:   baseModel,
 		ThreadID:    threadID,
 		ContactID:   from.ID,
 		ThreadRole:  initiatorRole,
 		Permissions: *initiatorPermissions,
-		Via:         from.ResolveVia(),
+		Via:         gateVia,
 		Settings:    model.BaseThreadSetting{Title: to.Identity.Name},
 	})
 	if err != nil {
 		return nil, err
 	}
 
+	targetVia := gateVia
+	if toIsBot {
+		targetVia = nil
+	}
+
 	targetCreatedThreadDialog, err := uow.ThreadDialogStore().Create(ctx, &model.ThreadDialogExtended{
 		BaseModel:   baseModel,
 		ThreadID:    threadID,
 		ContactID:   to.ID,
-		Via:         to.ResolveVia(),
+		Via:         targetVia,
 		ThreadRole:  peerRole,
 		Permissions: *targetPermissions,
 		IsBot:       toIsBot,
