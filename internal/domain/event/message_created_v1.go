@@ -78,6 +78,7 @@ type ReplyToPayload struct {
 	AttachmentMime *string   `json:"attachment_mime,omitempty"`
 
 	AttachmentAddress *string `json:"attachment_address,omitempty"`
+	IsDeleted         bool    `json:"is_deleted,omitempty"`
 }
 
 func (m *MessageCreated) AddMetadata(key, value string) {
