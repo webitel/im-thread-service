@@ -31,6 +31,9 @@ type (
 		Variables       *model.ThreadVariables `json:"variables,omitempty" db:"variables"`
 		BotControllerID *uuid.UUID             `json:"bot_controller_id,omitempty" db:"bot_controller_id"`
 		OwnerBotID      *uuid.UUID             `json:"owner_bot_id,omitempty" db:"owner_bot_id"`
+		// The real thread id for SearchLeft rows, where "id" above is a
+		// membership-period id instead. Absent (zero) from Search's SQL.
+		ThreadRefID uuid.UUID `json:"-" db:"thread_ref_id"`
 	}
 	threadMemberRecord struct {
 		ID        uuid.UUID `json:"id,omitempty" db:"id"`
@@ -143,8 +146,14 @@ func mapThreadRecordToModel(record *threadRecord) (*model.Thread, error) {
 		}
 	})
 
+	tagLookupID := record.ID
+	if record.ThreadRefID != uuid.Nil {
+		tagLookupID = record.ThreadRefID
+	}
+
 	thread := &model.Thread{
 		ID:              record.ID,
+		TagLookupID:     tagLookupID,
 		DomainID:        record.DomainID,
 		CreatedAt:       record.CreatedAt,
 		UpdatedAt:       record.UpdatedAt,

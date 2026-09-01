@@ -200,3 +200,58 @@ func TestThreadQuery_WithParticipantsFilter_ComposesWithOtherFilters(t *testing.
 	assert.Equal(t, "sub-1", values[2])    // sub
 	assert.Contains(t, values, selfID.String())
 }
+
+// TestThreadQuery_WithTagsFilter_MatchesSubsetOfThreadsTags is the shape that matters for AND
+// semantics: a thread carrying more tags than were searched for must still match, as long as it
+// carries every searched tag. The WHERE clause below filters thread_tag rows to the searched tags
+// *before* GROUP BY, so HAVING COUNT(DISTINCT tag) = N compares against the searched-tag count, not
+// against how many tags the thread has in total.
+func TestThreadQuery_WithTagsFilter_MatchesSubsetOfThreadsTags(t *testing.T) {
+	selfID := uuid.New()
+
+	query := NewThreadQueryObject().WithTagsFilter(selfID, "work")
+
+	sql, args, err := query.ToSQL()
+	require.NoError(t, err)
+
+	assertSQLContains(t, sql, "t.id IN (")
+	assertSQLContains(t, sql, "SELECT thread_id FROM im_thread.thread_tag")
+	assertSQLContains(t, sql, "WHERE contact_id =")
+	assertSQLContains(t, sql, "AND tag = ANY(")
+	assertSQLContains(t, sql, "GROUP BY thread_id")
+	assertSQLContains(t, sql, "HAVING COUNT(DISTINCT tag) =")
+
+	require.Len(t, args, 3)
+	assert.Equal(t, selfID, args[0])
+	assert.Equal(t, []string{"work"}, args[1]) // one searched tag, regardless of how many the thread has
+	assert.Equal(t, 1, args[2])                // HAVING compares against len(searched tags), not the thread's tag count
+}
+
+func TestThreadQuery_WithTagsFilter_MultipleTags_ANDSemantics(t *testing.T) {
+	selfID := uuid.New()
+
+	query := NewThreadQueryObject().WithTagsFilter(selfID, "work", "urgent")
+
+	_, args, err := query.ToSQL()
+	require.NoError(t, err)
+
+	require.Len(t, args, 3)
+	assert.Equal(t, []string{"work", "urgent"}, args[1])
+	assert.Equal(t, 2, args[2])
+}
+
+func TestThreadQuery_WithTagsFilter_NilSelf_NoOp(t *testing.T) {
+	query := NewThreadQueryObject().WithTagsFilter(uuid.Nil, "work")
+
+	sql, _, err := query.ToSQL()
+	require.NoError(t, err)
+	assert.NotContains(t, sql, "thread_tag")
+}
+
+func TestThreadQuery_WithTagsFilter_NoTags_NoOp(t *testing.T) {
+	query := NewThreadQueryObject().WithTagsFilter(uuid.New())
+
+	sql, _, err := query.ToSQL()
+	require.NoError(t, err)
+	assert.NotContains(t, sql, "thread_tag")
+}

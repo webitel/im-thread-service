@@ -27,6 +27,7 @@ type fakeUnitOfWork struct {
 	outboxStore          store.OutboxStore
 	botControlStore      store.BotControlStore
 	threadStore          store.ThreadStore
+	threadTagStore       store.ThreadTagStore
 }
 
 func (f fakeUnitOfWork) WithinTransaction(ctx context.Context, fn func(context.Context, store.UnitOfWork) error) error {
@@ -111,6 +112,32 @@ func (f fakeUnitOfWork) MessageReactions() store.MessageReactionStore {
 
 func (f fakeUnitOfWork) BotControl() store.BotControlStore {
 	return f.botControlStore
+}
+
+func (f fakeUnitOfWork) ThreadTagStore() store.ThreadTagStore {
+	if f.threadTagStore == nil {
+		return noopThreadTagStore{}
+	}
+
+	return f.threadTagStore
+}
+
+type noopThreadTagStore struct{}
+
+func (noopThreadTagStore) Add(ctx context.Context, tag *model.ThreadTag) (*model.ThreadTag, error) {
+	return tag, nil
+}
+
+func (noopThreadTagStore) Remove(context.Context, uuid.UUID, uuid.UUID) error {
+	return nil
+}
+
+func (noopThreadTagStore) ListForContact(context.Context, uuid.UUID, []uuid.UUID) (map[uuid.UUID][]*model.ThreadTag, error) {
+	return make(map[uuid.UUID][]*model.ThreadTag), nil
+}
+
+func (noopThreadTagStore) SearchTags(context.Context, uuid.UUID, int, int) ([]string, error) {
+	return nil, nil
 }
 
 type fakeThreadDialogStore struct {

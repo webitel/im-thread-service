@@ -39,7 +39,11 @@ func NewSearchLeftQueryObject(memberID uuid.UUID) *searchLeftQueryObject {
 	`, ThreadDialogTable), memberID)
 
 	obj.builder = obj.builder.
-		InnerJoin("membership_periods lm ON lm.thread_id = t.id")
+		InnerJoin("membership_periods lm ON lm.thread_id = t.id").
+		// "id" above is the membership-period row, not the thread id;
+		// always select the real thread id too for callers that need it
+		// (e.g. tag enrichment). Column() appends, unlike ToSQL()'s Columns().
+		Column("t.id AS thread_ref_id")
 
 	return obj
 }
@@ -138,6 +142,26 @@ func (q *searchLeftQueryObject) WithKindFilter(kinds ...model.ThreadKind) *searc
 	if len(kinds) != 0 {
 		q.builder = q.builder.Where(squirrel.Eq{"t.kind": kinds})
 	}
+
+	return q
+}
+
+// WithTagsFilter narrows results to threads the memberID has tagged with every one of the tags (AND semantics).
+// If memberID is Nil or tags is empty, the filter is silently ignored.
+func (q *searchLeftQueryObject) WithTagsFilter(memberID uuid.UUID, tags ...string) *searchLeftQueryObject {
+	if memberID == uuid.Nil || len(tags) == 0 {
+		return q
+	}
+
+	q.builder = q.builder.Where(
+		fmt.Sprintf(`%s.id IN (
+			SELECT thread_id FROM %s
+			WHERE contact_id = ? AND tag = ANY(?)
+			GROUP BY thread_id
+			HAVING COUNT(DISTINCT tag) = ?
+		)`, threadAlias, ThreadTagTable),
+		memberID, tags, len(tags),
+	)
 
 	return q
 }

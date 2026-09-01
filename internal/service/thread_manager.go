@@ -98,6 +98,10 @@ func (t *ThreadManagementService) Search(ctx context.Context, searchRequest *dto
 		return nil, errors.New("search request cannot be nil")
 	}
 
+	if len(searchRequest.Tags) > 0 && searchRequest.SelfID == uuid.Nil {
+		return nil, errors.InvalidArgument("self_id is required when tags is set", errors.WithID("service.thread_manager.search"))
+	}
+
 	query := queryobject.NewThreadQueryObject().
 		WithSubject().
 		WithFields(searchRequest.Fields).
@@ -109,7 +113,8 @@ func (t *ThreadManagementService) Search(ctx context.Context, searchRequest *dto
 		WithLimit(searchRequest.Size).
 		WithSort(searchRequest.Sort).
 		WithoutDeletedAtFilter().
-		WithOffset(searchRequest.Page)
+		WithOffset(searchRequest.Page).
+		WithTagsFilter(searchRequest.SelfID, searchRequest.Tags...)
 
 	switch {
 	case len(searchRequest.ContactIDs) > 0:
@@ -130,6 +135,7 @@ func (t *ThreadManagementService) Search(ctx context.Context, searchRequest *dto
 	}
 
 	t.enrichUnread(ctx, searchRequest.SelfID, firstDomainID(searchRequest.DomainIDs), threads)
+	t.enrichTags(ctx, searchRequest.SelfID, threads)
 
 	return threads, nil
 }
@@ -156,6 +162,32 @@ func (t *ThreadManagementService) enrichUnread(ctx context.Context, selfID uuid.
 
 	for _, th := range threads {
 		th.UnreadCount = counts[th.ID]
+	}
+}
+
+// enrichTags fills Tags on each thread with the requesting contact's own
+// tags. Auxiliary like enrichUnread: a failure is logged and threads keep an
+// empty tag list rather than failing the whole search. Keyed by
+// TagLookupID, not ID (see model.Thread.TagLookupID).
+func (t *ThreadManagementService) enrichTags(ctx context.Context, callerID uuid.UUID, threads []*model.Thread) {
+	if callerID == uuid.Nil || len(threads) == 0 {
+		return
+	}
+
+	threadIDs := make([]uuid.UUID, len(threads))
+	for i, th := range threads {
+		threadIDs[i] = th.TagLookupID
+	}
+
+	tagsByThread, err := t.uow.ThreadTagStore().ListForContact(ctx, callerID, threadIDs)
+	if err != nil {
+		t.log().Error("listing thread tags", "operation", "service.thread_manager.enrich_tags", "err", err)
+
+		return
+	}
+
+	for _, th := range threads {
+		th.Tags = tagsByThread[th.TagLookupID]
 	}
 }
 
@@ -189,11 +221,19 @@ func (t *ThreadManagementService) SearchLeft(ctx context.Context, req *dto.Searc
 		WithFields(req.Fields).
 		WithDomainIDFilter(req.DomainID).
 		WithKindFilter(req.Kinds...).
+		WithTagsFilter(req.MemberID, req.Tags...).
 		WithLimit(req.Size).
 		WithSort(req.Sort).
 		WithOffset(req.Page)
 
-	return t.uow.ThreadStore().SearchLeft(ctx, query)
+	threads, err := t.uow.ThreadStore().SearchLeft(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+
+	t.enrichTags(ctx, req.MemberID, threads)
+
+	return threads, nil
 }
 
 func (t *ThreadManagementService) findAddMemberActors(ctx context.Context, threadID, initiatorContactID, targetContactID uuid.UUID) (*model.ThreadDialogExtended, *model.ThreadDialogExtended, error) {
@@ -983,7 +1023,7 @@ func (t *ThreadManagementService) verifyRemoveMember(initiator, target *model.Th
 		return nil
 	}
 
-	err := t.verifyRemoveMemberInitiatorPermissions(initiator.ThreadRole, target.ThreadRole, &initiator.Permissions)
+	err := t.verifyRemoveMemberInitiatorPermissions(initiator.ThreadRole, target.ThreadRole, &initiator.Permissions, target.IsBot)
 	if err != nil {
 		return err
 	}
@@ -991,13 +1031,25 @@ func (t *ThreadManagementService) verifyRemoveMember(initiator, target *model.Th
 	return nil
 }
 
-func (t *ThreadManagementService) verifyRemoveMemberInitiatorPermissions(initiatorRole, targetRole model.ThreadRole, initiatorPermissions *model.ThreadPermissions) error {
+func (t *ThreadManagementService) verifyRemoveMemberInitiatorPermissions(initiatorRole, targetRole model.ThreadRole, initiatorPermissions *model.ThreadPermissions, targetIsBot bool) error {
 	if initiatorPermissions == nil {
 		return errors.InvalidArgument("permissions cannot be nil", errors.WithID("service.thread_manager.verify_remove_member_initiator_permissions"))
 	}
 
 	if !initiatorPermissions.CanRemoveMembers {
 		return errors.Forbidden("initiator does not have permission to remove members", errors.WithID("service.thread_manager.verify_remove_member_initiator_permissions"))
+	}
+
+	// Releasing a bot is not a peer takeover: in a bot-control thread both the
+	// operator and the bot are RoleOwner, so the strict "must outrank" rule would
+	// block an owner from ever reclaiming the chat. Allow an equal-or-higher role
+	// to release a bot; human-to-human removal keeps the strict hierarchy.
+	if targetIsBot {
+		if initiatorRole < targetRole {
+			return errors.Forbidden("initiator does not have permission to remove members", errors.WithID("service.thread_manager.verify_remove_member_initiator_permissions"))
+		}
+
+		return nil
 	}
 
 	if initiatorRole <= targetRole {

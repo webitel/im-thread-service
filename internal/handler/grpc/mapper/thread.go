@@ -65,6 +65,7 @@ func (s *ThreadInConverter) ConvertSearch(in *impb.ThreadSearchRequest) (*dto.Th
 		SelfID:       selfID,
 		ContactIDs:   members,
 		Participants: convertParticipants(in.GetParticipants()),
+		Tags:         in.GetTags(),
 	}, nil
 }
 
@@ -109,6 +110,7 @@ func (s *ThreadInConverter) ConvertSearchLeft(in *impb.SearchLeftRequest) (*dto.
 		MemberID: memberID,
 		DomainID: int(in.GetDomainId()),
 		Kinds:    s.convertThreadKinds(in.GetKinds()),
+		Tags:     in.GetTags(),
 		Size:     int(in.GetSize()),
 		Sort:     in.GetSort(),
 		Page:     int(in.GetPage()),
@@ -276,6 +278,7 @@ func (s *ThreadOutConverter) ConvertToThread(source *model.Thread) *impb.Thread 
 		LastMsg:     lastMsg,
 		Variables:   vars,
 		UnreadCount: int32(source.UnreadCount),
+		Tags:        s.convertThreadTags(source.Tags),
 	}
 
 	if source.BotControllerID != nil {
@@ -304,6 +307,19 @@ func (s *ThreadOutConverter) convertThreadMembers(members []*model.ThreadDialog,
 			AutoLeave:          member.AutoLeave,
 			IsActiveController: botControllerID != nil && member.ID == *botControllerID,
 		}
+	}
+
+	return out
+}
+
+func (s *ThreadOutConverter) convertThreadTags(tags []*model.ThreadTag) []*impb.ChatTag {
+	if len(tags) == 0 {
+		return nil
+	}
+
+	out := make([]*impb.ChatTag, 0, len(tags))
+	for _, t := range tags {
+		out = append(out, ConvertToChatTag(t))
 	}
 
 	return out
