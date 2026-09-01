@@ -14,6 +14,7 @@ import (
 type MessageSearchQuery struct {
 	base         sq.SelectBuilder
 	fields       []string
+	callerID     uuid.UUID
 	paginatorCfg Config[MessageHistoryCursor]
 
 	pag *SquirrelPaginator[MessageHistoryCursor]
@@ -97,6 +98,8 @@ func (q *MessageSearchQuery) WithCallerScope(callerID uuid.UUID) *MessageSearchQ
 		return q
 	}
 
+	q.callerID = callerID
+
 	q.base = q.base.Where(`
 		exists (
 			select 1
@@ -156,7 +159,7 @@ func (q *MessageSearchQuery) ToSQL() (string, []any, error) {
 		q.paginatorCfg.Direction = DirectionAfter
 	}
 
-	decorated, err := q.pag.Apply(q.base.Columns(q.fields...), q.paginatorCfg)
+	decorated, err := q.pag.Apply(selectMessageFields(q.base, q.fields, q.callerID), q.paginatorCfg)
 	if err != nil {
 		return "", nil, err
 	}
