@@ -5,11 +5,10 @@ import (
 	"log/slog"
 
 	"github.com/google/uuid"
-	"github.com/webitel/webitel-go-kit/pkg/errors"
-
 	"github.com/webitel/im-thread-service/internal/domain/model"
 	"github.com/webitel/im-thread-service/internal/service/dto"
 	"github.com/webitel/im-thread-service/internal/store"
+	"github.com/webitel/webitel-go-kit/pkg/errors"
 )
 
 type ThreadTagService struct {

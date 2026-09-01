@@ -6,10 +6,9 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
-	"github.com/webitel/webitel-go-kit/pkg/errors"
-
 	"github.com/webitel/im-thread-service/internal/domain/model"
 	"github.com/webitel/im-thread-service/internal/service/dto"
+	"github.com/webitel/webitel-go-kit/pkg/errors"
 )
 
 type stubThreadTagStore struct {
@@ -20,10 +19,13 @@ func (s *stubThreadTagStore) Add(ctx context.Context, tag *model.ThreadTag) (*mo
 	if s.addErr != nil {
 		return nil, s.addErr
 	}
+
 	if tag == nil {
 		return nil, errors.InvalidArgument("tag cannot be nil")
 	}
+
 	tag.ID = uuid.New()
+
 	return tag, nil
 }
 

@@ -143,14 +143,17 @@ func (s *threadTagStore) SearchTags(ctx context.Context, contactID uuid.UUID, pa
 	}
 
 	limit := size
+
 	if limit <= 0 {
 		limit = limitDefault
 	}
+
 	if limit > maxLimit {
 		limit = maxLimit
 	}
 
 	offset := 0
+
 	if page > 1 {
 		offset = (page - 1) * limit
 	}

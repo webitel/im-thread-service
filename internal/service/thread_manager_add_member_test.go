@@ -124,8 +124,8 @@ func (f fakeUnitOfWork) ThreadTagStore() store.ThreadTagStore {
 
 type noopThreadTagStore struct{}
 
-func (noopThreadTagStore) Add(context.Context, *model.ThreadTag) (*model.ThreadTag, error) {
-	return nil, nil
+func (noopThreadTagStore) Add(ctx context.Context, tag *model.ThreadTag) (*model.ThreadTag, error) {
+	return tag, nil
 }
 
 func (noopThreadTagStore) Remove(context.Context, uuid.UUID, uuid.UUID) error {
