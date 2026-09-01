@@ -50,9 +50,40 @@ var (
 	}
 )
 
+const replyToField = "reply_to"
+
+func replyToColumn(callerID uuid.UUID) sq.Sqlizer {
+	return sq.Expr(CompactSQL(`
+		case when exists (
+			select 1
+			from `+ThreadDialogTable+` priv
+			where priv.thread_id = v_messages.thread_id
+			and priv.domain_id = v_messages.domain_id
+			and priv.member_id = ?::uuid
+			and priv.deleted_at is null
+			and priv.thread_role >= ?
+		) then v_messages.reply_to_audit else v_messages.reply_to end as reply_to
+	`), callerID, int(model.RoleAdmin))
+}
+
+func selectMessageFields(base sq.SelectBuilder, fields []string, callerID uuid.UUID) sq.SelectBuilder {
+	for _, f := range fields {
+		if f == replyToField && callerID != uuid.Nil {
+			base = base.Column(replyToColumn(callerID))
+
+			continue
+		}
+
+		base = base.Columns(f)
+	}
+
+	return base
+}
+
 type MessageHistoryQuery struct {
 	base         sq.SelectBuilder
 	fields       []string
+	callerID     uuid.UUID
 	paginatorCfg Config[MessageHistoryCursor]
 
 	pag *SquirrelPaginator[MessageHistoryCursor]
@@ -153,6 +184,8 @@ func (q *MessageHistoryQuery) WithCallerLimitation(callerID uuid.UUID, threadIDs
 		return q
 	}
 
+	q.callerID = callerID
+
 	q.base = q.base.Where(
 		`
 		exists (
@@ -194,7 +227,7 @@ func (q *MessageHistoryQuery) ToSQL() (string, []any, error) {
 		q.paginatorCfg.Direction = DirectionAfter
 	}
 
-	withColumns := q.base.Columns(q.fields...)
+	withColumns := selectMessageFields(q.base, q.fields, q.callerID)
 
 	decorated, err := q.pag.Apply(withColumns, q.paginatorCfg)
 	if err != nil {
