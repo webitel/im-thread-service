@@ -47,6 +47,7 @@ type (
 		SelfID       uuid.UUID
 		ContactIDs   uuid.UUIDs
 		Participants []ContactIdentity
+		Tags         []string
 		Size         int
 		Sort         string
 		Page         int
@@ -62,6 +63,7 @@ type (
 		MemberID uuid.UUID
 		DomainID int
 		Kinds    []model.ThreadKind
+		Tags     []string
 		Size     int
 		Sort     string
 		Page     int
