@@ -93,6 +93,22 @@ func (q *MessageSearchQuery) WithTypeFilter(types ...int) *MessageSearchQuery {
 	return q
 }
 
+// WithSystemMessageAllowList restricts SYSTEM-type (model.MessageTypeSystem)
+// rows to a Message.System.Type allow-list. See MessageHistoryQuery's method
+// of the same name for the full nil-vs-empty semantics.
+func (q *MessageSearchQuery) WithSystemMessageAllowList(allowedTypes []string) *MessageSearchQuery {
+	if allowedTypes == nil {
+		return q
+	}
+
+	q.base = q.base.Where(
+		"(type <> ? OR EXISTS (select 1 from im_message.system_messages sm where sm.message_id = id and sm.type = any(?)))",
+		int(model.MessageTypeSystem), allowedTypes,
+	)
+
+	return q
+}
+
 func (q *MessageSearchQuery) WithCallerScope(callerID uuid.UUID) *MessageSearchQuery {
 	if callerID == uuid.Nil {
 		return q

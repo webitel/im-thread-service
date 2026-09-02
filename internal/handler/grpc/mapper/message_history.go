@@ -33,15 +33,16 @@ func MapSearchMessageHistoryRequest2HistoryMessageInputDTO(mhr *impb.SearchMessa
 	}
 
 	return &dto.HistoryMessageInputDTO{
-		Fields:    mhr.GetFields(),
-		IDs:       ids,
-		ThreadIDs: threadIDs,
-		SenderIDs: senderIDs,
-		Size:      int(mhr.GetSize()),
-		Types:     types,
-		Cursor:    cursor,
-		DomainID:  int(mhr.GetDomainId()),
-		CallerID:  utils.IDsParser(mhr.GetCallerId()),
+		Fields:                      mhr.GetFields(),
+		IDs:                         ids,
+		ThreadIDs:                   threadIDs,
+		SenderIDs:                   senderIDs,
+		Size:                        int(mhr.GetSize()),
+		Types:                       types,
+		Cursor:                      cursor,
+		DomainID:                    int(mhr.GetDomainId()),
+		CallerID:                    utils.IDsParser(mhr.GetCallerId()),
+		SystemMessageAllowListTypes: systemMessageAllowListTypes(mhr.GetSystemMessageAllowList()),
 	}
 }
 
@@ -67,15 +68,16 @@ func MapSearchMessagesRequest2SearchMessagesInputDTO(mr *impb.SearchMessagesRequ
 	}
 
 	return &dto.SearchMessagesInputDTO{
-		DomainID:  int(mr.GetDomainId()),
-		Fields:    mr.GetFields(),
-		Term:      mr.GetQ(),
-		ThreadIDs: threadIDs,
-		SenderIDs: senderIDs,
-		Types:     types,
-		Cursor:    cursor,
-		Size:      int(mr.GetSize()),
-		CallerID:  utils.IDsParser(mr.GetCallerId()),
+		DomainID:                    int(mr.GetDomainId()),
+		Fields:                      mr.GetFields(),
+		Term:                        mr.GetQ(),
+		ThreadIDs:                   threadIDs,
+		SenderIDs:                   senderIDs,
+		Types:                       types,
+		Cursor:                      cursor,
+		Size:                        int(mr.GetSize()),
+		CallerID:                    utils.IDsParser(mr.GetCallerId()),
+		SystemMessageAllowListTypes: systemMessageAllowListTypes(mr.GetSystemMessageAllowList()),
 	}
 }
 
@@ -108,16 +110,39 @@ func MapSearchLeftThreadsMessageHistoryRequest2LeftThreadsMessageHistoryInputDTO
 	}
 
 	return &dto.LeftThreadsMessageHistoryInputDTO{
-		DomainID:   int(mhr.GetDomainId()),
-		Fields:     mhr.GetFields(),
-		ThreadID:   threadID,
-		SenderIDs:  senderIDs,
-		Types:      types,
-		PeriodFrom: periodFrom,
-		PeriodTo:   periodTo,
-		Cursor:     cursor,
-		Size:       int(mhr.GetSize()),
+		DomainID:                    int(mhr.GetDomainId()),
+		Fields:                      mhr.GetFields(),
+		ThreadID:                    threadID,
+		SenderIDs:                   senderIDs,
+		Types:                       types,
+		PeriodFrom:                  periodFrom,
+		PeriodTo:                    periodTo,
+		Cursor:                      cursor,
+		Size:                        int(mhr.GetSize()),
+		SystemMessageAllowListTypes: systemMessageAllowListTypes(mhr.GetSystemMessageAllowList()),
 	}
+}
+
+// systemMessageAllowListTypes converts a request's optional
+// SystemMessageAllowList field into the plain []string the DTO/query_object
+// layers use, preserving the 3-state presence semantics: an unset field (nil)
+// maps to nil (not restricted); a present field maps to a non-nil slice —
+// its own Types (allow-list) if non-empty, or a non-nil empty slice if empty
+// (block all). GetTypes() on a nil-but-present message can itself return nil
+// for an empty repeated field, which is why it's normalized here rather than
+// passed straight through — losing non-nil-ness at this point would silently
+// turn "block all system messages" into "not restricted".
+func systemMessageAllowListTypes(allowList *impb.SystemMessageAllowList) []string {
+	if allowList == nil {
+		return nil
+	}
+
+	types := allowList.GetTypes()
+	if types == nil {
+		types = make([]string, 0)
+	}
+
+	return types
 }
 
 func MapMessage2SearchMessageHistoryResponse(messages []*model.Message, callerID uuid.UUID) *impb.SearchMessageHistoryResponse {

@@ -158,6 +158,28 @@ func (q *MessageHistoryQuery) WithTypeFilter(types ...int) *MessageHistoryQuery 
 	return q
 }
 
+// WithSystemMessageAllowList restricts SYSTEM-type (model.MessageTypeSystem)
+// rows to a Message.System.Type allow-list. allowedTypes == nil means "not
+// restricted" (no-op, matches not calling this method at all); a non-nil
+// allowedTypes (including an empty, non-nil slice) means "restricted" — an
+// empty slice blocks every system message, a non-empty slice allows only
+// those subtypes. There is deliberately no separate "restricted" flag: a
+// plain slice's own nil-ness already carries the 3-state signal, and a
+// second bool alongside it would only make the invalid state
+// (restricted=false with a non-empty list silently discarded) representable.
+func (q *MessageHistoryQuery) WithSystemMessageAllowList(allowedTypes []string) *MessageHistoryQuery {
+	if allowedTypes == nil {
+		return q
+	}
+
+	q.base = q.base.Where(
+		"(type <> ? OR EXISTS (select 1 from im_message.system_messages sm where sm.message_id = id and sm.type = any(?)))",
+		int(model.MessageTypeSystem), allowedTypes,
+	)
+
+	return q
+}
+
 func (q *MessageHistoryQuery) WithCursor(cursor *dto.HistoryMessageCursor) *MessageHistoryQuery {
 	if cursor == nil {
 		return q
