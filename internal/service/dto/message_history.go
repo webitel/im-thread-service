@@ -60,6 +60,25 @@ type (
 		Sort      string
 		Size      int
 		CallerID  uuid.UUID
+		// SystemMessageAllowListTypes: nil = not restricted (no-op); non-nil
+		// empty = block all system messages; non-nil non-empty = allow only
+		// those Message.System.Type subtypes. Deliberately a single nilable
+		// slice, not a slice + separate bool — see WithSystemMessageAllowList.
+		SystemMessageAllowListTypes []string
+	}
+
+	SearchMessagesInputDTO struct {
+		DomainID  int
+		Fields    []string
+		Term      string
+		ThreadIDs uuid.UUIDs
+		SenderIDs uuid.UUIDs
+		Types     []int
+		Cursor    *HistoryMessageCursor
+		Size      int
+		CallerID  uuid.UUID
+		// See HistoryMessageInputDTO.SystemMessageAllowListTypes.
+		SystemMessageAllowListTypes []string
 	}
 
 	HistoryMessageCursor struct {
@@ -78,5 +97,7 @@ type (
 		PeriodTo   time.Time
 		Cursor     *HistoryMessageCursor
 		Size       int
+		// See HistoryMessageInputDTO.SystemMessageAllowListTypes.
+		SystemMessageAllowListTypes []string
 	}
 )
