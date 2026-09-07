@@ -1141,6 +1141,21 @@ func (t *ThreadManagementService) CompleteBotControl(ctx context.Context, req *d
 			return nil
 		}
 
+		// If control fell back to the OWNER bot (the transient stack emptied above it), do NOT
+		// auto-grant it. The owner bot must wake only on the next inbound customer message (via
+		// ensureBotControl), never immediately on completion — otherwise it re-greets while an
+		// agent may be handling. A non-owner bot below in the stack still resumes via the grant.
+		if thread.OwnerBotID != nil && *newTop.MemberID == *thread.OwnerBotID {
+			if _, clearErr := uow.BotControl().ClearController(ctx, req.ThreadID); clearErr != nil {
+				return clearErr
+			}
+
+			t.log().InfoContext(ctx, "transient bot completed; owner left idle, wakes on next message",
+				"thread_id", req.ThreadID, "owner_bot_id", *newTop.MemberID)
+
+			return nil
+		}
+
 		return t.publishBotControlGranted(ctx, uow, botControlStackEntryToDialog(newTop), &model.BotControlStackEntry{
 			MemberID:  &req.MemberID,
 			Position:  completedPosition,
