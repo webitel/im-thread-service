@@ -1144,6 +1144,22 @@ func (t *ThreadManagementService) CompleteBotControl(ctx context.Context, req *d
 			return nil
 		}
 
+		// Control fell back to the owner bot after a transient (auto_leave) bot completed. Do
+		// NOT publish a granted event here: that grant is what makes flow_manager start the
+		// owner schema the instant the transient leaves, instead of on the next customer
+		// message — the regression being fixed. Pop already re-pointed bot_controller_id at the
+		// owner, so we KEEP it set (do not clear): the next inbound message is routed to the
+		// owner and flow_manager starts its schema from scratch via nodeMessage. This is the
+		// crucial difference from the reverted owner-idle attempt, which cleared the controller
+		// to NULL and relied on ensureBotControl to re-grant — so the schema never woke.
+		// A non-owner bot still below on the stack (nested transient) is resumed via the grant.
+		if thread.OwnerBotID != nil && *newTop.MemberID == *thread.OwnerBotID {
+			t.log().InfoContext(ctx, "transient bot completed, owner kept as controller to start on next message",
+				"thread_id", req.ThreadID, "owner_bot_id", *newTop.MemberID)
+
+			return nil
+		}
+
 		return t.publishBotControlGranted(ctx, uow, botControlStackEntryToDialog(newTop), &model.BotControlStackEntry{
 			MemberID:  &req.MemberID,
 			Position:  completedPosition,
