@@ -721,11 +721,14 @@ func TestReleaseBotControl_DivergedState_ClearsControllerAndPublishesReleased(t 
 	require.Nil(t, findGrantedEvent(outboxStore), "nothing to grant when clearing a diverged controller")
 }
 
-// TestCompleteBotControl_OwnerBot_MarksIdleKeepsStack covers the owner bot finishing its
-// flow. The owner never leaves the control stack, so instead of popping it, CompleteBotControl
-// clears the active controller (bot_controller_id=NULL) and leaves the stack intact. No granted
-// fires — the next customer message re-grants via ensureBotControl and restarts the schema.
-func TestCompleteBotControl_OwnerBot_MarksIdleKeepsStack(t *testing.T) {
+// TestCompleteBotControl_OwnerBot_Forbidden covers the owner bot trying to complete/leave bot
+// control. The owner is the permanent controller and must never leave: CompleteBotControl must
+// reject it with a Forbidden error and leave everything intact — controller NOT cleared, stack
+// NOT popped, no granted event. Keeping bot_controller_id pointing at the owner is what lets the
+// next customer message wake it again (delivery routes to the active controller). Clearing it to
+// NULL (the previous behavior) made delivery treat the thread as "no active bot" so the owner
+// was never woken.
+func TestCompleteBotControl_OwnerBot_Forbidden(t *testing.T) {
 	threadID := uuid.New()
 	ownerMemberID := uuid.New()
 
@@ -760,10 +763,10 @@ func TestCompleteBotControl_OwnerBot_MarksIdleKeepsStack(t *testing.T) {
 		DomainID: 1,
 	})
 
-	require.NoError(t, err)
-	require.Equal(t, 1, botControl.clearCalls, "owner completion must clear the controller")
+	require.Error(t, err, "owner bot completion must be forbidden")
+	require.Equal(t, 0, botControl.clearCalls, "owner completion must NOT clear the controller")
 	require.Equal(t, 0, botControl.popCalls, "owner must never be popped from the stack")
-	require.Nil(t, findGrantedEvent(outboxStore), "no granted on owner going idle")
+	require.Nil(t, findGrantedEvent(outboxStore), "no granted on a rejected owner completion")
 }
 
 // TestEnsureBotControl_ExistingStack_ReGrantsWithoutPush covers the restart path: a thread whose
