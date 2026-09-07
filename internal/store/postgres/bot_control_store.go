@@ -309,6 +309,21 @@ func (s *botControlStore) ClearController(ctx context.Context, threadID uuid.UUI
 	return &record.MemberID, nil
 }
 
+// SetController points thread.bot_controller_id at memberID without touching the stack.
+// Used to re-grant control to a bot already on the stack (e.g. the idle owner bot).
+func (s *botControlStore) SetController(ctx context.Context, threadID, memberID uuid.UUID) error {
+	_, err := s.db.Exec(ctx, `
+		UPDATE im_thread.thread
+		SET bot_controller_id = @MemberID
+		WHERE id = @ThreadID
+	`, pgx.NamedArgs{"ThreadID": threadID, "MemberID": memberID})
+	if err != nil {
+		return errors.Internal("set bot controller", errors.WithCause(err), errors.WithID("bot_control_store.set_controller"))
+	}
+
+	return nil
+}
+
 func mapBotControlStackEntry(r *botControlStackRecord) *model.BotControlStackEntry {
 	e := &model.BotControlStackEntry{
 		ID:       r.ID,

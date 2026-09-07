@@ -241,6 +241,22 @@ func (q *leftThreadsMessageHistoryQueryObject) WithTypesFilter(types ...int) *le
 	return q
 }
 
+// WithSystemMessageAllowList restricts SYSTEM-type (model.MessageTypeSystem)
+// rows to a Message.System.Type allow-list. See MessageHistoryQuery's method
+// of the same name for the full nil-vs-empty semantics.
+func (q *leftThreadsMessageHistoryQueryObject) WithSystemMessageAllowList(allowedTypes []string) *leftThreadsMessageHistoryQueryObject {
+	if allowedTypes == nil {
+		return q
+	}
+
+	q.builder = q.builder.Where(
+		fmt.Sprintf("(%s.type <> ? OR EXISTS (select 1 from im_message.system_messages sm where sm.message_id = %s.id and sm.type = any(?)))", leftThreadsMsgAlias, leftThreadsMsgAlias),
+		int(model.MessageTypeSystem), allowedTypes,
+	)
+
+	return q
+}
+
 func (q *leftThreadsMessageHistoryQueryObject) WithPeriodFilter(periodFrom, periodTo time.Time) *leftThreadsMessageHistoryQueryObject {
 	if !periodFrom.IsZero() {
 		q.builder = q.builder.Where(
