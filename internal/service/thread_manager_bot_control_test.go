@@ -439,6 +439,77 @@ func TestCompleteBotControl_PopsStackAndPublishesGrantedWithIsResume(t *testing.
 	require.Equal(t, newTop.Position, granted.Position)
 }
 
+// TestCompleteBotControl_TransientToOwner_NoGrant_KeepsController covers the regression fix:
+// when a transient (auto_leave) bot completes and control falls back to the OWNER bot, no
+// BotControlGranted must be published and the controller must NOT be cleared. Pop leaves
+// bot_controller_id pointing at the owner, so the next inbound customer message is routed to
+// it and flow_manager starts the owner schema from scratch via nodeMessage — instead of the
+// owner speaking the instant the transient bot leaves.
+func TestCompleteBotControl_TransientToOwner_NoGrant_KeepsController(t *testing.T) {
+	threadID := uuid.New()
+	transientMemberID := uuid.New()
+	ownerBotMemberID := uuid.New()
+
+	// After popping the transient, control falls back to the owner bot.
+	newTop := &model.BotControlStackEntry{
+		ID: uuid.New(), ThreadID: threadID, MemberID: &ownerBotMemberID, Position: 0,
+	}
+	botControl := &fakeBotControlStore{
+		newTopEntry: newTop,
+		// GetStack returns the transient as the active controller so the check passes.
+		stackResult: []*model.BotControlStackEntry{
+			{MemberID: &transientMemberID, Position: 1},
+		},
+	}
+	outboxStore := &fakeOutboxStore{}
+
+	threadDialogStore := &fakeThreadDialogStore{
+		fullViewResult: []*model.ThreadDialogExtended{
+			{
+				BaseModel: shared.BaseModel{ID: ownerBotMemberID, DomainID: 1},
+				ThreadID:  threadID,
+			},
+		},
+	}
+
+	mockThreadStore := &fakeThreadStore{
+		getResult: &model.Thread{
+			ID:         threadID,
+			OwnerBotID: &ownerBotMemberID, // control returns to the owner bot
+		},
+	}
+
+	svc := &ThreadManagementService{
+		uow: fakeUnitOfWork{
+			threadDialogStore: threadDialogStore,
+			messageStore:      &fakeMessageStore{},
+			outboxStore:       outboxStore,
+			botControlStore:   botControl,
+			threadStore:       mockThreadStore,
+		},
+	}
+
+	err := svc.CompleteBotControl(context.Background(), &dto.CompleteBotControlRequest{
+		ThreadID: threadID,
+		MemberID: transientMemberID,
+		DomainID: 1,
+	})
+
+	require.NoError(t, err)
+
+	// Transient was popped with the completed reason.
+	require.Equal(t, transientMemberID, botControl.lastPopMemberID)
+	require.Equal(t, model.BotControlReasonCompleted, botControl.lastPopReason)
+
+	// No grant: the owner must wake on the next message, not on completion.
+	require.Nil(t, findGrantedEvent(outboxStore),
+		"no BotControlGranted when control returns to the owner bot")
+
+	// Controller kept (not cleared) so the message routes to the owner.
+	require.Zero(t, botControl.clearCalls,
+		"controller must stay pointing at the owner, not be cleared to NULL")
+}
+
 func TestCompleteBotControl_EmptyStack_OnlyPublishesReleased(t *testing.T) {
 	threadID := uuid.New()
 	botMemberID := uuid.New()
