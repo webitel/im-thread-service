@@ -1119,18 +1119,20 @@ func (t *ThreadManagementService) CompleteBotControl(ctx context.Context, req *d
 		}
 
 		if thread.OwnerBotID != nil && *thread.OwnerBotID == req.MemberID {
-			// The owner bot never leaves the control stack, but its schema has finished.
-			// Clear the active controller (leaving the owner on the stack) so the thread is
-			// left with no live flow. The next inbound customer message re-grants control to
-			// the owner via ensureBotControl, restarting its schema from scratch.
-			if _, clearErr := uow.BotControl().ClearController(ctx, req.ThreadID); clearErr != nil {
-				return clearErr
-			}
-
-			t.log().InfoContext(ctx, "owner bot flow completed, marked idle for restart on next message",
+			// The owner bot is the permanent controller and must never complete or leave bot
+			// control: it stays on the stack AND stays the active controller so the next inbound
+			// customer message is routed to it (delivery keeps only the active controller in the
+			// recipient list) and flow_manager restarts its schema from scratch via nodeMessage.
+			// Reject the completion instead of clearing the controller — clearing it to NULL made
+			// delivery treat the thread as "no active bot", so the owner was never woken again.
+			// flow_manager calls CompleteBotControl on every schema end (completeId is always set),
+			// so this rejection is expected on a normal owner-flow end; it is a no-op guard that
+			// leaves bot_controller_id pointing at the owner.
+			t.log().DebugContext(ctx, "owner bot completion rejected: owner cannot leave, kept as controller for next message",
 				"thread_id", req.ThreadID, "owner_bot_id", req.MemberID)
 
-			return nil
+			return errors.Forbidden("owner bot cannot complete or leave bot control",
+				errors.WithID("service.thread_manager.complete_bot_control.owner_cannot_leave"))
 		}
 
 		completedPosition := top.Position
