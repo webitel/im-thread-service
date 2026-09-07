@@ -177,14 +177,17 @@ func (s *botControlStore) Pop(ctx context.Context, threadID, memberID uuid.UUID,
 		),
 		upd AS (
 			UPDATE im_thread.thread
-			SET bot_controller_id = COALESCE(
-				(SELECT member_id FROM new_top),
-				CASE
-					WHEN @IsClientLeave THEN NULL
-					WHEN @IsTop         THEN owner_bot_id
-					ELSE bot_controller_id
-				END
-			)
+			SET bot_controller_id = CASE
+				WHEN @Handoff THEN NULL
+				ELSE COALESCE(
+					(SELECT member_id FROM new_top),
+					CASE
+						WHEN @IsClientLeave THEN NULL
+						WHEN @IsTop         THEN owner_bot_id
+						ELSE bot_controller_id
+					END
+				)
+			END
 			WHERE id = @ThreadID
 			RETURNING owner_bot_id
 		),
@@ -205,9 +208,13 @@ func (s *botControlStore) Pop(ctx context.Context, threadID, memberID uuid.UUID,
 		LEFT JOIN new_top n ON true
 		LEFT JOIN owner_info oi ON true
 	`, pgx.NamedArgs{
-		"ThreadID":      threadID,
-		"IsTop":         isTop,
+		"ThreadID": threadID,
+		"IsTop":    isTop,
+		// client_leave: release to NULL only once the stack empties (existing behaviour).
 		"IsClientLeave": reason == model.BotControlReasonClientLeave,
+		// handoff (bot → human agent): release control unconditionally — no lower bot and
+		// no owner-bot fallback becomes controller, so no bot is woken while an agent handles.
+		"Handoff": reason == model.BotControlReasonHandoff,
 	})
 	if err != nil {
 		return nil, errors.Internal("fetching new top after pop", errors.WithCause(err), errors.WithID("bot_control_store.pop"))
@@ -223,7 +230,9 @@ func (s *botControlStore) Pop(ctx context.Context, threadID, memberID uuid.UUID,
 		contactID = *result.ContactID
 	}
 
-	if result.MemberID != nil {
+	// On handoff control is fully released (bot_controller_id = NULL above), so report no
+	// new controller even if a lower bot remains on the stack — no grant must be published.
+	if result.MemberID != nil && reason != model.BotControlReasonHandoff {
 		return &model.BotControlStackEntry{
 			ThreadID:  threadID,
 			MemberID:  result.MemberID,
@@ -235,7 +244,10 @@ func (s *botControlStore) Pop(ctx context.Context, threadID, memberID uuid.UUID,
 	}
 
 	// Stack is empty — synthesize owner bot entry so the service fires a granted event.
-	if isTop && result.OwnerBotID != nil && reason != model.BotControlReasonClientLeave {
+	// Skipped for a full release (client_leave / handoff): the owner must NOT be re-granted
+	// when the client left or the conversation was handed to a human agent.
+	if isTop && result.OwnerBotID != nil &&
+		reason != model.BotControlReasonClientLeave && reason != model.BotControlReasonHandoff {
 		return &model.BotControlStackEntry{
 			ThreadID:  threadID,
 			MemberID:  result.OwnerBotID,
