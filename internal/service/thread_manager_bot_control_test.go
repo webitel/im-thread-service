@@ -27,9 +27,14 @@ type fakeBotControlStore struct {
 	lastPopReason      model.BotControlReason
 	popCalls           int
 	clearCalls         int
+
+	pushCalls                 int
+	setControllerCalls        int
+	lastSetControllerMemberID uuid.UUID
 }
 
 func (f *fakeBotControlStore) Push(_ context.Context, transition model.BotControlTransition) (*model.BotControlPushResult, error) {
+	f.pushCalls++
 	f.lastPushTransition = transition
 
 	return &model.BotControlPushResult{Prev: f.prevEntry}, nil
@@ -51,6 +56,13 @@ func (f *fakeBotControlStore) ClearController(_ context.Context, _ uuid.UUID) (*
 	f.clearCalls++
 
 	return f.clearedMemberID, nil
+}
+
+func (f *fakeBotControlStore) SetController(_ context.Context, _, memberID uuid.UUID) error {
+	f.setControllerCalls++
+	f.lastSetControllerMemberID = memberID
+
+	return nil
 }
 
 var _ store.BotControlStore = (*fakeBotControlStore)(nil)
@@ -581,4 +593,95 @@ func TestReleaseBotControl_DivergedState_ClearsControllerAndPublishesReleased(t 
 	require.Nil(t, released.NextMemberID)
 
 	require.Nil(t, findGrantedEvent(outboxStore), "nothing to grant when clearing a diverged controller")
+}
+
+// TestCompleteBotControl_OwnerBot_MarksIdleKeepsStack covers the owner bot finishing its
+// flow. The owner never leaves the control stack, so instead of popping it, CompleteBotControl
+// clears the active controller (bot_controller_id=NULL) and leaves the stack intact. No granted
+// fires — the next customer message re-grants via ensureBotControl and restarts the schema.
+func TestCompleteBotControl_OwnerBot_MarksIdleKeepsStack(t *testing.T) {
+	threadID := uuid.New()
+	ownerMemberID := uuid.New()
+
+	botControl := &fakeBotControlStore{
+		// Owner is the sole controller: it is the top of the stack.
+		stackResult: []*model.BotControlStackEntry{
+			{MemberID: &ownerMemberID, Position: 0},
+		},
+	}
+	outboxStore := &fakeOutboxStore{}
+
+	mockThreadStore := &fakeThreadStore{
+		getResult: &model.Thread{
+			ID:         threadID,
+			OwnerBotID: &ownerMemberID, // the completing member IS the owner bot
+		},
+	}
+
+	svc := &ThreadManagementService{
+		uow: fakeUnitOfWork{
+			threadDialogStore: &fakeThreadDialogStore{},
+			messageStore:      &fakeMessageStore{},
+			outboxStore:       outboxStore,
+			botControlStore:   botControl,
+			threadStore:       mockThreadStore,
+		},
+	}
+
+	err := svc.CompleteBotControl(context.Background(), &dto.CompleteBotControlRequest{
+		ThreadID: threadID,
+		MemberID: ownerMemberID,
+		DomainID: 1,
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, 1, botControl.clearCalls, "owner completion must clear the controller")
+	require.Equal(t, 0, botControl.popCalls, "owner must never be popped from the stack")
+	require.Nil(t, findGrantedEvent(outboxStore), "no granted on owner going idle")
+}
+
+// TestEnsureBotControl_ExistingStack_ReGrantsWithoutPush covers the restart path: a thread whose
+// owner bot is still on the stack but idle (bot_controller_id was cleared). ensureBotControl must
+// re-point the controller at the existing top via SetController (NOT push a duplicate entry) and
+// publish a granted event so flow_manager starts a fresh schema.
+func TestEnsureBotControl_ExistingStack_ReGrantsWithoutPush(t *testing.T) {
+	threadID := uuid.New()
+	ownerMemberID := uuid.New()
+	ownerContactID := uuid.New()
+
+	botControl := &fakeBotControlStore{
+		// Owner still on the stack — the idle state left by CompleteBotControl.
+		stackResult: []*model.BotControlStackEntry{
+			{MemberID: &ownerMemberID, Position: 0},
+		},
+	}
+	outboxStore := &fakeOutboxStore{}
+
+	svc := &ThreadManagementService{
+		uow: fakeUnitOfWork{
+			threadDialogStore: &fakeThreadDialogStore{},
+			messageStore:      &fakeMessageStore{},
+			outboxStore:       outboxStore,
+			botControlStore:   botControl,
+		},
+	}
+
+	thread := &model.Thread{
+		ID: threadID,
+		Members: []*model.ThreadDialog{
+			{BaseModel: shared.BaseModel{ID: ownerMemberID, DomainID: 1}, ContactID: ownerContactID, IsBot: true},
+		},
+	}
+
+	err := svc.ensureBotControl(context.Background(), thread, 1)
+
+	require.NoError(t, err)
+	require.Equal(t, 1, botControl.setControllerCalls, "must re-point controller at existing top")
+	require.Equal(t, ownerMemberID, botControl.lastSetControllerMemberID)
+	require.Equal(t, 0, botControl.pushCalls, "must not push a duplicate entry for the owner already on the stack")
+
+	granted := findGrantedEvent(outboxStore)
+	require.NotNil(t, granted, "granted must fire so flow_manager restarts the schema")
+	require.Equal(t, ownerMemberID, granted.MemberID)
+	require.False(t, granted.IsResume, "a fresh restart is an initial grant, not a resume")
 }
