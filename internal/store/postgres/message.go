@@ -145,6 +145,12 @@ func (m *messageStore) SaveMessage(ctx context.Context, msg *model.Message) (*mo
 		return nil, errors.Internal("collecting saved message", errors.WithCause(err), errors.WithID("postgres.message.save.collecting"))
 	}
 
+	// BotControllerMemberID is a passthrough field (db:"-") — it is never stored nor
+	// returned by the query, so the freshly scanned savedMessage would drop it. Carry it
+	// over from the input so the created event (built from the saved message) still carries
+	// the active bot controller for downstream routing.
+	savedMessage.BotControllerMemberID = msg.BotControllerMemberID
+
 	return savedMessage, nil
 }
 
@@ -520,6 +526,10 @@ func (m *messageStore) SaveMessageLocation(ctx context.Context, msg *model.Messa
 		return nil, errors.Internal("eror collecting saved location", errors.WithCause(err))
 	}
 
+	// Passthrough field (db:"-") is not returned by the query — carry it over so the
+	// created event keeps the active bot controller. See SaveMessage.
+	saved.BotControllerMemberID = msg.BotControllerMemberID
+
 	return saved, nil
 }
 
@@ -595,6 +605,10 @@ func (m *messageStore) SaveMessageContact(ctx context.Context, msg *model.Messag
 	if err != nil {
 		return nil, errors.Internal("eror collecting saved contact", errors.WithCause(err))
 	}
+
+	// Passthrough field (db:"-") is not returned by the query — carry it over so the
+	// created event keeps the active bot controller. See SaveMessage.
+	saved.BotControllerMemberID = msg.BotControllerMemberID
 
 	return saved, nil
 }
