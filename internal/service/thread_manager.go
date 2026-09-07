@@ -1076,11 +1076,18 @@ func (t *ThreadManagementService) CompleteBotControl(ctx context.Context, req *d
 		}
 
 		if thread.OwnerBotID != nil && *thread.OwnerBotID == req.MemberID {
-			t.log().WarnContext(ctx, "CompleteBotControl rejected: cannot complete owner bot",
-				"thread_id", req.ThreadID, "member_id", req.MemberID, "owner_bot_id", thread.OwnerBotID)
+			// The owner bot never leaves the control stack, but its schema has finished.
+			// Clear the active controller (leaving the owner on the stack) so the thread is
+			// left with no live flow. The next inbound customer message re-grants control to
+			// the owner via ensureBotControl, restarting its schema from scratch.
+			if _, clearErr := uow.BotControl().ClearController(ctx, req.ThreadID); clearErr != nil {
+				return clearErr
+			}
 
-			return errors.InvalidArgument("owner bot cannot be completed",
-				errors.WithID("service.thread_manager.complete_bot_control"))
+			t.log().InfoContext(ctx, "owner bot flow completed, marked idle for restart on next message",
+				"thread_id", req.ThreadID, "owner_bot_id", req.MemberID)
+
+			return nil
 		}
 
 		completedPosition := top.Position
@@ -1218,13 +1225,30 @@ func (t *ThreadManagementService) ensureBotControl(ctx context.Context, thread *
 	}
 
 	return t.uow.WithinTransaction(ctx, func(ctx context.Context, uow store.UnitOfWork) error {
-		_, err := uow.BotControl().Push(ctx, model.BotControlTransition{
-			ThreadID:    thread.ID,
-			NewMemberID: botDialog.ID,
-			Reason:      model.BotControlReasonInitial,
-		})
+		stack, err := uow.BotControl().GetStack(ctx, thread.ID)
 		if err != nil {
 			return err
+		}
+
+		if len(stack) > 0 {
+			// A stack already exists — this is the owner bot that never leaves the stack but
+			// whose flow went idle (bot_controller_id was cleared on completion). Re-point the
+			// controller at the existing top member instead of pushing a duplicate entry, so
+			// the granted event below restarts its schema from scratch.
+			top := stack[len(stack)-1]
+			if top.MemberID != nil {
+				if err = uow.BotControl().SetController(ctx, thread.ID, *top.MemberID); err != nil {
+					return err
+				}
+			}
+		} else {
+			if _, err = uow.BotControl().Push(ctx, model.BotControlTransition{
+				ThreadID:    thread.ID,
+				NewMemberID: botDialog.ID,
+				Reason:      model.BotControlReasonInitial,
+			}); err != nil {
+				return err
+			}
 		}
 
 		dialog := &model.ThreadDialogExtended{}

@@ -191,4 +191,10 @@ type BotControlStore interface {
 	// to (nil if there was none). Used to release a controller that lingers without a matching
 	// stack entry (legacy data, or the owner-bot fallback), so /close stays effective.
 	ClearController(ctx context.Context, threadID uuid.UUID) (*uuid.UUID, error)
+
+	// SetController points thread.bot_controller_id at an existing stack member without
+	// pushing a new entry. Used to re-grant control to a bot that is already on the stack —
+	// e.g. the owner bot that never leaves the stack but whose flow went idle and must be
+	// restarted on the next customer message.
+	SetController(ctx context.Context, threadID, memberID uuid.UUID) error
 }
