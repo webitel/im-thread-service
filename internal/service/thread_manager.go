@@ -545,7 +545,10 @@ func (t *ThreadManagementService) Transfer(ctx context.Context, req *dto.Transfe
 				"member_id", initiator.ID,
 			)
 
-			newTop, popErr := uow.BotControl().Pop(ctx, req.ThreadID, initiator.ID, model.BotControlReasonTransfer, nil)
+			// Handoff to a human agent RELEASES bot control entirely (bot_controller_id = NULL,
+			// no owner-bot fallback, no granted event) so the owner bot is not re-woken while the
+			// agent handles the thread. Pop returns nil for handoff, so the block below is skipped.
+			newTop, popErr := uow.BotControl().Pop(ctx, req.ThreadID, initiator.ID, model.BotControlReasonHandoff, nil)
 			if popErr != nil {
 				t.log().ErrorContext(ctx, "transfer: failed to pop initiator bot control stack",
 					"thread_id", req.ThreadID,
@@ -1280,6 +1283,11 @@ func (t *ThreadManagementService) ensureBotControl(ctx context.Context, thread *
 				if err = uow.BotControl().SetController(ctx, thread.ID, *top.MemberID); err != nil {
 					return err
 				}
+
+				// Reflect the re-granted controller on the in-memory thread the caller returns:
+				// the message being created off this thread must carry the correct
+				// bot_controller_member_id, not the stale NULL left after completion.
+				thread.BotControllerID = top.MemberID
 			}
 		} else {
 			if _, err = uow.BotControl().Push(ctx, model.BotControlTransition{
@@ -1289,6 +1297,8 @@ func (t *ThreadManagementService) ensureBotControl(ctx context.Context, thread *
 			}); err != nil {
 				return err
 			}
+
+			thread.BotControllerID = &botDialog.ID
 		}
 
 		dialog := &model.ThreadDialogExtended{}
@@ -1350,6 +1360,23 @@ func (t *ThreadManagementService) orchestrateDirectThreadCreation(ctx context.Co
 
 		for _, member := range members {
 			createdThread.Members = append(createdThread.Members, extendedThreadDialogToSimpleMapper(member))
+		}
+
+		// Bot control was just pushed for the target bot (see initializeDirectThreadDialogs).
+		// Reflect it on the in-memory thread so the first message created off this thread
+		// carries bot_controller_member_id — otherwise strict delivery would drop that first
+		// inbound message and the bot would only start from the synthesized grant, losing it.
+		if toIsBot {
+			for _, member := range members {
+				if member == nil || !member.IsBot {
+					continue
+				}
+
+				id := member.ID
+				createdThread.BotControllerID = &id
+
+				break
+			}
 		}
 
 		events, err := t.buildDirectThreadCreatedEvents(createdThread, req.From, req.To)

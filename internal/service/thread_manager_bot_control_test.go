@@ -258,6 +258,61 @@ func TestTransfer_BotContact_PushesStackAndPublishesBotControlEvents(t *testing.
 	require.False(t, granted.IsResume)
 }
 
+// A bot handing the conversation off to a HUMAN agent must fully release bot control:
+// Pop is called with reason=handoff and NO bot.control.granted is published — otherwise the
+// owner bot would be re-woken and keep re-triggering (e.g. re-transferring) on every message
+// while the agent handles the thread.
+func TestTransfer_ToHumanAgent_ReleasesBotControlWithoutGrant(t *testing.T) {
+	threadID := uuid.New()
+	initiatorContactID := uuid.New()
+	initiatorMemberID := uuid.New()
+	agentContactID := uuid.New()
+
+	// Pop returns nil (control released, no new controller) — the handoff case.
+	botControl := &fakeBotControlStore{}
+	outboxStore := &fakeOutboxStore{}
+
+	threadDialogStore := &fakeThreadDialogStore{
+		fullViewResult: []*model.ThreadDialogExtended{
+			{
+				BaseModel:   shared.BaseModel{ID: initiatorMemberID, DomainID: 1},
+				ContactID:   initiatorContactID,
+				ThreadID:    threadID,
+				ThreadRole:  model.RoleOwner,
+				IsBot:       true, // initiator is the (owner) bot transferring out
+				Permissions: model.ThreadPermissions{CanAddMembers: true},
+				Settings:    model.BaseThreadSetting{Title: "Test"},
+			},
+		},
+		quickViewResult: []*model.ThreadDialog{},
+	}
+
+	svc := &ThreadManagementService{
+		uow: fakeUnitOfWork{
+			threadDialogStore: threadDialogStore,
+			messageStore:      &fakeMessageStore{},
+			outboxStore:       outboxStore,
+			botControlStore:   botControl,
+		},
+		privacyChecker: fakePrivacyChecker{},
+	}
+
+	_, err := svc.Transfer(context.Background(), &dto.TransferThreadRequest{
+		ThreadID:           threadID,
+		NewMemberContactID: agentContactID,
+		InitiatorContactID: initiatorContactID,
+		NewMemberRole:      model.RoleMember,
+		TargetIsBot:        false, // handing off to a human agent
+	})
+	require.NoError(t, err)
+
+	require.Equal(t, model.BotControlReasonHandoff, botControl.lastPopReason,
+		"handoff to a human agent must pop with reason=handoff")
+
+	require.Nil(t, findGrantedEvent(outboxStore),
+		"no bot.control.granted must be published when handing off to a human agent")
+}
+
 func TestRemoveMember_ActiveBot_PopsStackAndPublishesBotControlGrantedWithIsResume(t *testing.T) {
 	threadID := uuid.New()
 	botMemberID := uuid.New()
