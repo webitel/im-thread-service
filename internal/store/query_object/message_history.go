@@ -57,13 +57,15 @@ func replyToColumn(callerID uuid.UUID) sq.Sqlizer {
 		case when exists (
 			select 1
 			from `+ThreadDialogTable+` priv
+			join `+ThreadTable+` thr on thr.id = priv.thread_id
 			where priv.thread_id = v_messages.thread_id
 			and priv.domain_id = v_messages.domain_id
 			and priv.member_id = ?::uuid
 			and priv.deleted_at is null
 			and priv.thread_role >= ?
+			and thr.kind <> ?
 		) then v_messages.reply_to_audit else v_messages.reply_to end as reply_to
-	`), callerID, int(model.RoleAdmin))
+	`), callerID, int(model.RoleAdmin), int(model.ThreadDirect))
 }
 
 func selectMessageFields(base sq.SelectBuilder, fields []string, callerID uuid.UUID) sq.SelectBuilder {

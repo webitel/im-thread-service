@@ -98,6 +98,33 @@ func (s *MessageService) resolveToIsBot(ctx context.Context, toID uuid.UUID, dom
 	return isBot
 }
 
+func (s *MessageService) seedThreadVariables(ctx context.Context, uow store.UnitOfWork, msg *model.Message, variables map[string]string) {
+	if len(variables) == 0 || msg == nil || msg.Member == nil || msg.Member.ID == uuid.Nil {
+		return
+	}
+
+	setBy := msg.Member.ID
+	entries := make(map[string]model.VariableEntry, len(variables))
+
+	for key, value := range variables {
+		entries[key] = model.VariableEntry{Value: value, SetBy: setBy}
+	}
+
+	if _, err := uow.ThreadVariables().Set(ctx, &model.SetThreadVariablesCommand{
+		Member: setBy,
+		Variables: &model.ThreadVariables{
+			ThreadID:  msg.ThreadID,
+			Variables: entries,
+		},
+	}); err != nil {
+		s.logger.WarnContext(ctx, "failed to seed thread variables from inbound message",
+			"thread_id", msg.ThreadID,
+			"member_id", setBy,
+			"err", err,
+		)
+	}
+}
+
 func (s *MessageService) SendText(ctx context.Context, in *dto.SendTextRequest) (*dto.SendTextResponse, error) {
 	if err := guards.SendTextGuard(in); err != nil {
 		return nil, errors.InvalidArgument("validating text message", errors.WithCause(err), errors.WithID("service.message.send_text"))
@@ -186,6 +213,8 @@ func (s *MessageService) SendText(ctx context.Context, in *dto.SendTextRequest) 
 		if err = s.recordInboundExternalID(ctx, uow, saved, &in.From, in.ExternalID); err != nil {
 			return err
 		}
+
+		s.seedThreadVariables(ctx, uow, saved, in.Variables)
 
 		if err = s.insertSentStatuses(ctx, uow, saved); err != nil {
 			return err
@@ -413,6 +442,8 @@ func (s *MessageService) SendDocument(ctx context.Context, in *dto.SendDocumentR
 			return errors.Internal("save external message id", errors.WithCause(err), errors.WithID("service.message.send_document"))
 		}
 
+		s.seedThreadVariables(txCtx, uow, msg, in.Variables)
+
 		if err := s.insertSentStatuses(txCtx, uow, msg); err != nil {
 			return errors.Internal("insert sent statuses", errors.WithCause(err), errors.WithID("service.message.send_document"))
 		}
@@ -531,6 +562,10 @@ func (s *MessageService) SendLocation(ctx context.Context, msg *model.Message) (
 		savedMsg.IdempotencyKey = msg.IdempotencyKey
 		savedMsg.ReplyTo = msg.ReplyTo
 
+		if err = s.recordInboundExternalID(txCtx, uow, savedMsg, &msg.From, msg.ExternalID); err != nil {
+			return err
+		}
+
 		if err = s.insertSentStatuses(txCtx, uow, savedMsg); err != nil {
 			return err
 		}
@@ -574,6 +609,10 @@ func (s *MessageService) SendContact(ctx context.Context, msg *model.Message) (*
 		savedMsg.To = msg.To
 		savedMsg.IdempotencyKey = msg.IdempotencyKey
 		savedMsg.ReplyTo = msg.ReplyTo
+
+		if err = s.recordInboundExternalID(txCtx, uow, savedMsg, &msg.From, msg.ExternalID); err != nil {
+			return err
+		}
 
 		if err = s.insertSentStatuses(txCtx, uow, savedMsg); err != nil {
 			return err
@@ -722,6 +761,13 @@ func (s *MessageService) SendSystemMessage(ctx context.Context, msg *model.Messa
 		log.ErrorContext(ctx, "transaction_failed", "err", err)
 
 		return nil, err
+	}
+
+	// A service event is as much a part of the conversation as a reply is, so
+	// the external channel has to hear about it too — that is what makes the
+	// per-gate templates reach a customer at all.
+	if err = s.sendMessageToExternalProvider(ctx, savedMsg); err != nil {
+		log.Error("sending system message to external providers", "error", err)
 	}
 
 	return savedMsg, nil
@@ -1040,6 +1086,8 @@ func (s *MessageService) prepareMessageForSending(ctx context.Context, msg *mode
 		}
 
 		msg.ReplyTo = preview
+	} else if msg.ReplyToExternalID != "" {
+		msg.ReplyTo = s.resolveExternalReply(ctx, msg.ReplyToExternalID, &msg.From, t, msg.DomainID)
 	}
 
 	return nil

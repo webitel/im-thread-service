@@ -45,20 +45,24 @@ func (t MessageType) String() string {
 type Message struct {
 	ID             uuid.UUID `json:"id" db:"id"`
 	SendAs         *uuid.UUID
-	IdempotencyKey string          `json:"idempotency_key" db:"-"`
-	ThreadID       uuid.UUID       `json:"thread_id" db:"thread_id"`
-	DomainID       int32           `json:"domain_id" db:"domain_id"`
-	From           shared.Peer     `json:"from" db:"from"`
-	SendTo         shared.Peer     `json:"send_to" db:"send_to"`
-	To             []*ThreadDialog `json:"to" db:"to"`
-	Body           string          `json:"body" db:"body"`
-	Type           MessageType     `json:"type" db:"type"`
-	Metadata       map[string]any  `json:"metadata,omitempty" db:"metadata"`
-	CreatedAt      time.Time       `json:"created_at" db:"created_at"`
-	UpdatedAt      time.Time       `json:"updated_at" db:"updated_at"`
-	Edited         bool            `json:"edited" db:"edited"`
-	SenderID       uuid.UUID       `json:"sender_id" db:"sender_id"`
-	MemberID       uuid.UUID       `json:"member_id" db:"member_id"`
+	IdempotencyKey string `json:"idempotency_key" db:"-"`
+
+	ExternalID string `json:"external_id,omitempty" db:"-"`
+
+	ReplyToExternalID string          `json:"reply_to_external_id,omitempty" db:"-"`
+	ThreadID          uuid.UUID       `json:"thread_id" db:"thread_id"`
+	DomainID          int32           `json:"domain_id" db:"domain_id"`
+	From              shared.Peer     `json:"from" db:"from"`
+	SendTo            shared.Peer     `json:"send_to" db:"send_to"`
+	To                []*ThreadDialog `json:"to" db:"to"`
+	Body              string          `json:"body" db:"body"`
+	Type              MessageType     `json:"type" db:"type"`
+	Metadata          map[string]any  `json:"metadata,omitempty" db:"metadata"`
+	CreatedAt         time.Time       `json:"created_at" db:"created_at"`
+	UpdatedAt         time.Time       `json:"updated_at" db:"updated_at"`
+	Edited            bool            `json:"edited" db:"edited"`
+	SenderID          uuid.UUID       `json:"sender_id" db:"sender_id"`
+	MemberID          uuid.UUID       `json:"member_id" db:"member_id"`
 
 	DeletedAt *time.Time    `json:"deleted_at,omitempty" db:"deleted_at"`
 	DeletedBy *ThreadDialog `json:"deleted_by,omitempty" db:"deleted_by"`

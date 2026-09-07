@@ -242,7 +242,7 @@ func mapReplyTo(in *model.ReplyToPreview) *impb.ReplyToMessage {
 	}
 
 	out := &impb.ReplyToMessage{
-		Id:        in.MessageID.String(),
+		MessageId: in.MessageID.String(),
 		SenderId:  in.SenderID.String(),
 		Type:      in.Type.String(),
 		Body:      in.Body,

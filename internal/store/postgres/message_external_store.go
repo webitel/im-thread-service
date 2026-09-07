@@ -62,16 +62,16 @@ func (s *messageExternalStore) UpdateDelivery(ctx context.Context, in *model.Mes
 	const query = `
 		update im_message.message_external_ids set
 			delivered_at = case
-				when @Status in (1, 2) then coalesce(delivered_at, @At)
+				when @Status in (2, 3) then coalesce(delivered_at, @At)
 				else delivered_at end,
 			read_at = case
-				when @Status = 2 then coalesce(read_at, @At)
+				when @Status = 3 then coalesce(read_at, @At)
 				else read_at end,
 			failed_at = case
-				when @Status = 3 then @At
+				when @Status = 4 then @At
 				else failed_at end,
 			failed_reason = case
-				when @Status = 3 then nullif(@Reason, '')
+				when @Status = 4 then nullif(@Reason, '')
 				else failed_reason end
 		where gate_id = @GateID and external_id = @ExternalID
 		returning message_id, thread_id, gate_id, external_id, direction

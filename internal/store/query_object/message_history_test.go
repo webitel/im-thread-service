@@ -30,11 +30,11 @@ func TestSelectMessageFields_ReplyAudit(t *testing.T) {
 			wantColumns: "id, reply_to",
 		},
 		{
-			name:      "caller gets the audit column behind a role check",
+			name:      "caller gets the audit column behind a role and kind check",
 			fields:    []string{"id", "reply_to"},
 			visibleTo: caller,
 			wantAudit: true,
-			wantArgs:  []any{caller, 2},
+			wantArgs:  []any{caller, 2, 1},
 		},
 		{
 			name:        "fields without reply_to are untouched",
@@ -63,11 +63,13 @@ func TestSelectMessageFields_ReplyAudit(t *testing.T) {
 
 			assert.Contains(t, sql, CompactSQL(
 				`case when exists ( select 1 from `+ThreadDialogTable+` priv
+					join `+ThreadTable+` thr on thr.id = priv.thread_id
 					where priv.thread_id = v_messages.thread_id
 					and priv.domain_id = v_messages.domain_id
 					and priv.member_id = $1::uuid
 					and priv.deleted_at is null
 					and priv.thread_role >= $2
+					and thr.kind <> $3
 				) then v_messages.reply_to_audit else v_messages.reply_to end as reply_to`,
 			))
 		})
