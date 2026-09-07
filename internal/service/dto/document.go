@@ -69,6 +69,9 @@ type SendDocumentRequest struct {
 	ReplyToExternalID string     `json:"reply_to_external_id,omitempty"`
 
 	ForwardOrigin *model.ForwardOrigin `json:"forward_origin,omitempty"`
+
+	// Variables are seeded onto the thread when this message creates it.
+	Variables map[string]string `json:"variables,omitempty"`
 }
 
 func (sendDocumentRequest *SendDocumentRequest) Validate() error {

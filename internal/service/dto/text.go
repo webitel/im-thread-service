@@ -21,6 +21,8 @@ type (
 		ReplyToExternalID string     `json:"reply_to_external_id,omitempty"`
 
 		ForwardOrigin *model.ForwardOrigin `json:"forward_origin,omitempty"`
+
+		Variables map[string]string `json:"variables,omitempty"`
 	}
 
 	SendTextResponse struct {

@@ -26,6 +26,7 @@ func MapToSendTextRequest(in *impb.SendTextRequest) *dto.SendTextRequest {
 		ExternalID:        in.GetExternalId(),
 		ReplyToExternalID: in.GetReplyToExternalId(),
 		ForwardOrigin:     MapExternalForwardOrigin(in.GetForwardOrigin()),
+		Variables:         in.GetVariables(),
 	}
 }
 

@@ -35,6 +35,7 @@ type (
 		logger         *slog.Logger
 		privacyChecker ThreadPrivacyChecker
 		contactInfo    ContactInfoProvider
+		providers      ProvidersAdapter
 	}
 
 	ThreadPrivacyChecker interface {
@@ -56,7 +57,13 @@ type (
 )
 
 // NewThreadService returns a new thread manager, given a unit of work.
-func NewThreadService(logger *slog.Logger, uow store.UnitOfWork, privacyChecker ThreadPrivacyChecker, contactInfo ContactInfoProvider) *ThreadManagementService {
+func NewThreadService(
+	logger *slog.Logger,
+	uow store.UnitOfWork,
+	privacyChecker ThreadPrivacyChecker,
+	contactInfo ContactInfoProvider,
+	providers ProvidersAdapter,
+) *ThreadManagementService {
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -66,6 +73,7 @@ func NewThreadService(logger *slog.Logger, uow store.UnitOfWork, privacyChecker 
 		logger:         logger.With(slog.String("component", "thread")),
 		privacyChecker: privacyChecker,
 		contactInfo:    contactInfo,
+		providers:      providers,
 	}
 }
 
@@ -315,7 +323,10 @@ func (t *ThreadManagementService) AddMember(ctx context.Context, req *dto.AddMem
 		return uuid.Nil, err
 	}
 
-	var newMember *model.ThreadDialogExtended
+	var (
+		newMember      *model.ThreadDialogExtended
+		systemMessages []*model.Message
+	)
 
 	err = t.uow.WithinTransaction(ctx, func(ctx context.Context, uow store.UnitOfWork) error {
 		newMember, err = uow.ThreadDialogStore().Create(ctx, &model.ThreadDialogExtended{
@@ -346,7 +357,7 @@ func (t *ThreadManagementService) AddMember(ctx context.Context, req *dto.AddMem
 			return errors.Internal("search of members failed", errors.WithCause(err))
 		}
 
-		err = t.sendAddMemberSystemMessage(ctx, uow, &addMemberEventArgs{
+		systemMessage, err := t.sendAddMemberSystemMessage(ctx, uow, &addMemberEventArgs{
 			initiator: initiator,
 			newMember: newMember,
 			receivers: eventReceivers,
@@ -356,6 +367,8 @@ func (t *ThreadManagementService) AddMember(ctx context.Context, req *dto.AddMem
 		if err != nil {
 			return errors.Internal("failed to send system message", errors.WithCause(err))
 		}
+
+		systemMessages = append(systemMessages, systemMessage)
 
 		if req.IsBot {
 			t.log().DebugContext(ctx, "bot member added: pushing bot control stack",
@@ -400,6 +413,8 @@ func (t *ThreadManagementService) AddMember(ctx context.Context, req *dto.AddMem
 		return uuid.Nil, err
 	}
 
+	t.dispatchSystemMessages(ctx, systemMessages)
+
 	return newMember.ID, nil
 }
 
@@ -439,7 +454,10 @@ func (t *ThreadManagementService) Transfer(ctx context.Context, req *dto.Transfe
 		return uuid.Nil, err
 	}
 
-	var newMemberID uuid.UUID
+	var (
+		newMemberID    uuid.UUID
+		systemMessages []*model.Message
+	)
 
 	err = t.uow.WithinTransaction(ctx, func(ctx context.Context, uow store.UnitOfWork) error {
 		now := time.Now().UTC()
@@ -478,7 +496,7 @@ func (t *ThreadManagementService) Transfer(ctx context.Context, req *dto.Transfe
 			return errors.Internal("search of members failed", errors.WithCause(err))
 		}
 
-		err = t.sendTransferSystemMessage(ctx, uow, &transferMemberEventArgs{
+		systemMessage, err := t.sendTransferSystemMessage(ctx, uow, &transferMemberEventArgs{
 			initiator: initiator,
 			newMember: newMember,
 			receivers: eventReceivers,
@@ -488,6 +506,8 @@ func (t *ThreadManagementService) Transfer(ctx context.Context, req *dto.Transfe
 		if err != nil {
 			return errors.Internal("failed to send system message", errors.WithCause(err))
 		}
+
+		systemMessages = append(systemMessages, systemMessage)
 
 		if req.TargetIsBot {
 			t.log().DebugContext(ctx, "transfer: target is bot, pushing bot control stack",
@@ -576,6 +596,8 @@ func (t *ThreadManagementService) Transfer(ctx context.Context, req *dto.Transfe
 		return uuid.Nil, err
 	}
 
+	t.dispatchSystemMessages(ctx, systemMessages)
+
 	return newMemberID, nil
 }
 
@@ -650,21 +672,21 @@ type transferMemberEventArgs struct {
 	domainID  int
 }
 
-func (t *ThreadManagementService) sendAddMemberSystemMessage(ctx context.Context, uow store.UnitOfWork, args *addMemberEventArgs) error {
+func (t *ThreadManagementService) sendAddMemberSystemMessage(ctx context.Context, uow store.UnitOfWork, args *addMemberEventArgs) (*model.Message, error) {
 	if args == nil {
-		return errors.New("add member event args cannot be nil")
+		return nil, errors.New("add member event args cannot be nil")
 	}
 
 	if args.newMember == nil {
-		return errors.New("target member cannot be nil")
+		return nil, errors.New("target member cannot be nil")
 	}
 
 	if args.receivers == nil {
-		return errors.New("message recipients cannot be nil")
+		return nil, errors.New("message recipients cannot be nil")
 	}
 
 	if args.domainID <= 0 {
-		return errors.InvalidArgument("domain id must be greater than zero", errors.WithID("service.thread_manager.send_add_member_system_message"))
+		return nil, errors.InvalidArgument("domain id must be greater than zero", errors.WithID("service.thread_manager.send_add_member_system_message"))
 	}
 
 	var (
@@ -713,7 +735,7 @@ func (t *ThreadManagementService) sendAddMemberSystemMessage(ctx context.Context
 
 	savedMsg, err := t.sendThreadSystemMessage(ctx, uow, message)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	joinedEvent := &event.MemberJoined{
@@ -725,7 +747,31 @@ func (t *ThreadManagementService) sendAddMemberSystemMessage(ctx context.Context
 		System:     event.NewSystemPayload(systemMessage.Type, systemMessage.Metadata),
 	}
 
-	return t.publishMemberEvent(ctx, uow, joinedEvent)
+	if err := t.publishMemberEvent(ctx, uow, joinedEvent); err != nil {
+		return nil, err
+	}
+
+	return savedMsg, nil
+}
+
+func (t *ThreadManagementService) dispatchSystemMessages(ctx context.Context, messages []*model.Message) {
+	if t.providers == nil {
+		return
+	}
+
+	for _, msg := range messages {
+		if msg == nil {
+			continue
+		}
+
+		if err := t.providers.SendMessage(ctx, msg); err != nil {
+			t.log().ErrorContext(ctx, "failed to deliver system message to external providers",
+				"thread_id", msg.ThreadID,
+				"message_id", msg.ID,
+				"err", err,
+			)
+		}
+	}
 }
 
 func (t *ThreadManagementService) sendThreadSystemMessage(ctx context.Context, uow store.UnitOfWork, msg *model.Message) (*model.Message, error) {
@@ -773,6 +819,8 @@ func (t *ThreadManagementService) RemoveMember(ctx context.Context, req *dto.Rem
 	if target == nil {
 		return errors.NotFound("target not found")
 	}
+
+	var systemMessages []*model.Message
 
 	if req.InitiatorContactID != uuid.Nil {
 		err = t.verifyRemoveMember(initiator, target)
@@ -828,7 +876,7 @@ func (t *ThreadManagementService) RemoveMember(ctx context.Context, req *dto.Rem
 			}
 		}
 
-		err = t.sendRemoveMemberSystemMessage(ctx, uow, &removeMemberEventArgs{
+		systemMessage, err := t.sendRemoveMemberSystemMessage(ctx, uow, &removeMemberEventArgs{
 			initiator: initiator,
 			member:    target,
 			receivers: eventReceivers,
@@ -839,30 +887,34 @@ func (t *ThreadManagementService) RemoveMember(ctx context.Context, req *dto.Rem
 			return err
 		}
 
+		systemMessages = append(systemMessages, systemMessage)
+
 		return nil
 	})
 	if err != nil {
 		return err
 	}
 
+	t.dispatchSystemMessages(ctx, systemMessages)
+
 	return nil
 }
 
-func (t *ThreadManagementService) sendRemoveMemberSystemMessage(ctx context.Context, uow store.UnitOfWork, args *removeMemberEventArgs) error {
+func (t *ThreadManagementService) sendRemoveMemberSystemMessage(ctx context.Context, uow store.UnitOfWork, args *removeMemberEventArgs) (*model.Message, error) {
 	if args == nil {
-		return errors.New("remove member event args cannot be nil")
+		return nil, errors.New("remove member event args cannot be nil")
 	}
 
 	if args.member == nil {
-		return errors.New("removed member cannot be nil")
+		return nil, errors.New("removed member cannot be nil")
 	}
 
 	if args.receivers == nil {
-		return errors.New("message recipients cannot be nil")
+		return nil, errors.New("message recipients cannot be nil")
 	}
 
 	if args.domainID <= 0 {
-		return errors.InvalidArgument("domain id must be greater than zero", errors.WithID("service.thread_manager.send_remove_member_system_message"))
+		return nil, errors.InvalidArgument("domain id must be greater than zero", errors.WithID("service.thread_manager.send_remove_member_system_message"))
 	}
 
 	removedMember := args.member
@@ -913,7 +965,7 @@ func (t *ThreadManagementService) sendRemoveMemberSystemMessage(ctx context.Cont
 
 	savedMsg, err := t.sendThreadSystemMessage(ctx, uow, message)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	leftEvent := &event.MemberLeft{
@@ -925,28 +977,32 @@ func (t *ThreadManagementService) sendRemoveMemberSystemMessage(ctx context.Cont
 		System:     event.NewSystemPayload(memberRemovedSystemMessageType, metadata),
 	}
 
-	return t.publishMemberEvent(ctx, uow, leftEvent)
+	if err := t.publishMemberEvent(ctx, uow, leftEvent); err != nil {
+		return nil, err
+	}
+
+	return savedMsg, nil
 }
 
-func (t *ThreadManagementService) sendTransferSystemMessage(ctx context.Context, uow store.UnitOfWork, args *transferMemberEventArgs) error {
+func (t *ThreadManagementService) sendTransferSystemMessage(ctx context.Context, uow store.UnitOfWork, args *transferMemberEventArgs) (*model.Message, error) {
 	if args == nil {
-		return errors.New("transfer member event args cannot be nil")
+		return nil, errors.New("transfer member event args cannot be nil")
 	}
 
 	if args.initiator == nil {
-		return errors.New("initiator member cannot be nil")
+		return nil, errors.New("initiator member cannot be nil")
 	}
 
 	if args.newMember == nil {
-		return errors.New("new member cannot be nil")
+		return nil, errors.New("new member cannot be nil")
 	}
 
 	if args.receivers == nil {
-		return errors.New("message recipients cannot be nil")
+		return nil, errors.New("message recipients cannot be nil")
 	}
 
 	if args.domainID <= 0 {
-		return errors.InvalidArgument("domain id must be greater than zero", errors.WithID("service.thread_manager.send_transfer_system_message"))
+		return nil, errors.InvalidArgument("domain id must be greater than zero", errors.WithID("service.thread_manager.send_transfer_system_message"))
 	}
 
 	metadata := map[string]any{
@@ -983,7 +1039,7 @@ func (t *ThreadManagementService) sendTransferSystemMessage(ctx context.Context,
 
 	savedMsg, err := t.sendThreadSystemMessage(ctx, uow, message)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	leftEvent := &event.MemberLeft{
@@ -995,7 +1051,7 @@ func (t *ThreadManagementService) sendTransferSystemMessage(ctx context.Context,
 		System:     event.NewSystemPayload(memberTransferedSystemMessageType, metadata),
 	}
 	if err = t.publishMemberEvent(ctx, uow, leftEvent); err != nil {
-		return err
+		return nil, err
 	}
 
 	joinedEvent := &event.MemberJoined{
@@ -1007,7 +1063,11 @@ func (t *ThreadManagementService) sendTransferSystemMessage(ctx context.Context,
 		System:     event.NewSystemPayload(memberTransferedSystemMessageType, metadata),
 	}
 
-	return t.publishMemberEvent(ctx, uow, joinedEvent)
+	if err := t.publishMemberEvent(ctx, uow, joinedEvent); err != nil {
+		return nil, err
+	}
+
+	return savedMsg, nil
 }
 
 func (t *ThreadManagementService) verifyRemoveMember(initiator, target *model.ThreadDialogExtended) error {

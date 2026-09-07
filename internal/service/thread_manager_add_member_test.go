@@ -28,6 +28,7 @@ type fakeUnitOfWork struct {
 	botControlStore      store.BotControlStore
 	threadStore          store.ThreadStore
 	threadTagStore       store.ThreadTagStore
+	threadVariablesStore store.ThreadVariablesStore
 }
 
 func (f fakeUnitOfWork) WithinTransaction(ctx context.Context, fn func(context.Context, store.UnitOfWork) error) error {
@@ -120,6 +121,32 @@ func (f fakeUnitOfWork) ThreadTagStore() store.ThreadTagStore {
 	}
 
 	return f.threadTagStore
+}
+
+func (f fakeUnitOfWork) ThreadVariables() store.ThreadVariablesStore {
+	if f.threadVariablesStore == nil {
+		return noopThreadVariablesStore{}
+	}
+
+	return f.threadVariablesStore
+}
+
+type noopThreadVariablesStore struct{}
+
+func (noopThreadVariablesStore) Set(ctx context.Context, variables *model.SetThreadVariablesCommand) (*model.ThreadVariables, error) {
+	return variables.Variables, nil
+}
+
+func (noopThreadVariablesStore) Search(ctx context.Context, query model.GetThreadVariablesQuery) (model.Page[*model.ThreadVariables], error) {
+	return model.Page[*model.ThreadVariables]{}, nil
+}
+
+func (noopThreadVariablesStore) Locate(ctx context.Context, threadID uuid.UUID) (*model.ThreadVariables, error) {
+	return nil, nil
+}
+
+func (noopThreadVariablesStore) Flush(ctx context.Context, flushCmd model.FlushVariablesCommand) (*model.ThreadVariables, error) {
+	return nil, nil
 }
 
 type noopThreadTagStore struct{}
