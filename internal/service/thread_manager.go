@@ -1368,12 +1368,14 @@ func (t *ThreadManagementService) orchestrateDirectThreadCreation(ctx context.Co
 		// inbound message and the bot would only start from the synthesized grant, losing it.
 		if toIsBot {
 			for _, member := range members {
-				if member != nil && member.IsBot {
-					id := member.ID
-					createdThread.BotControllerID = &id
-
-					break
+				if member == nil || !member.IsBot {
+					continue
 				}
+
+				id := member.ID
+				createdThread.BotControllerID = &id
+
+				break
 			}
 		}
 

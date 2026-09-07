@@ -210,7 +210,7 @@ func (s *botControlStore) Pop(ctx context.Context, threadID, memberID uuid.UUID,
 	`, pgx.NamedArgs{
 		"ThreadID": threadID,
 		"IsTop":    isTop,
-		// client_leave: release to NULL only once the stack empties (existing behaviour).
+		// client_leave: release to NULL only once the stack empties (existing behavior).
 		"IsClientLeave": reason == model.BotControlReasonClientLeave,
 		// handoff (bot → human agent): release control unconditionally — no lower bot and
 		// no owner-bot fallback becomes controller, so no bot is woken while an agent handles.
