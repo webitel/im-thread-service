@@ -1084,34 +1084,32 @@ func (t *ThreadManagementService) CompleteBotControl(ctx context.Context, req *d
 			return err
 		}
 
-		// Only the active controller (top of stack) may complete bot control.
+		// CompleteBotControl is order-independent and idempotent. By the time a bot's schema
+		// ends, control may already have moved on: a joinQueue transfer adds the next bot and
+		// pushes it on top before this call arrives. So we remove the caller from wherever it
+		// sits on the stack and hand control onward only if it was the active controller.
 		if len(stack) == 0 {
-			t.log().WarnContext(
-				ctx,
-				"CompleteBotControl rejected: stack is empty — thread has no active bot controller",
-				"thread_id",
-				req.ThreadID,
-				"requested_member_id",
-				req.MemberID,
-			)
+			// Late or duplicate call after the stack already cleared — nothing to complete.
+			return nil
+		}
 
-			return errors.InvalidArgument("bot control stack is empty for this thread", errors.WithID("service.thread_manager.complete_bot_control"))
+		var completing *model.BotControlStackEntry
+
+		for _, entry := range stack {
+			if entry.MemberID != nil && *entry.MemberID == req.MemberID {
+				completing = entry
+
+				break
+			}
+		}
+
+		if completing == nil {
+			// Caller already left the stack (duplicate call, or removed via another path).
+			return nil
 		}
 
 		top := stack[len(stack)-1]
-
-		if top.MemberID == nil || *top.MemberID != req.MemberID {
-			t.log().WarnContext(ctx, "CompleteBotControl rejected: member is not the active controller",
-				"thread_id", req.ThreadID,
-				"requested_member_id", req.MemberID,
-				"active_member_id", top.MemberID,
-				"active_position", top.Position,
-				"stack_depth", len(stack),
-			)
-
-			return errors.InvalidArgument("member is not the active bot controller",
-				errors.WithID("service.thread_manager.complete_bot_control"))
-		}
+		wasActiveController := top.MemberID != nil && *top.MemberID == req.MemberID
 
 		thread, threadErr := uow.ThreadStore().Get(ctx, queryobject.NewThreadQueryObject().WithIDFilter(req.ThreadID).WithDomainIDFilter(req.DomainID))
 		if threadErr != nil {
@@ -1119,27 +1117,32 @@ func (t *ThreadManagementService) CompleteBotControl(ctx context.Context, req *d
 		}
 
 		if thread.OwnerBotID != nil && *thread.OwnerBotID == req.MemberID {
-			// The owner bot is the permanent controller and must never complete or leave bot
-			// control: it stays on the stack AND stays the active controller so the next inbound
-			// customer message is routed to it (delivery keeps only the active controller in the
-			// recipient list) and flow_manager restarts its schema from scratch via nodeMessage.
-			// Reject the completion instead of clearing the controller — clearing it to NULL made
-			// delivery treat the thread as "no active bot", so the owner was never woken again.
-			// flow_manager calls CompleteBotControl on every schema end (completeId is always set),
-			// so this rejection is expected on a normal owner-flow end; it is a no-op guard that
-			// leaves bot_controller_id pointing at the owner.
-			t.log().DebugContext(ctx, "owner bot completion rejected: owner cannot leave, kept as controller for next message",
+			// The owner bot is the permanent controller and must never complete or leave: it
+			// stays on the stack AND stays the active controller so the next inbound customer
+			// message is routed to it and flow_manager restarts its schema via nodeMessage.
+			// flow_manager calls CompleteBotControl on every schema end, so this is a no-op on a
+			// normal owner-flow end — return nil (not an error) to avoid spurious error logs.
+			t.log().DebugContext(ctx, "owner bot completion is a no-op: owner kept as controller",
 				"thread_id", req.ThreadID, "owner_bot_id", req.MemberID)
 
-			return errors.Forbidden("owner bot cannot complete or leave bot control",
-				errors.WithID("service.thread_manager.complete_bot_control.owner_cannot_leave"))
+			return nil
 		}
 
-		completedPosition := top.Position
+		completedPosition := completing.Position
 
 		newTop, err := uow.BotControl().Pop(ctx, req.ThreadID, req.MemberID, model.BotControlReasonCompleted, nil)
 		if err != nil {
 			return err
+		}
+
+		// A transient bot below the top completed (an intermediate hop in a chain of transfers).
+		// Pop soft-deleted its auto_leave dialog, but the active controller is unchanged, so no
+		// grant must be published — publishing one would re-grant control to the running top bot.
+		if !wasActiveController {
+			t.log().DebugContext(ctx, "non-active bot completed, removed from stack without regranting control",
+				"thread_id", req.ThreadID, "member_id", req.MemberID, "completed_position", completedPosition)
+
+			return nil
 		}
 
 		if newTop == nil || newTop.MemberID == nil {
