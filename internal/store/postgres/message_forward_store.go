@@ -12,15 +12,15 @@ import (
 	queryobject "github.com/webitel/im-thread-service/internal/store/query_object"
 )
 
-const forwardSourceFields = `id, thread_id, sender_id, type, body, metadata, created_at,
-	documents, images, location, contact, interactive`
+const forwardSourceFields = `m.id, m.thread_id, m.sender_id, m.type, m.body, m.metadata, m.created_at,
+	m.documents, m.images, m.location, m.contact, m.interactive`
 
 func (m *messageStore) LoadForwardSources(
 	ctx context.Context,
 	ids []uuid.UUID,
 	callerID uuid.UUID,
 	domainID int32,
-) ([]*model.Message, error) {
+) (*model.MessageForwardSources, error) {
 	if len(ids) == 0 {
 		return nil, errors.InvalidArgument("message ids cannot be empty", errors.WithID("postgres.message.load_forward_sources"))
 	}
@@ -30,26 +30,38 @@ func (m *messageStore) LoadForwardSources(
 	}
 
 	query := queryobject.CompactSQL(`
-		select ` + forwardSourceFields + `
+		select ` + forwardSourceFields + `,
+			case
+				when d.dialog_id is null then @NotFound::smallint
+				when m.deleted_at is not null then @AlreadyDeleted::smallint
+				when d.dialog_deleted_at is not null then @ChatClosed::smallint
+				when m.type = @SystemType then @NotAllowed::smallint
+				else @Forwardable::smallint
+			end as reason
 		from ` + queryobject.MessageHistoryView + ` m
-		where m.id = any(@IDs)
-		  and m.domain_id = @DomainID
-		  and m.deleted_at is null
-		  and m.type <> 4
-		  and exists (
-			select 1
+		left join lateral (
+			select td.id as dialog_id, td.deleted_at as dialog_deleted_at
 			from im_thread.thread_dialog td
 			where td.thread_id = m.thread_id
 			  and td.member_id = @CallerID
-			  and td.deleted_at is null
-		  )
+			order by td.deleted_at nulls first
+			limit 1
+		) d on true
+		where m.id = any(@IDs)
+		  and m.domain_id = @DomainID
 		order by m.created_at, m.id
 	`)
 
 	args := pgx.NamedArgs{
-		"IDs":      ids,
-		"CallerID": callerID,
-		"DomainID": domainID,
+		"IDs":            ids,
+		"CallerID":       callerID,
+		"DomainID":       domainID,
+		"SystemType":     int16(model.MessageTypeSystem),
+		"Forwardable":    int16(model.MessageSkipUnspecified),
+		"NotFound":       int16(model.MessageSkipNotFound),
+		"AlreadyDeleted": int16(model.MessageSkipAlreadyDeleted),
+		"ChatClosed":     int16(model.MessageSkipChatClosed),
+		"NotAllowed":     int16(model.MessageSkipNotAllowed),
 	}
 
 	rows, err := m.db.Query(ctx, query, args)
@@ -61,7 +73,7 @@ func (m *messageStore) LoadForwardSources(
 		)
 	}
 
-	sources, err := pgx.CollectRows(rows, pgx.RowToAddrOfStructByNameLax[model.Message])
+	classified, err := pgx.CollectRows(rows, pgx.RowToAddrOfStructByNameLax[model.Message])
 	if err != nil {
 		return nil, errors.Internal(
 			"collecting forward sources",
@@ -70,7 +82,9 @@ func (m *messageStore) LoadForwardSources(
 		)
 	}
 
-	return sources, nil
+	sources, skipped := splitSkipOutcome(ids, classified)
+
+	return &model.MessageForwardSources{Sources: sources, Skipped: skipped}, nil
 }
 
 func (m *messageStore) CopyAttachments(ctx context.Context, sourceID, targetID uuid.UUID) error {
