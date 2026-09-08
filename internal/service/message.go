@@ -26,13 +26,6 @@ import (
 
 type ThreadManager interface {
 	EnsureDirectThread(ctx context.Context, req *dto.EnsureDirectThreadRequest) (*model.Thread, error)
-	ReleaseBotControl(ctx context.Context, req *dto.ReleaseBotControlRequest) error
-}
-
-const botStopCommand = "/close"
-
-func isStopCommand(body string) bool {
-	return strings.TrimSpace(body) == botStopCommand
 }
 
 type MessageService struct {
@@ -47,6 +40,8 @@ type MessageService struct {
 	typingBus   TypingBus
 	rateLimiter RateLimiter
 	typingCfg   config.TypingConfig
+
+	commands *CommandService
 }
 
 func NewMessageService(
@@ -59,6 +54,7 @@ func NewMessageService(
 	typingBus TypingBus,
 	rateLimiter RateLimiter,
 	typingCfg config.TypingConfig,
+	commands *CommandService,
 ) *MessageService {
 	return &MessageService{
 		uow:              uow,
@@ -70,6 +66,7 @@ func NewMessageService(
 		typingBus:        typingBus,
 		rateLimiter:      rateLimiter,
 		typingCfg:        typingCfg,
+		commands:         commands,
 	}
 }
 
@@ -117,7 +114,7 @@ func (s *MessageService) SendText(ctx context.Context, in *dto.SendTextRequest) 
 		)
 	}
 
-	t, err := s.threader.EnsureDirectThread(ctx, &dto.EnsureDirectThreadRequest{
+	thread, err := s.threader.EnsureDirectThread(ctx, &dto.EnsureDirectThreadRequest{
 		From:     &in.From,
 		To:       &in.To,
 		DomainID: int(in.DomainID),
@@ -136,7 +133,7 @@ func (s *MessageService) SendText(ctx context.Context, in *dto.SendTextRequest) 
 		return nil, err
 	}
 
-	for i, m := range t.Members {
+	for i, m := range thread.Members {
 		via := "<nil>"
 		if m.Via != nil {
 			via = *m.Via
@@ -149,30 +146,34 @@ func (s *MessageService) SendText(ctx context.Context, in *dto.SendTextRequest) 
 		)
 	}
 
-	if isStopCommand(in.Body) && s.shouldStopBot(t, in.From.ID) {
-		return s.handleBotStopCommand(ctx, in, t)
+	if msg, handled, err := s.commands.Dispatch(ctx, thread, in); handled {
+		if err != nil {
+			return nil, err
+		}
+
+		return s.sendCommandMessage(ctx, in, msg)
 	}
 
-	replyPreview, err := s.resolveReply(ctx, in.ReplyToMessageID, in.ReplyToExternalID, &in.From, t, int32(in.DomainID))
+	replyPreview, err := s.resolveReply(ctx, in.ReplyToMessageID, in.ReplyToExternalID, &in.From, thread, int32(in.DomainID))
 	if err != nil {
 		return nil, err
 	}
 
 	msg := &model.Message{
-		ThreadID:              t.ID,
+		ThreadID:              thread.ID,
 		DomainID:              int32(in.DomainID),
 		From:                  in.From,
 		Body:                  in.Body,
-		To:                    t.Members,
+		To:                    thread.Members,
 		Type:                  model.MessageTypeText,
 		Metadata:              model.BuildMetadata(in.Body),
 		SendAs:                in.SendAs,
-		BotControllerMemberID: t.BotControllerID,
+		BotControllerMemberID: thread.BotControllerID,
 		ReplyTo:               replyPreview,
 		ForwardOrigin:         in.ForwardOrigin,
 	}
 
-	msg.SetMemberFromSlice(t.Members)
+	msg.SetMemberFromSlice(thread.Members)
 
 	err = s.uow.WithinTransaction(ctx, func(ctx context.Context, uow store.UnitOfWork) error {
 		saved, err := uow.Messages().SaveMessage(ctx, msg)
@@ -180,7 +181,7 @@ func (s *MessageService) SendText(ctx context.Context, in *dto.SendTextRequest) 
 			return err
 		}
 
-		saved.To = t.Members
+		saved.To = thread.Members
 		saved.ReplyTo = msg.ReplyTo
 
 		if err = s.recordInboundExternalID(ctx, uow, saved, &in.From, in.ExternalID); err != nil {
@@ -206,7 +207,7 @@ func (s *MessageService) SendText(ctx context.Context, in *dto.SendTextRequest) 
 			ctx,
 			"error saving text message",
 			slog.Any("error", err),
-			slog.String("thread_id", t.ID.String()),
+			slog.String("thread_id", thread.ID.String()),
 			slog.String("from", msg.From.ID.String()),
 		)
 
@@ -220,42 +221,23 @@ func (s *MessageService) SendText(ctx context.Context, in *dto.SendTextRequest) 
 	return &dto.SendTextResponse{ID: msg.ID, To: in.To}, nil
 }
 
-const botStoppedSystemType = "bot_stopped"
-
-func (s *MessageService) shouldStopBot(t *model.Thread, fromContactID uuid.UUID) bool {
-	if t == nil || t.BotControllerID == nil {
-		return false
+func (s *MessageService) sendCommandMessage(ctx context.Context, in *dto.SendTextRequest, msg *model.Message) (*dto.SendTextResponse, error) {
+	if msg == nil {
+		return &dto.SendTextResponse{To: in.To}, nil
 	}
 
-	if sender := memberByContactID(t.Members, fromContactID); sender != nil {
-		if sender.IsBot || sender.ID == *t.BotControllerID {
-			return false
-		}
+	saved, err := s.writeSystemMessage(ctx, msg)
+	if err != nil {
+		s.logger.ErrorContext(ctx, "failed to write command system message", "err", err,
+			slog.String("thread_id", msg.ThreadID.String()))
+
+		return &dto.SendTextResponse{To: in.To}, nil
 	}
 
-	return true
+	return &dto.SendTextResponse{ID: saved.ID, To: in.To}, nil
 }
 
-func (s *MessageService) handleBotStopCommand(ctx context.Context, in *dto.SendTextRequest, t *model.Thread) (*dto.SendTextResponse, error) {
-	log := s.logger.With("operation", "message.handleBotStopCommand", slog.String("thread_id", t.ID.String()))
-
-	var initiatorMemberID uuid.UUID
-	if sender := memberByContactID(t.Members, in.From.ID); sender != nil {
-		initiatorMemberID = sender.ID
-	}
-
-	if err := s.threader.ReleaseBotControl(ctx, &dto.ReleaseBotControlRequest{
-		ThreadID:          t.ID,
-		InitiatorMemberID: initiatorMemberID,
-		DomainID:          int(in.DomainID),
-	}); err != nil {
-		log.ErrorContext(ctx, "failed to release bot control on /close", "err", err)
-
-		return nil, err
-	}
-
-	msg := s.buildBotStoppedMessage(in, t)
-
+func (s *MessageService) writeSystemMessage(ctx context.Context, msg *model.Message) (*model.Message, error) {
 	var saved *model.Message
 
 	err := s.uow.WithinTransaction(ctx, func(txCtx context.Context, uow store.UnitOfWork) error {
@@ -265,6 +247,7 @@ func (s *MessageService) handleBotStopCommand(ctx context.Context, in *dto.SendT
 		}
 
 		saved.To = msg.To
+		saved.IdempotencyKey = msg.IdempotencyKey
 
 		if e = s.insertSentStatuses(txCtx, uow, saved); e != nil {
 			return e
@@ -275,54 +258,10 @@ func (s *MessageService) handleBotStopCommand(ctx context.Context, in *dto.SendT
 		return s.dispatchMessageEvents(txCtx, uow, saved)
 	})
 	if err != nil {
-		log.ErrorContext(ctx, "failed to send bot stopped system message", "err", err)
-
-		return &dto.SendTextResponse{To: in.To}, nil
+		return nil, err
 	}
 
-	log.InfoContext(ctx, "bot stopped via /close", slog.String("system_message_id", saved.ID.String()))
-
-	return &dto.SendTextResponse{ID: saved.ID, To: in.To}, nil
-}
-
-func (s *MessageService) buildBotStoppedMessage(in *dto.SendTextRequest, t *model.Thread) *model.Message {
-	to := make([]*model.ThreadDialog, 0, len(t.Members))
-	for _, m := range t.Members {
-		if m != nil && !m.IsBot {
-			to = append(to, m)
-		}
-	}
-
-	msg := &model.Message{
-		ThreadID:       t.ID,
-		DomainID:       int32(in.DomainID),
-		From:           in.From,
-		SendTo:         in.To,
-		SendAs:         in.SendAs,
-		Body:           in.Body,
-		To:             to,
-		Type:           model.MessageTypeSystem,
-		IdempotencyKey: in.SendID,
-		Metadata:       model.BuildMetadata(in.Body),
-		System: &model.MessageSystem{
-			Type:     botStoppedSystemType,
-			Metadata: make(map[string]any),
-		},
-	}
-
-	msg.SetMemberFromSlice(t.Members)
-
-	return msg
-}
-
-func memberByContactID(members []*model.ThreadDialog, contactID uuid.UUID) *model.ThreadDialog {
-	for _, m := range members {
-		if m != nil && m.ContactID == contactID {
-			return m
-		}
-	}
-
-	return nil
+	return saved, nil
 }
 
 func (s *MessageService) SendDocument(ctx context.Context, in *dto.SendDocumentRequest) (*dto.SendDocumentResponse, error) {
@@ -699,25 +638,7 @@ func (s *MessageService) SendSystemMessage(ctx context.Context, msg *model.Messa
 		return nil, err
 	}
 
-	var savedMsg *model.Message
-
-	err := s.uow.WithinTransaction(ctx, func(txCtx context.Context, uow store.UnitOfWork) error {
-		var err error
-		if savedMsg, err = uow.Messages().SaveSystemMessage(txCtx, msg); err != nil {
-			return err
-		}
-
-		savedMsg.To = msg.To
-		savedMsg.IdempotencyKey = msg.IdempotencyKey
-
-		if err = s.insertSentStatuses(txCtx, uow, savedMsg); err != nil {
-			return err
-		}
-
-		savedMsg.WithCreatedEvent(ctx, msg.IdempotencyKey)
-
-		return s.dispatchMessageEvents(txCtx, uow, savedMsg)
-	})
+	savedMsg, err := s.writeSystemMessage(ctx, msg)
 	if err != nil {
 		log.ErrorContext(ctx, "transaction_failed", "err", err)
 

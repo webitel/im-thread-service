@@ -84,6 +84,10 @@ var serviceToHandlerBridgeModule = fx.Module(
 			return s
 		},
 
+		func(s *service.ThreadManagementService) service.BotController {
+			return s
+		},
+
 		func(s *service.ThreadManagementService) grpchandler.ThreadManagementService {
 			return s
 		},

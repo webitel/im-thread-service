@@ -35,31 +35,16 @@ func (f *fakeThreadManager) ReleaseBotControl(_ context.Context, req *dto.Releas
 	return nil
 }
 
-var _ ThreadManager = (*fakeThreadManager)(nil)
+var (
+	_ ThreadManager = (*fakeThreadManager)(nil)
+	_ BotController = (*fakeThreadManager)(nil)
+)
 
-func TestIsStopCommand(t *testing.T) {
-	cases := []struct {
-		name string
-		body string
-		want bool
-	}{
-		{"exact", "/close", true},
-		{"trimmed", "  /close  ", true},
-		{"trailing newline", "/close\n", true},
-		{"prefix only", "/close please", false},
-		{"different command", "/stop", false},
-		{"empty", "", false},
-		{"contains close", "please /close", false},
-	}
-
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			require.Equal(t, tc.want, isStopCommand(tc.body))
-		})
-	}
+func senderRequest(from uuid.UUID) *dto.SendTextRequest {
+	return &dto.SendTextRequest{From: shared.Peer{ID: from}}
 }
 
-func TestShouldStopBot(t *testing.T) {
+func TestCanStopBot(t *testing.T) {
 	botMemberID := uuid.New()
 	userContactID := uuid.New()
 	botContactID := uuid.New()
@@ -75,29 +60,29 @@ func TestShouldStopBot(t *testing.T) {
 		}
 	}
 
-	svc := &MessageService{}
+	svc := NewCommandService(nil, nil)
 
 	t.Run("user stops active bot", func(t *testing.T) {
-		require.True(t, svc.shouldStopBot(threadWithBot(), userContactID))
+		require.True(t, svc.canStopBot(newCommandRequest(threadWithBot(), senderRequest(userContactID))))
 	})
 
 	t.Run("no active bot controller", func(t *testing.T) {
 		thread := threadWithBot()
 		thread.BotControllerID = nil
-		require.False(t, svc.shouldStopBot(thread, userContactID))
+		require.False(t, svc.canStopBot(newCommandRequest(thread, senderRequest(userContactID))))
 	})
 
 	t.Run("sender is a bot", func(t *testing.T) {
-		require.False(t, svc.shouldStopBot(threadWithBot(), botContactID))
+		require.False(t, svc.canStopBot(newCommandRequest(threadWithBot(), senderRequest(botContactID))))
 	})
 
 	t.Run("nil thread", func(t *testing.T) {
-		require.False(t, svc.shouldStopBot(nil, userContactID))
+		require.False(t, svc.canStopBot(newCommandRequest(nil, senderRequest(userContactID))))
 	})
 
 	t.Run("sender not a member still stops bot", func(t *testing.T) {
 		// An external sender with no membership row may still issue /close.
-		require.True(t, svc.shouldStopBot(threadWithBot(), uuid.New()))
+		require.True(t, svc.canStopBot(newCommandRequest(threadWithBot(), senderRequest(uuid.New()))))
 	})
 }
 
@@ -121,23 +106,30 @@ func TestHandleBotStopCommand_ReleasesBotAndPersistsConfirmation(t *testing.T) {
 	messageStore := &fakeMessageStore{}
 	outboxStore := &fakeOutboxStore{}
 
-	svc := &MessageService{
-		logger:   slog.New(slog.NewTextHandler(io.Discard, nil)),
-		threader: threader,
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+
+	sender := &MessageService{
+		logger: logger,
 		uow: fakeUnitOfWork{
 			messageStore: messageStore,
 			outboxStore:  outboxStore,
 		},
 	}
 
+	svc := NewCommandService(threader, logger)
+
 	in := &dto.SendTextRequest{
 		From:     shared.Peer{ID: userContactID},
 		To:       shared.Peer{ID: botContactID},
-		Body:     botStopCommand,
+		Body:     model.CommandClose.String(),
 		DomainID: 1,
 	}
 
-	resp, err := svc.handleBotStopCommand(context.Background(), in, thread)
+	msg, err := svc.handleBotStopCommand(context.Background(), newCommandRequest(thread, in))
+	require.NoError(t, err)
+	require.NotNil(t, msg, "command must produce a bot_stopped system message")
+
+	resp, err := sender.sendCommandMessage(context.Background(), in, msg)
 	require.NoError(t, err)
 
 	// Bot control is released for this thread on behalf of the initiating user member.
@@ -154,7 +146,7 @@ func TestHandleBotStopCommand_ReleasesBotAndPersistsConfirmation(t *testing.T) {
 	require.Equal(t, threadID, saved.ThreadID)
 	require.Equal(t, model.MessageTypeSystem, saved.Type)
 	require.Equal(t, botStoppedSystemType, saved.System.Type)
-	require.Equal(t, botStopCommand, saved.Body)
+	require.Equal(t, model.CommandClose.String(), saved.Body)
 	// messages.metadata is JSONB NOT NULL; a nil map fails the insert and nothing shows in chat.
 	require.NotNil(t, saved.Metadata, "messages.metadata is NOT NULL")
 
