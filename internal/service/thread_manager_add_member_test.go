@@ -261,6 +261,7 @@ type fakeMessageStore struct {
 	lastDeleterID        uuid.UUID
 
 	forwardSources    []*model.Message
+	forwardSkipped    []model.MessageSkip
 	forwardSourcesErr error
 	lastForwardIDs    []uuid.UUID
 	lastForwardCaller uuid.UUID
@@ -285,7 +286,7 @@ func (f *fakeMessageStore) LoadForwardSources(
 	ids []uuid.UUID,
 	callerID uuid.UUID,
 	domainID int32,
-) ([]*model.Message, error) {
+) (*model.MessageForwardSources, error) {
 	f.lastForwardIDs = ids
 	f.lastForwardCaller = callerID
 
@@ -293,7 +294,10 @@ func (f *fakeMessageStore) LoadForwardSources(
 		return nil, f.forwardSourcesErr
 	}
 
-	return f.forwardSources, nil
+	return &model.MessageForwardSources{
+		Sources: f.forwardSources,
+		Skipped: f.forwardSkipped,
+	}, nil
 }
 
 func (f *fakeMessageStore) CopyAttachments(ctx context.Context, sourceID, targetID uuid.UUID) error {

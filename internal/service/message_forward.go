@@ -35,10 +35,12 @@ func (s *MessageService) ForwardMessages(ctx context.Context, in *dto.ForwardMes
 		slog.Int("requested", len(in.MessageIDs)),
 	)
 
-	sources, err := s.uow.Messages().LoadForwardSources(ctx, in.MessageIDs, in.From.ID, int32(in.DomainID))
+	loaded, err := s.uow.Messages().LoadForwardSources(ctx, in.MessageIDs, in.From.ID, int32(in.DomainID))
 	if err != nil {
 		return nil, err
 	}
+
+	sources := loaded.Sources
 
 	if len(sources) == 0 {
 		return nil, errors.NotFound(
@@ -91,7 +93,7 @@ func (s *MessageService) ForwardMessages(ctx context.Context, in *dto.ForwardMes
 		}
 	}
 
-	return buildForwardResponse(in, t.ID, copies), nil
+	return buildForwardResponse(in, t.ID, copies, loaded.Skipped), nil
 }
 
 func (s *MessageService) forwardOne(
@@ -268,30 +270,18 @@ func buildForwardResponse(
 	in *dto.ForwardMessagesRequest,
 	threadID uuid.UUID,
 	copies []*model.Message,
+	skipped []model.MessageSkip,
 ) *dto.ForwardMessagesResponse {
 	ids := make([]uuid.UUID, 0, len(copies))
-	forwarded := make(map[uuid.UUID]struct{}, len(copies))
 
 	for _, copied := range copies {
 		ids = append(ids, copied.ID)
-
-		if origin := copied.ForwardOrigin; origin != nil && origin.SourceMessageID != nil {
-			forwarded[*origin.SourceMessageID] = struct{}{}
-		}
-	}
-
-	skipped := make([]uuid.UUID, 0, len(in.MessageIDs)-len(copies))
-
-	for _, id := range in.MessageIDs {
-		if _, ok := forwarded[id]; !ok {
-			skipped = append(skipped, id)
-		}
 	}
 
 	return &dto.ForwardMessagesResponse{
-		To:         in.To,
-		ThreadID:   threadID,
-		IDs:        ids,
-		SkippedIDs: skipped,
+		To:       in.To,
+		ThreadID: threadID,
+		IDs:      ids,
+		Skipped:  skipped,
 	}
 }
