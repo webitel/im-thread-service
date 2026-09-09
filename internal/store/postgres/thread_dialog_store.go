@@ -185,6 +185,7 @@ func mapToThreadDialogModel(dialog *threadDialog) (*model.ThreadDialog, error) {
 		LeaveReason: dialog.LeaveReason,
 		ThreadID:    dialog.ThreadID,
 		ThreadRole:  dialog.Role,
+		IsBot:       dialog.IsBot,
 	}, nil
 }
 
@@ -217,7 +218,8 @@ func (t *threadDialogStore) GetQuickView(ctx context.Context, filter *model.Thre
 	var (
 		query = `SELECT
 	-- basic thread dialog fields
-		 dial.id, dial.domain_id, dial.created_at, dial.updated_at, dial.invited_by, dial.leave_reason, dial.member_id, dial.thread_id, dial.thread_role
+		 dial.id, dial.domain_id, dial.created_at, dial.updated_at, dial.invited_by, dial.leave_reason, dial.member_id, dial.thread_id, dial.thread_role,
+		 dial.is_bot
 
 
 	FROM im_thread.thread_dialog dial
