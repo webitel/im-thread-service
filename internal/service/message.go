@@ -165,7 +165,7 @@ func (s *MessageService) SendText(ctx context.Context, in *dto.SendTextRequest) 
 		Body:                  in.Body,
 		To:                    t.Members,
 		Type:                  model.MessageTypeText,
-		Metadata:              model.BuildMetadata(in.Body),
+		Metadata:              model.BuildMetadata(in.Body, in.Entities),
 		SendAs:                in.SendAs,
 		BotControllerMemberID: t.BotControllerID,
 		ReplyTo:               replyPreview,
@@ -303,7 +303,7 @@ func (s *MessageService) buildBotStoppedMessage(in *dto.SendTextRequest, t *mode
 		To:             to,
 		Type:           model.MessageTypeSystem,
 		IdempotencyKey: in.SendID,
-		Metadata:       model.BuildMetadata(in.Body),
+		Metadata:       model.BuildMetadata(in.Body, nil),
 		System: &model.MessageSystem{
 			Type:     botStoppedSystemType,
 			Metadata: make(map[string]any),
@@ -388,6 +388,7 @@ func (s *MessageService) SendDocument(ctx context.Context, in *dto.SendDocumentR
 		Body:       in.Document.Body,
 		SendID:     in.SendID,
 		Documents:  s.mapDocumentInputs(in.Document.Documents),
+		Entities:   in.Entities,
 	})
 	msg.BotControllerMemberID = t.BotControllerID
 	msg.SendAs = in.SendAs

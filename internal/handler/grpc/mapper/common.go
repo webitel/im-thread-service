@@ -1,6 +1,11 @@
 package mapper
 
-import "github.com/google/uuid"
+import (
+	"github.com/google/uuid"
+
+	impb "github.com/webitel/im-thread-service/gen/go/thread/v1"
+	"github.com/webitel/im-thread-service/internal/domain/shared"
+)
 
 func ParseOptionalUUID(s string) *uuid.UUID {
 	if s == "" {
@@ -29,4 +34,26 @@ func convertToUUIDs(in []string) (uuid.UUIDs, error) {
 	}
 
 	return out, nil
+}
+
+func MapEntitiesFromProto(in []*impb.Entity) []shared.Entity {
+	if len(in) == 0 {
+		return nil
+	}
+
+	out := make([]shared.Entity, 0, len(in))
+	for _, e := range in {
+		if e == nil {
+			continue
+		}
+
+		out = append(out, shared.Entity{
+			Type:   e.GetType(),
+			Offset: int(e.GetOffset()),
+			Length: int(e.GetLength()),
+			Value:  e.GetValue(),
+		})
+	}
+
+	return out
 }

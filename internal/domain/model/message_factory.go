@@ -37,11 +37,19 @@ type MessageCreate struct {
 	SendID     string          // Used for client-side correlation in RabbitMQ events.
 	Images     []ImageInput    // Data for image attachments.
 	Documents  []DocumentInput // Data for file attachments.
+	Entities   []shared.Entity // Text formatting entities (bold, italic, etc.).
 }
 
 // NewDocumentMessage initializes a message with document attachments and stages events.
 func NewDocumentMessage(in MessageCreate) *Message {
-	cleanText := prepareText(in.Body)
+	// Caller-supplied entities carry offsets measured against in.Body as received; trimming/NFC
+	// normalization would shift those offsets, so skip it when entities are present (mirrors
+	// SendText, which never normalizes body text either). The regex fallback path still gets
+	// a normalized text to extract from.
+	cleanText := in.Body
+	if len(in.Entities) == 0 {
+		cleanText = prepareText(in.Body)
+	}
 
 	domainDocs := make([]*MessageDocument, 0, len(in.Documents))
 	for _, d := range in.Documents {
@@ -67,7 +75,7 @@ func NewDocumentMessage(in MessageCreate) *Message {
 		Body:      cleanText,
 		Type:      MessageTypeFile,
 		Documents: domainDocs,
-		Metadata:  BuildMetadata(cleanText),
+		Metadata:  BuildMetadata(cleanText, in.Entities),
 		CreatedAt: time.Now().UTC(),
 	}
 

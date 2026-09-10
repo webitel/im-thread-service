@@ -102,6 +102,8 @@ func (s *MessageService) forwardOne(
 	src *model.Message,
 	originName string,
 ) (*model.Message, error) {
+	entities := model.DecodeEntitiesFromMetadata(src.Metadata)
+
 	msg := &model.Message{
 		ThreadID:              t.ID,
 		DomainID:              int32(in.DomainID),
@@ -109,7 +111,7 @@ func (s *MessageService) forwardOne(
 		To:                    t.Members,
 		Body:                  src.Body,
 		Type:                  forwardedType(src),
-		Metadata:              model.BuildMetadata(src.Body),
+		Metadata:              model.BuildMetadata(src.Body, entities),
 		SendAs:                in.SendAs,
 		BotControllerMemberID: t.BotControllerID,
 		ForwardOrigin:         model.NewInternalForwardOrigin(src, originName),
