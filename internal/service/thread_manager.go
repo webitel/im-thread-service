@@ -286,7 +286,10 @@ func (t *ThreadManagementService) AddMember(ctx context.Context, req *dto.AddMem
 		domainID = initiator.DomainID
 	}
 
-	if req.InitiatorContactID != uuid.Nil {
+	// System calls (trusted orchestrators) skip membership/permission checks but
+	// still carry an initiator contact for sender attribution. Regular user calls
+	// carry an initiator and are always verified.
+	if !req.SystemCall && req.InitiatorContactID != uuid.Nil {
 		err = t.verifyAddMember(ctx, initiator, req.NewMemberContactID, req.NewMemberRole)
 		if err != nil {
 			return uuid.Nil, err
@@ -347,11 +350,12 @@ func (t *ThreadManagementService) AddMember(ctx context.Context, req *dto.AddMem
 		}
 
 		err = t.sendAddMemberSystemMessage(ctx, uow, &addMemberEventArgs{
-			initiator: initiator,
-			newMember: newMember,
-			receivers: eventReceivers,
-			threadID:  req.ThreadID,
-			domainID:  newMember.DomainID,
+			initiator:          initiator,
+			initiatorContactID: req.InitiatorContactID,
+			newMember:          newMember,
+			receivers:          eventReceivers,
+			threadID:           req.ThreadID,
+			domainID:           newMember.DomainID,
 		})
 		if err != nil {
 			return errors.Internal("failed to send system message", errors.WithCause(err))
@@ -631,18 +635,23 @@ func (t *ThreadManagementService) verifyAddMemberTargetPrivacy(ctx context.Conte
 
 type addMemberEventArgs struct {
 	initiator *model.ThreadDialogExtended
-	newMember *model.ThreadDialogExtended
-	receivers []*model.ThreadDialog
-	threadID  uuid.UUID
-	domainID  int
+	// initiatorContactID is the acting contact even when the initiator is not a
+	// thread member (system path): used to record the system message sender.
+	initiatorContactID uuid.UUID
+	newMember          *model.ThreadDialogExtended
+	receivers          []*model.ThreadDialog
+	threadID           uuid.UUID
+	domainID           int
 }
 
 type removeMemberEventArgs struct {
 	initiator *model.ThreadDialogExtended
-	member    *model.ThreadDialogExtended
-	receivers []*model.ThreadDialog
-	reason    *string
-	domainID  int
+	// initiatorContactID: see addMemberEventArgs.initiatorContactID.
+	initiatorContactID uuid.UUID
+	member             *model.ThreadDialogExtended
+	receivers          []*model.ThreadDialog
+	reason             *string
+	domainID           int
 }
 
 type transferMemberEventArgs struct {
@@ -712,6 +721,14 @@ func (t *ThreadManagementService) sendAddMemberSystemMessage(ctx context.Context
 			ThreadID:   initiator.ThreadID,
 			ThreadRole: initiator.ThreadRole,
 		}
+	} else if args.initiatorContactID != uuid.Nil {
+		// System path: the actor (schema/engine contact) is not a thread member,
+		// so there is no Member to enrich, but we still record it as the sender.
+		message.SenderID = args.initiatorContactID
+		message.From = shared.Peer{
+			ID:   args.initiatorContactID,
+			Type: shared.PeerContact,
+		}
 	}
 
 	savedMsg, err := t.sendThreadSystemMessage(ctx, uow, message)
@@ -777,7 +794,9 @@ func (t *ThreadManagementService) RemoveMember(ctx context.Context, req *dto.Rem
 		return errors.NotFound("target not found")
 	}
 
-	if req.InitiatorContactID != uuid.Nil {
+	// System calls skip permission checks but still carry an initiator contact
+	// for sender attribution; regular user calls are always verified.
+	if !req.SystemCall && req.InitiatorContactID != uuid.Nil {
 		err = t.verifyRemoveMember(initiator, target)
 		if err != nil {
 			return err
@@ -832,11 +851,12 @@ func (t *ThreadManagementService) RemoveMember(ctx context.Context, req *dto.Rem
 		}
 
 		err = t.sendRemoveMemberSystemMessage(ctx, uow, &removeMemberEventArgs{
-			initiator: initiator,
-			member:    target,
-			receivers: eventReceivers,
-			reason:    req.Reason,
-			domainID:  domainID,
+			initiator:          initiator,
+			initiatorContactID: req.InitiatorContactID,
+			member:             target,
+			receivers:          eventReceivers,
+			reason:             req.Reason,
+			domainID:           domainID,
 		})
 		if err != nil {
 			return err
@@ -912,6 +932,13 @@ func (t *ThreadManagementService) sendRemoveMemberSystemMessage(ctx context.Cont
 			ThreadID:   args.initiator.ThreadID,
 			ThreadRole: args.initiator.ThreadRole,
 		}
+	} else if args.initiatorContactID != uuid.Nil {
+		// System path: actor is not a thread member; record it as sender only.
+		message.SenderID = args.initiatorContactID
+		message.From = shared.Peer{
+			ID:   args.initiatorContactID,
+			Type: shared.PeerContact,
+		}
 	}
 
 	savedMsg, err := t.sendThreadSystemMessage(ctx, uow, message)
@@ -972,6 +999,10 @@ func (t *ThreadManagementService) sendTransferSystemMessage(ctx context.Context,
 			Metadata: metadata,
 		},
 		Metadata: model.BuildMetadata(""),
+		From: shared.Peer{
+			ID:   args.initiator.ContactID,
+			Type: shared.PeerContact,
+		},
 		SendTo: shared.Peer{
 			ID:   args.newMember.ContactID,
 			Type: shared.PeerContact,
@@ -1687,6 +1718,18 @@ func (t *ThreadManagementService) publishBotControlGranted(ctx context.Context, 
 			t.log().WarnContext(ctx, "failed to get sub for bot control granted, skipping", "contact_id", dialog.ContactID, "err", err)
 		} else {
 			schemeID = id
+		}
+	}
+
+	// Emit an explicit release for the bot that just lost control, before the
+	// grant. Previously only /close published released, so consumers had to
+	// INFER "stop the old bot" from granted.PreviousMemberID by probing a live
+	// connection — a latency-dependent heuristic that let a superseded bot keep
+	// running. Publishing released here covers every hand-off that moves control
+	// to a new bot (AddMember, Transfer, RemoveMember, CompleteBotControl).
+	if prevMemberID != nil {
+		if err := t.publishBotControlReleased(ctx, uow, dialog.ThreadID, *prevMemberID, prev.ContactID, prev.Position, dialog.DomainID, &dialog.ID, reason); err != nil {
+			return err
 		}
 	}
 
