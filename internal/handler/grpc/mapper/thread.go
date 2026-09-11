@@ -131,6 +131,7 @@ func (s *ThreadInConverter) ConvertAddMemberRequest(in *impb.AddMemberRequest) (
 		NewMemberContactID: newContactID,
 		NewMemberRole:      s.convertMemberRole(in.GetRole()),
 		DomainID:           int(in.GetDomainId()),
+		SystemCall:         in.GetSystemCall(),
 	}
 
 	if in.InitiatorContactId != nil {
@@ -190,6 +191,7 @@ func (s *ThreadInConverter) ConvertRemoveMemberRequest(in *impb.RemoveMemberRequ
 
 	converted := &dto.RemoveMemberRequest{
 		TargetMemberID: targetMemberID,
+		SystemCall:     in.GetSystemCall(),
 	}
 
 	if in.Reason != nil {
