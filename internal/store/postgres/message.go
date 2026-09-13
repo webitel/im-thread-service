@@ -413,11 +413,14 @@ func (m *messageStore) DeleteMessages(ctx context.Context, ids []uuid.UUID, dele
 // returned no row for never existed, so they complete the skipped half as
 // not_found.
 func splitDeleteOutcome(ids []uuid.UUID, classified []*model.Message) *model.MessageDeleteResult {
-	out := &model.MessageDeleteResult{
-		Deleted: make([]*model.Message, 0, len(classified)),
-		Skipped: make([]model.MessageSkip, 0, len(ids)),
-	}
+	deleted, skipped := splitSkipOutcome(ids, classified)
 
+	return &model.MessageDeleteResult{Deleted: deleted, Skipped: skipped}
+}
+
+func splitSkipOutcome(ids []uuid.UUID, classified []*model.Message) ([]*model.Message, []model.MessageSkip) {
+	kept := make([]*model.Message, 0, len(classified))
+	skipped := make([]model.MessageSkip, 0, len(ids))
 	seen := make(map[uuid.UUID]struct{}, len(ids))
 
 	for _, msg := range classified {
@@ -428,12 +431,12 @@ func splitDeleteOutcome(ids []uuid.UUID, classified []*model.Message) *model.Mes
 		seen[msg.ID] = struct{}{}
 
 		if msg.SkipReason == model.MessageSkipUnspecified {
-			out.Deleted = append(out.Deleted, msg)
+			kept = append(kept, msg)
 
 			continue
 		}
 
-		out.Skipped = append(out.Skipped, model.MessageSkip{ID: msg.ID, Reason: msg.SkipReason})
+		skipped = append(skipped, model.MessageSkip{ID: msg.ID, Reason: msg.SkipReason})
 	}
 
 	for _, id := range ids {
@@ -443,10 +446,10 @@ func splitDeleteOutcome(ids []uuid.UUID, classified []*model.Message) *model.Mes
 
 		seen[id] = struct{}{}
 
-		out.Skipped = append(out.Skipped, model.MessageSkip{ID: id, Reason: model.MessageSkipNotFound})
+		skipped = append(skipped, model.MessageSkip{ID: id, Reason: model.MessageSkipNotFound})
 	}
 
-	return out
+	return kept, skipped
 }
 
 func (m *messageStore) SaveDocuments(ctx context.Context, messageID uuid.UUID, docs []*model.MessageDocument) ([]*model.MessageDocument, error) {

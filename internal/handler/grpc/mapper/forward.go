@@ -51,9 +51,9 @@ func MapToForwardMessagesResponse(out *dto.ForwardMessagesResponse) *impb.Forwar
 	}
 
 	return &impb.ForwardMessagesResponse{
-		ThreadId:   out.ThreadID.String(),
-		Ids:        uuidsToStrings(out.IDs),
-		SkippedIds: uuidsToStrings(out.SkippedIDs),
+		ThreadId: out.ThreadID.String(),
+		Ids:      uuidsToStrings(out.IDs),
+		Skipped:  MapSkippedMessages(out.Skipped),
 	}
 }
 

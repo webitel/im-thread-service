@@ -146,6 +146,11 @@ type MessageDeleteResult struct {
 	Skipped []MessageSkip
 }
 
+type MessageForwardSources struct {
+	Sources []*Message
+	Skipped []MessageSkip
+}
+
 type ForwardOriginKind int16
 
 const (
