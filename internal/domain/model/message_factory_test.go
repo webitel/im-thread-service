@@ -26,6 +26,7 @@ func TestNewDocumentMessage_EntityOffsetsSurviveWhenCallerSuppliesEntities(t *te
 	if len(got) != 1 || got[0] != entities[0] {
 		t.Fatalf("expected the BOLD entity to survive unchanged (still pointing at %q), got %v", body[1:5], got)
 	}
+
 	if body[got[0].Offset:got[0].Offset+got[0].Length] != "Bold" {
 		t.Fatalf("entity no longer points at \"Bold\" in the stored body: got %q", body[got[0].Offset:got[0].Offset+got[0].Length])
 	}
@@ -54,6 +55,7 @@ func TestNewDocumentMessage_TrimmedAwayEntityDroppedNotMisaligned(t *testing.T) 
 	if !reflect.DeepEqual(got, []shared.Entity{{Type: "ITALIC", Offset: 5, Length: 7}}) {
 		t.Fatalf("expected the ITALIC entity to remain valid against the untrimmed stored body, got %v", got)
 	}
+
 	if msg.Body[5:12] != "tail   " {
 		t.Fatalf("entity offset no longer matches stored body: %q", msg.Body[5:12])
 	}
