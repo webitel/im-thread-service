@@ -699,7 +699,7 @@ func (t *ThreadManagementService) sendAddMemberSystemMessage(ctx context.Context
 			Type:           model.MessageTypeSystem,
 			System:         systemMessage,
 			Body:           body,
-			Metadata:       model.BuildMetadata(body),
+			Metadata:       model.BuildMetadata(body, nil),
 			SendTo: shared.Peer{
 				ID:   newMember.ContactID,
 				Type: shared.PeerContact,
@@ -908,7 +908,7 @@ func (t *ThreadManagementService) sendRemoveMemberSystemMessage(ctx context.Cont
 		To:             args.receivers,
 		Type:           model.MessageTypeSystem,
 		Body:           body,
-		Metadata:       model.BuildMetadata(body),
+		Metadata:       model.BuildMetadata(body, nil),
 		System: &model.MessageSystem{
 			Type:     memberRemovedSystemMessageType,
 			Metadata: metadata,
@@ -998,7 +998,7 @@ func (t *ThreadManagementService) sendTransferSystemMessage(ctx context.Context,
 			Type:     memberTransferedSystemMessageType,
 			Metadata: metadata,
 		},
-		Metadata: model.BuildMetadata(""),
+		Metadata: model.BuildMetadata("", nil),
 		From: shared.Peer{
 			ID:   args.initiator.ContactID,
 			Type: shared.PeerContact,

@@ -69,6 +69,7 @@ type SendDocumentRequest struct {
 	ReplyToExternalID string     `json:"reply_to_external_id,omitempty"`
 
 	ForwardOrigin *model.ForwardOrigin `json:"forward_origin,omitempty"`
+	Entities      []shared.Entity      `json:"entities,omitempty"`
 }
 
 func (sendDocumentRequest *SendDocumentRequest) Validate() error {
