@@ -57,12 +57,15 @@ func nonOverlapping(candidates, existing []shared.Entity) []shared.Entity {
 
 	for _, c := range candidates {
 		overlaps := false
+
 		for _, e := range existing {
 			if c.Offset < e.Offset+e.Length && e.Offset < c.Offset+c.Length {
 				overlaps = true
+
 				break
 			}
 		}
+
 		if !overlaps {
 			result = append(result, c)
 		}
@@ -97,6 +100,7 @@ func validateEntityBounds(text string, entities []shared.Entity) []shared.Entity
 	}
 
 	textLen := len(text)
+
 	var validEntities []shared.Entity
 
 	for _, e := range entities {
@@ -110,6 +114,7 @@ func validateEntityBounds(text string, entities []shared.Entity) []shared.Entity
 		if !utf8.RuneStart(text[e.Offset]) {
 			continue
 		}
+
 		if end := e.Offset + e.Length; end < textLen && !utf8.RuneStart(text[end]) {
 			continue
 		}

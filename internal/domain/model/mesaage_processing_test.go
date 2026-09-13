@@ -94,15 +94,18 @@ func TestBuildMetadata_CallerEntitiesAugmentedByFallback(t *testing.T) {
 				return true
 			}
 		}
+
 		return false
 	}
 
 	if !hasType("BOLD") {
 		t.Errorf("expected caller-supplied BOLD entity to survive, got %v", entities)
 	}
+
 	if !hasType("link") {
 		t.Errorf("expected regex fallback to still detect the bare link, got %v", entities)
 	}
+
 	if !hasType("mention") {
 		t.Errorf("expected regex fallback to still detect the mention, got %v", entities)
 	}
@@ -120,6 +123,7 @@ func TestBuildMetadata_FallbackEntityOverlappingCallerSpanIsDropped(t *testing.T
 	if len(entities) != 1 {
 		t.Fatalf("expected the overlapping regex-detected link to be deduplicated, got %v", entities)
 	}
+
 	if entities[0].Type != "LINK" {
 		t.Errorf("expected the surviving entity to be the caller-supplied LINK, got %v", entities[0])
 	}
@@ -153,10 +157,10 @@ func TestDecodeEntitiesFromMetadata(t *testing.T) {
 			want:     nil,
 		},
 		{
-			name:     "jsonb round-trip shape ([]interface{} of map[string]interface{} with float64 numbers)",
+			name: "jsonb round-trip shape ([]interface{} of map[string]interface{} with float64 numbers)",
 			metadata: map[string]any{
-				"entities": []interface{}{
-					map[string]interface{}{"type": "BOLD", "offset": float64(0), "length": float64(4), "value": ""},
+				"entities": []any{
+					map[string]any{"type": "BOLD", "offset": float64(0), "length": float64(4), "value": ""},
 				},
 			},
 			want: []shared.Entity{{Type: "BOLD", Offset: 0, Length: 4}},
@@ -175,7 +179,7 @@ func TestDecodeEntitiesFromMetadata(t *testing.T) {
 		},
 		{
 			name:     "empty entities list",
-			metadata: map[string]any{"entities": []interface{}{}},
+			metadata: map[string]any{"entities": []any{}},
 			want:     nil,
 		},
 	}
