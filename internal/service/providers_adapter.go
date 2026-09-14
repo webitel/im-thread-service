@@ -14,6 +14,7 @@ import (
 	"github.com/webitel/im-thread-service/gen/go/provider/v1"
 	improviders "github.com/webitel/im-thread-service/infra/webitel/im-providers"
 	"github.com/webitel/im-thread-service/internal/domain/model"
+	"github.com/webitel/im-thread-service/internal/domain/shared"
 	"github.com/webitel/im-thread-service/internal/store"
 )
 
@@ -97,6 +98,11 @@ func (a *baseRPCProvidersAdapter) SendMessage(ctx context.Context, message *mode
 		return nil
 	}
 
+	// Formatting spans are parsed once at the gateway/thread boundary and stored on
+	// the message; im-providers-service only relays/renders them for the destination
+	// channel, so they're decoded once here and reused for every external peer below.
+	entities := mapEntitiesToProvider(model.DecodeEntitiesFromMetadata(message.Metadata))
+
 	log.Info("sending message to external providers",
 		slog.String("message_id", message.ID.String()),
 		slog.String("thread_id", message.ThreadID.String()),
@@ -141,6 +147,7 @@ func (a *baseRPCProvidersAdapter) SendMessage(ctx context.Context, message *mode
 					ThreadId:          message.ThreadID.String(),
 					ReplyToExternalId: replyToExternal,
 					SenderName:        senderName(message),
+					Entities:          entities,
 				})
 
 			case model.MessageTypeText:
@@ -155,6 +162,7 @@ func (a *baseRPCProvidersAdapter) SendMessage(ctx context.Context, message *mode
 					ThreadId:          message.ThreadID.String(),
 					ReplyToExternalId: replyToExternal,
 					SenderName:        senderName(message),
+					Entities:          entities,
 				})
 
 			case model.MessageTypeContact:
@@ -567,6 +575,32 @@ func mapButtons(buttons []*model.KeyboardButton) []*provider.ProviderKeyboardBut
 		}
 
 		out = append(out, pb)
+	}
+
+	return out
+}
+
+// mapEntitiesToProvider converts stored formatting spans to the provider-service wire
+// type. Value is only set when non-empty since provider.Entity.Value is optional
+// (unset for span kinds that don't carry extra data, e.g. BOLD/ITALIC).
+func mapEntitiesToProvider(entities []shared.Entity) []*provider.Entity {
+	if len(entities) == 0 {
+		return nil
+	}
+
+	out := make([]*provider.Entity, 0, len(entities))
+	for _, e := range entities {
+		pe := &provider.Entity{
+			Type:   e.Type,
+			Offset: int32(e.Offset),
+			Length: int32(e.Length),
+		}
+
+		if e.Value != "" {
+			pe.Value = &e.Value
+		}
+
+		out = append(out, pe)
 	}
 
 	return out
