@@ -78,6 +78,26 @@ func findGrantedEvent(outbox *fakeOutboxStore) *event.BotControlGranted {
 	return nil
 }
 
+// fakeContactInfo returns a fixed sub for any contact, keyed by contact id.
+type fakeContactInfo struct {
+	subs map[uuid.UUID]int64
+}
+
+func (f *fakeContactInfo) IsBot(_ context.Context, _ uuid.UUID, _ int) (bool, error) {
+	return false, nil
+}
+
+func (f *fakeContactInfo) GetSub(_ context.Context, contactID uuid.UUID, _ int) (*int64, error) {
+	if sub, ok := f.subs[contactID]; ok {
+		return &sub, nil
+	}
+
+	//nolint:nilnil // absent sub is legitimately (nil, nil), matching the provider contract
+	return nil, nil
+}
+
+var _ ContactInfoProvider = (*fakeContactInfo)(nil)
+
 // findReleasedEvent returns the first BotControlReleased event from outbox, nil if absent.
 func findReleasedEvent(outbox *fakeOutboxStore) *event.BotControlReleased {
 	for _, pub := range outbox.published {
@@ -372,6 +392,78 @@ func TestRemoveMember_ActiveBot_PopsStackAndPublishesBotControlGrantedWithIsResu
 	require.Equal(t, newTopMemberID, granted.MemberID)
 	require.True(t, granted.IsResume, "returning control to previous bot must set is_resume=true")
 	require.Equal(t, newTop.Position, granted.Position)
+}
+
+// TestRemoveMember_ControlReturnsToBot_GrantedCarriesLingeringOperators verifies that when
+// control returns to a bot, the granted event lists the human operators still in the thread
+// (non-bot, non-owner) with their sub, while the owner (client) and bots are excluded — so a
+// consumer can RemoveMember the operators that a bot auto-leave would otherwise strand.
+func TestRemoveMember_ControlReturnsToBot_GrantedCarriesLingeringOperators(t *testing.T) {
+	threadID := uuid.New()
+	botMemberID := uuid.New()
+	botContactID := uuid.New()
+	newTopMemberID := uuid.New()
+	newTopContactID := uuid.New()
+
+	ownerMemberID := uuid.New()
+	ownerContactID := uuid.New()
+	operatorMemberID := uuid.New()
+	operatorContactID := uuid.New()
+	operatorSub := int64(4242)
+
+	newTop := &model.BotControlStackEntry{
+		ID: uuid.New(), ThreadID: threadID, MemberID: &newTopMemberID, Position: 0,
+	}
+	botControl := &fakeBotControlStore{newTopEntry: newTop}
+	outboxStore := &fakeOutboxStore{}
+
+	threadDialogStore := &fakeThreadDialogStore{
+		targetPair: &model.ThreadDialogExtended{
+			BaseModel:  shared.BaseModel{ID: botMemberID, DomainID: 1},
+			ContactID:  botContactID,
+			ThreadID:   threadID,
+			ThreadRole: model.RoleMember,
+			IsBot:      true,
+			AutoLeave:  true,
+		},
+		// Members still in the thread after the bot is popped: the resuming bot,
+		// the owner (client) and one human operator.
+		quickViewResult: []*model.ThreadDialog{
+			{BaseModel: shared.BaseModel{ID: newTopMemberID, DomainID: 1}, ContactID: newTopContactID, ThreadID: threadID, ThreadRole: model.RoleMember, IsBot: true},
+			{BaseModel: shared.BaseModel{ID: ownerMemberID, DomainID: 1}, ContactID: ownerContactID, ThreadID: threadID, ThreadRole: model.RoleOwner},
+			{BaseModel: shared.BaseModel{ID: operatorMemberID, DomainID: 1}, ContactID: operatorContactID, ThreadID: threadID, ThreadRole: model.RoleAdmin},
+		},
+		fullViewResult: []*model.ThreadDialogExtended{
+			{BaseModel: shared.BaseModel{ID: newTopMemberID, DomainID: 1}, ContactID: newTopContactID, ThreadID: threadID},
+		},
+	}
+
+	svc := &ThreadManagementService{
+		uow: fakeUnitOfWork{
+			threadDialogStore: threadDialogStore,
+			messageStore:      &fakeMessageStore{},
+			outboxStore:       outboxStore,
+			botControlStore:   botControl,
+		},
+		contactInfo: &fakeContactInfo{subs: map[uuid.UUID]int64{operatorContactID: operatorSub}},
+	}
+
+	err := svc.RemoveMember(context.Background(), &dto.RemoveMemberRequest{
+		TargetMemberID:     botMemberID,
+		InitiatorContactID: uuid.Nil,
+	})
+
+	require.NoError(t, err)
+
+	granted := findGrantedEvent(outboxStore)
+	require.NotNil(t, granted)
+	require.Equal(t, newTopMemberID, granted.MemberID)
+
+	// Only the human operator is listed — owner (client) and bots are excluded.
+	require.Len(t, granted.Agents, 1, "only the lingering operator must be listed")
+	require.Equal(t, operatorMemberID, granted.Agents[0].MemberID)
+	require.NotNil(t, granted.Agents[0].Sub)
+	require.Equal(t, operatorSub, *granted.Agents[0].Sub)
 }
 
 func TestCompleteBotControl_PopsStackAndPublishesGrantedWithIsResume(t *testing.T) {
