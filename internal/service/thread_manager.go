@@ -1608,6 +1608,47 @@ func resolveAutoLeave(override *bool) bool {
 // position is the new entry's stack position.
 // isResume=true when returning control to a bot that was previously paused (Pop path).
 // isResume=false when activating a newly added bot for the first time (Push path).
+// collectThreadAgents returns the human operators still present in the thread —
+// active, non-bot members that are not the owner (the owner is the client and
+// must never be handed to consumers for removal). Failures are logged and
+// downgraded to an empty result: enriching the event is best-effort and must
+// not fail the control transition.
+func (t *ThreadManagementService) collectThreadAgents(ctx context.Context, uow store.UnitOfWork, threadID uuid.UUID, domainID int) []event.BotControlAgent {
+	members, err := uow.ThreadDialogStore().GetQuickView(ctx, &model.ThreadDialogStoreFilter{
+		ThreadIDs:      []uuid.UUID{threadID},
+		IncludeDeleted: false,
+	})
+	if err != nil {
+		t.log().WarnContext(ctx, "failed to load members for bot control granted agents, skipping",
+			"thread_id", threadID, "err", err)
+
+		return nil
+	}
+
+	var agents []event.BotControlAgent
+
+	for _, m := range members {
+		if m == nil || m.IsBot || m.ThreadRole == model.RoleOwner {
+			continue
+		}
+
+		var sub *int64
+
+		if t.contactInfo != nil && m.ContactID != uuid.Nil {
+			if id, subErr := t.contactInfo.GetSub(ctx, m.ContactID, domainID); subErr != nil {
+				t.log().WarnContext(ctx, "failed to get sub for operator in granted event, skipping sub",
+					"contact_id", m.ContactID, "err", subErr)
+			} else {
+				sub = id
+			}
+		}
+
+		agents = append(agents, event.BotControlAgent{MemberID: m.ID, Sub: sub})
+	}
+
+	return agents
+}
+
 func (t *ThreadManagementService) publishBotControlGranted(ctx context.Context, uow store.UnitOfWork, dialog *model.ThreadDialogExtended, prev *model.BotControlStackEntry, position int, reason model.BotControlReason, isResume bool) error {
 	var (
 		prevMemberID *uuid.UUID
@@ -1649,6 +1690,12 @@ func (t *ThreadManagementService) publishBotControlGranted(ctx context.Context, 
 		}
 	}
 
+	// Control is moving (back) to a bot. Bots carry auto_leave and drop off the
+	// thread on pop, but any human operator that was handling the thread stays.
+	// Attach the lingering operators (non-bot, non-owner members) so consumers
+	// can RemoveMember them. Owner is the client and must never be touched.
+	agents := t.collectThreadAgents(ctx, uow, dialog.ThreadID, dialog.DomainID)
+
 	e := &event.BotControlGranted{
 		ThreadID:         dialog.ThreadID,
 		DomainID:         int32(dialog.DomainID),
@@ -1662,6 +1709,7 @@ func (t *ThreadManagementService) publishBotControlGranted(ctx context.Context, 
 		PreviousMemberID: prevMemberID,
 		Sub:              schemeID,
 		ReleasedSub:      prevSchemeID,
+		Agents:           agents,
 		OccurredAt:       time.Now().UTC(),
 	}
 

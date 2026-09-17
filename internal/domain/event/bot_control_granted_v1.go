@@ -10,20 +10,30 @@ import (
 
 const BotControlGrantedEvent = "im.thread.bot.control.granted"
 
+// BotControlAgent identifies a human operator (non-bot, non-owner member) that
+// is still present in the thread when control is handed (back) to a bot. Bots
+// carry auto_leave and drop off on pop, but operators linger, so consumers need
+// their member id (to RemoveMember) and sub to clean them up.
+type BotControlAgent struct {
+	MemberID uuid.UUID `json:"member_id"`
+	Sub      *int64    `json:"sub,omitempty"`
+}
+
 type BotControlGranted struct {
-	ThreadID         uuid.UUID  `json:"thread_id"`
-	DomainID         int32      `json:"domain_id"`
-	MemberID         uuid.UUID  `json:"member_id"`
-	ContactID        uuid.UUID  `json:"contact_id"`
-	Position         int        `json:"position"`
-	AutoLeave        bool       `json:"auto_leave"`
-	Reason           string     `json:"reason"`
-	IsResume         bool       `json:"is_resume"`
-	PreviousPosition *int       `json:"previous_position,omitempty"`
-	PreviousMemberID *uuid.UUID `json:"previous_member_id,omitempty"`
-	Sub              *int64     `json:"sub,omitempty"`
-	ReleasedSub      *int64     `json:"released_sub,omitempty"`
-	OccurredAt       time.Time  `json:"occurred_at"`
+	ThreadID         uuid.UUID         `json:"thread_id"`
+	DomainID         int32             `json:"domain_id"`
+	MemberID         uuid.UUID         `json:"member_id"`
+	ContactID        uuid.UUID         `json:"contact_id"`
+	Position         int               `json:"position"`
+	AutoLeave        bool              `json:"auto_leave"`
+	Reason           string            `json:"reason"`
+	IsResume         bool              `json:"is_resume"`
+	PreviousPosition *int              `json:"previous_position,omitempty"`
+	PreviousMemberID *uuid.UUID        `json:"previous_member_id,omitempty"`
+	Sub              *int64            `json:"sub,omitempty"`
+	ReleasedSub      *int64            `json:"released_sub,omitempty"`
+	Agents           []BotControlAgent `json:"agents,omitempty"`
+	OccurredAt       time.Time         `json:"occurred_at"`
 }
 
 var _ Base = (*BotControlGranted)(nil)
