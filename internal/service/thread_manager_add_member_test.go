@@ -142,11 +142,11 @@ func (noopThreadVariablesStore) Search(ctx context.Context, query model.GetThrea
 }
 
 func (noopThreadVariablesStore) Locate(ctx context.Context, threadID uuid.UUID) (*model.ThreadVariables, error) {
-	return nil, nil
+	return nil, nil //nolint:nilnil // matches the store contract: a thread with no variables is (nil, nil)
 }
 
 func (noopThreadVariablesStore) Flush(ctx context.Context, flushCmd model.FlushVariablesCommand) (*model.ThreadVariables, error) {
-	return nil, nil
+	return nil, nil //nolint:nilnil // same contract: nothing flushed is (nil, nil)
 }
 
 type noopThreadTagStore struct{}
