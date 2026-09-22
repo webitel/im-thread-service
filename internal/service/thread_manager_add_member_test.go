@@ -288,6 +288,7 @@ type fakeMessageStore struct {
 	lastDeleterID        uuid.UUID
 
 	forwardSources    []*model.Message
+	forwardSkipped    []model.MessageSkip
 	forwardSourcesErr error
 	lastForwardIDs    []uuid.UUID
 	lastForwardCaller uuid.UUID
@@ -312,7 +313,7 @@ func (f *fakeMessageStore) LoadForwardSources(
 	ids []uuid.UUID,
 	callerID uuid.UUID,
 	domainID int32,
-) ([]*model.Message, error) {
+) (*model.MessageForwardSources, error) {
 	f.lastForwardIDs = ids
 	f.lastForwardCaller = callerID
 
@@ -320,7 +321,10 @@ func (f *fakeMessageStore) LoadForwardSources(
 		return nil, f.forwardSourcesErr
 	}
 
-	return f.forwardSources, nil
+	return &model.MessageForwardSources{
+		Sources: f.forwardSources,
+		Skipped: f.forwardSkipped,
+	}, nil
 }
 
 func (f *fakeMessageStore) CopyAttachments(ctx context.Context, sourceID, targetID uuid.UUID) error {
@@ -653,6 +657,88 @@ func TestTransfer_AddsMemberRemovesInitiatorAndSendsTransferSystemMessage(t *tes
 	require.Equal(t, initiatorMemberID, messageStore.lastSavedSystemMessage.System.Metadata["transferred_member_id"])
 	require.Equal(t, newMemberID, messageStore.lastSavedSystemMessage.System.Metadata["new_member_id"])
 	require.GreaterOrEqual(t, len(outboxStore.published), 1)
+}
+
+// TestAddMember_SystemCall_RecordsSenderWithoutMembership guards the fix for the
+// 0000 sender_id: a trusted-orchestrator (schema/engine) call whose initiator is
+// not a thread member must skip permission checks yet still record the initiator
+// contact as the system message sender, with no Member enrichment.
+func TestAddMember_SystemCall_RecordsSenderWithoutMembership(t *testing.T) {
+	threadID := uuid.New()
+	initiatorContactID := uuid.New() // schema contact, NOT a member of the thread
+	newMemberContactID := uuid.New()
+
+	threadDialogStore := &fakeThreadDialogStore{
+		// Neither initiator nor target are existing members.
+		fullViewResult: nil,
+		quickViewResult: []*model.ThreadDialog{
+			{BaseModel: shared.BaseModel{ID: uuid.New()}, ContactID: uuid.New(), ThreadID: threadID, ThreadRole: model.RoleMember},
+		},
+	}
+	messageStore := &fakeMessageStore{}
+	outboxStore := &fakeOutboxStore{}
+
+	svc := &ThreadManagementService{
+		uow:            fakeUnitOfWork{threadDialogStore: threadDialogStore, messageStore: messageStore, outboxStore: outboxStore},
+		privacyChecker: fakePrivacyChecker{},
+	}
+
+	_, err := svc.AddMember(context.Background(), &dto.AddMemberRequest{
+		ThreadID:           threadID,
+		NewMemberContactID: newMemberContactID,
+		InitiatorContactID: initiatorContactID,
+		NewMemberRole:      model.RoleMember,
+		DomainID:           1,
+		SystemCall:         true,
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, messageStore.lastSavedSystemMessage)
+	// Sender is recorded from the initiator contact even though it is not a member.
+	require.Equal(t, initiatorContactID, messageStore.lastSavedSystemMessage.From.ID)
+	require.Equal(t, initiatorContactID, messageStore.lastSavedSystemMessage.SenderID)
+	// No Member enrichment: the actor is not a thread member.
+	require.Nil(t, messageStore.lastSavedSystemMessage.Member)
+}
+
+// TestRemoveMember_SystemCall_RecordsSenderWithoutMembership is the RemoveMember
+// counterpart of the system-call sender-attribution guard.
+func TestRemoveMember_SystemCall_RecordsSenderWithoutMembership(t *testing.T) {
+	threadID := uuid.New()
+	initiatorContactID := uuid.New() // schema contact, NOT a member
+	targetID := uuid.New()
+	targetContactID := uuid.New()
+
+	threadDialogStore := &fakeThreadDialogStore{
+		// initiatorPair nil: the orchestrator is not a member of the thread.
+		targetPair: &model.ThreadDialogExtended{
+			BaseModel:  shared.BaseModel{ID: targetID, DomainID: 1},
+			ContactID:  targetContactID,
+			ThreadID:   threadID,
+			ThreadRole: model.RoleMember,
+		},
+		quickViewResult: []*model.ThreadDialog{
+			{BaseModel: shared.BaseModel{ID: targetID}, ContactID: targetContactID, ThreadID: threadID, ThreadRole: model.RoleMember},
+		},
+	}
+	messageStore := &fakeMessageStore{}
+	outboxStore := &fakeOutboxStore{}
+
+	svc := &ThreadManagementService{
+		uow: fakeUnitOfWork{threadDialogStore: threadDialogStore, messageStore: messageStore, outboxStore: outboxStore},
+	}
+
+	err := svc.RemoveMember(context.Background(), &dto.RemoveMemberRequest{
+		TargetMemberID:     targetID,
+		InitiatorContactID: initiatorContactID,
+		SystemCall:         true,
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, messageStore.lastSavedSystemMessage)
+	require.Equal(t, initiatorContactID, messageStore.lastSavedSystemMessage.From.ID)
+	require.Equal(t, initiatorContactID, messageStore.lastSavedSystemMessage.SenderID)
+	require.Nil(t, messageStore.lastSavedSystemMessage.Member)
 }
 
 func TestTransfer_ReturnsValidationErrorWhenInitiatorIsNil(t *testing.T) {

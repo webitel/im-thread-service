@@ -4,6 +4,7 @@ import (
 	"github.com/google/uuid"
 
 	impb "github.com/webitel/im-thread-service/gen/go/thread/v1"
+	"github.com/webitel/im-thread-service/internal/domain/model"
 	"github.com/webitel/im-thread-service/internal/service/dto"
 	"github.com/webitel/im-thread-service/internal/utils"
 )
@@ -30,17 +31,21 @@ func MapToDeleteMessagesResponse(out *dto.DeleteMessagesResponse) *impb.DeleteMe
 		return nil
 	}
 
-	skipped := make([]*impb.SkippedMessage, 0, len(out.Skipped))
-	for _, skip := range out.Skipped {
+	return &impb.DeleteMessagesResponse{
+		DeletedIds: utils.Map(out.DeletedIDs, uuid.UUID.String),
+		Skipped:    MapSkippedMessages(out.Skipped),
+		DeletedAt:  max(out.DeletedAt.UTC().UnixMilli(), 0),
+	}
+}
+
+func MapSkippedMessages(skips []model.MessageSkip) []*impb.SkippedMessage {
+	skipped := make([]*impb.SkippedMessage, 0, len(skips))
+	for _, skip := range skips {
 		skipped = append(skipped, &impb.SkippedMessage{
 			Id:     skip.ID.String(),
 			Reason: impb.SkippedMessage_Reason(skip.Reason),
 		})
 	}
 
-	return &impb.DeleteMessagesResponse{
-		DeletedIds: utils.Map(out.DeletedIDs, uuid.UUID.String),
-		Skipped:    skipped,
-		DeletedAt:  max(out.DeletedAt.UTC().UnixMilli(), 0),
-	}
+	return skipped
 }

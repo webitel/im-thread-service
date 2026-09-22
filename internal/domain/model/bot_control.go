@@ -10,6 +10,12 @@ const (
 	BotControlReasonCompleted   BotControlReason = "completed"
 	BotControlReasonRemoved     BotControlReason = "removed"
 	BotControlReasonClientLeave BotControlReason = "client_leave"
+	// BotControlReasonHandoff marks a bot handing the conversation off to a human
+	// agent. Like client_leave it fully RELEASES bot control (bot_controller_id = NULL)
+	// with no owner-bot fallback, so the owner bot is not re-granted while an agent is
+	// handling the thread. It differs from completed/removed, which keep the owner as the
+	// resumable controller.
+	BotControlReasonHandoff BotControlReason = "handoff"
 )
 
 type BotControlTransition struct {

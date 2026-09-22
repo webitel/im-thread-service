@@ -43,12 +43,15 @@ type MessageStore interface {
 	// files by file_id.
 	CopyAttachments(ctx context.Context, sourceID, targetID uuid.UUID) error
 
-	// LoadForwardSources returns the messages callerID may forward, with their
-	// content already assembled. Ids the caller cannot read, ids that do not
-	// exist, deleted messages and system messages are silently omitted, so the
-	// result may be shorter than ids or empty, which is not an error at this
-	// layer. Rows come back oldest-first so copies keep the original order.
-	LoadForwardSources(ctx context.Context, ids []uuid.UUID, callerID uuid.UUID, domainID int32) ([]*model.Message, error)
+	// LoadForwardSources splits the requested ids into the messages callerID may
+	// forward, with their content already assembled, and the ones left out with
+	// the reason for each: ids that do not exist or that the caller cannot read
+	// come back as not_found, deleted messages as already_deleted, sources in a
+	// chat the caller has left as chat_closed and types that cannot be forwarded
+	// as not_allowed. Every requested id lands in exactly one
+	// half; an empty sources half is not an error at this layer. Sources come
+	// back oldest-first so copies keep the original order.
+	LoadForwardSources(ctx context.Context, ids []uuid.UUID, callerID uuid.UUID, domainID int32) (*model.MessageForwardSources, error)
 
 	SaveMessageContact(ctx context.Context, msg *model.Message) (*model.Message, error)
 	SaveMessageLocation(ctx context.Context, msg *model.Message) (*model.Message, error)
@@ -191,6 +194,12 @@ type BotControlStore interface {
 	// to (nil if there was none). Used to release a controller that lingers without a matching
 	// stack entry (legacy data, or the owner-bot fallback), so /close stays effective.
 	ClearController(ctx context.Context, threadID uuid.UUID) (*uuid.UUID, error)
+
+	// SetController points thread.bot_controller_id at an existing stack member without
+	// pushing a new entry. Used to re-grant control to a bot that is already on the stack —
+	// e.g. the owner bot that never leaves the stack but whose flow went idle and must be
+	// restarted on the next customer message.
+	SetController(ctx context.Context, threadID, memberID uuid.UUID) error
 }
 
 type ThreadTagStore interface {

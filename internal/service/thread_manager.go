@@ -294,7 +294,10 @@ func (t *ThreadManagementService) AddMember(ctx context.Context, req *dto.AddMem
 		domainID = initiator.DomainID
 	}
 
-	if req.InitiatorContactID != uuid.Nil {
+	// System calls (trusted orchestrators) skip membership/permission checks but
+	// still carry an initiator contact for sender attribution. Regular user calls
+	// carry an initiator and are always verified.
+	if !req.SystemCall && req.InitiatorContactID != uuid.Nil {
 		err = t.verifyAddMember(ctx, initiator, req.NewMemberContactID, req.NewMemberRole)
 		if err != nil {
 			return uuid.Nil, err
@@ -358,11 +361,12 @@ func (t *ThreadManagementService) AddMember(ctx context.Context, req *dto.AddMem
 		}
 
 		systemMessage, err := t.sendAddMemberSystemMessage(ctx, uow, &addMemberEventArgs{
-			initiator: initiator,
-			newMember: newMember,
-			receivers: eventReceivers,
-			threadID:  req.ThreadID,
-			domainID:  newMember.DomainID,
+			initiator:          initiator,
+			initiatorContactID: req.InitiatorContactID,
+			newMember:          newMember,
+			receivers:          eventReceivers,
+			threadID:           req.ThreadID,
+			domainID:           newMember.DomainID,
 		})
 		if err != nil {
 			return errors.Internal("failed to send system message", errors.WithCause(err))
@@ -565,7 +569,10 @@ func (t *ThreadManagementService) Transfer(ctx context.Context, req *dto.Transfe
 				"member_id", initiator.ID,
 			)
 
-			newTop, popErr := uow.BotControl().Pop(ctx, req.ThreadID, initiator.ID, model.BotControlReasonTransfer, nil)
+			// Handoff to a human agent RELEASES bot control entirely (bot_controller_id = NULL,
+			// no owner-bot fallback, no granted event) so the owner bot is not re-woken while the
+			// agent handles the thread. Pop returns nil for handoff, so the block below is skipped.
+			newTop, popErr := uow.BotControl().Pop(ctx, req.ThreadID, initiator.ID, model.BotControlReasonHandoff, nil)
 			if popErr != nil {
 				t.log().ErrorContext(ctx, "transfer: failed to pop initiator bot control stack",
 					"thread_id", req.ThreadID,
@@ -650,18 +657,23 @@ func (t *ThreadManagementService) verifyAddMemberTargetPrivacy(ctx context.Conte
 
 type addMemberEventArgs struct {
 	initiator *model.ThreadDialogExtended
-	newMember *model.ThreadDialogExtended
-	receivers []*model.ThreadDialog
-	threadID  uuid.UUID
-	domainID  int
+	// initiatorContactID is the acting contact even when the initiator is not a
+	// thread member (system path): used to record the system message sender.
+	initiatorContactID uuid.UUID
+	newMember          *model.ThreadDialogExtended
+	receivers          []*model.ThreadDialog
+	threadID           uuid.UUID
+	domainID           int
 }
 
 type removeMemberEventArgs struct {
 	initiator *model.ThreadDialogExtended
-	member    *model.ThreadDialogExtended
-	receivers []*model.ThreadDialog
-	reason    *string
-	domainID  int
+	// initiatorContactID: see addMemberEventArgs.initiatorContactID.
+	initiatorContactID uuid.UUID
+	member             *model.ThreadDialogExtended
+	receivers          []*model.ThreadDialog
+	reason             *string
+	domainID           int
 }
 
 type transferMemberEventArgs struct {
@@ -709,7 +721,7 @@ func (t *ThreadManagementService) sendAddMemberSystemMessage(ctx context.Context
 			Type:           model.MessageTypeSystem,
 			System:         systemMessage,
 			Body:           body,
-			Metadata:       model.BuildMetadata(body),
+			Metadata:       model.BuildMetadata(body, nil),
 			SendTo: shared.Peer{
 				ID:   newMember.ContactID,
 				Type: shared.PeerContact,
@@ -730,6 +742,14 @@ func (t *ThreadManagementService) sendAddMemberSystemMessage(ctx context.Context
 			ContactID:  initiator.ContactID,
 			ThreadID:   initiator.ThreadID,
 			ThreadRole: initiator.ThreadRole,
+		}
+	} else if args.initiatorContactID != uuid.Nil {
+		// System path: the actor (schema/engine contact) is not a thread member,
+		// so there is no Member to enrich, but we still record it as the sender.
+		message.SenderID = args.initiatorContactID
+		message.From = shared.Peer{
+			ID:   args.initiatorContactID,
+			Type: shared.PeerContact,
 		}
 	}
 
@@ -822,7 +842,9 @@ func (t *ThreadManagementService) RemoveMember(ctx context.Context, req *dto.Rem
 
 	var systemMessages []*model.Message
 
-	if req.InitiatorContactID != uuid.Nil {
+	// System calls skip permission checks but still carry an initiator contact
+	// for sender attribution; regular user calls are always verified.
+	if !req.SystemCall && req.InitiatorContactID != uuid.Nil {
 		err = t.verifyRemoveMember(initiator, target)
 		if err != nil {
 			return err
@@ -877,11 +899,12 @@ func (t *ThreadManagementService) RemoveMember(ctx context.Context, req *dto.Rem
 		}
 
 		systemMessage, err := t.sendRemoveMemberSystemMessage(ctx, uow, &removeMemberEventArgs{
-			initiator: initiator,
-			member:    target,
-			receivers: eventReceivers,
-			reason:    req.Reason,
-			domainID:  domainID,
+			initiator:          initiator,
+			initiatorContactID: req.InitiatorContactID,
+			member:             target,
+			receivers:          eventReceivers,
+			reason:             req.Reason,
+			domainID:           domainID,
 		})
 		if err != nil {
 			return err
@@ -937,7 +960,7 @@ func (t *ThreadManagementService) sendRemoveMemberSystemMessage(ctx context.Cont
 		To:             args.receivers,
 		Type:           model.MessageTypeSystem,
 		Body:           body,
-		Metadata:       model.BuildMetadata(body),
+		Metadata:       model.BuildMetadata(body, nil),
 		System: &model.MessageSystem{
 			Type:     memberRemovedSystemMessageType,
 			Metadata: metadata,
@@ -960,6 +983,13 @@ func (t *ThreadManagementService) sendRemoveMemberSystemMessage(ctx context.Cont
 			ContactID:  args.initiator.ContactID,
 			ThreadID:   args.initiator.ThreadID,
 			ThreadRole: args.initiator.ThreadRole,
+		}
+	} else if args.initiatorContactID != uuid.Nil {
+		// System path: actor is not a thread member; record it as sender only.
+		message.SenderID = args.initiatorContactID
+		message.From = shared.Peer{
+			ID:   args.initiatorContactID,
+			Type: shared.PeerContact,
 		}
 	}
 
@@ -1024,7 +1054,11 @@ func (t *ThreadManagementService) sendTransferSystemMessage(ctx context.Context,
 			Type:     memberTransferedSystemMessageType,
 			Metadata: metadata,
 		},
-		Metadata: model.BuildMetadata(""),
+		Metadata: model.BuildMetadata("", nil),
+		From: shared.Peer{
+			ID:   args.initiator.ContactID,
+			Type: shared.PeerContact,
+		},
 		SendTo: shared.Peer{
 			ID:   args.newMember.ContactID,
 			Type: shared.PeerContact,
@@ -1141,34 +1175,32 @@ func (t *ThreadManagementService) CompleteBotControl(ctx context.Context, req *d
 			return err
 		}
 
-		// Only the active controller (top of stack) may complete bot control.
+		// CompleteBotControl is order-independent and idempotent. By the time a bot's schema
+		// ends, control may already have moved on: a joinQueue transfer adds the next bot and
+		// pushes it on top before this call arrives. So we remove the caller from wherever it
+		// sits on the stack and hand control onward only if it was the active controller.
 		if len(stack) == 0 {
-			t.log().WarnContext(
-				ctx,
-				"CompleteBotControl rejected: stack is empty — thread has no active bot controller",
-				"thread_id",
-				req.ThreadID,
-				"requested_member_id",
-				req.MemberID,
-			)
+			// Late or duplicate call after the stack already cleared — nothing to complete.
+			return nil
+		}
 
-			return errors.InvalidArgument("bot control stack is empty for this thread", errors.WithID("service.thread_manager.complete_bot_control"))
+		var completing *model.BotControlStackEntry
+
+		for _, entry := range stack {
+			if entry.MemberID != nil && *entry.MemberID == req.MemberID {
+				completing = entry
+
+				break
+			}
+		}
+
+		if completing == nil {
+			// Caller already left the stack (duplicate call, or removed via another path).
+			return nil
 		}
 
 		top := stack[len(stack)-1]
-
-		if top.MemberID == nil || *top.MemberID != req.MemberID {
-			t.log().WarnContext(ctx, "CompleteBotControl rejected: member is not the active controller",
-				"thread_id", req.ThreadID,
-				"requested_member_id", req.MemberID,
-				"active_member_id", top.MemberID,
-				"active_position", top.Position,
-				"stack_depth", len(stack),
-			)
-
-			return errors.InvalidArgument("member is not the active bot controller",
-				errors.WithID("service.thread_manager.complete_bot_control"))
-		}
+		wasActiveController := top.MemberID != nil && *top.MemberID == req.MemberID
 
 		thread, threadErr := uow.ThreadStore().Get(ctx, queryobject.NewThreadQueryObject().WithIDFilter(req.ThreadID).WithDomainIDFilter(req.DomainID))
 		if threadErr != nil {
@@ -1176,21 +1208,51 @@ func (t *ThreadManagementService) CompleteBotControl(ctx context.Context, req *d
 		}
 
 		if thread.OwnerBotID != nil && *thread.OwnerBotID == req.MemberID {
-			t.log().WarnContext(ctx, "CompleteBotControl rejected: cannot complete owner bot",
-				"thread_id", req.ThreadID, "member_id", req.MemberID, "owner_bot_id", thread.OwnerBotID)
+			// The owner bot is the permanent controller and must never complete or leave: it
+			// stays on the stack AND stays the active controller so the next inbound customer
+			// message is routed to it and flow_manager restarts its schema via nodeMessage.
+			// flow_manager calls CompleteBotControl on every schema end, so this is a no-op on a
+			// normal owner-flow end — return nil (not an error) to avoid spurious error logs.
+			t.log().DebugContext(ctx, "owner bot completion is a no-op: owner kept as controller",
+				"thread_id", req.ThreadID, "owner_bot_id", req.MemberID)
 
-			return errors.InvalidArgument("owner bot cannot be completed",
-				errors.WithID("service.thread_manager.complete_bot_control"))
+			return nil
 		}
 
-		completedPosition := top.Position
+		completedPosition := completing.Position
 
 		newTop, err := uow.BotControl().Pop(ctx, req.ThreadID, req.MemberID, model.BotControlReasonCompleted, nil)
 		if err != nil {
 			return err
 		}
 
+		// A transient bot below the top completed (an intermediate hop in a chain of transfers).
+		// Pop soft-deleted its auto_leave dialog, but the active controller is unchanged, so no
+		// grant must be published — publishing one would re-grant control to the running top bot.
+		if !wasActiveController {
+			t.log().DebugContext(ctx, "non-active bot completed, removed from stack without regranting control",
+				"thread_id", req.ThreadID, "member_id", req.MemberID, "completed_position", completedPosition)
+
+			return nil
+		}
+
 		if newTop == nil || newTop.MemberID == nil {
+			return nil
+		}
+
+		// Control fell back to the owner bot after a transient (auto_leave) bot completed. Do
+		// NOT publish a granted event here: that grant is what makes flow_manager start the
+		// owner schema the instant the transient leaves, instead of on the next customer
+		// message — the regression being fixed. Pop already re-pointed bot_controller_id at the
+		// owner, so we KEEP it set (do not clear): the next inbound message is routed to the
+		// owner and flow_manager starts its schema from scratch via nodeMessage. This is the
+		// crucial difference from the reverted owner-idle attempt, which cleared the controller
+		// to NULL and relied on ensureBotControl to re-grant — so the schema never woke.
+		// A non-owner bot still below on the stack (nested transient) is resumed via the grant.
+		if thread.OwnerBotID != nil && *newTop.MemberID == *thread.OwnerBotID {
+			t.log().InfoContext(ctx, "transient bot completed, owner kept as controller to start on next message",
+				"thread_id", req.ThreadID, "owner_bot_id", *newTop.MemberID)
+
 			return nil
 		}
 
@@ -1318,13 +1380,37 @@ func (t *ThreadManagementService) ensureBotControl(ctx context.Context, thread *
 	}
 
 	return t.uow.WithinTransaction(ctx, func(ctx context.Context, uow store.UnitOfWork) error {
-		_, err := uow.BotControl().Push(ctx, model.BotControlTransition{
-			ThreadID:    thread.ID,
-			NewMemberID: botDialog.ID,
-			Reason:      model.BotControlReasonInitial,
-		})
+		stack, err := uow.BotControl().GetStack(ctx, thread.ID)
 		if err != nil {
 			return err
+		}
+
+		if len(stack) > 0 {
+			// A stack already exists — this is the owner bot that never leaves the stack but
+			// whose flow went idle (bot_controller_id was cleared on completion). Re-point the
+			// controller at the existing top member instead of pushing a duplicate entry, so
+			// the granted event below restarts its schema from scratch.
+			top := stack[len(stack)-1]
+			if top.MemberID != nil {
+				if err = uow.BotControl().SetController(ctx, thread.ID, *top.MemberID); err != nil {
+					return err
+				}
+
+				// Reflect the re-granted controller on the in-memory thread the caller returns:
+				// the message being created off this thread must carry the correct
+				// bot_controller_member_id, not the stale NULL left after completion.
+				thread.BotControllerID = top.MemberID
+			}
+		} else {
+			if _, err = uow.BotControl().Push(ctx, model.BotControlTransition{
+				ThreadID:    thread.ID,
+				NewMemberID: botDialog.ID,
+				Reason:      model.BotControlReasonInitial,
+			}); err != nil {
+				return err
+			}
+
+			thread.BotControllerID = &botDialog.ID
 		}
 
 		dialog := &model.ThreadDialogExtended{}
@@ -1386,6 +1472,23 @@ func (t *ThreadManagementService) orchestrateDirectThreadCreation(ctx context.Co
 
 		for _, member := range members {
 			createdThread.Members = append(createdThread.Members, extendedThreadDialogToSimpleMapper(member))
+		}
+
+		// Bot control was just pushed for the target bot (see initializeDirectThreadDialogs).
+		// Reflect it on the in-memory thread so the first message created off this thread
+		// carries bot_controller_member_id — otherwise strict delivery would drop that first
+		// inbound message and the bot would only start from the synthesized grant, losing it.
+		if toIsBot {
+			for _, member := range members {
+				if member == nil || !member.IsBot {
+					continue
+				}
+
+				id := member.ID
+				createdThread.BotControllerID = &id
+
+				break
+			}
 		}
 
 		events, err := t.buildDirectThreadCreatedEvents(createdThread, req.From, req.To)
@@ -1649,6 +1752,47 @@ func resolveAutoLeave(override *bool) bool {
 // position is the new entry's stack position.
 // isResume=true when returning control to a bot that was previously paused (Pop path).
 // isResume=false when activating a newly added bot for the first time (Push path).
+// collectThreadAgents returns the human operators still present in the thread —
+// active, non-bot members that are not the owner (the owner is the client and
+// must never be handed to consumers for removal). Failures are logged and
+// downgraded to an empty result: enriching the event is best-effort and must
+// not fail the control transition.
+func (t *ThreadManagementService) collectThreadAgents(ctx context.Context, uow store.UnitOfWork, threadID uuid.UUID, domainID int) []event.BotControlAgent {
+	members, err := uow.ThreadDialogStore().GetQuickView(ctx, &model.ThreadDialogStoreFilter{
+		ThreadIDs:      []uuid.UUID{threadID},
+		IncludeDeleted: false,
+	})
+	if err != nil {
+		t.log().WarnContext(ctx, "failed to load members for bot control granted agents, skipping",
+			"thread_id", threadID, "err", err)
+
+		return nil
+	}
+
+	var agents []event.BotControlAgent
+
+	for _, m := range members {
+		if m == nil || m.IsBot || m.ThreadRole == model.RoleOwner {
+			continue
+		}
+
+		var sub *int64
+
+		if t.contactInfo != nil && m.ContactID != uuid.Nil {
+			if id, subErr := t.contactInfo.GetSub(ctx, m.ContactID, domainID); subErr != nil {
+				t.log().WarnContext(ctx, "failed to get sub for operator in granted event, skipping sub",
+					"contact_id", m.ContactID, "err", subErr)
+			} else {
+				sub = id
+			}
+		}
+
+		agents = append(agents, event.BotControlAgent{MemberID: m.ID, Sub: sub})
+	}
+
+	return agents
+}
+
 func (t *ThreadManagementService) publishBotControlGranted(ctx context.Context, uow store.UnitOfWork, dialog *model.ThreadDialogExtended, prev *model.BotControlStackEntry, position int, reason model.BotControlReason, isResume bool) error {
 	var (
 		prevMemberID *uuid.UUID
@@ -1678,6 +1822,24 @@ func (t *ThreadManagementService) publishBotControlGranted(ctx context.Context, 
 		}
 	}
 
+	// Emit an explicit release for the bot that just lost control, before the
+	// grant. Previously only /close published released, so consumers had to
+	// INFER "stop the old bot" from granted.PreviousMemberID by probing a live
+	// connection — a latency-dependent heuristic that let a superseded bot keep
+	// running. Publishing released here covers every hand-off that moves control
+	// to a new bot (AddMember, Transfer, RemoveMember, CompleteBotControl).
+	if prevMemberID != nil {
+		if err := t.publishBotControlReleased(ctx, uow, dialog.ThreadID, *prevMemberID, prev.ContactID, prev.Position, dialog.DomainID, &dialog.ID, reason); err != nil {
+			return err
+		}
+	}
+
+	// Control is moving (back) to a bot. Bots carry auto_leave and drop off the
+	// thread on pop, but any human operator that was handling the thread stays.
+	// Attach the lingering operators (non-bot, non-owner members) so consumers
+	// can RemoveMember them. Owner is the client and must never be touched.
+	agents := t.collectThreadAgents(ctx, uow, dialog.ThreadID, dialog.DomainID)
+
 	e := &event.BotControlGranted{
 		ThreadID:         dialog.ThreadID,
 		DomainID:         int32(dialog.DomainID),
@@ -1691,6 +1853,7 @@ func (t *ThreadManagementService) publishBotControlGranted(ctx context.Context, 
 		PreviousMemberID: prevMemberID,
 		Sub:              schemeID,
 		ReleasedSub:      prevSchemeID,
+		Agents:           agents,
 		OccurredAt:       time.Now().UTC(),
 	}
 
