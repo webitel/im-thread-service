@@ -17,4 +17,5 @@ type UnitOfWork interface {
 	MessageReactions() MessageReactionStore
 	BotControl() BotControlStore
 	ThreadTagStore() ThreadTagStore
+	ThreadVariables() ThreadVariablesStore
 }

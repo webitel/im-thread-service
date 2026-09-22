@@ -22,6 +22,7 @@ type (
 
 		ForwardOrigin *model.ForwardOrigin `json:"forward_origin,omitempty"`
 		Entities      []shared.Entity      `json:"entities,omitempty"`
+		Variables     map[string]string    `json:"variables,omitempty"`
 	}
 
 	SendTextResponse struct {

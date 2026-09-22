@@ -109,6 +109,9 @@ func (m *MessageServer) SendLocation(ctx context.Context, in *impb.SendLocationR
 		SendAs:        &sendAs,
 		ReplyTo:       model.NewReplyTarget(mapper.ParseOptionalUUID(in.GetReplyToMessageId())),
 		ForwardOrigin: mapper.MapExternalForwardOrigin(in.GetForwardOrigin()),
+
+		ExternalID:        in.GetExternalId(),
+		ReplyToExternalID: in.GetReplyToExternalId(),
 	}
 
 	saved, err := m.handler.SendLocation(ctx, msg)
@@ -142,6 +145,9 @@ func (m *MessageServer) SendContact(ctx context.Context, in *impb.SendContactReq
 		SendAs:        &sendAs,
 		ReplyTo:       model.NewReplyTarget(mapper.ParseOptionalUUID(in.GetReplyToMessageId())),
 		ForwardOrigin: mapper.MapExternalForwardOrigin(in.GetForwardOrigin()),
+
+		ExternalID:        in.GetExternalId(),
+		ReplyToExternalID: in.GetReplyToExternalId(),
 	}
 
 	saved, err := m.handler.SendContact(ctx, msg)
