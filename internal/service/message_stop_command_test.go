@@ -44,7 +44,7 @@ func senderRequest(from uuid.UUID) *dto.SendTextRequest {
 	return &dto.SendTextRequest{From: shared.Peer{ID: from}}
 }
 
-func TestCanStopBot(t *testing.T) {
+func TestCloseCommand_CanExecute(t *testing.T) {
 	botMemberID := uuid.New()
 	userContactID := uuid.New()
 	botContactID := uuid.New()
@@ -60,33 +60,33 @@ func TestCanStopBot(t *testing.T) {
 		}
 	}
 
-	svc := NewCommandService(nil, nil)
+	cmd := NewCloseCommand(nil, nil)
 
 	t.Run("user stops active bot", func(t *testing.T) {
-		require.True(t, svc.canStopBot(newCommandRequest(threadWithBot(), senderRequest(userContactID))))
+		require.True(t, cmd.CanExecute(newCommandRequest(threadWithBot(), senderRequest(userContactID))))
 	})
 
 	t.Run("no active bot controller", func(t *testing.T) {
 		thread := threadWithBot()
 		thread.BotControllerID = nil
-		require.False(t, svc.canStopBot(newCommandRequest(thread, senderRequest(userContactID))))
+		require.False(t, cmd.CanExecute(newCommandRequest(thread, senderRequest(userContactID))))
 	})
 
 	t.Run("sender is a bot", func(t *testing.T) {
-		require.False(t, svc.canStopBot(newCommandRequest(threadWithBot(), senderRequest(botContactID))))
+		require.False(t, cmd.CanExecute(newCommandRequest(threadWithBot(), senderRequest(botContactID))))
 	})
 
 	t.Run("nil thread", func(t *testing.T) {
-		require.False(t, svc.canStopBot(newCommandRequest(nil, senderRequest(userContactID))))
+		require.False(t, cmd.CanExecute(newCommandRequest(nil, senderRequest(userContactID))))
 	})
 
 	t.Run("sender not a member still stops bot", func(t *testing.T) {
 		// An external sender with no membership row may still issue /close.
-		require.True(t, svc.canStopBot(newCommandRequest(threadWithBot(), senderRequest(uuid.New()))))
+		require.True(t, cmd.CanExecute(newCommandRequest(threadWithBot(), senderRequest(uuid.New()))))
 	})
 }
 
-func TestHandleBotStopCommand_ReleasesBotAndPersistsConfirmation(t *testing.T) {
+func TestCloseCommand_Execute_ReleasesBotAndPersistsConfirmation(t *testing.T) {
 	threadID := uuid.New()
 	userContactID := uuid.New()
 	botContactID := uuid.New()
@@ -116,7 +116,7 @@ func TestHandleBotStopCommand_ReleasesBotAndPersistsConfirmation(t *testing.T) {
 		},
 	}
 
-	svc := NewCommandService(threader, logger)
+	cmd := NewCloseCommand(threader, logger)
 
 	in := &dto.SendTextRequest{
 		From:     shared.Peer{ID: userContactID},
@@ -125,7 +125,7 @@ func TestHandleBotStopCommand_ReleasesBotAndPersistsConfirmation(t *testing.T) {
 		DomainID: 1,
 	}
 
-	msg, err := svc.handleBotStopCommand(context.Background(), newCommandRequest(thread, in))
+	msg, err := cmd.Execute(context.Background(), newCommandRequest(thread, in))
 	require.NoError(t, err)
 	require.NotNil(t, msg, "command must produce a bot_stopped system message")
 

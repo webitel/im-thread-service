@@ -12,7 +12,22 @@ import (
 
 const botStoppedSystemType = "bot_stopped"
 
-func (c *CommandService) canStopBot(req commandRequest) bool {
+type CloseCommand struct {
+	bots   BotController
+	logger *slog.Logger
+}
+
+var _ Command = (*CloseCommand)(nil)
+
+func NewCloseCommand(bots BotController, logger *slog.Logger) *CloseCommand {
+	return &CloseCommand{bots: bots, logger: logger}
+}
+
+func (c *CloseCommand) Name() model.Command {
+	return model.CommandClose
+}
+
+func (c *CloseCommand) CanExecute(req CommandRequest) bool {
 	if req.Thread == nil || req.Thread.BotControllerID == nil {
 		return false
 	}
@@ -24,7 +39,7 @@ func (c *CommandService) canStopBot(req commandRequest) bool {
 	return true
 }
 
-func (c *CommandService) handleBotStopCommand(ctx context.Context, req commandRequest) (*model.Message, error) {
+func (c *CloseCommand) Execute(ctx context.Context, req CommandRequest) (*model.Message, error) {
 	in, t := req.Message, req.Thread
 
 	log := c.logger.With("operation", "command.close", slog.String("thread_id", t.ID.String()))
@@ -46,10 +61,10 @@ func (c *CommandService) handleBotStopCommand(ctx context.Context, req commandRe
 
 	log.InfoContext(ctx, "bot control released via /close")
 
-	return c.buildBotStoppedMessage(in, t), nil
+	return buildBotStoppedMessage(in, t), nil
 }
 
-func (c *CommandService) buildBotStoppedMessage(in *dto.SendTextRequest, t *model.Thread) *model.Message {
+func buildBotStoppedMessage(in *dto.SendTextRequest, t *model.Thread) *model.Message {
 	to := make([]*model.ThreadDialog, 0, len(t.Members))
 	for _, m := range t.Members {
 		if m != nil && !m.IsBot {

@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"log/slog"
 	"strings"
 
 	"github.com/google/uuid"
@@ -13,18 +12,24 @@ import (
 
 const commandPrefix = "/"
 
+type Command interface {
+	Name() model.Command
+	CanExecute(req CommandRequest) bool
+	Execute(ctx context.Context, req CommandRequest) (*model.Message, error)
+}
+
 type BotController interface {
 	ReleaseBotControl(ctx context.Context, req *dto.ReleaseBotControlRequest) error
 }
 
-type commandRequest struct {
+type CommandRequest struct {
 	Thread  *model.Thread
 	Message *dto.SendTextRequest
 	Sender  *model.ThreadDialog
 }
 
-func newCommandRequest(thread *model.Thread, in *dto.SendTextRequest) commandRequest {
-	req := commandRequest{Thread: thread, Message: in}
+func newCommandRequest(thread *model.Thread, in *dto.SendTextRequest) CommandRequest {
+	req := CommandRequest{Thread: thread, Message: in}
 	if thread != nil {
 		req.Sender = memberByContactID(thread.Members, in.From.ID)
 	}
@@ -42,65 +47,46 @@ func memberByContactID(members []*model.ThreadDialog, contactID uuid.UUID) *mode
 	return nil
 }
 
-type messageCommand struct {
-	applies func(req commandRequest) bool
-	handle  func(ctx context.Context, req commandRequest) (*model.Message, error)
+type CommandDispatcher struct {
+	commands map[model.Command]Command
 }
 
-type CommandService struct {
-	bots   BotController
-	logger *slog.Logger
-
-	commands map[model.Command]messageCommand
-}
-
-func NewCommandService(bots BotController, logger *slog.Logger) *CommandService {
-	c := &CommandService{
-		bots:   bots,
-		logger: logger,
+func NewCommandDispatcher(commands []Command) *CommandDispatcher {
+	registry := make(map[model.Command]Command, len(commands))
+	for _, cmd := range commands {
+		registry[cmd.Name()] = cmd
 	}
 
-	c.commands = c.buildCommands()
-
-	return c
+	return &CommandDispatcher{commands: registry}
 }
 
-func (c *CommandService) buildCommands() map[model.Command]messageCommand {
-	return map[model.Command]messageCommand{
-		model.CommandClose: {
-			applies: c.canStopBot,
-			handle:  c.handleBotStopCommand,
-		},
-	}
-}
-
-func (c *CommandService) Dispatch(ctx context.Context, thread *model.Thread, in *dto.SendTextRequest) (*model.Message, bool, error) {
+func (d *CommandDispatcher) Dispatch(ctx context.Context, thread *model.Thread, in *dto.SendTextRequest) (*model.Message, bool, error) {
 	if in == nil {
 		return nil, false, nil
 	}
 
-	cmd, ok := c.lookupCommand(in.Body)
+	cmd, ok := d.lookup(in.Body)
 	if !ok {
 		return nil, false, nil
 	}
 
 	req := newCommandRequest(thread, in)
-	if cmd.applies != nil && !cmd.applies(req) {
+	if !cmd.CanExecute(req) {
 		return nil, false, nil
 	}
 
-	msg, err := cmd.handle(ctx, req)
+	msg, err := cmd.Execute(ctx, req)
 
 	return msg, true, err
 }
 
-func (c *CommandService) lookupCommand(body string) (messageCommand, bool) {
+func (d *CommandDispatcher) lookup(body string) (Command, bool) {
 	body = strings.TrimSpace(body)
 	if !strings.HasPrefix(body, commandPrefix) {
-		return messageCommand{}, false
+		return nil, false
 	}
 
-	cmd, ok := c.commands[model.Command(body)]
+	cmd, ok := d.commands[model.Command(body)]
 
 	return cmd, ok
 }

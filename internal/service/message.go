@@ -41,7 +41,7 @@ type MessageService struct {
 	rateLimiter RateLimiter
 	typingCfg   config.TypingConfig
 
-	commands *CommandService
+	commands *CommandDispatcher
 }
 
 func NewMessageService(
@@ -54,7 +54,7 @@ func NewMessageService(
 	typingBus TypingBus,
 	rateLimiter RateLimiter,
 	typingCfg config.TypingConfig,
-	commands *CommandService,
+	commands *CommandDispatcher,
 ) *MessageService {
 	return &MessageService{
 		uow:              uow,
