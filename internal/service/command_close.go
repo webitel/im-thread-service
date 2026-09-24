@@ -82,7 +82,7 @@ func buildBotStoppedMessage(in *dto.SendTextRequest, t *model.Thread) *model.Mes
 		To:             to,
 		Type:           model.MessageTypeSystem,
 		IdempotencyKey: in.SendID,
-		Metadata:       model.BuildMetadata(in.Body),
+		Metadata:       model.BuildMetadata(in.Body, nil),
 		System: &model.MessageSystem{
 			Type:     botStoppedSystemType,
 			Metadata: make(map[string]any),
