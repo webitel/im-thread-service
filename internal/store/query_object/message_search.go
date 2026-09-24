@@ -14,6 +14,7 @@ import (
 type MessageSearchQuery struct {
 	base         sq.SelectBuilder
 	fields       []string
+	callerID     uuid.UUID
 	paginatorCfg Config[MessageHistoryCursor]
 
 	pag *SquirrelPaginator[MessageHistoryCursor]
@@ -92,10 +93,28 @@ func (q *MessageSearchQuery) WithTypeFilter(types ...int) *MessageSearchQuery {
 	return q
 }
 
+// WithSystemMessageAllowList restricts SYSTEM-type (model.MessageTypeSystem)
+// rows to a Message.System.Type allow-list. See MessageHistoryQuery's method
+// of the same name for the full nil-vs-empty semantics.
+func (q *MessageSearchQuery) WithSystemMessageAllowList(allowedTypes []string) *MessageSearchQuery {
+	if allowedTypes == nil {
+		return q
+	}
+
+	q.base = q.base.Where(
+		"(type <> ? OR EXISTS (select 1 from im_message.system_messages sm where sm.message_id = id and sm.type = any(?)))",
+		int(model.MessageTypeSystem), allowedTypes,
+	)
+
+	return q
+}
+
 func (q *MessageSearchQuery) WithCallerScope(callerID uuid.UUID) *MessageSearchQuery {
 	if callerID == uuid.Nil {
 		return q
 	}
+
+	q.callerID = callerID
 
 	q.base = q.base.Where(`
 		exists (
@@ -156,7 +175,7 @@ func (q *MessageSearchQuery) ToSQL() (string, []any, error) {
 		q.paginatorCfg.Direction = DirectionAfter
 	}
 
-	decorated, err := q.pag.Apply(q.base.Columns(q.fields...), q.paginatorCfg)
+	decorated, err := q.pag.Apply(selectMessageFields(q.base, q.fields, q.callerID), q.paginatorCfg)
 	if err != nil {
 		return "", nil, err
 	}

@@ -30,6 +30,7 @@ var Module = fx.Module(
 		NewMessageStatusService,
 		NewThreadService,
 		NewThreadPermissionService,
+		NewThreadTagService,
 		NewMessageHistory,
 		NewMediaProcessor,
 		fx.Annotate(NewDirectThreadCreatorGuard, fx.As(new(DirectThreadCreatorGuarder))),

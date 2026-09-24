@@ -78,5 +78,5 @@ type Entity struct {
 	Type   string `json:"type"`
 	Offset int    `json:"offset"`
 	Length int    `json:"length"`
-	Value  string `json:"value"`
+	Value  string `json:"value,omitempty"`
 }

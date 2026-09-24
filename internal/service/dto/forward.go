@@ -3,6 +3,7 @@ package dto
 import (
 	"github.com/google/uuid"
 
+	"github.com/webitel/im-thread-service/internal/domain/model"
 	"github.com/webitel/im-thread-service/internal/domain/shared"
 )
 
@@ -19,9 +20,9 @@ type (
 	}
 
 	ForwardMessagesResponse struct {
-		To         shared.Peer `json:"to"`
-		ThreadID   uuid.UUID   `json:"thread_id"`
-		IDs        []uuid.UUID `json:"ids"`
-		SkippedIDs []uuid.UUID `json:"skipped_ids"`
+		To       shared.Peer         `json:"to"`
+		ThreadID uuid.UUID           `json:"thread_id"`
+		IDs      []uuid.UUID         `json:"ids"`
+		Skipped  []model.MessageSkip `json:"skipped"`
 	}
 )

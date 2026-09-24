@@ -27,6 +27,8 @@ type fakeUnitOfWork struct {
 	outboxStore          store.OutboxStore
 	botControlStore      store.BotControlStore
 	threadStore          store.ThreadStore
+	threadTagStore       store.ThreadTagStore
+	threadVariablesStore store.ThreadVariablesStore
 }
 
 func (f fakeUnitOfWork) WithinTransaction(ctx context.Context, fn func(context.Context, store.UnitOfWork) error) error {
@@ -111,6 +113,58 @@ func (f fakeUnitOfWork) MessageReactions() store.MessageReactionStore {
 
 func (f fakeUnitOfWork) BotControl() store.BotControlStore {
 	return f.botControlStore
+}
+
+func (f fakeUnitOfWork) ThreadTagStore() store.ThreadTagStore {
+	if f.threadTagStore == nil {
+		return noopThreadTagStore{}
+	}
+
+	return f.threadTagStore
+}
+
+func (f fakeUnitOfWork) ThreadVariables() store.ThreadVariablesStore {
+	if f.threadVariablesStore == nil {
+		return noopThreadVariablesStore{}
+	}
+
+	return f.threadVariablesStore
+}
+
+type noopThreadVariablesStore struct{}
+
+func (noopThreadVariablesStore) Set(ctx context.Context, variables *model.SetThreadVariablesCommand) (*model.ThreadVariables, error) {
+	return variables.Variables, nil
+}
+
+func (noopThreadVariablesStore) Search(ctx context.Context, query model.GetThreadVariablesQuery) (model.Page[*model.ThreadVariables], error) {
+	return model.Page[*model.ThreadVariables]{}, nil
+}
+
+func (noopThreadVariablesStore) Locate(ctx context.Context, threadID uuid.UUID) (*model.ThreadVariables, error) {
+	return nil, nil //nolint:nilnil // matches the store contract: a thread with no variables is (nil, nil)
+}
+
+func (noopThreadVariablesStore) Flush(ctx context.Context, flushCmd model.FlushVariablesCommand) (*model.ThreadVariables, error) {
+	return nil, nil //nolint:nilnil // same contract: nothing flushed is (nil, nil)
+}
+
+type noopThreadTagStore struct{}
+
+func (noopThreadTagStore) Add(ctx context.Context, tag *model.ThreadTag) (*model.ThreadTag, error) {
+	return tag, nil
+}
+
+func (noopThreadTagStore) Remove(context.Context, uuid.UUID, uuid.UUID) error {
+	return nil
+}
+
+func (noopThreadTagStore) ListForContact(context.Context, uuid.UUID, []uuid.UUID) (map[uuid.UUID][]*model.ThreadTag, error) {
+	return make(map[uuid.UUID][]*model.ThreadTag), nil
+}
+
+func (noopThreadTagStore) SearchTags(context.Context, uuid.UUID, int, int) ([]string, error) {
+	return nil, nil
 }
 
 type fakeThreadDialogStore struct {
@@ -234,6 +288,7 @@ type fakeMessageStore struct {
 	lastDeleterID        uuid.UUID
 
 	forwardSources    []*model.Message
+	forwardSkipped    []model.MessageSkip
 	forwardSourcesErr error
 	lastForwardIDs    []uuid.UUID
 	lastForwardCaller uuid.UUID
@@ -258,7 +313,7 @@ func (f *fakeMessageStore) LoadForwardSources(
 	ids []uuid.UUID,
 	callerID uuid.UUID,
 	domainID int32,
-) ([]*model.Message, error) {
+) (*model.MessageForwardSources, error) {
 	f.lastForwardIDs = ids
 	f.lastForwardCaller = callerID
 
@@ -266,7 +321,10 @@ func (f *fakeMessageStore) LoadForwardSources(
 		return nil, f.forwardSourcesErr
 	}
 
-	return f.forwardSources, nil
+	return &model.MessageForwardSources{
+		Sources: f.forwardSources,
+		Skipped: f.forwardSkipped,
+	}, nil
 }
 
 func (f *fakeMessageStore) CopyAttachments(ctx context.Context, sourceID, targetID uuid.UUID) error {
@@ -599,6 +657,88 @@ func TestTransfer_AddsMemberRemovesInitiatorAndSendsTransferSystemMessage(t *tes
 	require.Equal(t, initiatorMemberID, messageStore.lastSavedSystemMessage.System.Metadata["transferred_member_id"])
 	require.Equal(t, newMemberID, messageStore.lastSavedSystemMessage.System.Metadata["new_member_id"])
 	require.GreaterOrEqual(t, len(outboxStore.published), 1)
+}
+
+// TestAddMember_SystemCall_RecordsSenderWithoutMembership guards the fix for the
+// 0000 sender_id: a trusted-orchestrator (schema/engine) call whose initiator is
+// not a thread member must skip permission checks yet still record the initiator
+// contact as the system message sender, with no Member enrichment.
+func TestAddMember_SystemCall_RecordsSenderWithoutMembership(t *testing.T) {
+	threadID := uuid.New()
+	initiatorContactID := uuid.New() // schema contact, NOT a member of the thread
+	newMemberContactID := uuid.New()
+
+	threadDialogStore := &fakeThreadDialogStore{
+		// Neither initiator nor target are existing members.
+		fullViewResult: nil,
+		quickViewResult: []*model.ThreadDialog{
+			{BaseModel: shared.BaseModel{ID: uuid.New()}, ContactID: uuid.New(), ThreadID: threadID, ThreadRole: model.RoleMember},
+		},
+	}
+	messageStore := &fakeMessageStore{}
+	outboxStore := &fakeOutboxStore{}
+
+	svc := &ThreadManagementService{
+		uow:            fakeUnitOfWork{threadDialogStore: threadDialogStore, messageStore: messageStore, outboxStore: outboxStore},
+		privacyChecker: fakePrivacyChecker{},
+	}
+
+	_, err := svc.AddMember(context.Background(), &dto.AddMemberRequest{
+		ThreadID:           threadID,
+		NewMemberContactID: newMemberContactID,
+		InitiatorContactID: initiatorContactID,
+		NewMemberRole:      model.RoleMember,
+		DomainID:           1,
+		SystemCall:         true,
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, messageStore.lastSavedSystemMessage)
+	// Sender is recorded from the initiator contact even though it is not a member.
+	require.Equal(t, initiatorContactID, messageStore.lastSavedSystemMessage.From.ID)
+	require.Equal(t, initiatorContactID, messageStore.lastSavedSystemMessage.SenderID)
+	// No Member enrichment: the actor is not a thread member.
+	require.Nil(t, messageStore.lastSavedSystemMessage.Member)
+}
+
+// TestRemoveMember_SystemCall_RecordsSenderWithoutMembership is the RemoveMember
+// counterpart of the system-call sender-attribution guard.
+func TestRemoveMember_SystemCall_RecordsSenderWithoutMembership(t *testing.T) {
+	threadID := uuid.New()
+	initiatorContactID := uuid.New() // schema contact, NOT a member
+	targetID := uuid.New()
+	targetContactID := uuid.New()
+
+	threadDialogStore := &fakeThreadDialogStore{
+		// initiatorPair nil: the orchestrator is not a member of the thread.
+		targetPair: &model.ThreadDialogExtended{
+			BaseModel:  shared.BaseModel{ID: targetID, DomainID: 1},
+			ContactID:  targetContactID,
+			ThreadID:   threadID,
+			ThreadRole: model.RoleMember,
+		},
+		quickViewResult: []*model.ThreadDialog{
+			{BaseModel: shared.BaseModel{ID: targetID}, ContactID: targetContactID, ThreadID: threadID, ThreadRole: model.RoleMember},
+		},
+	}
+	messageStore := &fakeMessageStore{}
+	outboxStore := &fakeOutboxStore{}
+
+	svc := &ThreadManagementService{
+		uow: fakeUnitOfWork{threadDialogStore: threadDialogStore, messageStore: messageStore, outboxStore: outboxStore},
+	}
+
+	err := svc.RemoveMember(context.Background(), &dto.RemoveMemberRequest{
+		TargetMemberID:     targetID,
+		InitiatorContactID: initiatorContactID,
+		SystemCall:         true,
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, messageStore.lastSavedSystemMessage)
+	require.Equal(t, initiatorContactID, messageStore.lastSavedSystemMessage.From.ID)
+	require.Equal(t, initiatorContactID, messageStore.lastSavedSystemMessage.SenderID)
+	require.Nil(t, messageStore.lastSavedSystemMessage.Member)
 }
 
 func TestTransfer_ReturnsValidationErrorWhenInitiatorIsNil(t *testing.T) {

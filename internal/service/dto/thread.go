@@ -47,6 +47,7 @@ type (
 		SelfID       uuid.UUID
 		ContactIDs   uuid.UUIDs
 		Participants []ContactIdentity
+		Tags         []string
 		Size         int
 		Sort         string
 		Page         int
@@ -62,6 +63,7 @@ type (
 		MemberID uuid.UUID
 		DomainID int
 		Kinds    []model.ThreadKind
+		Tags     []string
 		Size     int
 		Sort     string
 		Page     int
@@ -85,12 +87,17 @@ type AddMemberRequest struct {
 	DomainID           int
 	IsBot              bool
 	AutoLeave          *bool
+	// SystemCall marks a trusted-orchestrator call: permission checks are skipped
+	// while InitiatorContactID is still recorded as the system message sender.
+	SystemCall bool
 }
 
 type RemoveMemberRequest struct {
 	TargetMemberID     uuid.UUID
 	InitiatorContactID uuid.UUID
 	Reason             *string
+	// SystemCall: see AddMemberRequest.SystemCall.
+	SystemCall bool
 }
 
 // CompleteBotControlRequest is sent by flow_manager when a bot schema finishes execution.

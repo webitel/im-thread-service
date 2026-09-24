@@ -338,6 +338,26 @@ func (q *threadQueryObject) WithSharedMembersFilter(selfID uuid.UUID, memberIDs 
 	return q
 }
 
+// WithTagsFilter narrows results to threads the selfID contact has tagged with every one of the tags (AND semantics).
+// If selfID is Nil or tags is empty, the filter is silently ignored.
+func (q *threadQueryObject) WithTagsFilter(selfID uuid.UUID, tags ...string) *threadQueryObject {
+	if selfID == uuid.Nil || len(tags) == 0 {
+		return q
+	}
+
+	q.builder = q.builder.Where(
+		fmt.Sprintf(`%s.id IN (
+			SELECT thread_id FROM %s
+			WHERE contact_id = ? AND tag = ANY(?)
+			GROUP BY thread_id
+			HAVING COUNT(DISTINCT tag) = ?
+		)`, threadAlias, ThreadTagTable),
+		selfID, tags, len(tags),
+	)
+
+	return q
+}
+
 func (q *threadQueryObject) WithParticipantsFilter(selfID uuid.UUID, domainIDs []int, participants ...dto.ContactIdentity) *threadQueryObject {
 	if selfID == uuid.Nil || len(participants) == 0 {
 		return q

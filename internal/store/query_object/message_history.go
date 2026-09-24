@@ -50,9 +50,42 @@ var (
 	}
 )
 
+const replyToField = "reply_to"
+
+func replyToColumn(callerID uuid.UUID) sq.Sqlizer {
+	return sq.Expr(CompactSQL(`
+		case when exists (
+			select 1
+			from `+ThreadDialogTable+` priv
+			join `+ThreadTable+` thr on thr.id = priv.thread_id
+			where priv.thread_id = v_messages.thread_id
+			and priv.domain_id = v_messages.domain_id
+			and priv.member_id = ?::uuid
+			and priv.deleted_at is null
+			and priv.thread_role >= ?
+			and thr.kind <> ?
+		) then v_messages.reply_to_audit else v_messages.reply_to end as reply_to
+	`), callerID, int(model.RoleAdmin), int(model.ThreadDirect))
+}
+
+func selectMessageFields(base sq.SelectBuilder, fields []string, callerID uuid.UUID) sq.SelectBuilder {
+	for _, f := range fields {
+		if f == replyToField && callerID != uuid.Nil {
+			base = base.Column(replyToColumn(callerID))
+
+			continue
+		}
+
+		base = base.Columns(f)
+	}
+
+	return base
+}
+
 type MessageHistoryQuery struct {
 	base         sq.SelectBuilder
 	fields       []string
+	callerID     uuid.UUID
 	paginatorCfg Config[MessageHistoryCursor]
 
 	pag *SquirrelPaginator[MessageHistoryCursor]
@@ -127,6 +160,28 @@ func (q *MessageHistoryQuery) WithTypeFilter(types ...int) *MessageHistoryQuery 
 	return q
 }
 
+// WithSystemMessageAllowList restricts SYSTEM-type (model.MessageTypeSystem)
+// rows to a Message.System.Type allow-list. allowedTypes == nil means "not
+// restricted" (no-op, matches not calling this method at all); a non-nil
+// allowedTypes (including an empty, non-nil slice) means "restricted" — an
+// empty slice blocks every system message, a non-empty slice allows only
+// those subtypes. There is deliberately no separate "restricted" flag: a
+// plain slice's own nil-ness already carries the 3-state signal, and a
+// second bool alongside it would only make the invalid state
+// (restricted=false with a non-empty list silently discarded) representable.
+func (q *MessageHistoryQuery) WithSystemMessageAllowList(allowedTypes []string) *MessageHistoryQuery {
+	if allowedTypes == nil {
+		return q
+	}
+
+	q.base = q.base.Where(
+		"(type <> ? OR EXISTS (select 1 from im_message.system_messages sm where sm.message_id = id and sm.type = any(?)))",
+		int(model.MessageTypeSystem), allowedTypes,
+	)
+
+	return q
+}
+
 func (q *MessageHistoryQuery) WithCursor(cursor *dto.HistoryMessageCursor) *MessageHistoryQuery {
 	if cursor == nil {
 		return q
@@ -152,6 +207,8 @@ func (q *MessageHistoryQuery) WithCallerLimitation(callerID uuid.UUID, threadIDs
 	if callerID == uuid.Nil {
 		return q
 	}
+
+	q.callerID = callerID
 
 	q.base = q.base.Where(
 		`
@@ -194,7 +251,7 @@ func (q *MessageHistoryQuery) ToSQL() (string, []any, error) {
 		q.paginatorCfg.Direction = DirectionAfter
 	}
 
-	withColumns := q.base.Columns(q.fields...)
+	withColumns := selectMessageFields(q.base, q.fields, q.callerID)
 
 	decorated, err := q.pag.Apply(withColumns, q.paginatorCfg)
 	if err != nil {

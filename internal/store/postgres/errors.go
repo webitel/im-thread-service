@@ -25,3 +25,20 @@ func uniqueViolation(err error, errMessage ...string) error {
 
 	return nil
 }
+
+func foreignKeyViolation(err error, errMessage ...string) error {
+	finalErrorMessage := "referenced row not found"
+	if len(errMessage) != 0 {
+		finalErrorMessage = cmp.Or(errMessage[0], finalErrorMessage)
+	}
+
+	if pgerr, ok := err.(*pgconn.PgError); ok && pgerr.Code == "23503" {
+		return errors.New(
+			finalErrorMessage,
+			errors.WithCause(pgerr),
+			errors.WithCode(codes.NotFound),
+		)
+	}
+
+	return nil
+}

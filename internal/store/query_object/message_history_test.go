@@ -1,0 +1,165 @@
+package queryobject
+
+import (
+	"strings"
+	"testing"
+
+	sq "github.com/Masterminds/squirrel"
+	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+func TestSelectMessageFields_ReplyAudit(t *testing.T) {
+	t.Parallel()
+
+	caller := uuid.MustParse("33333333-3333-3333-3333-333333333333")
+
+	tests := []struct {
+		name        string
+		fields      []string
+		visibleTo   uuid.UUID
+		wantAudit   bool
+		wantColumns string
+		wantArgs    []any
+	}{
+		{
+			name:        "no caller keeps the masked column",
+			fields:      []string{"id", "reply_to"},
+			visibleTo:   uuid.Nil,
+			wantColumns: "id, reply_to",
+		},
+		{
+			name:      "caller gets the audit column behind a role and kind check",
+			fields:    []string{"id", "reply_to"},
+			visibleTo: caller,
+			wantAudit: true,
+			wantArgs:  []any{caller, 2, 1},
+		},
+		{
+			name:        "fields without reply_to are untouched",
+			fields:      []string{"id", "body"},
+			visibleTo:   caller,
+			wantColumns: "id, body",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			base := sq.StatementBuilder.PlaceholderFormat(sq.Dollar).Select().From(MessageHistoryView)
+
+			sql, args, err := selectMessageFields(base, tt.fields, tt.visibleTo).ToSql()
+			require.NoError(t, err)
+
+			assert.Equal(t, tt.wantArgs, args)
+
+			if !tt.wantAudit {
+				assert.Equal(t, normalizeSQL("SELECT "+tt.wantColumns+" FROM "+MessageHistoryView), normalizeSQL(sql))
+
+				return
+			}
+
+			assert.Contains(t, sql, CompactSQL(
+				`case when exists ( select 1 from `+ThreadDialogTable+` priv
+					join `+ThreadTable+` thr on thr.id = priv.thread_id
+					where priv.thread_id = v_messages.thread_id
+					and priv.domain_id = v_messages.domain_id
+					and priv.member_id = $1::uuid
+					and priv.deleted_at is null
+					and priv.thread_role >= $2
+					and thr.kind <> $3
+				) then v_messages.reply_to_audit else v_messages.reply_to end as reply_to`,
+			))
+		})
+	}
+}
+
+func TestMessageHistoryQuery_WithFields_RejectsAuditColumn(t *testing.T) {
+	t.Parallel()
+
+	caller := uuid.MustParse("33333333-3333-3333-3333-333333333333")
+	thread := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+
+	sql, _, err := NewMessageHistoryQuery().
+		WithFields([]string{"id", "reply_to_audit"}).
+		WithCallerLimitation(caller, uuid.UUIDs{thread}).
+		ToSQL()
+
+	require.NoError(t, err)
+	assert.False(t, strings.Contains(sql, "reply_to_audit"))
+}
+
+const wantSystemAllowListPredicate = "(type <> $1 OR EXISTS (select 1 from im_message.system_messages sm where sm.message_id = id and sm.type = any($2)))"
+
+func TestMessageHistoryQuery_WithSystemMessageAllowList(t *testing.T) {
+	t.Parallel()
+
+	noOpSQL, noOpArgs, err := NewMessageHistoryQuery().ToSQL()
+	require.NoError(t, err)
+
+	tests := []struct {
+		name         string
+		allowedTypes []string
+		wantNoOp     bool
+		wantArgs     []any
+	}{
+		{
+			name:         "nil is not restricted: byte-for-byte identical to not calling the method",
+			allowedTypes: nil,
+			wantNoOp:     true,
+		},
+		{
+			name:         "non-nil empty blocks all system messages, using the same predicate as the non-empty case",
+			allowedTypes: []string{},
+			wantArgs:     []any{int(4), []string{}}, // model.MessageTypeSystem; empty (non-nil) allow-list
+		},
+		{
+			name:         "non-empty allow-list restricts to the given subtypes",
+			allowedTypes: []string{"user_joined", "user_left"},
+			wantArgs:     []any{int(4), []string{"user_joined", "user_left"}},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			sql, args, err := NewMessageHistoryQuery().
+				WithSystemMessageAllowList(tt.allowedTypes).
+				ToSQL()
+			require.NoError(t, err)
+
+			if tt.wantNoOp {
+				assert.Equal(t, noOpSQL, sql)
+				assert.Equal(t, noOpArgs, args)
+
+				return
+			}
+
+			assertSQLContains(t, sql, wantSystemAllowListPredicate)
+			assert.Equal(t, tt.wantArgs, args)
+		})
+	}
+}
+
+func TestMessageHistoryQuery_WithSystemMessageAllowList_ComposesWithTypeFilter(t *testing.T) {
+	t.Parallel()
+
+	sql, args, err := NewMessageHistoryQuery().
+		WithTypeFilter(1, 2).
+		WithSystemMessageAllowList([]string{"user_joined"}).
+		ToSQL()
+
+	require.NoError(t, err)
+	// Both predicates should be present, AND-combined.
+	assertSQLContains(t, sql, "type IN ($1,$2)")
+	assertSQLContains(t, sql, "(type <> $3 OR EXISTS (select 1 from im_message.system_messages sm where sm.message_id = id and sm.type = any($4)))")
+
+	require.Len(t, args, 4)
+	assert.Equal(t, 1, args[0])
+	assert.Equal(t, 2, args[1])
+	assert.Equal(t, int(4), args[2]) // model.MessageTypeSystem, from WithSystemMessageAllowList
+	assert.Equal(t, []string{"user_joined"}, args[3])
+}

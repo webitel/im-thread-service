@@ -145,6 +145,12 @@ func (m *messageStore) SaveMessage(ctx context.Context, msg *model.Message) (*mo
 		return nil, errors.Internal("collecting saved message", errors.WithCause(err), errors.WithID("postgres.message.save.collecting"))
 	}
 
+	// BotControllerMemberID is a passthrough field (db:"-") — it is never stored nor
+	// returned by the query, so the freshly scanned savedMessage would drop it. Carry it
+	// over from the input so the created event (built from the saved message) still carries
+	// the active bot controller for downstream routing.
+	savedMessage.BotControllerMemberID = msg.BotControllerMemberID
+
 	return savedMessage, nil
 }
 
@@ -407,11 +413,14 @@ func (m *messageStore) DeleteMessages(ctx context.Context, ids []uuid.UUID, dele
 // returned no row for never existed, so they complete the skipped half as
 // not_found.
 func splitDeleteOutcome(ids []uuid.UUID, classified []*model.Message) *model.MessageDeleteResult {
-	out := &model.MessageDeleteResult{
-		Deleted: make([]*model.Message, 0, len(classified)),
-		Skipped: make([]model.MessageSkip, 0, len(ids)),
-	}
+	deleted, skipped := splitSkipOutcome(ids, classified)
 
+	return &model.MessageDeleteResult{Deleted: deleted, Skipped: skipped}
+}
+
+func splitSkipOutcome(ids []uuid.UUID, classified []*model.Message) ([]*model.Message, []model.MessageSkip) {
+	kept := make([]*model.Message, 0, len(classified))
+	skipped := make([]model.MessageSkip, 0, len(ids))
 	seen := make(map[uuid.UUID]struct{}, len(ids))
 
 	for _, msg := range classified {
@@ -422,12 +431,12 @@ func splitDeleteOutcome(ids []uuid.UUID, classified []*model.Message) *model.Mes
 		seen[msg.ID] = struct{}{}
 
 		if msg.SkipReason == model.MessageSkipUnspecified {
-			out.Deleted = append(out.Deleted, msg)
+			kept = append(kept, msg)
 
 			continue
 		}
 
-		out.Skipped = append(out.Skipped, model.MessageSkip{ID: msg.ID, Reason: msg.SkipReason})
+		skipped = append(skipped, model.MessageSkip{ID: msg.ID, Reason: msg.SkipReason})
 	}
 
 	for _, id := range ids {
@@ -437,10 +446,10 @@ func splitDeleteOutcome(ids []uuid.UUID, classified []*model.Message) *model.Mes
 
 		seen[id] = struct{}{}
 
-		out.Skipped = append(out.Skipped, model.MessageSkip{ID: id, Reason: model.MessageSkipNotFound})
+		skipped = append(skipped, model.MessageSkip{ID: id, Reason: model.MessageSkipNotFound})
 	}
 
-	return out
+	return kept, skipped
 }
 
 func (m *messageStore) SaveDocuments(ctx context.Context, messageID uuid.UUID, docs []*model.MessageDocument) ([]*model.MessageDocument, error) {
@@ -520,6 +529,10 @@ func (m *messageStore) SaveMessageLocation(ctx context.Context, msg *model.Messa
 		return nil, errors.Internal("eror collecting saved location", errors.WithCause(err))
 	}
 
+	// Passthrough field (db:"-") is not returned by the query — carry it over so the
+	// created event keeps the active bot controller. See SaveMessage.
+	saved.BotControllerMemberID = msg.BotControllerMemberID
+
 	return saved, nil
 }
 
@@ -595,6 +608,10 @@ func (m *messageStore) SaveMessageContact(ctx context.Context, msg *model.Messag
 	if err != nil {
 		return nil, errors.Internal("eror collecting saved contact", errors.WithCause(err))
 	}
+
+	// Passthrough field (db:"-") is not returned by the query — carry it over so the
+	// created event keeps the active bot controller. See SaveMessage.
+	saved.BotControllerMemberID = msg.BotControllerMemberID
 
 	return saved, nil
 }
