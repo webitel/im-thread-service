@@ -18,6 +18,15 @@ var Module = fx.Module(
 		},
 		fx.Annotate(newBaseRPCProvidersAdapter, fx.As(new(ProvidersAdapter))),
 		NewMessageService,
+		fx.Annotate(
+			NewCloseCommand,
+			fx.As(new(Command)),
+			fx.ResultTags(`group:"commands"`),
+		),
+		fx.Annotate(
+			NewCommandDispatcher,
+			fx.ParamTags(`group:"commands"`),
+		),
 		NewMessageStatusService,
 		NewThreadService,
 		NewThreadPermissionService,
