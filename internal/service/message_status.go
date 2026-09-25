@@ -187,6 +187,7 @@ func groupStatusChanges(changes []*model.StatusChange) []*event.MessageStatusCha
 			DomainID:   c.DomainID,
 			MemberID:   c.MemberID,
 			MessageIDs: []uuid.UUID{c.MessageID},
+			UpToSeq:    c.UpToSeq,
 			Status:     c.Status.String(),
 			Via:        via,
 			Error:      c.Error,
@@ -203,6 +204,11 @@ func groupStatusChanges(changes []*model.StatusChange) []*event.MessageStatusCha
 		k := key{c.ThreadID, c.MemberID, c.Status, via}
 		if existing, ok := grouped[k]; ok {
 			existing.MessageIDs = append(existing.MessageIDs, c.MessageID)
+			// The watermark is the furthest horizon in the batch.
+			if c.UpToSeq > existing.UpToSeq {
+				existing.UpToSeq = c.UpToSeq
+			}
+
 			if c.UpdatedAt.After(existing.OccurredAt) {
 				existing.OccurredAt = c.UpdatedAt
 			}

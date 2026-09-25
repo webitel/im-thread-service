@@ -16,15 +16,15 @@ var _ Outboxer = (*MessageDeleted)(nil)
 // It deliberately carries no body or attachments: the content stays in the
 // database for analytics and must never reach clients again.
 type MessageDeleted struct {
-	MessageID  uuid.UUID       `json:"message_id"`
-	ThreadID   uuid.UUID       `json:"thread_id"`
-	DomainID   int32           `json:"domain_id"`
-	DeletedBy  *Member         `json:"deleted_by,omitempty"`
-	To         []*ThreadMember `json:"to,omitempty"`
-	Type       string          `json:"type"` // text|document|image|system|interactive|location|contact
-	CreatedAt  time.Time       `json:"created_at"`
-	OccurredAt time.Time       `json:"occurred_at"`
-
+	MessageID        uuid.UUID         `json:"message_id"`
+	ThreadID         uuid.UUID         `json:"thread_id"`
+	DomainID         int32             `json:"domain_id"`
+	DeletedBy        *Member           `json:"deleted_by,omitempty"`
+	To               []*ThreadMember   `json:"to,omitempty"`
+	Type             string            `json:"type"` // text|document|image|system|interactive|location|contact
+	CreatedAt        time.Time         `json:"created_at"`
+	OccurredAt       time.Time         `json:"occurred_at"`
+	UpdateSeq        int64             `json:"update_seq"`
 	ExternalMetadata map[string]string `json:"-"`
 }
 
@@ -39,6 +39,8 @@ func (m *MessageDeleted) AddMetadata(key, value string) {
 func (*MessageDeleted) EventType() string                { return MessageDeletedEvent }
 func (m *MessageDeleted) Version() string                { return MessageVersionV1 }
 func (m *MessageDeleted) RecipientID() uuid.UUID         { return m.ThreadID }
+func (m *MessageDeleted) JournalThreadID() uuid.UUID     { return m.ThreadID }
+func (m *MessageDeleted) SetUpdateSeq(seq int64)         { m.UpdateSeq = seq }
 func (m *MessageDeleted) ToOutbox() (OutboxEvent, error) { return m.serialize(m.Version()) }
 
 func (m *MessageDeleted) serialize(version string) (OutboxEvent, error) {

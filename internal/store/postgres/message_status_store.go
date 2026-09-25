@@ -256,6 +256,57 @@ func (s *messageStatusStore) ReadUnread(ctx context.Context, domainID int32, mem
 	return result, nil
 }
 
+// ReadMemberStates returns per-member delivery/read horizons from thread_dialog;
+// shared with GetThreadUpdates for deriving inbox/outbox watermarks.
+func (s *messageStatusStore) ReadMemberStates(ctx context.Context, domainID int32, memberID uuid.UUID, threadIDs []uuid.UUID) (map[uuid.UUID][]model.MemberReadState, error) {
+	if memberID == uuid.Nil || len(threadIDs) == 0 {
+		return make(map[uuid.UUID][]model.MemberReadState), nil
+	}
+
+	const query = `
+		select
+			td.thread_id,
+			td.member_id,
+			greatest(coalesce(td.last_delivered_seq, 0), coalesce(td.last_read_seq, 0)) as delivered_up_to_seq,
+			coalesce(td.last_read_seq, 0) as read_up_to_seq
+		from im_thread.thread_dialog td
+		where td.thread_id = any(@ThreadIDs::uuid[])
+		  and (@DomainID <= 0 or td.domain_id = @DomainID)
+		  and td.deleted_at is null
+		  and (td.last_delivered_seq is not null or td.last_read_seq is not null)
+		  and exists (
+		      select 1 from im_thread.thread_dialog self
+		      where self.thread_id = td.thread_id
+		        and self.member_id = @MemberID
+		        and self.deleted_at is null
+		  )
+		order by td.thread_id, td.member_id
+	`
+
+	args := pgx.NamedArgs{
+		"MemberID":  memberID,
+		"DomainID":  domainID,
+		"ThreadIDs": threadIDs,
+	}
+
+	rows, err := s.db.Query(ctx, query, args)
+	if err != nil {
+		return nil, errors.Internal("reading member states", errors.WithCause(err), errors.WithID("postgres.message_status.read_member_states"))
+	}
+
+	states, err := pgx.CollectRows(rows, pgx.RowToStructByName[model.MemberReadState])
+	if err != nil {
+		return nil, errors.Internal("collecting member states", errors.WithCause(err), errors.WithID("postgres.message_status.read_member_states"))
+	}
+
+	result := make(map[uuid.UUID][]model.MemberReadState, len(threadIDs))
+	for _, st := range states {
+		result[st.ThreadID] = append(result[st.ThreadID], st)
+	}
+
+	return result, nil
+}
+
 // UnreadSummary returns the member's denormalized unread totals across the
 // threads they are still an active participant of (thread_dialog not
 // soft-deleted): the number of chats with unread messages and the total unread
@@ -326,6 +377,8 @@ func (s *messageStatusStore) advanceReadHorizon(ctx context.Context, receipts []
 		set last_read_seq = case
 				when td.last_read_seq is null or r.up_to_seq > td.last_read_seq
 				then r.up_to_seq else td.last_read_seq end,
+		    -- Read implies delivered: never leave the delivered horizon behind read.
+		    last_delivered_seq = greatest(coalesce(td.last_delivered_seq, 0), r.up_to_seq),
 		    unread_count = coalesce((
 		        select count(*)
 		        from im_message.messages m
@@ -356,14 +409,13 @@ func (s *messageStatusStore) advanceReadHorizon(ctx context.Context, receipts []
 		return errors.Internal("advancing read horizon", errors.WithCause(err), errors.WithID("postgres.message_status.advance_read_horizon"))
 	}
 
-	return nil
+	// A read horizon crossing a message's seq means it reached the member — any
+	// prior delivery failure for it is now recovered, so drop the error row.
+	return s.clearRecoveredErrors(ctx, threadIDs, memberIDs, upToSeqs)
 }
 
-// advanceDeliveredHorizon moves each member's delivered horizon
-// (thread_dialog.last_delivered_seq) forward to the receipt's up-to boundary —
-// monotonically, never backward. Unlike advanceReadHorizon, it does not recompute
-// unread_count (delivered does not affect unread — only read does).
-// Uses seq for watermarks. Runs in the same transaction as MarkDelivered.
+// advanceDeliveredHorizon moves each member's delivered horizon (thread_dialog.last_delivered_seq)
+// forward monotonically. Unlike read, it does not recompute unread_count.
 func (s *messageStatusStore) advanceDeliveredHorizon(ctx context.Context, receipts []*model.StatusReceipt) error {
 	if len(receipts) == 0 {
 		return nil
@@ -405,6 +457,40 @@ func (s *messageStatusStore) advanceDeliveredHorizon(ctx context.Context, receip
 
 	if _, err := s.db.Exec(ctx, query, args); err != nil {
 		return errors.Internal("advancing delivered horizon", errors.WithCause(err), errors.WithID("postgres.message_status.advance_delivered_horizon"))
+	}
+
+	// A delivered horizon crossing a message's seq means it reached the member —
+	// any prior delivery failure for it is now recovered, so drop the error row.
+	return s.clearRecoveredErrors(ctx, threadIDs, memberIDs, upToSeqs)
+}
+
+// clearRecoveredErrors drops message_errors for messages now within the horizon;
+// later success supersedes earlier per-recipient delivery failure.
+func (s *messageStatusStore) clearRecoveredErrors(ctx context.Context, threadIDs, memberIDs []uuid.UUID, upToSeqs []*int64) error {
+	if len(threadIDs) == 0 {
+		return nil
+	}
+
+	const query = `
+		delete from im_message.message_errors e
+		using unnest(@ThreadIDs::uuid[], @MemberIDs::uuid[], @UpToSeqs::bigint[])
+			as r(thread_id, member_id, up_to_seq),
+		     im_message.messages m
+		where e.thread_id = r.thread_id
+		  and e.member_id = r.member_id
+		  and e.message_id = m.id
+		  and r.up_to_seq is not null
+		  and m.seq <= r.up_to_seq
+	`
+
+	args := pgx.NamedArgs{
+		"ThreadIDs": threadIDs,
+		"MemberIDs": memberIDs,
+		"UpToSeqs":  upToSeqs,
+	}
+
+	if _, err := s.db.Exec(ctx, query, args); err != nil {
+		return errors.Internal("clearing recovered errors", errors.WithCause(err), errors.WithID("postgres.message_status.clear_recovered_errors"))
 	}
 
 	return nil

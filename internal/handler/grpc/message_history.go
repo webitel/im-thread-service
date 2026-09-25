@@ -19,22 +19,39 @@ type MessageHistoryService interface {
 	GetRevisions(ctx context.Context, req *dto.GetMessageRevisionsRequest) ([]*model.MessageChangeEntry, error)
 }
 
+// ThreadHeads reads a thread's current update_seq, handed out with history.
+type ThreadHeads interface {
+	Head(ctx context.Context, threadID string) (int64, error)
+}
+
 type (
 	MessageHistoryServer struct {
 		impb.UnimplementedMessageHistoryServer
 
 		messageHistorySearcher MessageHistoryService
+		updates                ThreadHeads
 	}
 )
 
-func NewMessageHistoryServer(messageHistorySearcher MessageHistoryService) *MessageHistoryServer {
+func NewMessageHistoryServer(messageHistorySearcher MessageHistoryService, updates ThreadHeads) *MessageHistoryServer {
 	return &MessageHistoryServer{
 		messageHistorySearcher: messageHistorySearcher,
+		updates:                updates,
 	}
 }
 
 func (s *MessageHistoryServer) SearchThreadMessagesHistory(ctx context.Context, req *impb.SearchMessageHistoryRequest) (*impb.SearchMessageHistoryResponse, error) {
 	hmiDTO := mapper.MapSearchMessageHistoryRequest2HistoryMessageInputDTO(req)
+
+	// Read the head before the page: a change in between is replayed later, never skipped.
+	var head int64
+
+	if threadID := req.GetThreadId(); threadID != "" && s.updates != nil {
+		var err error
+		if head, err = s.updates.Head(ctx, threadID); err != nil {
+			return nil, err
+		}
+	}
 
 	messages, pageInfo, err := s.messageHistorySearcher.Search(ctx, hmiDTO)
 	if err != nil {
@@ -43,6 +60,7 @@ func (s *MessageHistoryServer) SearchThreadMessagesHistory(ctx context.Context, 
 
 	resp := mapper.MapMessage2SearchMessageHistoryResponse(messages, hmiDTO.CallerID)
 	resp.From = mapper.GetUniqueFrom(messages)
+	resp.LastUpdateSeq = head
 
 	if pageInfo.HasNextPage {
 		resp.NextCursor = &impb.HistoryMessageCursorResponse{

@@ -31,6 +31,7 @@ type (
 		Variables       *model.ThreadVariables `json:"variables,omitempty" db:"variables"`
 		BotControllerID *uuid.UUID             `json:"bot_controller_id,omitempty" db:"bot_controller_id"`
 		OwnerBotID      *uuid.UUID             `json:"owner_bot_id,omitempty" db:"owner_bot_id"`
+		LastUpdateSeq   int64                  `json:"last_update_seq,omitempty" db:"last_update_seq"`
 		// The real thread id for SearchLeft rows, where "id" above is a
 		// membership-period id instead. Absent (zero) from Search's SQL.
 		ThreadRefID uuid.UUID `json:"-" db:"thread_ref_id"`
@@ -84,6 +85,21 @@ func (s *threadStore) Create(ctx context.Context, req *model.Thread) (*model.Thr
 	}
 
 	return req, nil
+}
+
+func (s *threadStore) LockForUpdate(ctx context.Context, threadID uuid.UUID) error {
+	const query = `select 1 from im_thread.thread where id = $1 for update`
+
+	var one int
+	if err := s.db.QueryRow(ctx, query, threadID).Scan(&one); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return errors.NotFound("thread not found", errors.WithID("postgres.thread_store.lock_for_update"))
+		}
+
+		return errors.Internal("locking thread", errors.WithCause(err), errors.WithID("postgres.thread_store.lock_for_update"))
+	}
+
+	return nil
 }
 
 func (s *threadStore) Search(ctx context.Context, query queryobject.QueryObject) ([]*model.Thread, error) {
@@ -164,6 +180,7 @@ func mapThreadRecordToModel(record *threadRecord) (*model.Thread, error) {
 		LastMessage:     record.LastMessage,
 		Variables:       record.Variables,
 		BotControllerID: record.BotControllerID,
+		LastUpdateSeq:   record.LastUpdateSeq,
 		OwnerBotID:      record.OwnerBotID,
 	}
 

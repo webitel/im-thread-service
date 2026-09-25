@@ -12,12 +12,10 @@ const (
 	MessageStatusChangedEvent = "im.message.status"
 )
 
+// MessageStatusChanged is NOT a JournalEvent: delivery/read is per-member state, not delta.
 var _ Outboxer = (*MessageStatusChanged)(nil)
 
-// MessageStatusChanged is published when the per-recipient delivery status
-// of one or more messages actually changes (delivered/read/failed).
-// Read receipts are bulk ("read up to"), so a single event may cover
-// multiple messages of the same recipient in the same thread.
+// MessageStatusChanged: per-recipient delivery status change (delivered/read/failed).
 type MessageStatusChanged struct {
 	ThreadID uuid.UUID `json:"thread_id"`
 	DomainID int32     `json:"domain_id"`
@@ -25,6 +23,8 @@ type MessageStatusChanged struct {
 	// whose statuses changed.
 	MemberID   uuid.UUID   `json:"member_id"`
 	MessageIDs []uuid.UUID `json:"message_ids"`
+	// UpToSeq: recipient's delivered/read watermark; authoritative per-member horizon.
+	UpToSeq int64 `json:"up_to_seq"`
 	// Status is the new delivery state: delivered|read|failed.
 	Status string `json:"status"`
 	// Via is the confirmation source: ws|push|provider|bot.
@@ -33,8 +33,7 @@ type MessageStatusChanged struct {
 	OccurredAt time.Time      `json:"occurred_at"`
 	// Participants are the contact ids of all current thread members, so
 	// im-delivery can fan the event out without resolving the thread.
-	Participants []uuid.UUID `json:"participants,omitempty"`
-
+	Participants     []uuid.UUID       `json:"participants,omitempty"`
 	ExternalMetadata map[string]string `json:"-"`
 }
 

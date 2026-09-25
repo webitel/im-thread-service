@@ -1,6 +1,7 @@
 package service
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"log/slog"
@@ -377,6 +378,7 @@ func (s *MessageService) SendDocument(ctx context.Context, in *dto.SendDocumentR
 
 		msg.ID = saved.ID
 		msg.From = saved.From
+		msg.Seq = saved.Seq
 
 		if err = s.recordInboundExternalID(txCtx, uow, msg, &in.From, in.ExternalID); err != nil {
 			return errors.Internal("save external message id", errors.WithCause(err), errors.WithID("service.message.send_document"))
@@ -784,6 +786,12 @@ func (s *MessageService) DeleteMessages(ctx context.Context, in *dto.DeleteMessa
 		// per thread rather than once per message.
 		membersByThread := make(map[uuid.UUID][]*model.ThreadDialog)
 
+		// Each Publish row-locks its thread; lock threads in a fixed order so two
+		// multi-thread batches cannot deadlock. Stable keeps per-thread order.
+		slices.SortStableFunc(outcome.Deleted, func(a, b *model.Message) int {
+			return bytes.Compare(a.ThreadID[:], b.ThreadID[:])
+		})
+
 		for _, msg := range outcome.Deleted {
 			members, ok := membersByThread[msg.ThreadID]
 			if !ok {
@@ -954,6 +962,11 @@ func (s *MessageService) SetReaction(ctx context.Context, in *dto.SetReactionReq
 		}
 
 		reaction.To = members
+
+		// Lock first to order update_seq: aggregate read includes all earlier reactions.
+		if err := uow.ThreadStore().LockForUpdate(txCtx, reaction.ThreadID); err != nil {
+			return err
+		}
 
 		aggregate, err := uow.MessageReactions().AggregateForMessage(txCtx, reaction.MessageID)
 		if err != nil {
