@@ -19,7 +19,6 @@ type MemberJoined struct {
 	ContactID  uuid.UUID      `json:"contact_id"`
 	OccurredAt time.Time      `json:"occurred_at"`
 	System     *SystemPayload `json:"system,omitempty"`
-	UpdateSeq  int64          `json:"update_seq"`
 	// Participants are the thread's current members, so delivery fans the event out.
 	Participants []uuid.UUID `json:"participants,omitempty"`
 }
@@ -47,8 +46,6 @@ func (e *MemberJoined) Version() string { return MessageVersionV1 }
 func (e *MemberJoined) RecipientID() uuid.UUID { return e.ThreadID }
 
 func (e *MemberJoined) JournalThreadID() uuid.UUID { return e.ThreadID }
-
-func (e *MemberJoined) SetUpdateSeq(seq int64) { e.UpdateSeq = seq }
 
 // JournalSubject is marked too: a contact who just left is no longer an active member.
 func (e *MemberJoined) JournalSubject() uuid.UUID { return e.ContactID }

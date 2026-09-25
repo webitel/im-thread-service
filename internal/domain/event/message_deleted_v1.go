@@ -24,7 +24,6 @@ type MessageDeleted struct {
 	Type             string            `json:"type"` // text|document|image|system|interactive|location|contact
 	CreatedAt        time.Time         `json:"created_at"`
 	OccurredAt       time.Time         `json:"occurred_at"`
-	UpdateSeq        int64             `json:"update_seq"`
 	ExternalMetadata map[string]string `json:"-"`
 }
 
@@ -40,7 +39,6 @@ func (*MessageDeleted) EventType() string                { return MessageDeleted
 func (m *MessageDeleted) Version() string                { return MessageVersionV1 }
 func (m *MessageDeleted) RecipientID() uuid.UUID         { return m.ThreadID }
 func (m *MessageDeleted) JournalThreadID() uuid.UUID     { return m.ThreadID }
-func (m *MessageDeleted) SetUpdateSeq(seq int64)         { m.UpdateSeq = seq }
 func (m *MessageDeleted) ToOutbox() (OutboxEvent, error) { return m.serialize(m.Version()) }
 
 func (m *MessageDeleted) serialize(version string) (OutboxEvent, error) {

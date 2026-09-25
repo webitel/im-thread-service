@@ -4,6 +4,7 @@ package postgres
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -19,31 +20,39 @@ import (
 	"github.com/webitel/im-thread-service/internal/domain/event"
 )
 
-func setupJournalSchema(t *testing.T, pool *pgxpool.Pool, thread uuid.UUID) {
+// Integration tests against live Postgres in a throwaway schema:
+//
+//	POSTGRES_DSN=... go test -tags=integration ./internal/store/postgres/ -count=1 -v
+const journalSchema = "outbox_journal_it"
+
+func setupJournalSchema(t *testing.T, pool *pgxpool.Pool) {
 	t.Helper()
-	setupThreadSchema(t, pool, thread)
+
+	t.Cleanup(func() {
+		_, _ = pool.Exec(context.Background(), `DROP SCHEMA IF EXISTS `+journalSchema+` CASCADE`)
+	})
 
 	for _, q := range []string{
-		`CREATE TABLE ` + updSeqSchema + `.thread_updates (
+		`DROP SCHEMA IF EXISTS ` + journalSchema + ` CASCADE`,
+		`CREATE SCHEMA ` + journalSchema,
+		`CREATE TABLE ` + journalSchema + `.thread_updates (
 			id         bigserial primary key,
 			thread_id  uuid        not null,
-			update_seq bigint      not null,
 			kind       text        not null,
 			fields     jsonb       not null default '{}'::jsonb,
 			created_at timestamptz not null default clock_timestamp(),
 			tx_id      bigint      default (pg_current_xact_id()::text::bigint)
 		)`,
-		`CREATE UNIQUE INDEX ON ` + updSeqSchema + `.thread_updates (thread_id, update_seq)`,
-		`CREATE TABLE ` + updSeqSchema + `.thread_dialog (
+		`CREATE TABLE ` + journalSchema + `.thread_dialog (
 			thread_id uuid not null, member_id uuid not null,
 			is_bot boolean not null default false, deleted_at timestamptz
 		)`,
-		`CREATE TABLE ` + updSeqSchema + `.contact_updates (
+		`CREATE TABLE ` + journalSchema + `.contact_updates (
 			contact_id uuid not null, thread_id uuid not null, tx_id bigint not null,
 			primary key (contact_id, thread_id)
 		)`,
-		`CREATE TABLE ` + updSeqSchema + `.thread_updates_trim (id smallint primary key default 1, tx_id bigint not null)`,
-		`CREATE TABLE ` + updSeqSchema + `.messages_outbox (
+		`CREATE TABLE ` + journalSchema + `.thread_updates_trim (id smallint primary key default 1, tx_id bigint not null)`,
+		`CREATE TABLE ` + journalSchema + `.messages_outbox (
 			"offset"         bigserial,
 			"uuid"           varchar(36) not null,
 			"created_at"     timestamp   not null default current_timestamp,
@@ -64,20 +73,19 @@ func itOutboxStore(q Querier) *outboxStore {
 	return &outboxStore{
 		q:            q,
 		wmlogger:     watermill.NopLogger{},
-		threadTable:  updSeqSchema + ".thread",
-		journalTable: updSeqSchema + ".thread_updates",
-		marksTable:   updSeqSchema + ".contact_updates",
-		dialogTable:  updSeqSchema + ".thread_dialog",
+		journalTable: journalSchema + ".thread_updates",
+		marksTable:   journalSchema + ".contact_updates",
+		dialogTable:  journalSchema + ".thread_dialog",
 		config: sql.PublisherConfig{SchemaAdapter: sql.DefaultPostgreSQLSchema{
-			GenerateMessagesTableName: func(string) string { return updSeqSchema + ".messages_outbox" },
+			GenerateMessagesTableName: func(string) string { return journalSchema + ".messages_outbox" },
 		}},
 	}
 }
 
 func itJournal(pool *pgxpool.Pool) *journal.Journal {
 	return journal.New(pool,
-		journal.WithTables(updSeqSchema+".thread_updates", updSeqSchema+".thread"),
-		journal.WithMarksTable(updSeqSchema+".contact_updates", updSeqSchema+".thread_updates_trim"))
+		journal.WithTable(journalSchema+".thread_updates"),
+		journal.WithMarksTable(journalSchema+".contact_updates", journalSchema+".thread_updates_trim"))
 }
 
 func publishOnce(ctx context.Context, pool *pgxpool.Pool, thread uuid.UUID) error {
@@ -95,15 +103,15 @@ func publishOnce(ctx context.Context, pool *pgxpool.Pool, thread uuid.UUID) erro
 	return tx.Commit(ctx)
 }
 
-// K writers call the real Publish while a reader keeps reading settled windows: every seq
-// arrives exactly once, and the settled cursor never claims a seq the reader has not seen.
+// K writers call the real Publish while a reader keeps reading settled windows: every change
+// arrives exactly once, and none is lost when the reader advances past a window.
 func TestPublish_ConcurrentWritersAndReaderMissNothing(t *testing.T) {
 	const writers = 50
 
 	ctx := context.Background()
 	pool := itPool(t)
 	thread := uuid.New()
-	setupJournalSchema(t, pool, thread)
+	setupJournalSchema(t, pool)
 
 	j := itJournal(pool)
 
@@ -127,7 +135,7 @@ func TestPublish_ConcurrentWritersAndReaderMissNothing(t *testing.T) {
 		defer reader.Done()
 
 		after := start
-		seen := make(map[int64]bool, writers)
+		seen := make(map[string]bool, writers)
 
 		for {
 			finished := writersDone.Load()
@@ -147,29 +155,14 @@ func TestPublish_ConcurrentWritersAndReaderMissNothing(t *testing.T) {
 			}
 
 			for _, e := range events {
-				seq, _ := strconv.ParseInt(e.Cursor, 10, 64)
-				if seen[seq] {
-					readerErr = errGap(seq, seq)
+				id := e.Fields[journal.FieldMsgID]
+				if seen[id] {
+					readerErr = errDuplicate(id)
 
 					return
 				}
 
-				seen[seq] = true
-			}
-
-			settled, err := j.SettledUpTo(readCtx, thread.String(), horizon)
-			if err != nil {
-				readerErr = err
-
-				return
-			}
-
-			for s := int64(1); s <= settled; s++ {
-				if !seen[s] {
-					readerErr = errGap(settled, s)
-
-					return
-				}
+				seen[id] = true
 			}
 
 			after = max(after, horizon)
@@ -216,9 +209,9 @@ func TestPublish_RollbackLeavesNoTrace(t *testing.T) {
 	ctx := context.Background()
 	pool := itPool(t)
 	thread, member := uuid.New(), uuid.New()
-	setupJournalSchema(t, pool, thread)
+	setupJournalSchema(t, pool)
 
-	if _, err := pool.Exec(ctx, `INSERT INTO `+updSeqSchema+`.thread_dialog (thread_id, member_id) VALUES ($1, $2)`, thread, member); err != nil {
+	if _, err := pool.Exec(ctx, `INSERT INTO `+journalSchema+`.thread_dialog (thread_id, member_id) VALUES ($1, $2)`, thread, member); err != nil {
 		t.Fatalf("seed member: %v", err)
 	}
 
@@ -235,7 +228,7 @@ func TestPublish_RollbackLeavesNoTrace(t *testing.T) {
 
 	for table, want := range map[string]int{"thread_updates": 0, "messages_outbox": 0, "contact_updates": 0} {
 		var n int
-		if err := pool.QueryRow(ctx, `SELECT count(*) FROM `+updSeqSchema+`.`+table).Scan(&n); err != nil {
+		if err := pool.QueryRow(ctx, `SELECT count(*) FROM `+journalSchema+`.`+table).Scan(&n); err != nil {
 			t.Fatalf("count %s: %v", table, err)
 		}
 
@@ -250,11 +243,11 @@ func TestPublish_MarksContactsForGetUpdates(t *testing.T) {
 	ctx := context.Background()
 	pool := itPool(t)
 	thread := uuid.New()
-	setupJournalSchema(t, pool, thread)
+	setupJournalSchema(t, pool)
 
 	human, bot, stranger := uuid.New(), uuid.New(), uuid.New()
 
-	if _, err := pool.Exec(ctx, `INSERT INTO `+updSeqSchema+`.thread_dialog (thread_id, member_id, is_bot) VALUES ($1, $2, false), ($1, $3, true)`,
+	if _, err := pool.Exec(ctx, `INSERT INTO `+journalSchema+`.thread_dialog (thread_id, member_id, is_bot) VALUES ($1, $2, false), ($1, $3, true)`,
 		thread, human, bot); err != nil {
 		t.Fatalf("seed members: %v", err)
 	}
@@ -279,8 +272,8 @@ func TestPublish_MarksContactsForGetUpdates(t *testing.T) {
 		t.Fatalf("human changes: %v", err)
 	}
 
-	if len(got.Threads) != 1 || got.Threads[0].ThreadID != thread.String() || got.Threads[0].Head != 2 {
-		t.Fatalf("human: want thread with head 2 once, got %+v", got.Threads)
+	if len(got.Threads) != 1 || got.Threads[0] != thread.String() {
+		t.Fatalf("human: want the thread once, got %+v", got.Threads)
 	}
 
 	events, err := j.ChangesSince(ctx, thread.String(), got.After, got.Horizon, journal.MaxContactChanges)
@@ -296,10 +289,4 @@ func TestPublish_MarksContactsForGetUpdates(t *testing.T) {
 	}
 }
 
-type gapError struct{ settled, seq int64 }
-
-func (e gapError) Error() string {
-	return "seq " + strconv.FormatInt(e.seq, 10) + " duplicated or missing below settled " + strconv.FormatInt(e.settled, 10)
-}
-
-func errGap(settled, seq int64) error { return gapError{settled: settled, seq: seq} }
+func errDuplicate(msgID string) error { return fmt.Errorf("message %s served twice", msgID) }

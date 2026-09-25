@@ -963,7 +963,7 @@ func (s *MessageService) SetReaction(ctx context.Context, in *dto.SetReactionReq
 
 		reaction.To = members
 
-		// Lock first to order update_seq: aggregate read includes all earlier reactions.
+		// Lock first so the aggregate read includes all earlier reactions.
 		if err := uow.ThreadStore().LockForUpdate(txCtx, reaction.ThreadID); err != nil {
 			return err
 		}

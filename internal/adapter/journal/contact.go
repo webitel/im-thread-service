@@ -16,15 +16,9 @@ const (
 // reloads its thread list instead (Telegram's differenceTooLong).
 const MaxContactChanges = 1000
 
-// ChangedThread is a thread changed for a contact, with its current head.
-type ChangedThread struct {
-	ThreadID string
-	Head     int64
-}
-
 // ContactChanges is every thread changed for a contact since a cursor.
 type ContactChanges struct {
-	Threads []ChangedThread
+	Threads []string
 	Cursor  string
 	// After and Horizon bound the transactions served: (After, Horizon].
 	After   int64
@@ -47,12 +41,11 @@ func (j *Journal) ContactChanges(ctx context.Context, contactID, cursor string) 
 	}
 
 	query := fmt.Sprintf(`
-		select cu.thread_id::text, coalesce(t.last_update_seq, 0)
-		from %s cu
-		left join %s t on t.id = cu.thread_id
-		where cu.contact_id = $1::uuid and cu.tx_id > $2 and cu.tx_id <= $3
-		order by cu.tx_id, cu.thread_id
-		limit $4`, j.marksTable, j.threadTable)
+		select thread_id::text
+		from %s
+		where contact_id = $1::uuid and tx_id > $2 and tx_id <= $3
+		order by tx_id, thread_id
+		limit $4`, j.marksTable)
 
 	rows, err := j.db.Query(ctx, query, contactID, after, horizon, MaxContactChanges+1)
 	if err != nil {
@@ -63,8 +56,8 @@ func (j *Journal) ContactChanges(ctx context.Context, contactID, cursor string) 
 	out := &ContactChanges{Cursor: strconv.FormatInt(max(after, horizon), 10), After: after, Horizon: horizon}
 
 	for rows.Next() {
-		var t ChangedThread
-		if err := rows.Scan(&t.ThreadID, &t.Head); err != nil {
+		var t string
+		if err := rows.Scan(&t); err != nil {
 			return nil, err
 		}
 
@@ -113,10 +106,10 @@ func (j *Journal) Unread(ctx context.Context, threadID, contactID string) (int64
 // oldest first, at most limit+1 so the caller can tell it overflowed.
 func (j *Journal) ChangesSince(ctx context.Context, threadID string, after, horizon int64, limit int) ([]Event, error) {
 	query := fmt.Sprintf(`
-		select update_seq, kind, fields
+		select kind, fields
 		from %s
 		where thread_id = $1 and tx_id > $2 and tx_id <= $3
-		order by update_seq
+		order by tx_id, id
 		limit $4`, j.table)
 
 	rows, err := j.db.Query(ctx, query, threadID, after, horizon, limit+1)
@@ -129,13 +122,12 @@ func (j *Journal) ChangesSince(ctx context.Context, threadID string, after, hori
 
 	for rows.Next() {
 		var (
-			seq    int64
 			kind   string
 			raw    []byte
 			fields = make(map[string]string)
 		)
 
-		if err := rows.Scan(&seq, &kind, &raw); err != nil {
+		if err := rows.Scan(&kind, &raw); err != nil {
 			return nil, err
 		}
 
@@ -145,7 +137,7 @@ func (j *Journal) ChangesSince(ctx context.Context, threadID string, after, hori
 			}
 		}
 
-		out = append(out, Event{Cursor: strconv.FormatInt(seq, 10), Kind: kind, Fields: fields})
+		out = append(out, Event{Kind: kind, Fields: fields})
 	}
 
 	return out, rows.Err()
@@ -161,22 +153,4 @@ func (j *Journal) TrimHorizon(ctx context.Context) (int64, error) {
 	}
 
 	return tx, nil
-}
-
-// SettledUpTo is the highest update_seq of a thread whose whole prefix is served by windows
-// up to horizon. Seqs commit in order per thread, but a later seq can have an older
-// transaction id, so a row with tx_id past horizon caps the prefix just below it.
-func (j *Journal) SettledUpTo(ctx context.Context, threadID string, horizon int64) (int64, error) {
-	query := fmt.Sprintf(`
-		select coalesce(
-			(select min(update_seq) - 1 from %[1]s where thread_id = $1 and tx_id > $2),
-			(select last_update_seq from %[2]s where id = $1::uuid),
-			0)`, j.table, j.threadTable)
-
-	var seq int64
-	if err := j.db.QueryRow(ctx, query, threadID, horizon).Scan(&seq); err != nil {
-		return 0, err
-	}
-
-	return seq, nil
 }

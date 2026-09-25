@@ -2,7 +2,6 @@ package grpc
 
 import (
 	"context"
-	"strconv"
 	"testing"
 	"time"
 
@@ -42,16 +41,6 @@ func (f *fakeUpdates) ChangesSince(_ context.Context, threadID string, _, _ int6
 func (f *fakeUpdates) SettledHorizon(context.Context) (int64, error) { return f.horizon, nil }
 
 func (f *fakeUpdates) TrimHorizon(context.Context) (int64, error) { return f.trimmed, nil }
-
-// SettledUpTo mirrors the common case: the thread's last served seq.
-func (f *fakeUpdates) SettledUpTo(_ context.Context, threadID string, _ int64) (int64, error) {
-	ev := f.events[threadID]
-	if len(ev) == 0 {
-		return 0, nil
-	}
-
-	return strconv.ParseInt(ev[len(ev)-1].Cursor, 10, 64)
-}
 
 func (f *fakeUpdates) ReadStates(context.Context, string) ([]journal.ReadState, error) {
 	return nil, nil
@@ -109,8 +98,8 @@ func updatesReq(cursor string) *impb.GetUpdatesRequest {
 	return &impb.GetUpdatesRequest{CallerId: uuid.NewString(), DomainId: 1, Cursor: cursor}
 }
 
-func msgEvent(seq int, kind string, msgID uuid.UUID) journal.Event {
-	return journal.Event{Cursor: strconv.Itoa(seq), Kind: kind, Fields: map[string]string{journal.FieldMsgID: msgID.String()}}
+func msgEvent(kind string, msgID uuid.UUID) journal.Event {
+	return journal.Event{Kind: kind, Fields: map[string]string{journal.FieldMsgID: msgID.String()}}
 }
 
 func TestGetUpdates_Errors(t *testing.T) {
@@ -146,16 +135,16 @@ func TestGetUpdates_AllChangedThreads(t *testing.T) {
 	gone := uuid.New()
 
 	updates := &fakeUpdates{
-		changes: &journal.ContactChanges{Cursor: "900", After: 100, Horizon: 900, Threads: []journal.ChangedThread{
-			{ThreadID: oldThread.String()}, {ThreadID: newThread.String()}, {ThreadID: leftThread.String()},
+		changes: &journal.ContactChanges{Cursor: "900", After: 100, Horizon: 900, Threads: []string{
+			oldThread.String(), newThread.String(), leftThread.String(),
 		}},
 		events: map[string][]journal.Event{
 			oldThread.String(): {
-				msgEvent(11, journal.KindMessageEdited, edited),
-				msgEvent(12, journal.KindMessageReaction, edited),
-				msgEvent(13, journal.KindMessageDeleted, gone),
+				msgEvent(journal.KindMessageEdited, edited),
+				msgEvent(journal.KindMessageReaction, edited),
+				msgEvent(journal.KindMessageDeleted, gone),
 			},
-			newThread.String(): {msgEvent(1, journal.KindMessageNew, created)},
+			newThread.String(): {{Kind: journal.KindThreadCreated}, msgEvent(journal.KindMessageNew, created)},
 		},
 		notMember: map[string]bool{leftThread.String(): true},
 		unread:    2,
@@ -181,7 +170,6 @@ func TestGetUpdates_AllChangedThreads(t *testing.T) {
 	}
 
 	old := byID[oldThread.String()]
-	assert.Equal(t, "13", old.GetCursor(), "cursor is the last applied update_seq")
 	require.Len(t, old.GetMessages(), 1, "edit and reaction fold into one message")
 	assert.Equal(t, "final", old.GetMessages()[0].GetBody())
 	assert.Equal(t, []string{gone.String()}, old.GetDeletedMessageIds())
@@ -196,19 +184,20 @@ func TestGetUpdates_AllChangedThreads(t *testing.T) {
 	assert.True(t, byID[leftThread.String()].GetLeft())
 }
 
-// A thread the caller just joined is new to them too.
+// A thread is new to the caller when it was created or they joined it inside the window.
 func TestIsNewToCaller(t *testing.T) {
 	me := uuid.NewString()
-	joined := journal.Event{Cursor: "40", Kind: journal.KindMemberChanged, Fields: map[string]string{
+	joined := journal.Event{Kind: journal.KindMemberChanged, Fields: map[string]string{
 		journal.FieldContactID: me, journal.FieldAction: journal.ActionJoined,
 	}}
-	otherJoined := journal.Event{Cursor: "41", Kind: journal.KindMemberChanged, Fields: map[string]string{
+	otherJoined := journal.Event{Kind: journal.KindMemberChanged, Fields: map[string]string{
 		journal.FieldContactID: uuid.NewString(), journal.FieldAction: journal.ActionJoined,
 	}}
 
 	assert.True(t, isNewToCaller([]journal.Event{joined}, me))
 	assert.False(t, isNewToCaller([]journal.Event{otherJoined}, me))
-	assert.True(t, isNewToCaller([]journal.Event{msgEvent(1, journal.KindMessageNew, uuid.New())}, me))
+	assert.True(t, isNewToCaller([]journal.Event{{Kind: journal.KindThreadCreated}}, me))
+	assert.False(t, isNewToCaller([]journal.Event{msgEvent(journal.KindMessageNew, uuid.New())}, me))
 }
 
 func TestGetUpdates_Resyncs(t *testing.T) {
@@ -216,16 +205,16 @@ func TestGetUpdates_Resyncs(t *testing.T) {
 	many := make([]journal.Event, journal.MaxContactChanges+1)
 
 	for i := range many {
-		many[i] = msgEvent(i+1, journal.KindMessageNew, uuid.New())
+		many[i] = msgEvent(journal.KindMessageNew, uuid.New())
 	}
 
 	tests := map[string]*fakeUpdates{
 		"more than 1000 threads": {horizon: 5, changes: &journal.ContactChanges{TooMany: true}},
 		"cursor older than retention": {horizon: 5, trimmed: 200, changes: &journal.ContactChanges{
-			After: 100, Threads: []journal.ChangedThread{{ThreadID: thread}},
+			After: 100, Threads: []string{thread},
 		}},
 		"more than 1000 changes": {horizon: 5, changes: &journal.ContactChanges{
-			After: 100, Threads: []journal.ChangedThread{{ThreadID: thread}},
+			After: 100, Threads: []string{thread},
 		}, events: map[string][]journal.Event{thread: many}},
 	}
 
@@ -240,17 +229,26 @@ func TestGetUpdates_Resyncs(t *testing.T) {
 	}
 }
 
-type fakeHeads struct{ head int64 }
+type fakeHorizon struct{ horizon int64 }
 
-func (f fakeHeads) Head(context.Context, string) (int64, error) { return f.head, nil }
+func (f fakeHorizon) SettledHorizon(context.Context) (int64, error) { return f.horizon, nil }
 
-// History hands out the head so a client starts catch-up without a separate lookup.
-func TestSearchThreadMessagesHistory_ReturnsHead(t *testing.T) {
-	srv := NewMessageHistoryServer(&fakeHistory{}, fakeHeads{head: 42})
+// History hands out the GetUpdates cursor read before the page, so the client needs no second counter.
+func TestSearchThreadMessagesHistory_ReturnsUpdatesCursor(t *testing.T) {
+	srv := NewMessageHistoryServer(&fakeHistory{}, fakeHorizon{horizon: 92547098})
 
 	resp, err := srv.SearchThreadMessagesHistory(context.Background(), &impb.SearchMessageHistoryRequest{
 		ThreadId: uuid.NewString(), CallerId: uuid.NewString(), DomainId: 1,
 	})
 	require.NoError(t, err)
-	assert.Equal(t, int64(42), resp.GetLastUpdateSeq())
+	assert.Equal(t, "92547098", resp.GetUpdatesCursor())
+}
+
+// Search hands out the GetUpdates cursor on the response, so the thread list and the catch-up agree.
+func TestThreadSearch_ReturnsUpdatesCursor(t *testing.T) {
+	srv := NewThreadService(&fakeThreads{}, nil, nil, fakeHorizon{horizon: 777})
+
+	resp, err := srv.Search(context.Background(), &impb.ThreadSearchRequest{SelfId: uuid.NewString(), DomainIds: []int32{1}, Size: 10})
+	require.NoError(t, err)
+	assert.Equal(t, "777", resp.GetUpdatesCursor())
 }

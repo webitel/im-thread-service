@@ -6,7 +6,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// TestJournalEventMembership validates which events advance update_seq and must be journaled.
+// TestJournalEventMembership validates which events must be journaled for GetUpdates.
 func TestJournalEventMembership(t *testing.T) {
 	tests := []struct {
 		name  string
@@ -19,6 +19,7 @@ func TestJournalEventMembership(t *testing.T) {
 		{name: "message reaction", event: &MessageReaction{}, want: true},
 		{name: "member joined", event: &MemberJoined{}, want: true},
 		{name: "member left", event: &MemberLeft{}, want: true},
+		{name: "thread created", event: &ThreadCreated{}, want: true},
 		{name: "message status changed", event: &MessageStatusChanged{}, want: false},
 	}
 
