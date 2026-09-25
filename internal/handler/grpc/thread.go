@@ -44,15 +44,22 @@ type ThreadManagementServer struct {
 	threadManager         ThreadManagementService
 	threadVariables       ThreadVariablesOperator
 	threadCreatorsFactory service.ThreadCreatorsFactoryProvider
+	updates               UpdatesHorizon
 }
 
-func NewThreadService(threadManager ThreadManagementService, threadVariables ThreadVariablesOperator, threadCreatorsFactory service.ThreadCreatorsFactoryProvider) *ThreadManagementServer {
+func NewThreadService(
+	threadManager ThreadManagementService,
+	threadVariables ThreadVariablesOperator,
+	threadCreatorsFactory service.ThreadCreatorsFactoryProvider,
+	updates UpdatesHorizon,
+) *ThreadManagementServer {
 	return &ThreadManagementServer{
 		threadManager:         threadManager,
 		inMapper:              &mapper.ThreadInConverter{},
 		outMapper:             &mapper.ThreadOutConverter{},
 		threadVariables:       threadVariables,
 		threadCreatorsFactory: threadCreatorsFactory,
+		updates:               updates,
 	}
 }
 
@@ -84,16 +91,29 @@ func (ts *ThreadManagementServer) Get(ctx context.Context, req *impb.GetThreadRe
 		return nil, err
 	}
 
+	cursor, err := updatesCursor(ctx, ts.updates)
+	if err != nil {
+		return nil, err
+	}
+
 	thread, err := ts.threadManager.Get(ctx, getReq)
 	if err != nil {
 		return nil, err
 	}
 
-	return ts.outMapper.ConvertToThread(thread), nil
+	out := ts.outMapper.ConvertToThread(thread)
+	out.UpdatesCursor = cursor
+
+	return out, nil
 }
 
 func (ts *ThreadManagementServer) Search(ctx context.Context, req *impb.ThreadSearchRequest) (*impb.SearchThreadResponse, error) {
 	search, err := ts.inMapper.ConvertSearch(req)
+	if err != nil {
+		return nil, err
+	}
+
+	cursor, err := updatesCursor(ctx, ts.updates)
 	if err != nil {
 		return nil, err
 	}
@@ -105,7 +125,7 @@ func (ts *ThreadManagementServer) Search(ctx context.Context, req *impb.ThreadSe
 
 	next, threads := utils.ProcessPagination(int(req.GetSize()), threads)
 
-	res := impb.SearchThreadResponse{Next: next}
+	res := impb.SearchThreadResponse{Next: next, UpdatesCursor: cursor}
 
 	for _, threadModel := range threads {
 		res.Items = append(res.Items, ts.outMapper.ConvertToThread(threadModel))

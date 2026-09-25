@@ -55,7 +55,6 @@ func (q *threadQueryObject) DefaultFields() []string {
 	return []string{
 		"id", "domain_id", "created_at", "updated_at",
 		"kind", "owner", "subject", "description", "members", "bot_controller_id", "owner_bot_id",
-		"last_update_seq",
 	}
 }
 
@@ -181,13 +180,6 @@ func (q *threadQueryObject) FieldsMetadata() map[string]fieldMetadata {
 			requiresJoin: 0,
 			sortable:     false,
 			filterExpr:   "t.owner_bot_id",
-		},
-		"last_update_seq": {
-			sqlExpr:      "t.last_update_seq",
-			aliasedExpr:  "t.last_update_seq as last_update_seq",
-			requiresJoin: 0,
-			sortable:     false,
-			filterExpr:   "",
 		},
 	}
 }

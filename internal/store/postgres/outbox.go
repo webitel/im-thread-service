@@ -21,7 +21,6 @@ import (
 const (
 	defaultOutboxTable  = "im_message.messages_outbox"
 	defaultOffsetsTable = "im_message.messages_offsets"
-	defaultThreadTable  = "im_thread.thread"
 	defaultJournalTable = "im_message.thread_updates"
 	defaultMarksTable   = "im_thread.contact_updates"
 	defaultDialogTable  = "im_thread.thread_dialog"
@@ -33,10 +32,9 @@ type outboxStore struct {
 	wmlogger watermill.LoggerAdapter
 
 	// Fully-qualified table names, overridable by tests to run the real
-	// cleanup / update_seq queries against a throwaway schema.
+	// cleanup and journal queries against a throwaway schema.
 	outboxTable  string
 	offsetsTable string
-	threadTable  string
 	journalTable string
 	marksTable   string
 	dialogTable  string
@@ -48,7 +46,6 @@ func NewOutboxStore(q Querier, wmlogger watermill.LoggerAdapter) store.OutboxSto
 		wmlogger:     wmlogger,
 		outboxTable:  defaultOutboxTable,
 		offsetsTable: defaultOffsetsTable,
-		threadTable:  defaultThreadTable,
 		journalTable: defaultJournalTable,
 		marksTable:   defaultMarksTable,
 		dialogTable:  defaultDialogTable,
@@ -71,25 +68,14 @@ func (o *outboxStore) Publish(ctx context.Context, topic string, evt event.Outbo
 		return errors.New("outbox publish: transaction required (querier is not pgx.Tx)")
 	}
 
-	// Stamp per-thread monotonic cursor on journal-worthy mutations; row lock
-	// serializes concurrent writers so sequence is gap-free and ordered by commit.
 	je, journaled := evt.(event.JournalEvent)
-	if journaled {
-		seq, err := o.nextUpdateSeq(ctx, tx, je.JournalThreadID())
-		if err != nil {
-			return err
-		}
-
-		je.SetUpdateSeq(seq)
-	}
 
 	ev, err := evt.ToOutbox()
 	if err != nil {
 		return fmt.Errorf("outbox publish: %w", err)
 	}
 
-	// Write journal row in same transaction under thread lock; head and row
-	// commit atomically so journal is contiguous and catch-up never depends on async relay.
+	// The journal row and contact marks commit with the mutation, so catch-up never depends on the relay.
 	if journaled {
 		if err := o.appendJournal(ctx, tx, ev); err != nil {
 			return err
@@ -116,7 +102,7 @@ func (o *outboxStore) Publish(ctx context.Context, topic string, evt event.Outbo
 }
 
 // appendJournal writes the event's journal row. A
-// JournalEvent without a projection is a bug: its seq would become a hole.
+// JournalEvent without a projection is a bug: the change would never reach GetUpdates.
 func (o *outboxStore) appendJournal(ctx context.Context, tx pgx.Tx, ev event.OutboxEvent) error {
 	upd, ok, err := journal.ProjectEvent(ev.Metadata["event_type"], ev.Payload)
 	if err != nil {
@@ -129,7 +115,7 @@ func (o *outboxStore) appendJournal(ctx context.Context, tx pgx.Tx, ev event.Out
 			errors.WithID("postgres.outbox.journal_unprojectable"), errors.WithValue("event_type", ev.Metadata["event_type"]))
 	}
 
-	j := journal.New(tx, journal.WithTables(o.journalTable, o.threadTable))
+	j := journal.New(tx, journal.WithTable(o.journalTable))
 
 	if err := j.Append(ctx, upd); err != nil {
 		return errors.Internal("appending journal entry",
@@ -167,27 +153,6 @@ func (o *outboxStore) markContacts(ctx context.Context, tx pgx.Tx, je event.Jour
 	}
 
 	return nil
-}
-
-// nextUpdateSeq advances thread's update_seq under row lock to stay gap-free.
-func (o *outboxStore) nextUpdateSeq(ctx context.Context, tx pgx.Tx, threadID uuid.UUID) (int64, error) {
-	query := fmt.Sprintf(`
-		update %s
-		set last_update_seq = last_update_seq + 1
-		where id = $1
-		returning last_update_seq`, o.threadTable)
-
-	var seq int64
-	if err := tx.QueryRow(ctx, query, threadID).Scan(&seq); err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return 0, errors.NotFound("thread not found", errors.WithID("postgres.outbox.next_update_seq"))
-		}
-
-		return 0, errors.Internal("stamping update_seq",
-			errors.WithCause(err), errors.WithID("postgres.outbox.next_update_seq"))
-	}
-
-	return seq, nil
 }
 
 func (o *outboxStore) Cleanup(ctx context.Context, opt *model.OutboxCleanupOptions) (int64, error) {

@@ -117,7 +117,7 @@ func TestProjectEvent_BadPayload(t *testing.T) {
 }
 
 // Publish writes the journal row synchronously, so every JournalEvent must
-// project from its own outbox payload; a miss would turn its seq into a hole.
+// project from its own outbox payload; a miss would never reach GetUpdates.
 func TestProjectEvent_EveryJournalEventProjects(t *testing.T) {
 	thread := uuid.New()
 	events := []event.JournalEvent{
@@ -127,18 +127,16 @@ func TestProjectEvent_EveryJournalEventProjects(t *testing.T) {
 		&event.MessageReaction{MessageID: uuid.New(), ThreadID: thread},
 		&event.MemberJoined{ThreadID: thread, ContactID: uuid.New()},
 		&event.MemberLeft{ThreadID: thread, ContactID: uuid.New()},
+		&event.ThreadCreated{ID: thread, Recipient: &event.Recipient{ID: uuid.New()}},
 	}
 
 	for _, e := range events {
-		e.SetUpdateSeq(7)
-
 		ev, err := e.ToOutbox()
 		require.NoError(t, err)
 
 		upd, ok, err := ProjectEvent(ev.Metadata["event_type"], ev.Payload)
 		require.NoError(t, err, "%T", e)
 		require.True(t, ok, "%T has no projection", e)
-		assert.Equal(t, int64(7), upd.UpdateSeq, "%T", e)
 		assert.Equal(t, thread.String(), upd.ThreadID, "%T", e)
 	}
 }

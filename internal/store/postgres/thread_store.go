@@ -31,7 +31,6 @@ type (
 		Variables       *model.ThreadVariables `json:"variables,omitempty" db:"variables"`
 		BotControllerID *uuid.UUID             `json:"bot_controller_id,omitempty" db:"bot_controller_id"`
 		OwnerBotID      *uuid.UUID             `json:"owner_bot_id,omitempty" db:"owner_bot_id"`
-		LastUpdateSeq   int64                  `json:"last_update_seq,omitempty" db:"last_update_seq"`
 		// The real thread id for SearchLeft rows, where "id" above is a
 		// membership-period id instead. Absent (zero) from Search's SQL.
 		ThreadRefID uuid.UUID `json:"-" db:"thread_ref_id"`
@@ -180,7 +179,6 @@ func mapThreadRecordToModel(record *threadRecord) (*model.Thread, error) {
 		LastMessage:     record.LastMessage,
 		Variables:       record.Variables,
 		BotControllerID: record.BotControllerID,
-		LastUpdateSeq:   record.LastUpdateSeq,
 		OwnerBotID:      record.OwnerBotID,
 	}
 

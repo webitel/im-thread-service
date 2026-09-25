@@ -21,7 +21,6 @@ type UpdatesReader interface {
 	ContactChanges(ctx context.Context, contactID, cursor string) (*journal.ContactChanges, error)
 	ChangesSince(ctx context.Context, threadID string, after, horizon int64, limit int) ([]journal.Event, error)
 	SettledHorizon(ctx context.Context) (int64, error)
-	SettledUpTo(ctx context.Context, threadID string, horizon int64) (int64, error)
 	TrimHorizon(ctx context.Context) (int64, error)
 	ReadStates(ctx context.Context, threadID string) ([]journal.ReadState, error)
 	IsMember(ctx context.Context, threadID, memberID string, domainID int32) (bool, error)
@@ -98,8 +97,8 @@ func (s *UpdatesServer) GetUpdates(ctx context.Context, req *impb.GetUpdatesRequ
 	resp := &impb.GetUpdatesResponse{Cursor: changes.Cursor}
 	budget := journal.MaxContactChanges
 
-	for _, t := range changes.Threads {
-		entry, used, err := s.threadUpdates(ctx, caller, t.ThreadID, changes, budget)
+	for _, threadID := range changes.Threads {
+		entry, used, err := s.threadUpdates(ctx, caller, threadID, changes, budget)
 		if err != nil {
 			return nil, err
 		}
@@ -155,13 +154,7 @@ func (s *UpdatesServer) threadUpdates(ctx context.Context, caller updatesCaller,
 		return nil, len(events), nil
 	}
 
-	// The socket's +1 rule needs a cursor with nothing missing below it.
-	settled, err := s.updates.SettledUpTo(ctx, threadID, window.Horizon)
-	if err != nil {
-		return nil, 0, err
-	}
-
-	entry := &impb.ThreadUpdates{ThreadId: threadID, Cursor: formatSeq(settled)}
+	entry := &impb.ThreadUpdates{ThreadId: threadID}
 
 	if entry.UnreadCount, err = s.updates.Unread(ctx, threadID, caller.contactID); err != nil {
 		return nil, 0, err
@@ -207,7 +200,7 @@ func (s *UpdatesServer) threadUpdates(ctx context.Context, caller updatesCaller,
 // client has never seen this thread.
 func isNewToCaller(events []journal.Event, contactID string) bool {
 	for _, e := range events {
-		if e.Cursor == "1" {
+		if e.Kind == journal.KindThreadCreated {
 			return true
 		}
 

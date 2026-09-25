@@ -24,7 +24,6 @@ type MessageEdited struct {
 	CreatedAt        time.Time         `json:"created_at"`
 	OccurredAt       time.Time         `json:"occurred_at"`
 	Metadata         map[string]any    `json:"metadata,omitempty"`
-	UpdateSeq        int64             `json:"update_seq"`
 	ExternalMetadata map[string]string `json:"-"`
 }
 
@@ -40,7 +39,6 @@ func (*MessageEdited) EventType() string                { return MessageEditedEv
 func (m *MessageEdited) Version() string                { return MessageVersionV1 }
 func (m *MessageEdited) RecipientID() uuid.UUID         { return m.ThreadID }
 func (m *MessageEdited) JournalThreadID() uuid.UUID     { return m.ThreadID }
-func (m *MessageEdited) SetUpdateSeq(seq int64)         { m.UpdateSeq = seq }
 func (m *MessageEdited) ToOutbox() (OutboxEvent, error) { return m.serialize(m.Version()) }
 
 func (m *MessageEdited) serialize(version string) (OutboxEvent, error) {

@@ -66,9 +66,8 @@ type MessageCreated struct {
 	ReplyTo               *ReplyToPayload       `json:"reply_to,omitempty"`
 	ForwardOrigin         *ForwardOriginPayload `json:"forward_origin,omitempty"`
 	// Seq is the message's per-thread seq (message timeline), the unit the
-	// read_states horizons are expressed in. Not to be confused with UpdateSeq.
+	// read_states horizons are expressed in.
 	Seq              int64             `json:"seq,omitempty"`
-	UpdateSeq        int64             `json:"update_seq"`
 	ExternalMetadata map[string]string `json:"-"`
 }
 
@@ -113,7 +112,6 @@ func (*MessageCreated) EventType() string                { return MessageCreated
 func (m *MessageCreated) Version() string                { return MessageVersionV1 }
 func (m *MessageCreated) RecipientID() uuid.UUID         { return m.ThreadID }
 func (m *MessageCreated) JournalThreadID() uuid.UUID     { return m.ThreadID }
-func (m *MessageCreated) SetUpdateSeq(seq int64)         { m.UpdateSeq = seq }
 func (m *MessageCreated) ToOutbox() (OutboxEvent, error) { return m.serialize(m, m.Version()) }
 
 func (m *MessageCreated) serialize(data any, version string) (OutboxEvent, error) {

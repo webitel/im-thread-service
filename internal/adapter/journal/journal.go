@@ -17,8 +17,6 @@ var ErrInvalidCursor = errors.New("invalid journal cursor")
 
 const defaultTable = "im_message.thread_updates"
 
-const defaultThreadTable = "im_thread.thread"
-
 // DefaultTTL bounds the catch-up window; older cursors resync.
 const DefaultTTL = 48 * time.Hour
 
@@ -31,15 +29,14 @@ type DB interface {
 	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
 }
 
-// Journal is the per-thread update log; a row's update_seq is the client cursor.
+// Journal is the per-thread update log; rows are served to contacts by transaction id.
 type Journal struct {
-	db          DB
-	table       string
-	threadTable string
-	marksTable  string
-	trimTable   string
-	ttl         time.Duration
-	now         func() time.Time
+	db         DB
+	table      string
+	marksTable string
+	trimTable  string
+	ttl        time.Duration
+	now        func() time.Time
 }
 
 type Option func(*Journal)
@@ -52,15 +49,11 @@ func WithTTL(d time.Duration) Option {
 	}
 }
 
-// WithTables points the journal at other tables (tests use throwaway schemas).
-func WithTables(journalTable, threadTable string) Option {
+// WithTable points the journal at another table (tests use throwaway schemas).
+func WithTable(journalTable string) Option {
 	return func(j *Journal) {
 		if journalTable != "" {
 			j.table = journalTable
-		}
-
-		if threadTable != "" {
-			j.threadTable = threadTable
 		}
 	}
 }
@@ -87,7 +80,7 @@ func WithClock(now func() time.Time) Option {
 }
 
 func New(db DB, opts ...Option) *Journal {
-	j := &Journal{db: db, table: defaultTable, threadTable: defaultThreadTable, marksTable: defaultMarksTable, trimTable: defaultTrimTable, ttl: DefaultTTL, now: time.Now}
+	j := &Journal{db: db, table: defaultTable, marksTable: defaultMarksTable, trimTable: defaultTrimTable, ttl: DefaultTTL, now: time.Now}
 	for _, o := range opts {
 		o(j)
 	}
@@ -95,16 +88,14 @@ func New(db DB, opts ...Option) *Journal {
 	return j
 }
 
-// Update is one projected mutation, keyed by its stamped update_seq.
+// Update is one projected mutation.
 type Update struct {
-	ThreadID  string
-	UpdateSeq int64
-	Kind      string
-	Fields    map[string]any
+	ThreadID string
+	Kind     string
+	Fields   map[string]any
 }
 
-// Append writes one entry. It runs once per seq in the seq's own transaction, so
-// a duplicate (thread_id, update_seq) is a bug and fails loudly.
+// Append writes one entry in the mutation's transaction; tx_id defaults to it.
 func (j *Journal) Append(ctx context.Context, u Update) error {
 	fields, err := json.Marshal(u.Fields)
 	if err != nil {
@@ -112,35 +103,18 @@ func (j *Journal) Append(ctx context.Context, u Update) error {
 	}
 
 	query := fmt.Sprintf(`
-		insert into %s (thread_id, update_seq, kind, fields)
-		values ($1, $2, $3, $4)`, j.table)
+		insert into %s (thread_id, kind, fields)
+		values ($1, $2, $3)`, j.table)
 
-	_, err = j.db.Exec(ctx, query, u.ThreadID, u.UpdateSeq, u.Kind, fields)
+	_, err = j.db.Exec(ctx, query, u.ThreadID, u.Kind, fields)
 
 	return err
 }
 
 // Event is one journal entry served to a catching-up client.
 type Event struct {
-	Cursor string            `json:"cursor"`
 	Kind   string            `json:"kind"`
 	Fields map[string]string `json:"fields"`
-}
-
-// Head is thread.last_update_seq, the cursor a client starts catch-up from; 0 if absent.
-func (j *Journal) Head(ctx context.Context, threadID string) (int64, error) {
-	query := fmt.Sprintf(`select last_update_seq from %s where id = $1::uuid`, j.threadTable)
-
-	var seq int64
-	if err := j.db.QueryRow(ctx, query, threadID).Scan(&seq); err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return 0, nil
-		}
-
-		return 0, err
-	}
-
-	return seq, nil
 }
 
 // IsMember gates catch-up to current members, scoped to the caller's domain so a

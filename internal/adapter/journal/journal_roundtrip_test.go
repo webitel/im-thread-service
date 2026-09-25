@@ -5,7 +5,6 @@ package journal
 import (
 	"context"
 	"os"
-	"strconv"
 	"testing"
 	"time"
 
@@ -39,14 +38,11 @@ func newTestJournal(t *testing.T, ttl time.Duration, now func() time.Time) *Jour
 		`CREATE TABLE ` + itSchema + `.thread_updates (
 			id         bigserial primary key,
 			thread_id  uuid        not null,
-			update_seq bigint      not null,
 			kind       text        not null,
 			fields     jsonb       not null default '{}'::jsonb,
 			created_at timestamptz not null default clock_timestamp(),
 			tx_id      bigint      default (pg_current_xact_id()::text::bigint)
 		)`,
-		`CREATE UNIQUE INDEX ON ` + itSchema + `.thread_updates (thread_id, update_seq)`,
-		`CREATE TABLE ` + itSchema + `.thread (id uuid primary key, last_update_seq bigint not null default 0)`,
 		`CREATE TABLE ` + itSchema + `.contact_updates (
 			contact_id uuid not null, thread_id uuid not null, tx_id bigint not null,
 			primary key (contact_id, thread_id)
@@ -63,7 +59,7 @@ func newTestJournal(t *testing.T, ttl time.Duration, now func() time.Time) *Jour
 
 	opts := []Option{
 		WithTTL(ttl),
-		WithTables(itSchema+".thread_updates", itSchema+".thread"),
+		WithTable(itSchema + ".thread_updates"),
 		WithMarksTable(itSchema+".contact_updates", itSchema+".thread_updates_trim"),
 	}
 	if now != nil {
@@ -73,9 +69,9 @@ func newTestJournal(t *testing.T, ttl time.Duration, now func() time.Time) *Jour
 	return New(pool, opts...)
 }
 
-func appendSeq(t *testing.T, j *Journal, thread string, seq int64) {
+func appendMsg(t *testing.T, j *Journal, thread, msgID string) {
 	t.Helper()
-	require.NoError(t, j.Append(context.Background(), Update{ThreadID: thread, UpdateSeq: seq, Kind: KindMessageNew}))
+	require.NoError(t, j.Append(context.Background(), Update{ThreadID: thread, Kind: KindMessageNew, Fields: map[string]any{FieldMsgID: msgID}}))
 }
 
 // Only entries written after the cursor's transaction come back, oldest first.
@@ -84,14 +80,14 @@ func TestJournal_ChangesSince(t *testing.T) {
 	j := newTestJournal(t, DefaultTTL, nil)
 	thread := uuid.NewString()
 
-	appendSeq(t, j, thread, 1)
-	appendSeq(t, j, thread, 2)
+	appendMsg(t, j, thread, "m1")
+	appendMsg(t, j, thread, "m2")
 
 	cursor, err := j.SettledHorizon(ctx)
 	require.NoError(t, err)
 
-	appendSeq(t, j, thread, 3)
-	appendSeq(t, j, thread, 4)
+	appendMsg(t, j, thread, "m3")
+	appendMsg(t, j, thread, "m4")
 
 	horizon, err := j.SettledHorizon(ctx)
 	require.NoError(t, err)
@@ -99,8 +95,8 @@ func TestJournal_ChangesSince(t *testing.T) {
 	events, err := j.ChangesSince(ctx, thread, cursor, horizon, MaxContactChanges)
 	require.NoError(t, err)
 	require.Len(t, events, 2)
-	assert.Equal(t, "3", events[0].Cursor)
-	assert.Equal(t, "4", events[1].Cursor)
+	assert.Equal(t, "m3", events[0].Fields[FieldMsgID])
+	assert.Equal(t, "m4", events[1].Fields[FieldMsgID])
 
 	limited, err := j.ChangesSince(ctx, thread, 0, horizon, 1)
 	require.NoError(t, err)
@@ -114,17 +110,13 @@ func TestJournal_ContactChanges(t *testing.T) {
 	me, other := uuid.NewString(), uuid.NewString()
 	t1, t2 := uuid.NewString(), uuid.NewString()
 
-	_, err := j.db.Exec(ctx, `INSERT INTO `+itSchema+`.thread (id, last_update_seq) VALUES ($1, 5), ($2, 9)`, t1, t2)
-	require.NoError(t, err)
-
-	_, err = j.db.Exec(ctx, `INSERT INTO `+itSchema+`.contact_updates VALUES ($1, $2, 10), ($1, $3, 20), ($4, $2, 30)`, me, t1, t2, other)
+	_, err := j.db.Exec(ctx, `INSERT INTO `+itSchema+`.contact_updates VALUES ($1, $2, 10), ($1, $3, 20), ($4, $2, 30)`, me, t1, t2, other)
 	require.NoError(t, err)
 
 	got, err := j.ContactChanges(ctx, me, "10")
 	require.NoError(t, err)
 	require.Len(t, got.Threads, 1, "t1 was marked at the cursor itself")
-	assert.Equal(t, t2, got.Threads[0].ThreadID)
-	assert.Equal(t, int64(9), got.Threads[0].Head)
+	assert.Equal(t, t2, got.Threads[0])
 	assert.Equal(t, int64(10), got.After)
 
 	next, err := j.ContactChanges(ctx, me, got.Cursor)
@@ -161,8 +153,9 @@ func TestJournal_CleanupRecordsTrimHorizon(t *testing.T) {
 	require.NoError(t, err)
 	assert.Zero(t, none)
 
-	_, err = j.db.Exec(ctx, `INSERT INTO `+itSchema+`.thread_updates (thread_id, update_seq, kind, created_at, tx_id) VALUES
-		($1, 1, 'message.new', $2, 111), ($1, 2, 'message.new', $2, 222), ($1, 3, 'message.new', $3, 333)`,
+	_, err = j.db.Exec(ctx, `INSERT INTO `+itSchema+`.thread_updates (thread_id, kind, fields, created_at, tx_id) VALUES
+		($1, 'message.new', '{"msg_id":"m1"}', $2, 111), ($1, 'message.new', '{"msg_id":"m2"}', $2, 222),
+		($1, 'message.new', '{"msg_id":"m3"}', $3, 333)`,
 		thread, nowP.Add(-5*24*time.Hour), nowP)
 	require.NoError(t, err)
 
@@ -177,16 +170,5 @@ func TestJournal_CleanupRecordsTrimHorizon(t *testing.T) {
 	left, err := j.ChangesSince(ctx, thread, 0, 1000, MaxContactChanges)
 	require.NoError(t, err)
 	require.Len(t, left, 1)
-	assert.Equal(t, strconv.Itoa(3), left[0].Cursor)
-}
-
-// Each seq is written once, in its own tx; a duplicate means a bug and must fail.
-func TestJournal_AppendDuplicateFails(t *testing.T) {
-	ctx := context.Background()
-	j := newTestJournal(t, DefaultTTL, nil)
-	thread := uuid.NewString()
-
-	u := Update{ThreadID: thread, UpdateSeq: 1, Kind: KindMessageNew, Fields: map[string]any{"k": "v"}}
-	require.NoError(t, j.Append(ctx, u))
-	require.Error(t, j.Append(ctx, u))
+	assert.Equal(t, "m3", left[0].Fields[FieldMsgID])
 }

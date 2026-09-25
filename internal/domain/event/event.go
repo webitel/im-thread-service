@@ -8,13 +8,10 @@ type Base interface {
 	Topic() string
 }
 
-// JournalEvent is a thread-scoped mutation participating in the update journal.
-// Its update_seq is the catch-up cursor and rides on both live event and journal row.
+// JournalEvent is a thread-scoped mutation written to the update journal for GetUpdates.
 type JournalEvent interface {
 	Outboxer
 
-	// JournalThreadID is the thread whose update_seq counter this event advances.
+	// JournalThreadID is the thread the journal row belongs to.
 	JournalThreadID() uuid.UUID
-	// SetUpdateSeq records the stamped sequence before the event is serialized.
-	SetUpdateSeq(seq int64)
 }

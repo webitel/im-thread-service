@@ -2,6 +2,7 @@ package grpc
 
 import (
 	"context"
+	"strconv"
 
 	"github.com/google/uuid"
 
@@ -19,9 +20,24 @@ type MessageHistoryService interface {
 	GetRevisions(ctx context.Context, req *dto.GetMessageRevisionsRequest) ([]*model.MessageChangeEntry, error)
 }
 
-// ThreadHeads reads a thread's current update_seq, handed out with history.
-type ThreadHeads interface {
-	Head(ctx context.Context, threadID string) (int64, error)
+// UpdatesHorizon is the GetUpdates cursor as of now, handed out with reads so a client
+// resumes GetUpdates from the moment it loaded them.
+type UpdatesHorizon interface {
+	SettledHorizon(ctx context.Context) (int64, error)
+}
+
+// updatesCursor reads the cursor before the page: a change in between is replayed, never skipped.
+func updatesCursor(ctx context.Context, h UpdatesHorizon) (string, error) {
+	if h == nil {
+		return "", nil
+	}
+
+	horizon, err := h.SettledHorizon(ctx)
+	if err != nil {
+		return "", err
+	}
+
+	return strconv.FormatInt(horizon, 10), nil
 }
 
 type (
@@ -29,11 +45,11 @@ type (
 		impb.UnimplementedMessageHistoryServer
 
 		messageHistorySearcher MessageHistoryService
-		updates                ThreadHeads
+		updates                UpdatesHorizon
 	}
 )
 
-func NewMessageHistoryServer(messageHistorySearcher MessageHistoryService, updates ThreadHeads) *MessageHistoryServer {
+func NewMessageHistoryServer(messageHistorySearcher MessageHistoryService, updates UpdatesHorizon) *MessageHistoryServer {
 	return &MessageHistoryServer{
 		messageHistorySearcher: messageHistorySearcher,
 		updates:                updates,
@@ -43,14 +59,9 @@ func NewMessageHistoryServer(messageHistorySearcher MessageHistoryService, updat
 func (s *MessageHistoryServer) SearchThreadMessagesHistory(ctx context.Context, req *impb.SearchMessageHistoryRequest) (*impb.SearchMessageHistoryResponse, error) {
 	hmiDTO := mapper.MapSearchMessageHistoryRequest2HistoryMessageInputDTO(req)
 
-	// Read the head before the page: a change in between is replayed later, never skipped.
-	var head int64
-
-	if threadID := req.GetThreadId(); threadID != "" && s.updates != nil {
-		var err error
-		if head, err = s.updates.Head(ctx, threadID); err != nil {
-			return nil, err
-		}
+	cursor, err := updatesCursor(ctx, s.updates)
+	if err != nil {
+		return nil, err
 	}
 
 	messages, pageInfo, err := s.messageHistorySearcher.Search(ctx, hmiDTO)
@@ -60,7 +71,7 @@ func (s *MessageHistoryServer) SearchThreadMessagesHistory(ctx context.Context, 
 
 	resp := mapper.MapMessage2SearchMessageHistoryResponse(messages, hmiDTO.CallerID)
 	resp.From = mapper.GetUniqueFrom(messages)
-	resp.LastUpdateSeq = head
+	resp.UpdatesCursor = cursor
 
 	if pageInfo.HasNextPage {
 		resp.NextCursor = &impb.HistoryMessageCursorResponse{
@@ -80,12 +91,18 @@ func (s *MessageHistoryServer) SearchThreadMessagesHistory(ctx context.Context, 
 func (s *MessageHistoryServer) SearchMessages(ctx context.Context, req *impb.SearchMessagesRequest) (*impb.SearchMessageHistoryResponse, error) {
 	searchDTO := mapper.MapSearchMessagesRequest2SearchMessagesInputDTO(req)
 
+	cursor, err := updatesCursor(ctx, s.updates)
+	if err != nil {
+		return nil, err
+	}
+
 	messages, pageInfo, err := s.messageHistorySearcher.SearchMessages(ctx, searchDTO)
 	if err != nil {
 		return nil, err
 	}
 
 	resp := mapper.MapMessage2SearchMessageHistoryResponse(messages, searchDTO.CallerID)
+	resp.UpdatesCursor = cursor
 	resp.From = mapper.GetUniqueFrom(messages)
 
 	if pageInfo.HasNextPage {
@@ -115,6 +132,11 @@ func (s *MessageHistoryServer) GetMessageRevisions(ctx context.Context, req *imp
 func (s *MessageHistoryServer) SearchLeftThreadsMessageHistory(ctx context.Context, req *impb.SearchLeftThreadsMessageHistoryRequest) (*impb.SearchMessageHistoryResponse, error) {
 	requestDTO := mapper.MapSearchLeftThreadsMessageHistoryRequest2LeftThreadsMessageHistoryInputDTO(req)
 
+	cursor, err := updatesCursor(ctx, s.updates)
+	if err != nil {
+		return nil, err
+	}
+
 	messages, pageInfo, err := s.messageHistorySearcher.SearchLeftThreads(ctx, requestDTO)
 	if err != nil {
 		return nil, err
@@ -122,6 +144,7 @@ func (s *MessageHistoryServer) SearchLeftThreadsMessageHistory(ctx context.Conte
 
 	// Left-threads history has no caller context; reacted_by_me stays false.
 	resp := mapper.MapMessage2SearchMessageHistoryResponse(messages, uuid.Nil)
+	resp.UpdatesCursor = cursor
 	resp.From = mapper.GetUniqueFrom(messages)
 
 	if pageInfo.HasNextPage {

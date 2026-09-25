@@ -62,6 +62,11 @@ func (e *ThreadCreated) RecipientID() uuid.UUID { return e.Recipient.ID }
 
 func (e *ThreadCreated) MustBeThreadEvent() {}
 
+func (e *ThreadCreated) JournalThreadID() uuid.UUID { return e.ID }
+
+// JournalSubject marks the recipient, so the new thread reaches their GetUpdates.
+func (e *ThreadCreated) JournalSubject() uuid.UUID { return e.Recipient.ID }
+
 func (e *ThreadCreated) ToOutbox() (OutboxEvent, error) {
 	return e.serialize(e, e.Version())
 }

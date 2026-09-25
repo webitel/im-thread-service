@@ -14,6 +14,7 @@ const (
 	KindMessageDeleted  = "message.deleted"
 	KindMessageReaction = "message.reaction"
 	KindMemberChanged   = "member.changed"
+	KindThreadCreated   = "thread.created"
 )
 
 // Journal field keys. Entries keep only references; message content is read from
@@ -35,13 +36,20 @@ const (
 // ProjectEvent maps an outbox event to a journal Update; ok=false means not journaled.
 func ProjectEvent(eventType string, payload []byte) (Update, bool, error) {
 	switch eventType {
+	case event.ThreadCreatedEvent:
+		var e event.ThreadCreated
+		if err := json.Unmarshal(payload, &e); err != nil {
+			return Update{}, false, err
+		}
+
+		return Update{ThreadID: e.ID.String(), Kind: KindThreadCreated, Fields: make(map[string]any)}, true, nil
 	case event.MessageCreatedEvent:
 		var e event.MessageCreated
 		if err := json.Unmarshal(payload, &e); err != nil {
 			return Update{}, false, err
 		}
 
-		return messageUpdate(e.ThreadID.String(), e.UpdateSeq, KindMessageNew, e.MessageID.String(), memberContact(e.From), nil), true, nil
+		return messageUpdate(e.ThreadID.String(), KindMessageNew, e.MessageID.String(), memberContact(e.From), nil), true, nil
 
 	case event.MessageEditedEvent:
 		var e event.MessageEdited
@@ -49,7 +57,7 @@ func ProjectEvent(eventType string, payload []byte) (Update, bool, error) {
 			return Update{}, false, err
 		}
 
-		return messageUpdate(e.ThreadID.String(), e.UpdateSeq, KindMessageEdited, e.MessageID.String(), memberContact(e.EditedBy), nil), true, nil
+		return messageUpdate(e.ThreadID.String(), KindMessageEdited, e.MessageID.String(), memberContact(e.EditedBy), nil), true, nil
 
 	case event.MessageDeletedEvent:
 		var e event.MessageDeleted
@@ -57,7 +65,7 @@ func ProjectEvent(eventType string, payload []byte) (Update, bool, error) {
 			return Update{}, false, err
 		}
 
-		return messageUpdate(e.ThreadID.String(), e.UpdateSeq, KindMessageDeleted, e.MessageID.String(), memberContactFromMember(e.DeletedBy), nil), true, nil
+		return messageUpdate(e.ThreadID.String(), KindMessageDeleted, e.MessageID.String(), memberContactFromMember(e.DeletedBy), nil), true, nil
 
 	case event.MessageReactionEvent:
 		var e event.MessageReaction
@@ -65,7 +73,7 @@ func ProjectEvent(eventType string, payload []byte) (Update, bool, error) {
 			return Update{}, false, err
 		}
 
-		return messageUpdate(e.ThreadID.String(), e.UpdateSeq, KindMessageReaction, e.MessageID.String(), memberContact(e.Reactor),
+		return messageUpdate(e.ThreadID.String(), KindMessageReaction, e.MessageID.String(), memberContact(e.Reactor),
 			map[string]any{FieldEmoji: e.Emoji, FieldAction: e.Action}), true, nil
 
 	case event.MemberJoinedEvent:
@@ -74,7 +82,7 @@ func ProjectEvent(eventType string, payload []byte) (Update, bool, error) {
 			return Update{}, false, err
 		}
 
-		return memberUpdate(e.ThreadID.String(), e.UpdateSeq, e.ContactID.String(), ActionJoined), true, nil
+		return memberUpdate(e.ThreadID.String(), e.ContactID.String(), ActionJoined), true, nil
 
 	case event.MemberLeftEvent:
 		var e event.MemberLeft
@@ -82,22 +90,22 @@ func ProjectEvent(eventType string, payload []byte) (Update, bool, error) {
 			return Update{}, false, err
 		}
 
-		return memberUpdate(e.ThreadID.String(), e.UpdateSeq, e.ContactID.String(), ActionLeft), true, nil
+		return memberUpdate(e.ThreadID.String(), e.ContactID.String(), ActionLeft), true, nil
 
 	default:
 		return Update{}, false, nil // status receipts, typing and the rest are not journaled
 	}
 }
 
-func messageUpdate(threadID string, seq int64, kind, msgID, actor string, extra map[string]any) Update {
+func messageUpdate(threadID, kind, msgID, actor string, extra map[string]any) Update {
 	fields := map[string]any{FieldMsgID: msgID, FieldActor: actor}
 	maps.Copy(fields, extra)
 
-	return Update{ThreadID: threadID, UpdateSeq: seq, Kind: kind, Fields: fields}
+	return Update{ThreadID: threadID, Kind: kind, Fields: fields}
 }
 
-func memberUpdate(threadID string, seq int64, contactID, action string) Update {
-	return Update{ThreadID: threadID, UpdateSeq: seq, Kind: KindMemberChanged, Fields: map[string]any{
+func memberUpdate(threadID, contactID, action string) Update {
+	return Update{ThreadID: threadID, Kind: KindMemberChanged, Fields: map[string]any{
 		FieldContactID: contactID, FieldActor: contactID, FieldAction: action,
 	}}
 }
