@@ -145,11 +145,14 @@ func (le *LeaderElector) attemptLeadership(ctx context.Context, onStart func(ctx
 	var startFailed atomic.Bool
 
 	go func() {
-		if err := onStart(leaderCtx); err != nil {
-			le.log.Error("leader task execution failed", "err", err)
-			startFailed.Store(true)
-			cancelLeader()
+		err := onStart(leaderCtx)
+		if err == nil {
+			return
 		}
+
+		le.log.Error("leader task execution failed", "err", err)
+		startFailed.Store(true)
+		cancelLeader()
 	}()
 
 	// [WATCHDOG]
