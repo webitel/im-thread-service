@@ -1,7 +1,6 @@
 package mapper
 
 import (
-	"encoding/json"
 	"time"
 
 	"github.com/google/uuid"
@@ -13,6 +12,24 @@ import (
 	"github.com/webitel/im-thread-service/internal/utils"
 	"github.com/webitel/im-thread-service/internal/utils/set"
 )
+
+// UpdatesHistoryInput looks up messages of a thread as the caller sees them in history:
+// the given ids, or the newest one when ids is empty.
+func UpdatesHistoryInput(threadID, callerID string, domainID int32, allow *impb.SystemMessageAllowList, messageIDs []string) *dto.HistoryMessageInputDTO {
+	in := &dto.HistoryMessageInputDTO{
+		ThreadIDs:                   utils.Map([]string{threadID}, utils.IDsParser),
+		Size:                        max(len(messageIDs), 1),
+		DomainID:                    int(domainID),
+		CallerID:                    utils.IDsParser(callerID),
+		SystemMessageAllowListTypes: systemMessageAllowListTypes(allow),
+	}
+
+	if len(messageIDs) > 0 {
+		in.IDs = utils.Map(messageIDs, utils.IDsParser)
+	}
+
+	return in
+}
 
 func MapSearchMessageHistoryRequest2HistoryMessageInputDTO(mhr *impb.SearchMessageHistoryRequest) *dto.HistoryMessageInputDTO {
 	var (
@@ -157,15 +174,13 @@ func MapMessage2SearchMessageHistoryResponse(messages []*model.Message, callerID
 
 func mapHistoryMessage(m *model.Message, callerID uuid.UUID) *impb.HistoryMessage {
 	out := &impb.HistoryMessage{
-		Id:             m.ID.String(),
-		ThreadId:       m.ThreadID.String(),
-		SenderId:       m.SenderID.String(),
-		Type:           int32(m.Type),
-		CreatedAt:      max(m.CreatedAt.UnixMilli(), 0),
-		UpdatedAt:      max(m.UpdatedAt.UnixMilli(), 0),
-		Seq:            m.Seq,
-		DeliveryStatus: mapDeliveryStatus(m.DeliveryStatus),
-		Statuses:       mapRecipientStatuses(m.Statuses),
+		Id:        m.ID.String(),
+		ThreadId:  m.ThreadID.String(),
+		SenderId:  m.SenderID.String(),
+		Type:      int32(m.Type),
+		CreatedAt: max(m.CreatedAt.UnixMilli(), 0),
+		UpdatedAt: max(m.UpdatedAt.UnixMilli(), 0),
+		Seq:       m.Seq,
 	}
 
 	out.RevisionCount = m.RevisionCount
@@ -280,59 +295,6 @@ func mapReplyTo(in *model.ReplyToPreview) *impb.ReplyToMessage {
 		out.AttachmentName = a.Name
 		out.AttachmentMime = a.Mime
 		out.AttachmentAddress = a.Address
-	}
-
-	return out
-}
-
-func mapDeliveryStatus(in *model.MessageDeliveryStatus) impb.MessageDeliveryStatus {
-	if in == nil {
-		return impb.MessageDeliveryStatus_MESSAGE_DELIVERY_STATUS_UNSPECIFIED
-	}
-
-	return impb.MessageDeliveryStatus(*in)
-}
-
-func mapRecipientStatuses(in []*model.MessageRecipientStatus) []*impb.MessageRecipientStatus {
-	if len(in) == 0 {
-		return nil
-	}
-
-	out := make([]*impb.MessageRecipientStatus, 0, len(in))
-
-	for _, st := range in {
-		if st == nil {
-			continue
-		}
-
-		pb := &impb.MessageRecipientStatus{
-			MemberId: st.MemberID.String(),
-			Status:   impb.MessageDeliveryStatus(st.Status),
-		}
-
-		if st.DeliveredAt != nil {
-			pb.DeliveredAt = max(st.DeliveredAt.UnixMilli(), 0)
-		}
-
-		if st.ReadAt != nil {
-			pb.ReadAt = max(st.ReadAt.UnixMilli(), 0)
-		}
-
-		if st.FailedAt != nil {
-			pb.FailedAt = max(st.FailedAt.UnixMilli(), 0)
-		}
-
-		if st.Via != nil {
-			pb.Via = *st.Via
-		}
-
-		if len(st.Error) > 0 {
-			if raw, err := json.Marshal(st.Error); err == nil {
-				pb.Error = string(raw)
-			}
-		}
-
-		out = append(out, pb)
 	}
 
 	return out

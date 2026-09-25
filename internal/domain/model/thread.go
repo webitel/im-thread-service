@@ -60,6 +60,10 @@ type Thread struct {
 	BotControllerID *uuid.UUID `json:"bot_controller_id,omitempty" db:"bot_controller_id"`
 	OwnerBotID      *uuid.UUID `json:"owner_bot_id,omitempty" db:"owner_bot_id"`
 
+	// LastUpdateSeq is the thread's update journal head (GetThreadUpdates
+	// cursor space) at read time — where a freshly loaded client starts catch-up.
+	LastUpdateSeq int64 `json:"last_update_seq,omitempty" db:"last_update_seq"`
+
 	// UnreadCount is the number of unread messages in this thread for the
 	// requesting participant. Enriched after the thread query; not scanned.
 	UnreadCount int64 `json:"unread_count" db:"-"`
@@ -72,7 +76,20 @@ type Thread struct {
 	// row id (not the thread id), so this carries the real thread id.
 	TagLookupID uuid.UUID `json:"-" db:"-"`
 
+	// ReadStates is the per-member delivery/read horizon snapshot. Enriched after
+	// the thread query (not scanned); shared with GetThreadUpdates.
+	ReadStates []MemberReadState `json:"read_states,omitempty" db:"-"`
+
 	events []event.Base `db:"-"`
+}
+
+// MemberReadState is one member's delivery/read horizon (per-thread message seq).
+// Shared between thread search and the catch-up journal.
+type MemberReadState struct {
+	MemberID         uuid.UUID `db:"member_id"`
+	ThreadID         uuid.UUID `db:"thread_id"`
+	DeliveredUpToSeq int64     `db:"delivered_up_to_seq"`
+	ReadUpToSeq      int64     `db:"read_up_to_seq"`
 }
 
 func (t *Thread) CreatedAtUnix() int64 { return max(t.CreatedAt.UTC().UnixMilli(), 0) }

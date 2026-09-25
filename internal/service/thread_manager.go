@@ -144,22 +144,28 @@ func (t *ThreadManagementService) Search(ctx context.Context, searchRequest *dto
 
 	t.enrichUnread(ctx, searchRequest.SelfID, firstDomainID(searchRequest.DomainIDs), threads)
 	t.enrichTags(ctx, searchRequest.SelfID, threads)
+	t.enrichReadStates(ctx, searchRequest.SelfID, firstDomainID(searchRequest.DomainIDs), threads)
 
 	return threads, nil
 }
 
-// enrichUnread fills UnreadCount on each thread for the requesting participant.
-// Unread is auxiliary: a failure is logged and the threads keep a zero count
-// rather than failing the whole search.
+// threadIDsOf collects thread ids, preserving order for enrichment lookups.
+func threadIDsOf(threads []*model.Thread) []uuid.UUID {
+	ids := make([]uuid.UUID, len(threads))
+	for i, th := range threads {
+		ids[i] = th.ID
+	}
+
+	return ids
+}
+
+// enrichUnread fills UnreadCount; failure is logged and threads keep zero count.
 func (t *ThreadManagementService) enrichUnread(ctx context.Context, selfID uuid.UUID, domainID int32, threads []*model.Thread) {
 	if selfID == uuid.Nil || len(threads) == 0 {
 		return
 	}
 
-	threadIDs := make([]uuid.UUID, len(threads))
-	for i, th := range threads {
-		threadIDs[i] = th.ID
-	}
+	threadIDs := threadIDsOf(threads)
 
 	counts, err := t.uow.MessageStatuses().ReadUnread(ctx, domainID, selfID, threadIDs)
 	if err != nil {
@@ -196,6 +202,27 @@ func (t *ThreadManagementService) enrichTags(ctx context.Context, callerID uuid.
 
 	for _, th := range threads {
 		th.Tags = tagsByThread[th.TagLookupID]
+	}
+}
+
+// enrichReadStates fills per-member delivery/read horizons on each thread.
+// Failures are logged; threads keep empty states rather than failing search.
+func (t *ThreadManagementService) enrichReadStates(ctx context.Context, selfID uuid.UUID, domainID int32, threads []*model.Thread) {
+	if selfID == uuid.Nil || len(threads) == 0 {
+		return
+	}
+
+	threadIDs := threadIDsOf(threads)
+
+	states, err := t.uow.MessageStatuses().ReadMemberStates(ctx, domainID, selfID, threadIDs)
+	if err != nil {
+		t.log().Error("reading thread member states", "operation", "service.thread_manager.enrich_read_states", "err", err)
+
+		return
+	}
+
+	for _, th := range threads {
+		th.ReadStates = states[th.ID]
 	}
 }
 
@@ -332,6 +359,11 @@ func (t *ThreadManagementService) AddMember(ctx context.Context, req *dto.AddMem
 	)
 
 	err = t.uow.WithinTransaction(ctx, func(ctx context.Context, uow store.UnitOfWork) error {
+		// Lock order thread -> thread_dialog, same as Send.
+		if err := uow.ThreadStore().LockForUpdate(ctx, req.ThreadID); err != nil {
+			return err
+		}
+
 		newMember, err = uow.ThreadDialogStore().Create(ctx, &model.ThreadDialogExtended{
 			BaseModel: shared.BaseModel{
 				DomainID:  domainID,
@@ -464,6 +496,11 @@ func (t *ThreadManagementService) Transfer(ctx context.Context, req *dto.Transfe
 	)
 
 	err = t.uow.WithinTransaction(ctx, func(ctx context.Context, uow store.UnitOfWork) error {
+		// Lock order thread -> thread_dialog, same as Send.
+		if err := uow.ThreadStore().LockForUpdate(ctx, req.ThreadID); err != nil {
+			return err
+		}
+
 		now := time.Now().UTC()
 
 		newMember, err := uow.ThreadDialogStore().Create(ctx, &model.ThreadDialogExtended{
@@ -852,6 +889,11 @@ func (t *ThreadManagementService) RemoveMember(ctx context.Context, req *dto.Rem
 	}
 
 	err = t.uow.WithinTransaction(ctx, func(ctx context.Context, uow store.UnitOfWork) error {
+		// Lock order thread -> thread_dialog, same as Send.
+		if err := uow.ThreadStore().LockForUpdate(ctx, target.ThreadID); err != nil {
+			return err
+		}
+
 		eventReceivers, err := uow.ThreadDialogStore().GetQuickView(ctx, &model.ThreadDialogStoreFilter{
 			ThreadIDs:      []uuid.UUID{target.ThreadID},
 			IncludeDeleted: false,
@@ -1712,7 +1754,38 @@ func (t *ThreadManagementService) publishThreadCreatedEvents(ctx context.Context
 }
 
 func (t *ThreadManagementService) publishMemberEvent(ctx context.Context, uow store.UnitOfWork, e ThreadEvent) error {
+	switch me := e.(type) {
+	case *event.MemberJoined:
+		participants, err := t.threadParticipants(ctx, uow, me.ThreadID)
+		if err != nil {
+			return err
+		}
+
+		me.Participants = participants
+	case *event.MemberLeft:
+		participants, err := t.threadParticipants(ctx, uow, me.ThreadID)
+		if err != nil {
+			return err
+		}
+
+		me.Participants = participants
+	}
+
 	return uow.Outbox().Publish(ctx, e.Topic(), e)
+}
+
+func (t *ThreadManagementService) threadParticipants(ctx context.Context, uow store.UnitOfWork, threadID uuid.UUID) ([]uuid.UUID, error) {
+	members, err := uow.ThreadDialogStore().GetQuickView(ctx, &model.ThreadDialogStoreFilter{ThreadIDs: []uuid.UUID{threadID}})
+	if err != nil {
+		return nil, err
+	}
+
+	ids := make([]uuid.UUID, 0, len(members))
+	for _, m := range members {
+		ids = append(ids, m.ContactID)
+	}
+
+	return ids, nil
 }
 
 // positionAfterPush returns the stack position that was just pushed.
@@ -1747,6 +1820,17 @@ func resolveAutoLeave(override *bool) bool {
 	return true
 }
 
+// subLookupTimeout bounds GetSub: it runs inside transactions that hold the
+// thread row lock, so a slow contacts service must not stall the thread.
+const subLookupTimeout = 500 * time.Millisecond
+
+func (t *ThreadManagementService) lookupSub(ctx context.Context, contactID uuid.UUID, domainID int) (*int64, error) {
+	ctx, cancel := context.WithTimeout(ctx, subLookupTimeout)
+	defer cancel()
+
+	return t.contactInfo.GetSub(ctx, contactID, domainID)
+}
+
 // publishBotControlGranted publishes a BotControlGranted event to the outbox.
 // prev is the stack entry that was previously controlling (nil on initial activation).
 // position is the new entry's stack position.
@@ -1779,7 +1863,7 @@ func (t *ThreadManagementService) collectThreadAgents(ctx context.Context, uow s
 		var sub *int64
 
 		if t.contactInfo != nil && m.ContactID != uuid.Nil {
-			if id, subErr := t.contactInfo.GetSub(ctx, m.ContactID, domainID); subErr != nil {
+			if id, subErr := t.lookupSub(ctx, m.ContactID, domainID); subErr != nil {
 				t.log().WarnContext(ctx, "failed to get sub for operator in granted event, skipping sub",
 					"contact_id", m.ContactID, "err", subErr)
 			} else {
@@ -1806,7 +1890,7 @@ func (t *ThreadManagementService) publishBotControlGranted(ctx context.Context, 
 		prevPosition = &prev.Position
 
 		if t.contactInfo != nil && prev.ContactID != uuid.Nil {
-			if id, err := t.contactInfo.GetSub(ctx, prev.ContactID, dialog.DomainID); err != nil {
+			if id, err := t.lookupSub(ctx, prev.ContactID, dialog.DomainID); err != nil {
 				t.log().WarnContext(ctx, "failed to get sub for previous bot in granted event, skipping", "contact_id", prev.ContactID, "err", err)
 			} else {
 				prevSchemeID = id
@@ -1815,7 +1899,7 @@ func (t *ThreadManagementService) publishBotControlGranted(ctx context.Context, 
 	}
 
 	if t.contactInfo != nil && dialog.ContactID != uuid.Nil {
-		if id, err := t.contactInfo.GetSub(ctx, dialog.ContactID, dialog.DomainID); err != nil {
+		if id, err := t.lookupSub(ctx, dialog.ContactID, dialog.DomainID); err != nil {
 			t.log().WarnContext(ctx, "failed to get sub for bot control granted, skipping", "contact_id", dialog.ContactID, "err", err)
 		} else {
 			schemeID = id
@@ -1893,7 +1977,7 @@ func (t *ThreadManagementService) publishBotControlReleased(ctx context.Context,
 	var sub *int64
 
 	if t.contactInfo != nil && contactID != uuid.Nil {
-		if id, err := t.contactInfo.GetSub(ctx, contactID, domainID); err != nil {
+		if id, err := t.lookupSub(ctx, contactID, domainID); err != nil {
 			t.log().WarnContext(ctx, "failed to get sub for bot control released, skipping", "contact_id", contactID, "err", err)
 		} else {
 			sub = id

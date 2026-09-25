@@ -98,6 +98,10 @@ type MessageStatusStore interface {
 	// no active row for the member are omitted.
 	ReadUnread(ctx context.Context, domainID int32, memberID uuid.UUID, threadIDs []uuid.UUID) (map[uuid.UUID]int64, error)
 
+	// ReadMemberStates returns per-member delivery/read horizons; shared with
+	// GetThreadUpdates, used to derive inbox/outbox watermarks.
+	ReadMemberStates(ctx context.Context, domainID int32, memberID uuid.UUID, threadIDs []uuid.UUID) (map[uuid.UUID][]model.MemberReadState, error)
+
 	// UnreadSummary returns the member's denormalized unread totals across the
 	// threads they are still an active participant of: the number of chats with
 	// unread messages and the total number of unread messages.
@@ -135,6 +139,9 @@ type ThreadStore interface {
 	Search(ctx context.Context, query queryobject.QueryObject) ([]*model.Thread, error)
 	ResolveThread(ctx context.Context, q model.ResolveThreadQuery) (*model.Thread, error)
 	SearchLeft(ctx context.Context, query queryobject.QueryObject) ([]*model.Thread, error)
+	// LockForUpdate row-locks the thread; writers lock thread -> thread_dialog
+	// in send order to prevent deadlock, and reads see all earlier commits.
+	LockForUpdate(ctx context.Context, threadID uuid.UUID) error
 }
 
 type ThreadPermissionStore interface {

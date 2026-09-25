@@ -36,6 +36,15 @@ type OutboxEvent struct {
 
 var _ Outboxer = (*MessageCreated)(nil)
 
+var (
+	_ JournalEvent = (*MessageCreated)(nil)
+	_ JournalEvent = (*MessageEdited)(nil)
+	_ JournalEvent = (*MessageDeleted)(nil)
+	_ JournalEvent = (*MessageReaction)(nil)
+	_ JournalEvent = (*MemberJoined)(nil)
+	_ JournalEvent = (*MemberLeft)(nil)
+)
+
 type MessageCreated struct {
 	MessageID             uuid.UUID             `json:"message_id"`
 	ThreadID              uuid.UUID             `json:"thread_id"`
@@ -56,7 +65,11 @@ type MessageCreated struct {
 	BotControllerMemberID *uuid.UUID            `json:"bot_controller_member_id,omitempty"`
 	ReplyTo               *ReplyToPayload       `json:"reply_to,omitempty"`
 	ForwardOrigin         *ForwardOriginPayload `json:"forward_origin,omitempty"`
-	ExternalMetadata      map[string]string     `json:"-"`
+	// Seq is the message's per-thread seq (message timeline), the unit the
+	// read_states horizons are expressed in. Not to be confused with UpdateSeq.
+	Seq              int64             `json:"seq,omitempty"`
+	UpdateSeq        int64             `json:"update_seq"`
+	ExternalMetadata map[string]string `json:"-"`
 }
 
 type ForwardOriginPayload struct {
@@ -99,6 +112,8 @@ type ThreadMember struct {
 func (*MessageCreated) EventType() string                { return MessageCreatedEvent }
 func (m *MessageCreated) Version() string                { return MessageVersionV1 }
 func (m *MessageCreated) RecipientID() uuid.UUID         { return m.ThreadID }
+func (m *MessageCreated) JournalThreadID() uuid.UUID     { return m.ThreadID }
+func (m *MessageCreated) SetUpdateSeq(seq int64)         { m.UpdateSeq = seq }
 func (m *MessageCreated) ToOutbox() (OutboxEvent, error) { return m.serialize(m, m.Version()) }
 
 func (m *MessageCreated) serialize(data any, version string) (OutboxEvent, error) {

@@ -39,7 +39,14 @@ func (f fakeUnitOfWork) ThreadDialogStore() store.ThreadDialogStore {
 	return f.threadDialogStore
 }
 
-func (f fakeUnitOfWork) ThreadStore() store.ThreadStore { return f.threadStore }
+func (f fakeUnitOfWork) ThreadStore() store.ThreadStore {
+	// Mutations row-lock the thread first; tests that do not care get a no-op.
+	if f.threadStore == nil {
+		return &fakeThreadStore{}
+	}
+
+	return f.threadStore
+}
 
 func (f fakeUnitOfWork) ThreadPermissionStore() store.ThreadPermissionStore {
 	return nil
@@ -89,6 +96,10 @@ func (noopMessageStatusStore) MarkFailed(context.Context, []*model.StatusReceipt
 
 func (noopMessageStatusStore) ReadUnread(context.Context, int32, uuid.UUID, []uuid.UUID) (map[uuid.UUID]int64, error) {
 	return make(map[uuid.UUID]int64), nil
+}
+
+func (noopMessageStatusStore) ReadMemberStates(context.Context, int32, uuid.UUID, []uuid.UUID) (map[uuid.UUID][]model.MemberReadState, error) {
+	return make(map[uuid.UUID][]model.MemberReadState), nil
 }
 
 func (noopMessageStatusStore) UnreadSummary(context.Context, int32, uuid.UUID) (model.UnreadSummary, error) {
@@ -236,6 +247,8 @@ func (f *fakeThreadStore) ResolveThread(ctx context.Context, q model.ResolveThre
 func (f *fakeThreadStore) Search(ctx context.Context, query queryobject.QueryObject) ([]*model.Thread, error) {
 	panic("unimplemented")
 }
+
+func (f *fakeThreadStore) LockForUpdate(context.Context, uuid.UUID) error { return nil }
 
 func (f *fakeThreadStore) SearchLeft(ctx context.Context, query queryobject.QueryObject) ([]*model.Thread, error) {
 	panic("unimplemented")

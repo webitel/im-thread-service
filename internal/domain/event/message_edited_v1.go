@@ -13,18 +13,18 @@ const MessageEditedEvent = "im.message.edited"
 var _ Outboxer = (*MessageEdited)(nil)
 
 type MessageEdited struct {
-	MessageID  uuid.UUID       `json:"message_id"`
-	ThreadID   uuid.UUID       `json:"thread_id"`
-	DomainID   int32           `json:"domain_id"`
-	EditedBy   *ThreadMember   `json:"edited_by,omitempty"`
-	To         []*ThreadMember `json:"to,omitempty"`
-	Body       string          `json:"body"`
-	Type       string          `json:"type"` // text|document|image|system|interactive|location|contact
-	Revision   int32           `json:"version"`
-	CreatedAt  time.Time       `json:"created_at"`
-	OccurredAt time.Time       `json:"occurred_at"`
-	Metadata   map[string]any  `json:"metadata,omitempty"`
-
+	MessageID        uuid.UUID         `json:"message_id"`
+	ThreadID         uuid.UUID         `json:"thread_id"`
+	DomainID         int32             `json:"domain_id"`
+	EditedBy         *ThreadMember     `json:"edited_by,omitempty"`
+	To               []*ThreadMember   `json:"to,omitempty"`
+	Body             string            `json:"body"`
+	Type             string            `json:"type"` // text|document|image|system|interactive|location|contact
+	Revision         int32             `json:"version"`
+	CreatedAt        time.Time         `json:"created_at"`
+	OccurredAt       time.Time         `json:"occurred_at"`
+	Metadata         map[string]any    `json:"metadata,omitempty"`
+	UpdateSeq        int64             `json:"update_seq"`
 	ExternalMetadata map[string]string `json:"-"`
 }
 
@@ -39,6 +39,8 @@ func (m *MessageEdited) AddMetadata(key, value string) {
 func (*MessageEdited) EventType() string                { return MessageEditedEvent }
 func (m *MessageEdited) Version() string                { return MessageVersionV1 }
 func (m *MessageEdited) RecipientID() uuid.UUID         { return m.ThreadID }
+func (m *MessageEdited) JournalThreadID() uuid.UUID     { return m.ThreadID }
+func (m *MessageEdited) SetUpdateSeq(seq int64)         { m.UpdateSeq = seq }
 func (m *MessageEdited) ToOutbox() (OutboxEvent, error) { return m.serialize(m.Version()) }
 
 func (m *MessageEdited) serialize(version string) (OutboxEvent, error) {

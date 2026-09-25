@@ -1,10 +1,12 @@
 package service
 
 import (
+	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/fx"
 
 	"github.com/webitel/im-thread-service/config"
 	storageclient "github.com/webitel/im-thread-service/infra/webitel/storage"
+	"github.com/webitel/im-thread-service/internal/adapter/journal"
 	"github.com/webitel/im-thread-service/internal/adapter/pubsub"
 	"github.com/webitel/im-thread-service/internal/service/decorators"
 )
@@ -49,8 +51,12 @@ var Module = fx.Module(
 		func(base *MessageHistoryService, storageServiceClient *storageclient.Client) *decorators.MessageHistoryEnricher {
 			return decorators.NewMessageHistoryEnricher(base, storageServiceClient)
 		},
-		pubsub.NewOutboxSubscriber,
+		pubsub.NewOutboxSubscriberFactory,
 		pubsub.NewRabbitPublisher,
+		func(p *pgxpool.Pool) journal.DB { return p },
+		func(db journal.DB, cfg *config.Config) *journal.Journal {
+			return journal.New(db, journal.WithTTL(cfg.Journal.RetentionTTL))
+		},
 		NewThreadVariables,
 	),
 

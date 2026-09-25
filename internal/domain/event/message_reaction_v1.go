@@ -49,9 +49,9 @@ type MessageReaction struct {
 	// Reactions is the full per-emoji aggregate on the message AFTER this change,
 	// so a client can replace its reaction state authoritatively rather than
 	// applying just the (Emoji, Action) delta.
-	Reactions []ReactionAggregate `json:"reactions,omitempty"`
-
-	ExternalMetadata map[string]string `json:"-"`
+	Reactions        []ReactionAggregate `json:"reactions,omitempty"`
+	UpdateSeq        int64               `json:"update_seq"`
+	ExternalMetadata map[string]string   `json:"-"`
 }
 
 func (m *MessageReaction) AddMetadata(key, value string) {
@@ -65,6 +65,8 @@ func (m *MessageReaction) AddMetadata(key, value string) {
 func (*MessageReaction) EventType() string                { return MessageReactionEvent }
 func (m *MessageReaction) Version() string                { return MessageVersionV1 }
 func (m *MessageReaction) RecipientID() uuid.UUID         { return m.ThreadID }
+func (m *MessageReaction) JournalThreadID() uuid.UUID     { return m.ThreadID }
+func (m *MessageReaction) SetUpdateSeq(seq int64)         { m.UpdateSeq = seq }
 func (m *MessageReaction) ToOutbox() (OutboxEvent, error) { return m.serialize(m.Version()) }
 
 func (m *MessageReaction) serialize(version string) (OutboxEvent, error) {
