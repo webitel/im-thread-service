@@ -267,6 +267,9 @@ func (s *UpdatesServer) attachDialog(ctx context.Context, caller updatesCaller, 
 
 	if len(threads) > 0 {
 		entry.Dialog = s.out.ConvertToThread(threads[0])
+		// The preview is top_message and the cursor sits on the response, never on the dialog.
+		entry.Dialog.LastMsg = nil
+		entry.Dialog.UpdatesCursor = ""
 	}
 
 	entry.TopMessage, err = s.topMessage(ctx, caller, entry.GetThreadId())
