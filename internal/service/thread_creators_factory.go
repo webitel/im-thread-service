@@ -169,18 +169,20 @@ func (g *directThreadCreatorGuard) checkRequestPreconditions(createThreadRequest
 }
 
 type DirectThreadCreator struct {
-	manager ThreadManager
-	guard   DirectThreadCreatorGuarder
-	logger  *slog.Logger
+	manager     ThreadManager
+	guard       DirectThreadCreatorGuarder
+	logger      *slog.Logger
+	contactInfo ContactInfoProvider
 }
 
 func (c *DirectThreadCreator) Kind() model.ThreadKind { return model.ThreadDirect }
 
-func NewDirectThreadCreator(manager ThreadManager, logger *slog.Logger, guard DirectThreadCreatorGuarder) *DirectThreadCreator {
+func NewDirectThreadCreator(manager ThreadManager, logger *slog.Logger, guard DirectThreadCreatorGuarder, contactInfo ContactInfoProvider) *DirectThreadCreator {
 	return &DirectThreadCreator{
-		manager: manager,
-		logger:  logger,
-		guard:   guard,
+		manager:     manager,
+		logger:      logger,
+		guard:       guard,
+		contactInfo: contactInfo,
 	}
 }
 
@@ -208,6 +210,7 @@ func (c *DirectThreadCreator) Create(ctx context.Context, createThreadRequest *C
 		DomainID: int(createThreadRequest.DomainID),
 		From:     &createThreadRequest.Initiator,
 		To:       &directConfig.Member,
+		ToIsBot:  func() bool { return c.peerIsBot(ctx, directConfig.Member.ID, int(createThreadRequest.DomainID)) },
 	}
 
 	thread, err := c.manager.EnsureDirectThread(ctx, ensureDirectThreadRequest)
@@ -216,4 +219,24 @@ func (c *DirectThreadCreator) Create(ctx context.Context, createThreadRequest *C
 	}
 
 	return thread, nil
+}
+
+// peerIsBot checks whether the target contact is a bot.
+//
+// TODO: merge with MessageService.resolveToIsBot.
+func (c *DirectThreadCreator) peerIsBot(ctx context.Context, contactID uuid.UUID, domainID int) bool {
+	if c.contactInfo == nil {
+		c.logger.WarnContext(ctx, "direct thread creator: contactInfo is nil, assuming peer is not a bot", "contact_id", contactID)
+
+		return false
+	}
+
+	isBot, err := c.contactInfo.IsBot(ctx, contactID, domainID)
+	if err != nil {
+		c.logger.WarnContext(ctx, "direct thread creator: failed to resolve is_bot for peer, assuming false", "contact_id", contactID, "err", err)
+
+		return false
+	}
+
+	return isBot
 }
