@@ -200,6 +200,10 @@ type BotControlStore interface {
 	// e.g. the owner bot that never leaves the stack but whose flow went idle and must be
 	// restarted on the next customer message.
 	SetController(ctx context.Context, threadID, memberID uuid.UUID) error
+
+	// RestoreController grants control to the stack top or the owner bot if no bot holds it.
+	// Returns the current controller (nil if the thread has no bot) and whether this call granted it.
+	RestoreController(ctx context.Context, threadID uuid.UUID) (*model.BotControlStackEntry, bool, error)
 }
 
 type ThreadTagStore interface {

@@ -16,6 +16,12 @@ const (
 	// handling the thread. It differs from completed/removed, which keep the owner as the
 	// resumable controller.
 	BotControlReasonHandoff BotControlReason = "handoff"
+	// BotControlReasonAgentTakeover marks an operator taking the conversation from the bot.
+	BotControlReasonAgentTakeover BotControlReason = "agent_takeover"
+	// BotControlReasonAgentHandback marks an operator handing the conversation back to the bot.
+	BotControlReasonAgentHandback BotControlReason = "agent_handback"
+	// BotControlReasonAgentLeft marks control returning to the bot after the last operator left.
+	BotControlReasonAgentLeft BotControlReason = "agent_left"
 )
 
 type BotControlTransition struct {

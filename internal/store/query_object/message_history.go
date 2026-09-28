@@ -31,8 +31,6 @@ var (
 		"reacted_metadata": true,
 		"reply_to":         true,
 		"forward_origin":   true,
-		"delivery_status":  true,
-		"statuses":         true,
 		"reactions":        true,
 		"edited":           true,
 		"deleted_at":       true,
@@ -45,7 +43,7 @@ var (
 		"created_at", "updated_at", "seq", "images", "documents",
 		"member", "interactive", "location", "contact", "system", "reacted_metadata",
 		"reply_to", "forward_origin",
-		"delivery_status", "statuses", "reactions",
+		"reactions",
 		"edited", "deleted_at", "deleted_by", "revision_count",
 	}
 )

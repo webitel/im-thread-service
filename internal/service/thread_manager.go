@@ -409,6 +409,10 @@ func (t *ThreadManagementService) AddMember(ctx context.Context, req *dto.AddMem
 			if err = t.publishBotControlGranted(ctx, uow, newMember, prev, newPos, model.BotControlReasonTransfer, false); err != nil {
 				return err
 			}
+		} else if isOperator(false, req.NewMemberRole) {
+			if err = t.releaseControlToAgent(ctx, uow, req.ThreadID, newMember.DomainID); err != nil {
+				return err
+			}
 		}
 
 		return nil
@@ -592,6 +596,10 @@ func (t *ThreadManagementService) Transfer(ctx context.Context, req *dto.Transfe
 				}, newTop.Position, model.BotControlReasonTransfer, true); err != nil {
 					return err
 				}
+			}
+		} else if isOperator(false, req.NewMemberRole) {
+			if err = t.releaseControlToAgent(ctx, uow, req.ThreadID, newMember.DomainID); err != nil {
+				return err
 			}
 		}
 
@@ -895,6 +903,12 @@ func (t *ThreadManagementService) RemoveMember(ctx context.Context, req *dto.Rem
 		} else {
 			if err = uow.ThreadDialogStore().Delete(ctx, target.ID, req.Reason); err != nil {
 				return err
+			}
+
+			if isOperator(target.IsBot, target.ThreadRole) {
+				if err = t.restoreControlAfterAgent(ctx, uow, target.ThreadID, domainID); err != nil {
+					return err
+				}
 			}
 		}
 
@@ -1327,6 +1341,141 @@ func (t *ThreadManagementService) ReleaseBotControl(ctx context.Context, req *dt
 	})
 }
 
+// HandBackToBot gives the conversation to the thread's bot; the operator stays in the thread.
+func (t *ThreadManagementService) HandBackToBot(ctx context.Context, req *dto.HandBackToBotRequest) error {
+	if req == nil {
+		return errors.InvalidArgument("request cannot be nil", errors.WithID("service.thread_manager.hand_back_to_bot"))
+	}
+
+	if err := t.verifyOperator(ctx, req.ThreadID, req.InitiatorContactID, "service.thread_manager.hand_back_to_bot"); err != nil {
+		return err
+	}
+
+	return t.uow.WithinTransaction(ctx, func(ctx context.Context, uow store.UnitOfWork) error {
+		controller, _, err := uow.BotControl().RestoreController(ctx, req.ThreadID)
+		if err != nil {
+			return err
+		}
+
+		if controller == nil {
+			return errors.New("thread has no bot to hand the conversation back to",
+				errors.WithCode(codes.FailedPrecondition), errors.WithID("service.thread_manager.hand_back_to_bot"))
+		}
+
+		dialog := botControlStackEntryToDialog(controller)
+		if dialog.DomainID <= 0 {
+			dialog.DomainID = req.DomainID
+		}
+
+		return t.publishBotControlGranted(ctx, uow, dialog, nil, controller.Position, model.BotControlReasonAgentHandback, true)
+	})
+}
+
+// TakeOverFromBot gives the conversation back to the calling operator.
+func (t *ThreadManagementService) TakeOverFromBot(ctx context.Context, req *dto.TakeOverFromBotRequest) error {
+	if req == nil {
+		return errors.InvalidArgument("request cannot be nil", errors.WithID("service.thread_manager.take_over_from_bot"))
+	}
+
+	if err := t.verifyOperator(ctx, req.ThreadID, req.InitiatorContactID, "service.thread_manager.take_over_from_bot"); err != nil {
+		return err
+	}
+
+	return t.uow.WithinTransaction(ctx, func(ctx context.Context, uow store.UnitOfWork) error {
+		return t.releaseControlToAgent(ctx, uow, req.ThreadID, req.DomainID)
+	})
+}
+
+func (t *ThreadManagementService) releaseControlToAgent(ctx context.Context, uow store.UnitOfWork, threadID uuid.UUID, domainID int) error {
+	releasedID, err := uow.BotControl().ClearController(ctx, threadID)
+	if err != nil {
+		return err
+	}
+
+	if releasedID == nil {
+		return nil
+	}
+
+	members, err := uow.ThreadDialogStore().GetQuickView(ctx, &model.ThreadDialogStoreFilter{
+		ThreadIDs: []uuid.UUID{threadID},
+	})
+	if err != nil {
+		return errors.Internal("search of members failed", errors.WithCause(err))
+	}
+
+	var contactID uuid.UUID
+
+	for _, m := range members {
+		if m != nil && m.ID == *releasedID {
+			contactID = m.ContactID
+
+			break
+		}
+	}
+
+	return t.publishBotControlReleased(ctx, uow, threadID, *releasedID, contactID, 0, domainID, nil, model.BotControlReasonAgentTakeover)
+}
+
+func (t *ThreadManagementService) restoreControlAfterAgent(ctx context.Context, uow store.UnitOfWork, threadID uuid.UUID, domainID int) error {
+	members, err := uow.ThreadDialogStore().GetQuickView(ctx, &model.ThreadDialogStoreFilter{
+		ThreadIDs: []uuid.UUID{threadID},
+	})
+	if err != nil {
+		return errors.Internal("search of members failed", errors.WithCause(err))
+	}
+
+	if hasOperator(members) {
+		return nil
+	}
+
+	controller, granted, err := uow.BotControl().RestoreController(ctx, threadID)
+	if err != nil {
+		return err
+	}
+
+	if controller == nil || !granted {
+		return nil
+	}
+
+	dialog := botControlStackEntryToDialog(controller)
+	if dialog.DomainID <= 0 {
+		dialog.DomainID = domainID
+	}
+
+	return t.publishBotControlGranted(ctx, uow, dialog, nil, controller.Position, model.BotControlReasonAgentLeft, true)
+}
+
+func (t *ThreadManagementService) verifyOperator(ctx context.Context, threadID, contactID uuid.UUID, errID string) error {
+	if threadID == uuid.Nil || contactID == uuid.Nil {
+		return errors.InvalidArgument("thread_id and initiator are required", errors.WithID(errID))
+	}
+
+	initiator, _, err := t.findAddMemberActors(ctx, threadID, contactID, uuid.Nil)
+	if err != nil {
+		return err
+	}
+
+	if initiator == nil || !isOperator(initiator.IsBot, initiator.ThreadRole) {
+		return errors.Forbidden("only an operator of the thread can switch it between the bot and the operator", errors.WithID(errID))
+	}
+
+	return nil
+}
+
+func isOperator(isBot bool, role model.ThreadRole) bool {
+	return !isBot && role != model.RoleOwner
+}
+
+func hasOperator(members []*model.ThreadDialog) bool {
+	for _, m := range members {
+		if m != nil && isOperator(m.IsBot, m.ThreadRole) {
+			return true
+		}
+	}
+
+	return false
+}
+
 func (t *ThreadManagementService) EnsureDirectThread(ctx context.Context, req *dto.EnsureDirectThreadRequest) (*model.Thread, error) {
 	if req == nil {
 		return nil, errors.InvalidArgument("request cannot be nil", errors.WithID("service.thread_manager.ensure_direct_thread"))
@@ -1375,7 +1524,7 @@ func (t *ThreadManagementService) ensureBotControl(ctx context.Context, thread *
 		}
 	}
 
-	if botDialog == nil {
+	if botDialog == nil || hasOperator(thread.Members) {
 		return nil
 	}
 
@@ -1772,7 +1921,7 @@ func (t *ThreadManagementService) collectThreadAgents(ctx context.Context, uow s
 	var agents []event.BotControlAgent
 
 	for _, m := range members {
-		if m == nil || m.IsBot || m.ThreadRole == model.RoleOwner {
+		if m == nil || !isOperator(m.IsBot, m.ThreadRole) {
 			continue
 		}
 

@@ -336,6 +336,75 @@ func (s *botControlStore) SetController(ctx context.Context, threadID, memberID 
 	return nil
 }
 
+// RestoreController grants control to the stack top or the owner bot if no bot holds it.
+func (s *botControlStore) RestoreController(ctx context.Context, threadID uuid.UUID) (*model.BotControlStackEntry, bool, error) {
+	type restoreRecord struct {
+		MemberID  uuid.UUID `db:"member_id"`
+		ContactID uuid.UUID `db:"contact_id"`
+		AutoLeave bool      `db:"auto_leave"`
+		DomainID  int       `db:"domain_id"`
+		Position  int       `db:"position"`
+		Granted   bool      `db:"granted"`
+	}
+
+	rows, err := s.db.Query(ctx, `
+		WITH cur AS (
+			SELECT t.bot_controller_id,
+			       COALESCE((
+			           SELECT s.member_id
+			           FROM im_thread.bot_control_stack s
+			           WHERE s.thread_id = t.id AND s.member_id IS NOT NULL
+			           ORDER BY s.position DESC
+			           LIMIT 1
+			       ), t.owner_bot_id) AS candidate
+			FROM im_thread.thread t
+			WHERE t.id = @ThreadID
+		),
+		upd AS (
+			UPDATE im_thread.thread t
+			SET bot_controller_id = cur.candidate
+			FROM cur
+			WHERE t.id = @ThreadID
+			  AND t.bot_controller_id IS NULL
+			  AND cur.candidate IS NOT NULL
+			RETURNING t.bot_controller_id
+		)
+		SELECT d.id AS member_id,
+		       d.member_id AS contact_id,
+		       COALESCE(d.auto_leave, false) AS auto_leave,
+		       d.domain_id,
+		       COALESCE((
+		           SELECT s.position
+		           FROM im_thread.bot_control_stack s
+		           WHERE s.thread_id = @ThreadID AND s.member_id = d.id
+		       ), 0) AS position,
+		       EXISTS (SELECT 1 FROM upd) AS granted
+		FROM cur
+		JOIN im_thread.thread_dialog d ON d.id = COALESCE(cur.bot_controller_id, cur.candidate)
+	`, pgx.NamedArgs{"ThreadID": threadID})
+	if err != nil {
+		return nil, false, errors.Internal("restore bot controller", errors.WithCause(err), errors.WithID("bot_control_store.restore_controller"))
+	}
+
+	record, err := pgx.CollectOneRow(rows, pgx.RowToAddrOfStructByNameLax[restoreRecord])
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, false, nil
+		}
+
+		return nil, false, errors.Internal("scanning restored controller", errors.WithCause(err), errors.WithID("bot_control_store.restore_controller"))
+	}
+
+	return &model.BotControlStackEntry{
+		ThreadID:  threadID,
+		MemberID:  &record.MemberID,
+		Position:  record.Position,
+		ContactID: record.ContactID,
+		DomainID:  record.DomainID,
+		AutoLeave: record.AutoLeave,
+	}, record.Granted, nil
+}
+
 func mapBotControlStackEntry(r *botControlStackRecord) *model.BotControlStackEntry {
 	e := &model.BotControlStackEntry{
 		ID:       r.ID,

@@ -115,6 +115,18 @@ type ReleaseBotControlRequest struct {
 	DomainID          int
 }
 
+type HandBackToBotRequest struct {
+	ThreadID           uuid.UUID
+	InitiatorContactID uuid.UUID
+	DomainID           int
+}
+
+type TakeOverFromBotRequest struct {
+	ThreadID           uuid.UUID
+	InitiatorContactID uuid.UUID
+	DomainID           int
+}
+
 type TransferThreadRequest struct {
 	ThreadID           uuid.UUID
 	NewMemberContactID uuid.UUID

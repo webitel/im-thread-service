@@ -112,6 +112,10 @@ func (f fakeUnitOfWork) MessageReactions() store.MessageReactionStore {
 }
 
 func (f fakeUnitOfWork) BotControl() store.BotControlStore {
+	if f.botControlStore == nil {
+		return &fakeBotControlStore{}
+	}
+
 	return f.botControlStore
 }
 
