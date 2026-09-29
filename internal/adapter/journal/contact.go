@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"strings"
+	"time"
 )
 
 const (
@@ -16,12 +18,24 @@ const (
 // reloads its thread list instead (Telegram's differenceTooLong).
 const MaxContactChanges = 1000
 
+// LiveOverlap is how far back GetUpdates replays for a cursor taken from a live event:
+// events reach the socket through per-type queues, so an earlier change can arrive later.
+const LiveOverlap = time.Minute
+
+// LiveCursor is the cursor a live event carries: the position before its transaction and
+// the database time, so GetUpdates can replay the reorder overlap.
+func LiveCursor(after, unixMs int64) string {
+	return strconv.FormatInt(after, 10) + "." + strconv.FormatInt(unixMs, 10)
+}
+
 // ContactChanges is every thread changed for a contact since a cursor.
 type ContactChanges struct {
 	Threads []string
 	Cursor  string
-	// After and Horizon bound the transactions served: (After, Horizon].
+	// After and Horizon bound the transactions served: (After, Horizon]. A live-event
+	// cursor also replays everything written since Since (zero for an exact cursor).
 	After   int64
+	Since   time.Time
 	Horizon int64
 	// TooMany is set when more than MaxContactChanges threads changed.
 	TooMany bool
@@ -35,7 +49,7 @@ func (j *Journal) ContactChanges(ctx context.Context, contactID, cursor string) 
 		return nil, err
 	}
 
-	after, err := parseCursor(cursor)
+	after, since, err := parseCursor(cursor)
 	if err != nil {
 		return nil, err
 	}
@@ -43,17 +57,18 @@ func (j *Journal) ContactChanges(ctx context.Context, contactID, cursor string) 
 	query := fmt.Sprintf(`
 		select thread_id::text
 		from %s
-		where contact_id = $1::uuid and tx_id > $2 and tx_id <= $3
+		where contact_id = $1::uuid and tx_id <= $3
+		  and (tx_id > $2 or updated_at >= $5::timestamptz)
 		order by tx_id, thread_id
 		limit $4`, j.marksTable)
 
-	rows, err := j.db.Query(ctx, query, contactID, after, horizon, MaxContactChanges+1)
+	rows, err := j.db.Query(ctx, query, contactID, after, horizon, MaxContactChanges+1, sinceArg(since))
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	out := &ContactChanges{Cursor: strconv.FormatInt(max(after, horizon), 10), After: after, Horizon: horizon}
+	out := &ContactChanges{Cursor: strconv.FormatInt(max(after, horizon), 10), After: after, Since: since, Horizon: horizon}
 
 	for rows.Next() {
 		var t string
@@ -102,17 +117,18 @@ func (j *Journal) Unread(ctx context.Context, threadID, contactID string) (int64
 	return n, nil
 }
 
-// ChangesSince returns a thread's journal entries written by transactions in (after, horizon],
+// ChangesSince returns a thread's journal entries in the contact's window (see ContactChanges),
 // oldest first, at most limit+1 so the caller can tell it overflowed.
-func (j *Journal) ChangesSince(ctx context.Context, threadID string, after, horizon int64, limit int) ([]Event, error) {
+func (j *Journal) ChangesSince(ctx context.Context, threadID string, w *ContactChanges, limit int) ([]Event, error) {
 	query := fmt.Sprintf(`
 		select kind, fields
 		from %s
-		where thread_id = $1 and tx_id > $2 and tx_id <= $3
+		where thread_id = $1 and tx_id <= $3
+		  and (tx_id > $2 or created_at >= $5::timestamptz)
 		order by tx_id, id
 		limit $4`, j.table)
 
-	rows, err := j.db.Query(ctx, query, threadID, after, horizon, limit+1)
+	rows, err := j.db.Query(ctx, query, threadID, w.After, w.Horizon, limit+1, sinceArg(w.Since))
 	if err != nil {
 		return nil, err
 	}
@@ -153,4 +169,34 @@ func (j *Journal) TrimHorizon(ctx context.Context) (int64, error) {
 	}
 
 	return tx, nil
+}
+
+// sinceArg is the overlap bound for SQL; an exact cursor replays nothing extra.
+func sinceArg(since time.Time) any {
+	if since.IsZero() {
+		return nil
+	}
+
+	return since
+}
+
+// parseCursor reads "<tx>" (exact, from an API response) or "<tx>.<unix ms>" (from a live event).
+func parseCursor(cursor string) (int64, time.Time, error) {
+	txPart, msPart, live := strings.Cut(cursor, ".")
+
+	after, err := strconv.ParseInt(txPart, 10, 64)
+	if err != nil {
+		return 0, time.Time{}, fmt.Errorf("%w: %q", ErrInvalidCursor, cursor)
+	}
+
+	if !live {
+		return after, time.Time{}, nil
+	}
+
+	ms, err := strconv.ParseInt(msPart, 10, 64)
+	if err != nil {
+		return 0, time.Time{}, fmt.Errorf("%w: %q", ErrInvalidCursor, cursor)
+	}
+
+	return after, time.UnixMilli(ms).Add(-LiveOverlap), nil
 }

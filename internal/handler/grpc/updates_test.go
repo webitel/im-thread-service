@@ -32,7 +32,7 @@ func (f *fakeUpdates) ContactChanges(context.Context, string, string) (*journal.
 	return f.changes, nil
 }
 
-func (f *fakeUpdates) ChangesSince(_ context.Context, threadID string, _, _ int64, limit int) ([]journal.Event, error) {
+func (f *fakeUpdates) ChangesSince(_ context.Context, threadID string, _ *journal.ContactChanges, limit int) ([]journal.Event, error) {
 	ev := f.events[threadID]
 
 	return ev[:min(len(ev), limit+1)], nil

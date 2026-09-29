@@ -16,6 +16,8 @@ var _ Outboxer = (*MessageDeleted)(nil)
 // It deliberately carries no body or attachments: the content stays in the
 // database for analytics and must never reach clients again.
 type MessageDeleted struct {
+	Journaled
+
 	MessageID        uuid.UUID         `json:"message_id"`
 	ThreadID         uuid.UUID         `json:"thread_id"`
 	DomainID         int32             `json:"domain_id"`

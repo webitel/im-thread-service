@@ -19,7 +19,7 @@ import (
 // UpdatesReader is the slice of the journal GetUpdates needs.
 type UpdatesReader interface {
 	ContactChanges(ctx context.Context, contactID, cursor string) (*journal.ContactChanges, error)
-	ChangesSince(ctx context.Context, threadID string, after, horizon int64, limit int) ([]journal.Event, error)
+	ChangesSince(ctx context.Context, threadID string, window *journal.ContactChanges, limit int) ([]journal.Event, error)
 	SettledHorizon(ctx context.Context) (int64, error)
 	TrimHorizon(ctx context.Context) (int64, error)
 	ReadStates(ctx context.Context, threadID string) ([]journal.ReadState, error)
@@ -141,7 +141,7 @@ func (s *UpdatesServer) threadUpdates(ctx context.Context, caller updatesCaller,
 		return &impb.ThreadUpdates{ThreadId: threadID, Left: true}, 1, nil
 	}
 
-	events, err := s.updates.ChangesSince(ctx, threadID, window.After, window.Horizon, budget)
+	events, err := s.updates.ChangesSince(ctx, threadID, window, budget)
 	if err != nil {
 		return nil, 0, err
 	}

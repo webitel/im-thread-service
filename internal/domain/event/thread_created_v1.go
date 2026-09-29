@@ -29,6 +29,8 @@ func NewRecipient(id uuid.UUID, name string) *Recipient {
 }
 
 type ThreadCreated struct {
+	Journaled
+
 	ID        uuid.UUID       `json:"id"`
 	DomainID  int32           `json:"domain_id"`
 	CreatedAt time.Time       `json:"created_at"`

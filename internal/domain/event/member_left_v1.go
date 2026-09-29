@@ -13,6 +13,8 @@ const (
 )
 
 type MemberLeft struct {
+	Journaled
+
 	MessageID  uuid.UUID      `json:"message_id"`
 	ThreadID   uuid.UUID      `json:"thread_id"`
 	DomainID   int32          `json:"domain_id"`

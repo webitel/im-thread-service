@@ -5,6 +5,7 @@ package journal
 import (
 	"context"
 	"os"
+	"strconv"
 	"testing"
 	"time"
 
@@ -45,6 +46,7 @@ func newTestJournal(t *testing.T, ttl time.Duration, now func() time.Time) *Jour
 		)`,
 		`CREATE TABLE ` + itSchema + `.contact_updates (
 			contact_id uuid not null, thread_id uuid not null, tx_id bigint not null,
+			updated_at timestamptz not null default clock_timestamp(),
 			primary key (contact_id, thread_id)
 		)`,
 		`CREATE TABLE ` + itSchema + `.thread_updates_trim (id smallint primary key default 1, tx_id bigint not null)`,
@@ -92,15 +94,44 @@ func TestJournal_ChangesSince(t *testing.T) {
 	horizon, err := j.SettledHorizon(ctx)
 	require.NoError(t, err)
 
-	events, err := j.ChangesSince(ctx, thread, cursor, horizon, MaxContactChanges)
+	events, err := j.ChangesSince(ctx, thread, &ContactChanges{After: cursor, Horizon: horizon}, MaxContactChanges)
 	require.NoError(t, err)
 	require.Len(t, events, 2)
 	assert.Equal(t, "m3", events[0].Fields[FieldMsgID])
 	assert.Equal(t, "m4", events[1].Fields[FieldMsgID])
 
-	limited, err := j.ChangesSince(ctx, thread, 0, horizon, 1)
+	limited, err := j.ChangesSince(ctx, thread, &ContactChanges{Horizon: horizon}, 1)
 	require.NoError(t, err)
 	assert.Len(t, limited, 2, "limit+1 rows so the caller sees the overflow")
+}
+
+// A cursor from a live event also replays the recent overlap: a change committed before it
+// may still be in another queue, so it must not be skipped even though its tx is older.
+func TestJournal_LiveCursorReplaysOverlap(t *testing.T) {
+	ctx := context.Background()
+	j := newTestJournal(t, DefaultTTL, nil)
+	me, thread := uuid.NewString(), uuid.NewString()
+
+	appendMsg(t, j, thread, "reordered")
+
+	_, err := j.db.Exec(ctx, `INSERT INTO `+itSchema+`.contact_updates (contact_id, thread_id, tx_id) VALUES ($1, $2, 10)`, me, thread)
+	require.NoError(t, err)
+
+	horizon, err := j.SettledHorizon(ctx)
+	require.NoError(t, err)
+
+	exact, err := j.ContactChanges(ctx, me, strconv.FormatInt(horizon, 10))
+	require.NoError(t, err)
+	assert.Empty(t, exact.Threads, "an exact cursor past the change serves nothing")
+
+	live, err := j.ContactChanges(ctx, me, LiveCursor(horizon, time.Now().UnixMilli()))
+	require.NoError(t, err)
+	require.Equal(t, []string{thread}, live.Threads, "the overlap brings the thread back")
+
+	events, err := j.ChangesSince(ctx, thread, live, MaxContactChanges)
+	require.NoError(t, err)
+	require.Len(t, events, 1)
+	assert.Equal(t, "reordered", events[0].Fields[FieldMsgID])
 }
 
 // A contact sees each changed thread once, from its own marks only.
@@ -167,7 +198,7 @@ func TestJournal_CleanupRecordsTrimHorizon(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, int64(222), trimmed)
 
-	left, err := j.ChangesSince(ctx, thread, 0, 1000, MaxContactChanges)
+	left, err := j.ChangesSince(ctx, thread, &ContactChanges{Horizon: 1000}, MaxContactChanges)
 	require.NoError(t, err)
 	require.Len(t, left, 1)
 	assert.Equal(t, "m3", left[0].Fields[FieldMsgID])

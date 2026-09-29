@@ -13,6 +13,8 @@ const MessageEditedEvent = "im.message.edited"
 var _ Outboxer = (*MessageEdited)(nil)
 
 type MessageEdited struct {
+	Journaled
+
 	MessageID        uuid.UUID         `json:"message_id"`
 	ThreadID         uuid.UUID         `json:"thread_id"`
 	DomainID         int32             `json:"domain_id"`
