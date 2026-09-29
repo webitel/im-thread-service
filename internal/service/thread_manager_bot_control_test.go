@@ -31,6 +31,10 @@ type fakeBotControlStore struct {
 	pushCalls                 int
 	setControllerCalls        int
 	lastSetControllerMemberID uuid.UUID
+
+	restoreEntry   *model.BotControlStackEntry
+	restoreGranted bool
+	restoreCalls   int
 }
 
 func (f *fakeBotControlStore) Push(_ context.Context, transition model.BotControlTransition) (*model.BotControlPushResult, error) {
@@ -63,6 +67,12 @@ func (f *fakeBotControlStore) SetController(_ context.Context, _, memberID uuid.
 	f.lastSetControllerMemberID = memberID
 
 	return nil
+}
+
+func (f *fakeBotControlStore) RestoreController(_ context.Context, _ uuid.UUID) (*model.BotControlStackEntry, bool, error) {
+	f.restoreCalls++
+
+	return f.restoreEntry, f.restoreGranted, nil
 }
 
 var _ store.BotControlStore = (*fakeBotControlStore)(nil)

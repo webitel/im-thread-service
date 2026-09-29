@@ -27,6 +27,8 @@ type ThreadManagementService interface {
 	RemoveMember(context.Context, *dto.RemoveMemberRequest) error
 	Transfer(context.Context, *dto.TransferThreadRequest) (uuid.UUID, error)
 	CompleteBotControl(context.Context, *dto.CompleteBotControlRequest) error
+	HandBackToBot(context.Context, *dto.HandBackToBotRequest) error
+	TakeOverFromBot(context.Context, *dto.TakeOverFromBotRequest) error
 }
 
 type ThreadVariablesOperator interface {
@@ -244,6 +246,50 @@ func (ts *ThreadManagementServer) CompleteBotControl(ctx context.Context, req *i
 	}
 
 	return &impb.CompleteBotControlResponse{}, nil
+}
+
+func (ts *ThreadManagementServer) HandBackToBot(ctx context.Context, req *impb.HandBackToBotRequest) (*impb.HandBackToBotResponse, error) {
+	tid, err := uuid.Parse(req.GetThreadId())
+	if err != nil {
+		return nil, errors.InvalidArgument("invalid thread_id", errors.WithCause(err))
+	}
+
+	initiator, err := uuid.Parse(req.GetInitiatorContactId())
+	if err != nil {
+		return nil, errors.InvalidArgument("invalid initiator_contact_id", errors.WithCause(err))
+	}
+
+	if err = ts.threadManager.HandBackToBot(ctx, &dto.HandBackToBotRequest{
+		ThreadID:           tid,
+		InitiatorContactID: initiator,
+		DomainID:           int(req.GetDomainId()),
+	}); err != nil {
+		return nil, err
+	}
+
+	return &impb.HandBackToBotResponse{}, nil
+}
+
+func (ts *ThreadManagementServer) TakeOverFromBot(ctx context.Context, req *impb.TakeOverFromBotRequest) (*impb.TakeOverFromBotResponse, error) {
+	tid, err := uuid.Parse(req.GetThreadId())
+	if err != nil {
+		return nil, errors.InvalidArgument("invalid thread_id", errors.WithCause(err))
+	}
+
+	initiator, err := uuid.Parse(req.GetInitiatorContactId())
+	if err != nil {
+		return nil, errors.InvalidArgument("invalid initiator_contact_id", errors.WithCause(err))
+	}
+
+	if err = ts.threadManager.TakeOverFromBot(ctx, &dto.TakeOverFromBotRequest{
+		ThreadID:           tid,
+		InitiatorContactID: initiator,
+		DomainID:           int(req.GetDomainId()),
+	}); err != nil {
+		return nil, err
+	}
+
+	return &impb.TakeOverFromBotResponse{}, nil
 }
 
 func (ts *ThreadManagementServer) SetVariables(ctx context.Context, req *impb.SetVariablesRequest) (*impb.ThreadVariables, error) {
