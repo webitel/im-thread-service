@@ -554,8 +554,7 @@ func (t *ThreadManagementService) Transfer(ctx context.Context, req *dto.Transfe
 
 		systemMessages = append(systemMessages, systemMessage)
 
-		switch {
-		case req.TargetIsBot:
+		if req.TargetIsBot {
 			t.log().DebugContext(ctx, "transfer: target is bot, pushing bot control stack",
 				"thread_id", req.ThreadID,
 				"member_id", newMember.ID,
@@ -602,7 +601,7 @@ func (t *ThreadManagementService) Transfer(ctx context.Context, req *dto.Transfe
 					)
 				}
 			}
-		case initiator.IsBot:
+		} else if initiator.IsBot {
 			// Initiator is a bot being transferred out to a non-bot agent.
 			// Pop the initiator from the stack and publish bot control events,
 			// mirroring the RemoveMember bot control flow.
@@ -635,7 +634,9 @@ func (t *ThreadManagementService) Transfer(ctx context.Context, req *dto.Transfe
 					return err
 				}
 			}
-		case isOperator(false, req.NewMemberRole):
+		}
+
+		if !req.TargetIsBot && !initiator.IsBot && isOperator(false, req.NewMemberRole) {
 			if err = t.releaseControlToAgent(ctx, uow, req.ThreadID, newMember.DomainID); err != nil {
 				return err
 			}
