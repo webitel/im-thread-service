@@ -18,7 +18,7 @@ type JournalEvent interface {
 	SetUpdatesCursor(cursor string)
 }
 
-// Journaled carries the GetUpdates position just before the event's transaction, so a
+// Journaled carries the event's transaction as the recipients' GetUpdates cursor, so a
 // client can resume catch-up from the latest live event it received.
 type Journaled struct {
 	UpdatesCursor string `json:"updates_cursor,omitempty"`

@@ -5,7 +5,6 @@ package journal
 import (
 	"context"
 	"os"
-	"strconv"
 	"testing"
 	"time"
 
@@ -105,30 +104,60 @@ func TestJournal_ChangesSince(t *testing.T) {
 	assert.Len(t, limited, 2, "limit+1 rows so the caller sees the overflow")
 }
 
-// A cursor from a live event also replays the recent overlap: a change committed before it
-// may still be in another queue, so it must not be skipped even though its tx is older.
-func TestJournal_LiveCursorReplaysOverlap(t *testing.T) {
+// The cursor is the contact's latest change: other contacts' traffic does not move it.
+func TestJournal_ContactCursorStableUntilChange(t *testing.T) {
 	ctx := context.Background()
 	j := newTestJournal(t, DefaultTTL, nil)
-	me, thread := uuid.NewString(), uuid.NewString()
+	me, other, thread := uuid.NewString(), uuid.NewString(), uuid.NewString()
 
-	appendMsg(t, j, thread, "reordered")
+	none, err := j.ContactCursor(ctx, me)
+	require.NoError(t, err)
+	assert.Equal(t, "0", none)
 
-	_, err := j.db.Exec(ctx, `INSERT INTO `+itSchema+`.contact_updates (contact_id, thread_id, tx_id) VALUES ($1, $2, 10)`, me, thread)
+	_, err = j.db.Exec(ctx, `INSERT INTO `+itSchema+`.contact_updates (contact_id, thread_id, tx_id) VALUES ($1, $2, 10), ($3, $2, 20)`, me, thread, other)
 	require.NoError(t, err)
 
-	horizon, err := j.SettledHorizon(ctx)
+	for range 2 {
+		got, err := j.ContactCursor(ctx, me)
+		require.NoError(t, err)
+		assert.Equal(t, "10", got)
+	}
+
+	_, err = j.db.Exec(ctx, `UPDATE `+itSchema+`.contact_updates SET tx_id = 30 WHERE contact_id = $1`, me)
 	require.NoError(t, err)
 
-	exact, err := j.ContactChanges(ctx, me, strconv.FormatInt(horizon, 10))
+	moved, err := j.ContactCursor(ctx, me)
 	require.NoError(t, err)
-	assert.Empty(t, exact.Threads, "an exact cursor past the change serves nothing")
+	assert.Equal(t, "30", moved)
+}
 
-	live, err := j.ContactChanges(ctx, me, LiveCursor(horizon, time.Now().UnixMilli()))
+// GetUpdates also replays changes written within Overlap before the cursor's own change: one
+// may still be in another socket queue although its transaction is older than the cursor.
+func TestJournal_CursorReplaysOverlap(t *testing.T) {
+	ctx := context.Background()
+	j := newTestJournal(t, DefaultTTL, nil)
+	me := uuid.NewString()
+	reordered, cursorThread, old := uuid.NewString(), uuid.NewString(), uuid.NewString()
+	now := time.Now()
+
+	_, err := j.db.Exec(ctx, `INSERT INTO `+itSchema+`.thread_updates (thread_id, kind, fields, created_at, tx_id) VALUES
+		($1, 'message.new', '{"msg_id":"reordered"}', $4, 100),
+		($2, 'message.new', '{"msg_id":"cursor"}', $4, 200),
+		($3, 'message.new', '{"msg_id":"old"}', $5, 50)`,
+		reordered, cursorThread, old, now, now.Add(-5*time.Minute))
 	require.NoError(t, err)
-	require.Equal(t, []string{thread}, live.Threads, "the overlap brings the thread back")
 
-	events, err := j.ChangesSince(ctx, thread, live, MaxContactChanges)
+	_, err = j.db.Exec(ctx, `INSERT INTO `+itSchema+`.contact_updates (contact_id, thread_id, tx_id, updated_at) VALUES
+		($1, $2, 100, $5), ($1, $3, 200, $5), ($1, $4, 50, $6)`,
+		me, reordered, cursorThread, old, now, now.Add(-5*time.Minute))
+	require.NoError(t, err)
+
+	got, err := j.ContactChanges(ctx, me, "200")
+	require.NoError(t, err)
+	assert.ElementsMatch(t, []string{reordered, cursorThread}, got.Threads, "the overlap brings back recent threads, not old ones")
+	assert.Equal(t, "200", got.Cursor, "nothing new: the cursor stays")
+
+	events, err := j.ChangesSince(ctx, reordered, got, MaxContactChanges)
 	require.NoError(t, err)
 	require.Len(t, events, 1)
 	assert.Equal(t, "reordered", events[0].Fields[FieldMsgID])

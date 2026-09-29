@@ -46,14 +46,14 @@ type ThreadManagementServer struct {
 	threadManager         ThreadManagementService
 	threadVariables       ThreadVariablesOperator
 	threadCreatorsFactory service.ThreadCreatorsFactoryProvider
-	updates               UpdatesHorizon
+	updates               UpdatesCursors
 }
 
 func NewThreadService(
 	threadManager ThreadManagementService,
 	threadVariables ThreadVariablesOperator,
 	threadCreatorsFactory service.ThreadCreatorsFactoryProvider,
-	updates UpdatesHorizon,
+	updates UpdatesCursors,
 ) *ThreadManagementServer {
 	return &ThreadManagementServer{
 		threadManager:         threadManager,
@@ -93,7 +93,7 @@ func (ts *ThreadManagementServer) Get(ctx context.Context, req *impb.GetThreadRe
 		return nil, err
 	}
 
-	cursor, err := updatesCursor(ctx, ts.updates)
+	cursor, err := updatesCursor(ctx, ts.updates, req.GetCallerId())
 	if err != nil {
 		return nil, err
 	}
@@ -115,7 +115,7 @@ func (ts *ThreadManagementServer) Search(ctx context.Context, req *impb.ThreadSe
 		return nil, err
 	}
 
-	cursor, err := updatesCursor(ctx, ts.updates)
+	cursor, err := updatesCursor(ctx, ts.updates, req.GetSelfId())
 	if err != nil {
 		return nil, err
 	}
