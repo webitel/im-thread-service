@@ -69,6 +69,14 @@ func (o *outboxStore) Publish(ctx context.Context, topic string, evt event.Outbo
 	}
 
 	je, journaled := evt.(event.JournalEvent)
+	if journaled {
+		cursor, err := o.liveCursor(ctx, tx)
+		if err != nil {
+			return err
+		}
+
+		je.SetUpdatesCursor(cursor)
+	}
 
 	ev, err := evt.ToOutbox()
 	if err != nil {
@@ -99,6 +107,19 @@ func (o *outboxStore) Publish(ctx context.Context, topic string, evt event.Outbo
 	msg.Metadata.Set("x-routing-key", topic)
 
 	return publisher.Publish(topic, msg)
+}
+
+// liveCursor is the GetUpdates position just before this transaction, with the database time
+// so GetUpdates can replay the overlap live events may have been reordered within.
+func (o *outboxStore) liveCursor(ctx context.Context, tx pgx.Tx) (string, error) {
+	var tx8, ms int64
+
+	const query = `select pg_current_xact_id()::text::bigint, (extract(epoch from clock_timestamp()) * 1000)::bigint`
+	if err := tx.QueryRow(ctx, query).Scan(&tx8, &ms); err != nil {
+		return "", errors.Internal("reading updates cursor", errors.WithCause(err), errors.WithID("postgres.outbox.live_cursor"))
+	}
+
+	return journal.LiveCursor(tx8-1, ms), nil
 }
 
 // appendJournal writes the event's journal row. A
@@ -136,8 +157,8 @@ func (o *outboxStore) markContacts(ctx context.Context, tx pgx.Tx, je event.Jour
 	}
 
 	query := fmt.Sprintf(`
-		insert into %[1]s (contact_id, thread_id, tx_id)
-		select c.contact_id, $1, pg_current_xact_id()::text::bigint
+		insert into %[1]s (contact_id, thread_id, tx_id, updated_at)
+		select c.contact_id, $1, pg_current_xact_id()::text::bigint, clock_timestamp()
 		from (
 			select td.member_id as contact_id
 			from %[2]s td
@@ -146,7 +167,7 @@ func (o *outboxStore) markContacts(ctx context.Context, tx pgx.Tx, je event.Jour
 			select $2::uuid where $2::uuid is not null
 		) c
 		order by c.contact_id
-		on conflict (contact_id, thread_id) do update set tx_id = excluded.tx_id`, o.marksTable, o.dialogTable)
+		on conflict (contact_id, thread_id) do update set tx_id = excluded.tx_id, updated_at = excluded.updated_at`, o.marksTable, o.dialogTable)
 
 	if _, err := tx.Exec(ctx, query, je.JournalThreadID(), extra); err != nil {
 		return errors.Internal("marking contact updates", errors.WithCause(err), errors.WithID("postgres.outbox.mark_contacts"))

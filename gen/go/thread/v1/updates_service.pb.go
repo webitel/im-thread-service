@@ -223,8 +223,9 @@ type ThreadUpdates struct {
 	Left        bool  `protobuf:"varint,3,opt,name=left,proto3" json:"left,omitempty"`
 	UnreadCount int64 `protobuf:"varint,4,opt,name=unread_count,json=unreadCount,proto3" json:"unread_count,omitempty"`
 	// The thread itself, set when it is new to the caller (created or joined since cursor).
+	// Same model as the thread list, except last_msg and updates_cursor are never set here.
 	Dialog *Thread `protobuf:"bytes,5,opt,name=dialog,proto3" json:"dialog,omitempty"`
-	// Newest message for the list preview; set with dialog.
+	// Newest message for the list preview, in place of dialog.last_msg; set with dialog.
 	TopMessage *UpdatedMessage `protobuf:"bytes,6,opt,name=top_message,json=topMessage,proto3" json:"top_message,omitempty"`
 	// New or changed messages in their current state; upsert by id.
 	Messages          []*UpdatedMessage     `protobuf:"bytes,7,rep,name=messages,proto3" json:"messages,omitempty"`

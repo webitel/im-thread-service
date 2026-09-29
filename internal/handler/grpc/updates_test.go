@@ -32,7 +32,7 @@ func (f *fakeUpdates) ContactChanges(context.Context, string, string) (*journal.
 	return f.changes, nil
 }
 
-func (f *fakeUpdates) ChangesSince(_ context.Context, threadID string, _, _ int64, limit int) ([]journal.Event, error) {
+func (f *fakeUpdates) ChangesSince(_ context.Context, threadID string, _ *journal.ContactChanges, limit int) ([]journal.Event, error) {
 	ev := f.events[threadID]
 
 	return ev[:min(len(ev), limit+1)], nil
@@ -157,7 +157,9 @@ func TestGetUpdates_AllChangedThreads(t *testing.T) {
 		},
 		newest: &model.Message{ID: created, Body: "hello", Seq: 1},
 	}
-	threads := &fakeThreads{byID: map[uuid.UUID]*model.Thread{newThread: {ID: newThread, Subject: "new dialog"}}}
+	threads := &fakeThreads{byID: map[uuid.UUID]*model.Thread{newThread: {
+		ID: newThread, Subject: "new dialog", LastMessage: &model.Message{ID: created, Body: "hello"},
+	}}}
 
 	resp, err := NewUpdatesServer(history, updates, threads).GetUpdates(context.Background(), updatesReq("100"))
 	require.NoError(t, err)
@@ -178,6 +180,7 @@ func TestGetUpdates_AllChangedThreads(t *testing.T) {
 
 	fresh := byID[newThread.String()]
 	assert.Equal(t, "new dialog", fresh.GetDialog().GetSubject())
+	assert.Nil(t, fresh.GetDialog().GetLastMsg(), "the preview is top_message only")
 	assert.Equal(t, "hello", fresh.GetTopMessage().GetBody())
 	require.Len(t, fresh.GetMessages(), 1)
 

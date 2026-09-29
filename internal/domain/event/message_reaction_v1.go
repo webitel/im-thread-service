@@ -32,6 +32,8 @@ var _ Outboxer = (*MessageReaction)(nil)
 // message. It fans out to every thread participant so both sides converge on
 // the same reaction set. A removal carries an empty Emoji and Action=removed.
 type MessageReaction struct {
+	Journaled
+
 	MessageID  uuid.UUID       `json:"message_id"`
 	ThreadID   uuid.UUID       `json:"thread_id"`
 	DomainID   int32           `json:"domain_id"`

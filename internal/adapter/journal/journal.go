@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"strconv"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -263,13 +262,4 @@ func (j *Journal) Cleanup(ctx context.Context) (int64, error) {
 			return total, nil
 		}
 	}
-}
-
-func parseCursor(cursor string) (int64, error) {
-	seq, err := strconv.ParseInt(cursor, 10, 64)
-	if err != nil {
-		return 0, fmt.Errorf("%w: %q", ErrInvalidCursor, cursor)
-	}
-
-	return seq, nil
 }

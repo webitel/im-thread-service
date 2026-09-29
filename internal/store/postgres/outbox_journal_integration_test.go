@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -49,6 +50,7 @@ func setupJournalSchema(t *testing.T, pool *pgxpool.Pool) {
 		)`,
 		`CREATE TABLE ` + journalSchema + `.contact_updates (
 			contact_id uuid not null, thread_id uuid not null, tx_id bigint not null,
+			updated_at timestamptz not null default clock_timestamp(),
 			primary key (contact_id, thread_id)
 		)`,
 		`CREATE TABLE ` + journalSchema + `.thread_updates_trim (id smallint primary key default 1, tx_id bigint not null)`,
@@ -147,7 +149,7 @@ func TestPublish_ConcurrentWritersAndReaderMissNothing(t *testing.T) {
 				return
 			}
 
-			events, err := j.ChangesSince(readCtx, thread.String(), after, horizon, writers)
+			events, err := j.ChangesSince(readCtx, thread.String(), &journal.ContactChanges{After: after, Horizon: horizon}, writers)
 			if err != nil {
 				readerErr = err
 
@@ -276,7 +278,7 @@ func TestPublish_MarksContactsForGetUpdates(t *testing.T) {
 		t.Fatalf("human: want the thread once, got %+v", got.Threads)
 	}
 
-	events, err := j.ChangesSince(ctx, thread.String(), got.After, got.Horizon, journal.MaxContactChanges)
+	events, err := j.ChangesSince(ctx, thread.String(), got, journal.MaxContactChanges)
 	if err != nil || len(events) != 2 {
 		t.Fatalf("human: want both changes, got %d %v", len(events), err)
 	}
@@ -286,6 +288,45 @@ func TestPublish_MarksContactsForGetUpdates(t *testing.T) {
 		if err != nil || len(other.Threads) != 0 {
 			t.Fatalf("%s must not see the thread, got %+v %v", name, other, err)
 		}
+	}
+}
+
+// The live event carries the position just before its own transaction, so resuming from it
+// replays that whole transaction.
+func TestPublish_StampsLiveCursor(t *testing.T) {
+	ctx := context.Background()
+	pool := itPool(t)
+	thread := uuid.New()
+	setupJournalSchema(t, pool)
+
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		t.Fatalf("begin: %v", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	var own int64
+	if err := tx.QueryRow(ctx, `select pg_current_xact_id()::text::bigint`).Scan(&own); err != nil {
+		t.Fatalf("xact id: %v", err)
+	}
+
+	e := &event.MessageCreated{MessageID: uuid.New(), ThreadID: thread}
+	if err := itOutboxStore(tx).Publish(ctx, "t", e); err != nil {
+		t.Fatalf("publish: %v", err)
+	}
+
+	after, _, ok := strings.Cut(e.UpdatesCursor, ".")
+	if !ok || after != strconv.FormatInt(own-1, 10) {
+		t.Fatalf("updates_cursor = %q, want %d.<ms>", e.UpdatesCursor, own-1)
+	}
+
+	var payload string
+	if err := tx.QueryRow(ctx, `select payload::text from `+journalSchema+`.messages_outbox`).Scan(&payload); err != nil {
+		t.Fatalf("outbox row: %v", err)
+	}
+
+	if !strings.Contains(payload, `"updates_cursor":"`+e.UpdatesCursor+`"`) {
+		t.Fatalf("payload %s lacks updates_cursor", payload)
 	}
 }
 
