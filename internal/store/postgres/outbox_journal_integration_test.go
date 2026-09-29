@@ -342,4 +342,46 @@ func TestPublish_StampsLiveCursor(t *testing.T) {
 	}
 }
 
+// A read reaches every member's GetUpdates; a delivered receipt stays live-only.
+func TestPublish_JournalsReadsOnly(t *testing.T) {
+	ctx := context.Background()
+	pool := itPool(t)
+	thread, reader := uuid.New(), uuid.New()
+	setupJournalSchema(t, pool)
+
+	if _, err := pool.Exec(ctx, `INSERT INTO `+journalSchema+`.thread_dialog (thread_id, member_id) VALUES ($1, $2)`, thread, reader); err != nil {
+		t.Fatalf("seed member: %v", err)
+	}
+
+	for _, status := range []string{"delivered", event.StatusRead} {
+		tx, err := pool.Begin(ctx)
+		if err != nil {
+			t.Fatalf("begin: %v", err)
+		}
+
+		e := &event.MessageStatusChanged{ThreadID: thread, MemberID: reader, Status: status, UpToSeq: 3}
+		if err := itOutboxStore(tx).Publish(ctx, "t", e); err != nil {
+			t.Fatalf("publish %s: %v", status, err)
+		}
+
+		if err := tx.Commit(ctx); err != nil {
+			t.Fatalf("commit: %v", err)
+		}
+	}
+
+	var kinds []string
+	if err := pool.QueryRow(ctx, `select coalesce(array_agg(kind), '{}') from `+journalSchema+`.thread_updates`).Scan(&kinds); err != nil {
+		t.Fatalf("journal: %v", err)
+	}
+
+	if len(kinds) != 1 || kinds[0] != journal.KindReadChanged {
+		t.Fatalf("journal kinds = %v, want only the read", kinds)
+	}
+
+	var marks int
+	if err := pool.QueryRow(ctx, `select count(*) from `+journalSchema+`.contact_updates where contact_id = $1`, reader).Scan(&marks); err != nil || marks != 1 {
+		t.Fatalf("reader marks = %d (%v), want 1", marks, err)
+	}
+}
+
 func errDuplicate(msgID string) error { return fmt.Errorf("message %s served twice", msgID) }

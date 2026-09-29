@@ -10,13 +10,19 @@ import (
 
 const (
 	MessageStatusChangedEvent = "im.message.status"
+
+	// StatusRead is the Status value of a read receipt.
+	StatusRead = "read"
 )
 
-// MessageStatusChanged is NOT a JournalEvent: delivery/read is per-member state, not delta.
-var _ Outboxer = (*MessageStatusChanged)(nil)
+// Reads are journaled so every device of the reader catches up its unread count; delivered
+// and failed are not (far more frequent, and the next read or message carries the horizons).
+var _ JournalEvent = (*MessageStatusChanged)(nil)
 
 // MessageStatusChanged: per-recipient delivery status change (delivered/read/failed).
 type MessageStatusChanged struct {
+	Journaled
+
 	ThreadID uuid.UUID `json:"thread_id"`
 	DomainID int32     `json:"domain_id"`
 	// MemberID is the recipient contact id (thread_dialog.member_id)
@@ -48,6 +54,11 @@ func (m *MessageStatusChanged) AddMetadata(key, value string) {
 func (*MessageStatusChanged) EventType() string        { return MessageStatusChangedEvent }
 func (m *MessageStatusChanged) Version() string        { return MessageVersionV1 }
 func (m *MessageStatusChanged) RecipientID() uuid.UUID { return m.ThreadID }
+
+func (m *MessageStatusChanged) JournalThreadID() uuid.UUID { return m.ThreadID }
+
+// SkipJournal keeps delivered/failed out of the journal; only reads are replayed.
+func (m *MessageStatusChanged) SkipJournal() bool { return m.Status != StatusRead }
 
 func (m *MessageStatusChanged) ToOutbox() (OutboxEvent, error) {
 	payload, err := json.Marshal(m)
