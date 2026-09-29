@@ -20,7 +20,7 @@ import (
 )
 
 type fakeUpdates struct {
-	horizon   int64
+	cursor    string
 	trimmed   int64
 	changes   *journal.ContactChanges
 	events    map[string][]journal.Event
@@ -38,7 +38,7 @@ func (f *fakeUpdates) ChangesSince(_ context.Context, threadID string, _ *journa
 	return ev[:min(len(ev), limit+1)], nil
 }
 
-func (f *fakeUpdates) SettledHorizon(context.Context) (int64, error) { return f.horizon, nil }
+func (f *fakeUpdates) ContactCursor(context.Context, string) (string, error) { return f.cursor, nil }
 
 func (f *fakeUpdates) TrimHorizon(context.Context) (int64, error) { return f.trimmed, nil }
 
@@ -119,7 +119,7 @@ func TestGetUpdates_Errors(t *testing.T) {
 
 // First sync: the client gets its starting cursor and loads the thread list itself.
 func TestGetUpdates_FirstSyncResyncs(t *testing.T) {
-	resp, err := NewUpdatesServer(&fakeHistory{}, &fakeUpdates{horizon: 77}, &fakeThreads{}).
+	resp, err := NewUpdatesServer(&fakeHistory{}, &fakeUpdates{cursor: "77"}, &fakeThreads{}).
 		GetUpdates(context.Background(), updatesReq(""))
 	require.NoError(t, err)
 	assert.True(t, resp.GetResync())
@@ -212,11 +212,11 @@ func TestGetUpdates_Resyncs(t *testing.T) {
 	}
 
 	tests := map[string]*fakeUpdates{
-		"more than 1000 threads": {horizon: 5, changes: &journal.ContactChanges{TooMany: true}},
-		"cursor older than retention": {horizon: 5, trimmed: 200, changes: &journal.ContactChanges{
+		"more than 1000 threads": {cursor: "5", changes: &journal.ContactChanges{TooMany: true}},
+		"cursor older than retention": {cursor: "5", trimmed: 200, changes: &journal.ContactChanges{
 			After: 100, Threads: []string{thread},
 		}},
-		"more than 1000 changes": {horizon: 5, changes: &journal.ContactChanges{
+		"more than 1000 changes": {cursor: "5", changes: &journal.ContactChanges{
 			After: 100, Threads: []string{thread},
 		}, events: map[string][]journal.Event{thread: many}},
 	}
@@ -232,16 +232,20 @@ func TestGetUpdates_Resyncs(t *testing.T) {
 	}
 }
 
-type fakeHorizon struct{ horizon int64 }
+// fakeCursors hands out one cursor per contact, the way the journal does.
+type fakeCursors map[string]string
 
-func (f fakeHorizon) SettledHorizon(context.Context) (int64, error) { return f.horizon, nil }
+func (f fakeCursors) ContactCursor(_ context.Context, contactID string) (string, error) {
+	return f[contactID], nil
+}
 
 // History hands out the GetUpdates cursor read before the page, so the client needs no second counter.
 func TestSearchThreadMessagesHistory_ReturnsUpdatesCursor(t *testing.T) {
-	srv := NewMessageHistoryServer(&fakeHistory{}, fakeHorizon{horizon: 92547098})
+	caller := uuid.NewString()
+	srv := NewMessageHistoryServer(&fakeHistory{}, fakeCursors{caller: "92547098"})
 
 	resp, err := srv.SearchThreadMessagesHistory(context.Background(), &impb.SearchMessageHistoryRequest{
-		ThreadId: uuid.NewString(), CallerId: uuid.NewString(), DomainId: 1,
+		ThreadId: uuid.NewString(), CallerId: caller, DomainId: 1,
 	})
 	require.NoError(t, err)
 	assert.Equal(t, "92547098", resp.GetUpdatesCursor())
@@ -249,9 +253,33 @@ func TestSearchThreadMessagesHistory_ReturnsUpdatesCursor(t *testing.T) {
 
 // Search hands out the GetUpdates cursor on the response, so the thread list and the catch-up agree.
 func TestThreadSearch_ReturnsUpdatesCursor(t *testing.T) {
-	srv := NewThreadService(&fakeThreads{}, nil, nil, fakeHorizon{horizon: 777})
+	caller := uuid.NewString()
+	srv := NewThreadService(&fakeThreads{}, nil, nil, fakeCursors{caller: "92547098"})
 
-	resp, err := srv.Search(context.Background(), &impb.ThreadSearchRequest{SelfId: uuid.NewString(), DomainIds: []int32{1}, Size: 10})
+	resp, err := srv.Search(context.Background(), &impb.ThreadSearchRequest{SelfId: caller, DomainIds: []int32{1}, Size: 10})
 	require.NoError(t, err)
-	assert.Equal(t, "777", resp.GetUpdatesCursor())
+	assert.Equal(t, "92547098", resp.GetUpdatesCursor(), "the same cursor history hands out")
+}
+
+// An old cursor for a contact with no changes since stays valid: nothing was trimmed from them.
+func TestGetUpdates_TrimmedWithoutChangesKeepsCursor(t *testing.T) {
+	updates := &fakeUpdates{cursor: "100", trimmed: 500, changes: &journal.ContactChanges{Cursor: "100", After: 100}}
+
+	resp, err := NewUpdatesServer(&fakeHistory{}, updates, &fakeThreads{}).GetUpdates(context.Background(), updatesReq("100"))
+	require.NoError(t, err)
+	assert.False(t, resp.GetResync())
+	assert.Equal(t, "100", resp.GetCursor())
+	assert.Empty(t, resp.GetThreads())
+}
+
+func TestUpdatesCursor_Get(t *testing.T) {
+	caller := uuid.NewString()
+	srv := NewUpdatesCursorServer(fakeCursors{caller: "94770179"})
+
+	resp, err := srv.Get(context.Background(), &impb.GetUpdatesCursorRequest{CallerId: caller})
+	require.NoError(t, err)
+	assert.Equal(t, "94770179", resp.GetCursor())
+
+	_, err = srv.Get(context.Background(), &impb.GetUpdatesCursorRequest{CallerId: "x"})
+	assert.Equal(t, codes.InvalidArgument, errors.Code(err))
 }

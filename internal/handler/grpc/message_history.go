@@ -2,7 +2,6 @@ package grpc
 
 import (
 	"context"
-	"strconv"
 
 	"github.com/google/uuid"
 
@@ -20,24 +19,20 @@ type MessageHistoryService interface {
 	GetRevisions(ctx context.Context, req *dto.GetMessageRevisionsRequest) ([]*model.MessageChangeEntry, error)
 }
 
-// UpdatesHorizon is the GetUpdates cursor as of now, handed out with reads so a client
+// UpdatesCursors reads a contact's GetUpdates cursor, handed out with reads so a client
 // resumes GetUpdates from the moment it loaded them.
-type UpdatesHorizon interface {
-	SettledHorizon(ctx context.Context) (int64, error)
+type UpdatesCursors interface {
+	ContactCursor(ctx context.Context, contactID string) (string, error)
 }
 
-// updatesCursor reads the cursor before the page: a change in between is replayed, never skipped.
-func updatesCursor(ctx context.Context, h UpdatesHorizon) (string, error) {
-	if h == nil {
+// updatesCursor reads the caller's cursor before the page: a change in between is replayed,
+// never skipped. No caller, no cursor.
+func updatesCursor(ctx context.Context, c UpdatesCursors, callerID string) (string, error) {
+	if c == nil || callerID == "" || callerID == uuid.Nil.String() {
 		return "", nil
 	}
 
-	horizon, err := h.SettledHorizon(ctx)
-	if err != nil {
-		return "", err
-	}
-
-	return strconv.FormatInt(horizon, 10), nil
+	return c.ContactCursor(ctx, callerID)
 }
 
 type (
@@ -45,11 +40,11 @@ type (
 		impb.UnimplementedMessageHistoryServer
 
 		messageHistorySearcher MessageHistoryService
-		updates                UpdatesHorizon
+		updates                UpdatesCursors
 	}
 )
 
-func NewMessageHistoryServer(messageHistorySearcher MessageHistoryService, updates UpdatesHorizon) *MessageHistoryServer {
+func NewMessageHistoryServer(messageHistorySearcher MessageHistoryService, updates UpdatesCursors) *MessageHistoryServer {
 	return &MessageHistoryServer{
 		messageHistorySearcher: messageHistorySearcher,
 		updates:                updates,
@@ -59,7 +54,7 @@ func NewMessageHistoryServer(messageHistorySearcher MessageHistoryService, updat
 func (s *MessageHistoryServer) SearchThreadMessagesHistory(ctx context.Context, req *impb.SearchMessageHistoryRequest) (*impb.SearchMessageHistoryResponse, error) {
 	hmiDTO := mapper.MapSearchMessageHistoryRequest2HistoryMessageInputDTO(req)
 
-	cursor, err := updatesCursor(ctx, s.updates)
+	cursor, err := updatesCursor(ctx, s.updates, req.GetCallerId())
 	if err != nil {
 		return nil, err
 	}
@@ -91,7 +86,7 @@ func (s *MessageHistoryServer) SearchThreadMessagesHistory(ctx context.Context, 
 func (s *MessageHistoryServer) SearchMessages(ctx context.Context, req *impb.SearchMessagesRequest) (*impb.SearchMessageHistoryResponse, error) {
 	searchDTO := mapper.MapSearchMessagesRequest2SearchMessagesInputDTO(req)
 
-	cursor, err := updatesCursor(ctx, s.updates)
+	cursor, err := updatesCursor(ctx, s.updates, req.GetCallerId())
 	if err != nil {
 		return nil, err
 	}
@@ -132,7 +127,7 @@ func (s *MessageHistoryServer) GetMessageRevisions(ctx context.Context, req *imp
 func (s *MessageHistoryServer) SearchLeftThreadsMessageHistory(ctx context.Context, req *impb.SearchLeftThreadsMessageHistoryRequest) (*impb.SearchMessageHistoryResponse, error) {
 	requestDTO := mapper.MapSearchLeftThreadsMessageHistoryRequest2LeftThreadsMessageHistoryInputDTO(req)
 
-	cursor, err := updatesCursor(ctx, s.updates)
+	cursor, err := updatesCursor(ctx, s.updates, req.GetCallerId())
 	if err != nil {
 		return nil, err
 	}

@@ -3,7 +3,6 @@ package grpc
 import (
 	"context"
 	stderrors "errors"
-	"strconv"
 
 	"github.com/google/uuid"
 
@@ -20,7 +19,7 @@ import (
 type UpdatesReader interface {
 	ContactChanges(ctx context.Context, contactID, cursor string) (*journal.ContactChanges, error)
 	ChangesSince(ctx context.Context, threadID string, window *journal.ContactChanges, limit int) ([]journal.Event, error)
-	SettledHorizon(ctx context.Context) (int64, error)
+	ContactCursor(ctx context.Context, contactID string) (string, error)
 	TrimHorizon(ctx context.Context) (int64, error)
 	ReadStates(ctx context.Context, threadID string) ([]journal.ReadState, error)
 	IsMember(ctx context.Context, threadID, memberID string, domainID int32) (bool, error)
@@ -68,7 +67,7 @@ func (s *UpdatesServer) GetUpdates(ctx context.Context, req *impb.GetUpdatesRequ
 	caller := updatesCaller{contactID: req.GetCallerId(), domainID: req.GetDomainId(), allow: req.GetSystemMessageAllowList()}
 
 	if req.GetCursor() == "" {
-		return s.resync(ctx, journal.ResyncFirstSync)
+		return s.resync(ctx, caller.contactID, journal.ResyncFirstSync)
 	}
 
 	changes, err := s.updates.ContactChanges(ctx, caller.contactID, req.GetCursor())
@@ -80,18 +79,18 @@ func (s *UpdatesServer) GetUpdates(ctx context.Context, req *impb.GetUpdatesRequ
 		return nil, err
 	}
 
-	// Retention already removed changes after this cursor: they cannot be replayed.
+	if changes.TooMany {
+		return s.resync(ctx, caller.contactID, journal.ResyncTooMany)
+	}
+
+	// Retention may have removed changes after an old cursor; nothing changed means nothing lost.
 	trimmed, err := s.updates.TrimHorizon(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	if changes.After < trimmed {
-		return s.resync(ctx, journal.ResyncTrimmed)
-	}
-
-	if changes.TooMany {
-		return s.resync(ctx, journal.ResyncTooMany)
+	if changes.After < trimmed && len(changes.Threads) > 0 {
+		return s.resync(ctx, caller.contactID, journal.ResyncTrimmed)
 	}
 
 	resp := &impb.GetUpdatesResponse{Cursor: changes.Cursor}
@@ -104,7 +103,7 @@ func (s *UpdatesServer) GetUpdates(ctx context.Context, req *impb.GetUpdatesRequ
 		}
 
 		if used > budget {
-			return s.resync(ctx, journal.ResyncTooMany)
+			return s.resync(ctx, caller.contactID, journal.ResyncTooMany)
 		}
 
 		budget -= used
@@ -118,15 +117,15 @@ func (s *UpdatesServer) GetUpdates(ctx context.Context, req *impb.GetUpdatesRequ
 }
 
 // resync tells the client to reload its thread list and continue from the returned cursor.
-func (s *UpdatesServer) resync(ctx context.Context, reason string) (*impb.GetUpdatesResponse, error) {
+func (s *UpdatesServer) resync(ctx context.Context, contactID, reason string) (*impb.GetUpdatesResponse, error) {
 	journal.CountResync(ctx, reason)
 
-	horizon, err := s.updates.SettledHorizon(ctx)
+	cursor, err := s.updates.ContactCursor(ctx, contactID)
 	if err != nil {
 		return nil, err
 	}
 
-	return &impb.GetUpdatesResponse{Cursor: formatSeq(horizon), Resync: true}, nil
+	return &impb.GetUpdatesResponse{Cursor: cursor, Resync: true}, nil
 }
 
 // threadUpdates builds one thread's entry from its changes in the served window and reports
@@ -440,5 +439,3 @@ func mergeMembers(dst, src []*impb.ThreadMember) []*impb.ThreadMember {
 
 	return dst
 }
-
-func formatSeq(seq int64) string { return strconv.FormatInt(seq, 10) }
