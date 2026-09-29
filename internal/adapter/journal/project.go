@@ -3,6 +3,7 @@ package journal
 import (
 	"encoding/json"
 	"maps"
+	"strconv"
 
 	"github.com/webitel/im-thread-service/internal/domain/event"
 )
@@ -15,6 +16,7 @@ const (
 	KindMessageReaction = "message.reaction"
 	KindMemberChanged   = "member.changed"
 	KindThreadCreated   = "thread.created"
+	KindReadChanged     = "read.changed"
 )
 
 // Journal field keys. Entries keep only references; message content is read from
@@ -25,6 +27,7 @@ const (
 	FieldEmoji     = "emoji"
 	FieldAction    = "action"
 	FieldContactID = "contact_id"
+	FieldUpToSeq   = "up_to_seq"
 )
 
 // Member change actions stored under FieldAction.
@@ -36,6 +39,19 @@ const (
 // ProjectEvent maps an outbox event to a journal Update; ok=false means not journaled.
 func ProjectEvent(eventType string, payload []byte) (Update, bool, error) {
 	switch eventType {
+	case event.MessageStatusChangedEvent:
+		var e event.MessageStatusChanged
+		if err := json.Unmarshal(payload, &e); err != nil {
+			return Update{}, false, err
+		}
+
+		if e.SkipJournal() {
+			return Update{}, false, nil
+		}
+
+		return Update{ThreadID: e.ThreadID.String(), Kind: KindReadChanged, Fields: map[string]any{
+			FieldActor: e.MemberID.String(), FieldUpToSeq: strconv.FormatInt(e.UpToSeq, 10),
+		}}, true, nil
 	case event.ThreadCreatedEvent:
 		var e event.ThreadCreated
 		if err := json.Unmarshal(payload, &e); err != nil {

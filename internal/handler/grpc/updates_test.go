@@ -283,3 +283,23 @@ func TestUpdatesCursor_Get(t *testing.T) {
 	_, err = srv.Get(context.Background(), &impb.GetUpdatesCursorRequest{CallerId: "x"})
 	assert.Equal(t, codes.InvalidArgument, errors.Code(err))
 }
+
+// A read on another device changes only the thread's horizons: it arrives with the fresh
+// unread count and no messages.
+func TestGetUpdates_ReadOnlyChange(t *testing.T) {
+	thread := uuid.NewString()
+	updates := &fakeUpdates{
+		changes: &journal.ContactChanges{Cursor: "300", After: 200, Threads: []string{thread}},
+		events: map[string][]journal.Event{thread: {{Kind: journal.KindReadChanged, Fields: map[string]string{
+			journal.FieldActor: uuid.NewString(), journal.FieldUpToSeq: "9",
+		}}}},
+		unread: 0,
+	}
+
+	resp, err := NewUpdatesServer(&fakeHistory{}, updates, &fakeThreads{}).GetUpdates(context.Background(), updatesReq("200"))
+	require.NoError(t, err)
+	require.Len(t, resp.GetThreads(), 1)
+	assert.Empty(t, resp.GetThreads()[0].GetMessages())
+	assert.Nil(t, resp.GetThreads()[0].GetDialog())
+	assert.Equal(t, "300", resp.GetCursor())
+}

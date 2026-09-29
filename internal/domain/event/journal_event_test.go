@@ -20,7 +20,7 @@ func TestJournalEventMembership(t *testing.T) {
 		{name: "member joined", event: &MemberJoined{}, want: true},
 		{name: "member left", event: &MemberLeft{}, want: true},
 		{name: "thread created", event: &ThreadCreated{}, want: true},
-		{name: "message status changed", event: &MessageStatusChanged{}, want: false},
+		{name: "message status changed", event: &MessageStatusChanged{}, want: true},
 	}
 
 	for _, tt := range tests {
@@ -29,4 +29,11 @@ func TestJournalEventMembership(t *testing.T) {
 			assert.Equal(t, tt.want, ok)
 		})
 	}
+}
+
+// Only reads reach the journal; delivered and failed stay live-only.
+func TestMessageStatusChanged_SkipJournal(t *testing.T) {
+	assert.False(t, (&MessageStatusChanged{Status: StatusRead}).SkipJournal())
+	assert.True(t, (&MessageStatusChanged{Status: "delivered"}).SkipJournal())
+	assert.True(t, (&MessageStatusChanged{Status: "failed"}).SkipJournal())
 }

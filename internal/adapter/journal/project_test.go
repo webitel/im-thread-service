@@ -128,6 +128,7 @@ func TestProjectEvent_EveryJournalEventProjects(t *testing.T) {
 		&event.MemberJoined{ThreadID: thread, ContactID: uuid.New()},
 		&event.MemberLeft{ThreadID: thread, ContactID: uuid.New()},
 		&event.ThreadCreated{ID: thread, Recipient: &event.Recipient{ID: uuid.New()}},
+		&event.MessageStatusChanged{ThreadID: thread, MemberID: uuid.New(), Status: event.StatusRead, UpToSeq: 4},
 	}
 
 	for _, e := range events {
@@ -139,4 +140,13 @@ func TestProjectEvent_EveryJournalEventProjects(t *testing.T) {
 		require.True(t, ok, "%T has no projection", e)
 		assert.Equal(t, thread.String(), upd.ThreadID, "%T", e)
 	}
+}
+
+func TestProjectEvent_DeliveredStatusNotJournaled(t *testing.T) {
+	ev, err := (&event.MessageStatusChanged{ThreadID: uuid.New(), Status: "delivered"}).ToOutbox()
+	require.NoError(t, err)
+
+	_, ok, err := ProjectEvent(ev.Metadata["event_type"], ev.Payload)
+	require.NoError(t, err)
+	assert.False(t, ok)
 }
