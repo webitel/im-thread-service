@@ -420,16 +420,15 @@ func (s *MessageService) Read(ctx context.Context, in *dto.ReadMessageRequest) e
 	}
 
 	tID, _ := uuid.Parse(in.ThreadID)
-	mID, _ := uuid.Parse(in.MessageID)
 	uID, _ := uuid.Parse(in.UserID)
 
+	receipt := &model.ReadReceipt{DomainID: in.DomainID, ThreadID: tID, MemberID: uID, UpToSeq: in.UpToSeq}
+	if in.UpToSeq == 0 {
+		receipt.UpToMessageID, _ = uuid.Parse(in.MessageID)
+	}
+
 	return s.uow.WithinTransaction(ctx, func(txCtx context.Context, uow store.UnitOfWork) error {
-		changes, err := uow.MessageStatuses().MarkRead(txCtx, []*model.ReadReceipt{{
-			DomainID:      in.DomainID,
-			ThreadID:      tID,
-			MemberID:      uID,
-			UpToMessageID: mID,
-		}})
+		changes, err := uow.MessageStatuses().MarkRead(txCtx, []*model.ReadReceipt{receipt})
 		if err != nil {
 			return fmt.Errorf("read_message: %w", err)
 		}
