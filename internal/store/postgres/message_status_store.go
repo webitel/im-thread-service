@@ -129,6 +129,10 @@ func (s *messageStatusStore) MarkRead(ctx context.Context, receipts []*model.Rea
 		return nil, err
 	}
 
+	if err := s.clampReadSeqToThread(ctx, receipts); err != nil {
+		return nil, err
+	}
+
 	// Advance each member's read horizon and refresh the denormalized unread counter.
 	if err := s.advanceReadHorizon(ctx, receipts); err != nil {
 		return nil, err
@@ -412,6 +416,54 @@ func (s *messageStatusStore) advanceReadHorizon(ctx context.Context, receipts []
 	// A read horizon crossing a message's seq means it reached the member — any
 	// prior delivery failure for it is now recovered, so drop the error row.
 	return s.clearRecoveredErrors(ctx, threadIDs, memberIDs, upToSeqs)
+}
+
+// clampReadSeqToThread caps a client-given seq at the thread's newest message, so a read
+// never covers messages that do not exist yet.
+func (s *messageStatusStore) clampReadSeqToThread(ctx context.Context, receipts []*model.ReadReceipt) error {
+	threadIDs := make([]uuid.UUID, 0, len(receipts))
+	for _, r := range receipts {
+		if r.UpToSeq > 0 {
+			threadIDs = append(threadIDs, r.ThreadID)
+		}
+	}
+
+	if len(threadIDs) == 0 {
+		return nil
+	}
+
+	rows, err := s.db.Query(ctx, `select id, last_seq from im_thread.thread where id = any($1::uuid[])`, threadIDs)
+	if err != nil {
+		return errors.Internal("reading thread seq", errors.WithCause(err), errors.WithID("postgres.message_status.clamp_read_seq"))
+	}
+	defer rows.Close()
+
+	last := make(map[uuid.UUID]int64, len(threadIDs))
+
+	for rows.Next() {
+		var (
+			id  uuid.UUID
+			seq int64
+		)
+
+		if err := rows.Scan(&id, &seq); err != nil {
+			return errors.Internal("scanning thread seq", errors.WithCause(err), errors.WithID("postgres.message_status.clamp_read_seq"))
+		}
+
+		last[id] = seq
+	}
+
+	if err := rows.Err(); err != nil {
+		return errors.Internal("reading thread seq", errors.WithCause(err), errors.WithID("postgres.message_status.clamp_read_seq"))
+	}
+
+	for _, r := range receipts {
+		if seq, ok := last[r.ThreadID]; ok && r.UpToSeq > seq {
+			r.UpToSeq = seq
+		}
+	}
+
+	return nil
 }
 
 // advanceDeliveredHorizon moves each member's delivered horizon (thread_dialog.last_delivered_seq)

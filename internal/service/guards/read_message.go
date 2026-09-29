@@ -42,13 +42,19 @@ func checkNilReadRequest() ReadMessageGuard {
 // checkReadIdentifiers validates that IDs are provided and are valid UUIDs
 func checkReadIdentifiers() ReadMessageGuard {
 	return func(req *dto.ReadMessageRequest) error {
-		// Validate MessageID
-		if req.MessageID == "" {
-			return errors.New("message id is required")
+		// The read point is a message seq or, for older clients, a message id.
+		if req.UpToSeq < 0 {
+			return errors.New("up_to_seq must be positive")
 		}
 
-		if _, err := uuid.Parse(req.MessageID); err != nil {
-			return fmt.Errorf("invalid message id format: %w", err)
+		if req.UpToSeq == 0 {
+			if req.MessageID == "" {
+				return errors.New("message id or up_to_seq is required")
+			}
+
+			if _, err := uuid.Parse(req.MessageID); err != nil {
+				return fmt.Errorf("invalid message id format: %w", err)
+			}
 		}
 
 		// Validate ThreadID

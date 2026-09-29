@@ -15,5 +15,6 @@ func MapToReadMessageRequest(pb *impb.ReadMessageRequest) *dto.ReadMessageReques
 		ThreadID:  pb.GetThreadId(),
 		UserID:    pb.GetUserId(),
 		DomainID:  pb.GetDomainId(),
+		UpToSeq:   pb.GetUpToSeq(),
 	}
 }
