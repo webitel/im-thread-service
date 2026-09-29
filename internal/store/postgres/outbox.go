@@ -109,17 +109,16 @@ func (o *outboxStore) Publish(ctx context.Context, topic string, evt event.Outbo
 	return publisher.Publish(topic, msg)
 }
 
-// liveCursor is the GetUpdates position just before this transaction, with the database time
-// so GetUpdates can replay the overlap live events may have been reordered within.
+// liveCursor is this transaction as a GetUpdates cursor: once it commits, it is the cursor
+// of every contact it marks, the same value reads hand out.
 func (o *outboxStore) liveCursor(ctx context.Context, tx pgx.Tx) (string, error) {
-	var tx8, ms int64
+	var cursor string
 
-	const query = `select pg_current_xact_id()::text::bigint, (extract(epoch from clock_timestamp()) * 1000)::bigint`
-	if err := tx.QueryRow(ctx, query).Scan(&tx8, &ms); err != nil {
+	if err := tx.QueryRow(ctx, `select pg_current_xact_id()::text`).Scan(&cursor); err != nil {
 		return "", errors.Internal("reading updates cursor", errors.WithCause(err), errors.WithID("postgres.outbox.live_cursor"))
 	}
 
-	return journal.LiveCursor(tx8-1, ms), nil
+	return cursor, nil
 }
 
 // appendJournal writes the event's journal row. A

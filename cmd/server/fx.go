@@ -112,7 +112,7 @@ var serviceToHandlerBridgeModule = fx.Module(
 		func(s *decorators.MessageHistoryEnricher) grpchandler.MessageHistoryService {
 			return s
 		},
-		func(j *journal.Journal) grpchandler.UpdatesHorizon {
+		func(j *journal.Journal) grpchandler.UpdatesCursors {
 			return j
 		},
 		func(j *journal.Journal) grpchandler.UpdatesReader {

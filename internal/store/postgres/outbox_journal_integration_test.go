@@ -291,13 +291,17 @@ func TestPublish_MarksContactsForGetUpdates(t *testing.T) {
 	}
 }
 
-// The live event carries the position just before its own transaction, so resuming from it
-// replays that whole transaction.
+// The live event carries its own transaction, which after commit is the recipients'
+// cursor: the same value history and thread reads hand out.
 func TestPublish_StampsLiveCursor(t *testing.T) {
 	ctx := context.Background()
 	pool := itPool(t)
-	thread := uuid.New()
+	thread, member := uuid.New(), uuid.New()
 	setupJournalSchema(t, pool)
+
+	if _, err := pool.Exec(ctx, `INSERT INTO `+journalSchema+`.thread_dialog (thread_id, member_id) VALUES ($1, $2)`, thread, member); err != nil {
+		t.Fatalf("seed member: %v", err)
+	}
 
 	tx, err := pool.Begin(ctx)
 	if err != nil {
@@ -305,8 +309,8 @@ func TestPublish_StampsLiveCursor(t *testing.T) {
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	var own int64
-	if err := tx.QueryRow(ctx, `select pg_current_xact_id()::text::bigint`).Scan(&own); err != nil {
+	var own string
+	if err := tx.QueryRow(ctx, `select pg_current_xact_id()::text`).Scan(&own); err != nil {
 		t.Fatalf("xact id: %v", err)
 	}
 
@@ -315,9 +319,8 @@ func TestPublish_StampsLiveCursor(t *testing.T) {
 		t.Fatalf("publish: %v", err)
 	}
 
-	after, _, ok := strings.Cut(e.UpdatesCursor, ".")
-	if !ok || after != strconv.FormatInt(own-1, 10) {
-		t.Fatalf("updates_cursor = %q, want %d.<ms>", e.UpdatesCursor, own-1)
+	if e.UpdatesCursor != own {
+		t.Fatalf("updates_cursor = %q, want own tx %s", e.UpdatesCursor, own)
 	}
 
 	var payload string
@@ -325,8 +328,17 @@ func TestPublish_StampsLiveCursor(t *testing.T) {
 		t.Fatalf("outbox row: %v", err)
 	}
 
-	if !strings.Contains(payload, `"updates_cursor":"`+e.UpdatesCursor+`"`) {
+	if !strings.Contains(payload, `"updates_cursor":"`+own+`"`) {
 		t.Fatalf("payload %s lacks updates_cursor", payload)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatalf("commit: %v", err)
+	}
+
+	got, err := itJournal(pool).ContactCursor(ctx, member.String())
+	if err != nil || got != own {
+		t.Fatalf("member cursor = %q (%v), want the event's %s", got, err, own)
 	}
 }
 
