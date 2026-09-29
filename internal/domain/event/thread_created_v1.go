@@ -29,6 +29,8 @@ func NewRecipient(id uuid.UUID, name string) *Recipient {
 }
 
 type ThreadCreated struct {
+	Journaled
+
 	ID        uuid.UUID       `json:"id"`
 	DomainID  int32           `json:"domain_id"`
 	CreatedAt time.Time       `json:"created_at"`
@@ -61,6 +63,11 @@ func (e *ThreadCreated) Version() string { return ThreadVersionV1 }
 func (e *ThreadCreated) RecipientID() uuid.UUID { return e.Recipient.ID }
 
 func (e *ThreadCreated) MustBeThreadEvent() {}
+
+func (e *ThreadCreated) JournalThreadID() uuid.UUID { return e.ID }
+
+// JournalSubject marks the recipient, so the new thread reaches their GetUpdates.
+func (e *ThreadCreated) JournalSubject() uuid.UUID { return e.Recipient.ID }
 
 func (e *ThreadCreated) ToOutbox() (OutboxEvent, error) {
 	return e.serialize(e, e.Version())

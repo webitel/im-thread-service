@@ -62,18 +62,6 @@ type MessageStatus struct {
 	UpdatedAt   time.Time             `json:"updated_at" db:"updated_at"`
 }
 
-// MessageRecipientStatus is the per-recipient delivery detail attached to
-// history messages, decoded from the jsonb aggregate of v_messages.
-type MessageRecipientStatus struct {
-	MemberID    uuid.UUID             `json:"member_id"`
-	Status      MessageDeliveryStatus `json:"status"`
-	DeliveredAt *time.Time            `json:"delivered_at,omitempty"`
-	ReadAt      *time.Time            `json:"read_at,omitempty"`
-	FailedAt    *time.Time            `json:"failed_at,omitempty"`
-	Via         *string               `json:"via,omitempty"`
-	Error       map[string]any        `json:"error,omitempty"`
-}
-
 // StatusReceipt is a delivery/failure confirmation for a single message
 // and recipient, reported by im-delivery or im-providers.
 // For watermark receipts (UpToMessageID set), MessageID must be zero.

@@ -23,7 +23,6 @@ const (
 	MessageHistory_SearchLeftThreadsMessageHistory_FullMethodName = "/webitel.im.service.thread.v1.MessageHistory/SearchLeftThreadsMessageHistory"
 	MessageHistory_SearchMessages_FullMethodName                  = "/webitel.im.service.thread.v1.MessageHistory/SearchMessages"
 	MessageHistory_GetMessageRevisions_FullMethodName             = "/webitel.im.service.thread.v1.MessageHistory/GetMessageRevisions"
-	MessageHistory_GetThreadUpdates_FullMethodName                = "/webitel.im.service.thread.v1.MessageHistory/GetThreadUpdates"
 )
 
 // MessageHistoryClient is the client API for MessageHistory service.
@@ -41,11 +40,6 @@ type MessageHistoryClient interface {
 	// Returns the edit and deletion history of a single message, oldest first.
 	// Readable by every member of the thread the message belongs to.
 	GetMessageRevisions(ctx context.Context, in *GetMessageRevisionsRequest, opts ...grpc.CallOption) (*GetMessageRevisionsResponse, error)
-	// GetThreadUpdates returns the journal delta for a thread since the caller's
-	// cursor — the mutations (edits, reactions, deletions, status changes) a
-	// returning client missed while offline. When the cursor fell outside the
-	// retained window, resync=true tells the client to re-pull history instead.
-	GetThreadUpdates(ctx context.Context, in *GetThreadUpdatesRequest, opts ...grpc.CallOption) (*GetThreadUpdatesResponse, error)
 }
 
 type messageHistoryClient struct {
@@ -96,16 +90,6 @@ func (c *messageHistoryClient) GetMessageRevisions(ctx context.Context, in *GetM
 	return out, nil
 }
 
-func (c *messageHistoryClient) GetThreadUpdates(ctx context.Context, in *GetThreadUpdatesRequest, opts ...grpc.CallOption) (*GetThreadUpdatesResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(GetThreadUpdatesResponse)
-	err := c.cc.Invoke(ctx, MessageHistory_GetThreadUpdates_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
 // MessageHistoryServer is the server API for MessageHistory service.
 // All implementations must embed UnimplementedMessageHistoryServer
 // for forward compatibility.
@@ -121,11 +105,6 @@ type MessageHistoryServer interface {
 	// Returns the edit and deletion history of a single message, oldest first.
 	// Readable by every member of the thread the message belongs to.
 	GetMessageRevisions(context.Context, *GetMessageRevisionsRequest) (*GetMessageRevisionsResponse, error)
-	// GetThreadUpdates returns the journal delta for a thread since the caller's
-	// cursor — the mutations (edits, reactions, deletions, status changes) a
-	// returning client missed while offline. When the cursor fell outside the
-	// retained window, resync=true tells the client to re-pull history instead.
-	GetThreadUpdates(context.Context, *GetThreadUpdatesRequest) (*GetThreadUpdatesResponse, error)
 	mustEmbedUnimplementedMessageHistoryServer()
 }
 
@@ -147,9 +126,6 @@ func (UnimplementedMessageHistoryServer) SearchMessages(context.Context, *Search
 }
 func (UnimplementedMessageHistoryServer) GetMessageRevisions(context.Context, *GetMessageRevisionsRequest) (*GetMessageRevisionsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetMessageRevisions not implemented")
-}
-func (UnimplementedMessageHistoryServer) GetThreadUpdates(context.Context, *GetThreadUpdatesRequest) (*GetThreadUpdatesResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method GetThreadUpdates not implemented")
 }
 func (UnimplementedMessageHistoryServer) mustEmbedUnimplementedMessageHistoryServer() {}
 func (UnimplementedMessageHistoryServer) testEmbeddedByValue()                        {}
@@ -244,24 +220,6 @@ func _MessageHistory_GetMessageRevisions_Handler(srv interface{}, ctx context.Co
 	return interceptor(ctx, in, info, handler)
 }
 
-func _MessageHistory_GetThreadUpdates_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(GetThreadUpdatesRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(MessageHistoryServer).GetThreadUpdates(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: MessageHistory_GetThreadUpdates_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(MessageHistoryServer).GetThreadUpdates(ctx, req.(*GetThreadUpdatesRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
 // MessageHistory_ServiceDesc is the grpc.ServiceDesc for MessageHistory service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -284,10 +242,6 @@ var MessageHistory_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetMessageRevisions",
 			Handler:    _MessageHistory_GetMessageRevisions_Handler,
-		},
-		{
-			MethodName: "GetThreadUpdates",
-			Handler:    _MessageHistory_GetThreadUpdates_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

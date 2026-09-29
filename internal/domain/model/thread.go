@@ -72,7 +72,20 @@ type Thread struct {
 	// row id (not the thread id), so this carries the real thread id.
 	TagLookupID uuid.UUID `json:"-" db:"-"`
 
+	// ReadStates is the per-member delivery/read horizon snapshot. Enriched after
+	// the thread query (not scanned); shared with GetThreadUpdates.
+	ReadStates []MemberReadState `json:"read_states,omitempty" db:"-"`
+
 	events []event.Base `db:"-"`
+}
+
+// MemberReadState is one member's delivery/read horizon (per-thread message seq).
+// Shared between thread search and the catch-up journal.
+type MemberReadState struct {
+	MemberID         uuid.UUID `db:"member_id"`
+	ThreadID         uuid.UUID `db:"thread_id"`
+	DeliveredUpToSeq int64     `db:"delivered_up_to_seq"`
+	ReadUpToSeq      int64     `db:"read_up_to_seq"`
 }
 
 func (t *Thread) CreatedAtUnix() int64 { return max(t.CreatedAt.UTC().UnixMilli(), 0) }

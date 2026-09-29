@@ -13,6 +13,7 @@ import (
 	"github.com/webitel/im-thread-service/infra/tls"
 	webiteldi "github.com/webitel/im-thread-service/infra/webitel/di"
 	imcontact "github.com/webitel/im-thread-service/infra/webitel/im-contact"
+	"github.com/webitel/im-thread-service/internal/adapter/journal"
 	grpchandler "github.com/webitel/im-thread-service/internal/handler/grpc"
 	"github.com/webitel/im-thread-service/internal/service"
 	"github.com/webitel/im-thread-service/internal/service/decorators"
@@ -84,6 +85,10 @@ var serviceToHandlerBridgeModule = fx.Module(
 			return s
 		},
 
+		func(s *service.ThreadManagementService) service.BotController {
+			return s
+		},
+
 		func(s *service.ThreadManagementService) grpchandler.ThreadManagementService {
 			return s
 		},
@@ -106,6 +111,12 @@ var serviceToHandlerBridgeModule = fx.Module(
 		},
 		func(s *decorators.MessageHistoryEnricher) grpchandler.MessageHistoryService {
 			return s
+		},
+		func(j *journal.Journal) grpchandler.UpdatesHorizon {
+			return j
+		},
+		func(j *journal.Journal) grpchandler.UpdatesReader {
+			return j
 		},
 	),
 )

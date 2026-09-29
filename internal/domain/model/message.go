@@ -92,12 +92,6 @@ type Message struct {
 	System          *MessageSystem       `json:"system,omitempty" db:"system"`
 	Member          *ThreadDialog        `json:"member,omitempty" db:"member"`
 
-	// DeliveryStatus is the aggregate across recipients: FAILED when every
-	// recipient failed, otherwise the minimal status among non-failed ones.
-	// Nil for messages without per-recipient tracking (historical).
-	DeliveryStatus *MessageDeliveryStatus    `json:"delivery_status,omitempty" db:"delivery_status"`
-	Statuses       []*MessageRecipientStatus `json:"statuses,omitempty" db:"statuses"`
-
 	// Reactions holds the emoji reactions currently on the message, one per
 	// reactor, ordered by first-reaction time.
 	Reactions []*MessageReaction `json:"reactions,omitempty" db:"reactions"`
@@ -351,6 +345,7 @@ func (m *Message) WithCreatedEvent(ctx context.Context, sendID string) *Message 
 		Body:                  m.Body,
 		Type:                  m.Type.String(),
 		OccurredAt:            m.CreatedAt,
+		Seq:                   m.Seq,
 		Metadata:              maps.Clone(m.Metadata),
 		BotControllerMemberID: m.BotControllerMemberID,
 	}

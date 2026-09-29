@@ -11,6 +11,16 @@ type OutboxSubscriber interface {
 	message.Subscriber
 }
 
+// OutboxSubscriberFactory builds a fresh outbox subscriber. The forwarder needs
+// one per leadership term: a watermill router closes its subscriber on stop.
+type OutboxSubscriberFactory func() (OutboxSubscriber, error)
+
+func NewOutboxSubscriberFactory(pool *pgxpool.Pool, logger watermill.LoggerAdapter) OutboxSubscriberFactory {
+	return func() (OutboxSubscriber, error) {
+		return NewOutboxSubscriber(pool, logger)
+	}
+}
+
 func NewOutboxSubscriber(
 	pool *pgxpool.Pool,
 	logger watermill.LoggerAdapter,
@@ -23,7 +33,7 @@ func NewOutboxSubscriber(
 		sql.SubscriberConfig{
 			// [CONSUMER_GROUP]
 			// Identifies this instance in messages_offsets table to track progress
-			ConsumerGroup: "im-thread-outbox-forwarder",
+			ConsumerGroup: ConsumerGroupName,
 
 			// [SCHEMA_MAPPING]
 			// Point Watermill to our custom schema and table naming convention

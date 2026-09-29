@@ -1,134 +1,68 @@
-// Package pubsub implements the High-Availability Transactional Outbox Forwarder.
-//
-// ARCHITECTURE:
-// This component bridges the gap between persistent SQL storage and distributed message brokers (RabbitMQ).
-// It ensures AT-LEAST-ONCE delivery semantics by relaying staged domain events from the 'messages_outbox'
-// table to external exchanges.
-//
-// KEY FEATURES:
-// 1. [LEADERSHIP] Integrated with Consul to ensure only one node (LEADER) performs the relay.
-// 2. [RESILIENCE] Uses Poison Queue (DLQ) and Retry strategies to prevent Head-of-Line blocking.
-// 3. [ROUTING] Supports dynamic, hierarchical routing keys (im_message.id.event.action.v1).
-// 4. [CLEANUP] Automated background purging of acknowledged messages to prevent DB bloat.
+// Package pubsub implements the Transactional Outbox Forwarder with Consul-based leadership.
+// The journal is written in the mutation tx; this relay feeds live delivery only; lost events are caught up.
 package pubsub
 
 import (
 	"context"
 	"log/slog"
+	"sync"
 	"time"
 
 	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/ThreeDotsLabs/watermill/message/router/middleware"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
 	"go.uber.org/fx"
 
 	leader "github.com/webitel/im-thread-service/infra/discovery/consul"
+	"github.com/webitel/im-thread-service/internal/adapter/journal"
 	"github.com/webitel/im-thread-service/internal/domain/model"
 	"github.com/webitel/im-thread-service/internal/store"
 )
 
-// [CONSTANTS] Technical identifiers for infrastructure components
 const (
 	ForwarderHandlerName = "webitel.im.outbox_forwarder"
 	OutboxTopic          = "im.messages"
 	DefaultFallbackTopic = "chat.events.v1"
 	MetadataRoutingKey   = "x-routing-key"
-	ConsumerGroupName    = "webitel.im-thread-outbox-forwarder"
-	PoisonQueueTopic     = "webitel.im.outbox.dead_letter" // [DLX_CONFIG] Target topic for exhausted retries or unrecoverable errors
+	// ConsumerGroupName: watermill consumer group; cleanup must match or outbox grows forever.
+	ConsumerGroupName = "im-thread-outbox-forwarder"
+	PoisonQueueTopic  = "webitel.im.outbox.dead_letter"
 )
+
+// relayed counts outbox events handed to RabbitMQ, by result (ok|error).
+var relayed = func() metric.Int64Counter {
+	c, err := otel.Meter("github.com/webitel/im-thread-service/internal/adapter/pubsub").
+		Int64Counter("im_thread_outbox_relayed_total", metric.WithDescription("Outbox events relayed to the broker, by result."))
+	if err != nil {
+		panic(err)
+	}
+
+	return c
+}()
 
 func RegisterOutboxForwarder(
 	lc fx.Lifecycle,
-	outboxSub OutboxSubscriber,
+	newSubscriber OutboxSubscriberFactory,
+	jrnl *journal.Journal,
 	rabbitPub EventPublisher,
 	logger watermill.LoggerAdapter,
 	elector leader.LeadershipElector,
 	outbox store.OutboxStore,
 	slog *slog.Logger,
 ) error {
-	router, err := message.NewRouter(message.RouterConfig{}, logger)
-	if err != nil {
-		return err
-	}
-
-	// [STABILITY] Core middleware for resilience and observability
-	router.AddMiddleware(middleware.Recoverer) // Prevent service crash on handler panic
-
-	throttle := middleware.NewThrottle(100, time.Second) // 100 msg/sec
-	router.AddMiddleware(throttle.Middleware)
-
-	// [TIMEOUT] Ensure handlers don't hang indefinitely (e.g., during network partitions)
-	router.AddMiddleware(middleware.Timeout(time.Second * 10))
-
-	// [POISON_QUEUE] Final destination for unprocessable messages.
-	poisonHandler, err := middleware.PoisonQueue(rabbitPub, PoisonQueueTopic)
-	if err != nil {
-		return err
-	}
-
-	router.AddMiddleware(poisonHandler)
-
-	// [RETRY] Configurable backoff strategy for transient failures
-	router.AddMiddleware(middleware.Retry{
-		MaxRetries:      5,
-		InitialInterval: time.Millisecond * 200,
-		MaxInterval:     time.Second * 5,
-		Multiplier:      2.0,
-		Logger:          logger,
-		// [RETRY_HOOK]
-		OnRetryHook: func(retryNum int, delay time.Duration) {
-			slog.Warn("OUTBOX_FORWARDER_RETRY_TRIGGERED",
-				"attempt", retryNum,
-				"delay_ms", delay.Milliseconds(),
-				"handler", ForwarderHandlerName,
-			)
-		},
-	}.Middleware)
-
-	// [RELAY_LOGIC] Transfer messages from persistent DB outbox to RabbitMQ exchange
-	router.AddConsumerHandler(
-		ForwarderHandlerName,
-		OutboxTopic,
-		outboxSub,
-		func(msg *message.Message) error {
-			// [DYNAMIC_ROUTING] Resolve target topic from message metadata
-			topic := msg.Metadata.Get(MetadataRoutingKey)
-			if topic == "" {
-				topic = DefaultFallbackTopic
-			}
-
-			slog.Info("forwarding outbox event",
-				"topic", topic,
-				"msg_uuid", msg.UUID,
-				"correlation_id", middleware.MessageCorrelationID(msg))
-
-			if err := rabbitPub.Publish(topic, msg); err != nil {
-				slog.Error("failed to publish outbox event to rabbitmq",
-					"topic", topic,
-					"msg_uuid", msg.UUID,
-					"err", err,
-				)
-
-				return err
-			}
-
-			slog.Debug("outbox event published to rabbitmq",
-				"topic", topic,
-				"msg_uuid", msg.UUID,
-			)
-
-			return nil
-		},
-	)
-
 	mainCtx, cancelMain := context.WithCancel(context.Background())
 	electorDone := make(chan struct{})
+
+	var routers sync.WaitGroup
 
 	lc.Append(fx.Hook{
 		OnStart: func(_ context.Context) error {
 			slog.Info("starting webitel outbox forwarder with leadership election")
 
-			// [LEADERSHIP] Only the active Leader node performs outbox relay to prevent DUPLICATE delivery
+			// Only the active leader relays to prevent duplicate delivery.
 			go func() {
 				defer close(electorDone)
 
@@ -136,13 +70,29 @@ func RegisterOutboxForwarder(
 					func(leaderCtx context.Context) error {
 						slog.Info("node PROMOTED to leader: initializing background workers")
 
-						// [CLEANUP] Start periodic purging of processed outbox entries
-						go StartOutboxCleanupJob(leaderCtx, outbox, slog)
+						// A watermill router runs once, so each term needs a fresh one; reusing it
+						// left a re-promoted node holding the lock while relaying nothing.
+						router, err := newForwarderRouter(newSubscriber, rabbitPub, logger, slog)
+						if err != nil {
+							slog.Error("outbox forwarder: build router", "error", err)
 
-						// [ROUTER] Run the Watermill message router bound to Leader context
+							return err
+						}
+
+						go StartOutboxCleanupJob(leaderCtx, outbox, slog)
+						go StartJournalCleanupJob(leaderCtx, jrnl, slog)
+
+						routers.Add(1)
+
 						go func() {
+							defer routers.Done()
+
 							if err := router.Run(leaderCtx); err != nil {
 								slog.Error("watermill router: unexpected stop", "error", err)
+							}
+
+							if err := router.Close(); err != nil {
+								slog.Warn("watermill router: close", "error", err)
 							}
 						}()
 
@@ -158,20 +108,125 @@ func RegisterOutboxForwarder(
 		},
 		OnStop: func(ctx context.Context) error {
 			slog.Info("shutting down webitel outbox forwarder")
-			cancelMain() // Signal LeaderElector and workers to stop
+			cancelMain()
 
-			// [GRACEFUL_RELEASE] Wait for the elector goroutine to actually finish releasing the
-			// Consul lock (KV release + session cleanup) before this hook returns — otherwise the
-			// process can exit mid-release, forcing Consul to fall back to TTL-based expiry.
+			// Let the elector release the Consul lock (else TTL expiry) and the router
+			// finish in-flight acks before the pool and broker are closed.
 			select {
 			case <-electorDone:
 			case <-ctx.Done():
 				slog.Warn("timed out waiting for leader election to release the lock")
 			}
 
-			return router.Close()
+			routersDone := make(chan struct{})
+
+			go func() {
+				routers.Wait()
+				close(routersDone)
+			}()
+
+			select {
+			case <-routersDone:
+			case <-ctx.Done():
+				slog.Warn("timed out waiting for the outbox router to stop")
+			}
+
+			return nil
 		},
 	})
+
+	return nil
+}
+
+// newForwarderRouter builds one leadership term's router: middleware stack plus
+// the single relay handler over a fresh outbox subscriber.
+func newForwarderRouter(
+	newSubscriber OutboxSubscriberFactory,
+	rabbitPub EventPublisher,
+	logger watermill.LoggerAdapter,
+	log *slog.Logger,
+) (*message.Router, error) {
+	sub, err := newSubscriber()
+	if err != nil {
+		return nil, err
+	}
+
+	router, err := message.NewRouter(message.RouterConfig{}, logger)
+	if err != nil {
+		return nil, err
+	}
+
+	router.AddMiddleware(middleware.Recoverer) // Prevent handler panics from crashing the service
+
+	throttle := middleware.NewThrottle(100, time.Second)
+	router.AddMiddleware(throttle.Middleware)
+
+	router.AddMiddleware(middleware.Timeout(time.Second * 10))
+
+	// Lost live events are recoverable: the journal holds them and the client
+	// detects gaps and catches up.
+	poisonHandler, err := middleware.PoisonQueue(rabbitPub, PoisonQueueTopic)
+	if err != nil {
+		return nil, err
+	}
+
+	router.AddMiddleware(poisonHandler)
+
+	router.AddMiddleware(middleware.Retry{
+		MaxRetries:      5,
+		InitialInterval: time.Millisecond * 200,
+		MaxInterval:     time.Second * 5,
+		Multiplier:      2.0,
+		Logger:          logger,
+		OnRetryHook: func(retryNum int, delay time.Duration) {
+			log.Warn("OUTBOX_FORWARDER_RETRY_TRIGGERED",
+				"attempt", retryNum,
+				"delay_ms", delay.Milliseconds(),
+				"handler", ForwarderHandlerName,
+			)
+		},
+	}.Middleware)
+
+	router.AddConsumerHandler(
+		ForwarderHandlerName,
+		OutboxTopic,
+		sub,
+		func(msg *message.Message) error {
+			return handleOutboxEvent(msg, rabbitPub, log)
+		},
+	)
+
+	return router, nil
+}
+
+// handleOutboxEvent relays outbox message to RabbitMQ; publish errors trigger retry.
+func handleOutboxEvent(msg *message.Message, pub EventPublisher, log *slog.Logger) error {
+	topic := msg.Metadata.Get(MetadataRoutingKey)
+	if topic == "" {
+		topic = DefaultFallbackTopic
+	}
+
+	log.Info("forwarding outbox event",
+		"topic", topic,
+		"msg_uuid", msg.UUID,
+		"correlation_id", middleware.MessageCorrelationID(msg))
+
+	if err := pub.Publish(topic, msg); err != nil {
+		relayed.Add(msg.Context(), 1, metric.WithAttributes(attribute.String("result", "error")))
+		log.Error("failed to publish outbox event to rabbitmq",
+			"topic", topic,
+			"msg_uuid", msg.UUID,
+			"err", err,
+		)
+
+		return err
+	}
+
+	relayed.Add(msg.Context(), 1, metric.WithAttributes(attribute.String("result", "ok")))
+	log.Debug("outbox event published to rabbitmq",
+		"topic", topic,
+		"msg_uuid", msg.UUID,
+	)
 
 	return nil
 }
@@ -180,7 +235,6 @@ func RegisterOutboxForwarder(
 func StartOutboxCleanupJob(ctx context.Context, outbox store.OutboxStore, logger *slog.Logger) {
 	const cleanupInterval = 24 * time.Hour
 
-	// [INITIAL_PURGE] Execute cleanup immediately upon leader promotion
 	doCleanup(ctx, outbox, logger)
 
 	ticker := time.NewTicker(cleanupInterval)
@@ -198,15 +252,55 @@ func StartOutboxCleanupJob(ctx context.Context, outbox store.OutboxStore, logger
 	}
 }
 
+// StartJournalCleanupJob periodically trims the per-thread catch-up journal to
+// its TTL window; clients offline past that window fall back to a resync.
+func StartJournalCleanupJob(ctx context.Context, jrnl *journal.Journal, logger *slog.Logger) {
+	const cleanupInterval = time.Hour
+
+	doJournalCleanup(ctx, jrnl, logger)
+
+	ticker := time.NewTicker(cleanupInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			logger.Debug("journal cleanup job: context canceled")
+
+			return
+		case <-ticker.C:
+			doJournalCleanup(ctx, jrnl, logger)
+		}
+	}
+}
+
+func doJournalCleanup(ctx context.Context, jrnl *journal.Journal, logger *slog.Logger) {
+	n, err := jrnl.Cleanup(ctx)
+	if err != nil {
+		logger.Error("journal cleanup failed", "error", err)
+
+		return
+	}
+
+	if n > 0 {
+		logger.Info("journal cleanup successful", "deleted_count", n)
+	}
+}
+
+// outboxCleanupOptions is the cleanup policy; ConsumerGroups must name the
+// subscriber's real group (see ConsumerGroupName).
+func outboxCleanupOptions() *model.OutboxCleanupOptions {
+	return &model.OutboxCleanupOptions{
+		RetentionDays:  3,
+		BatchSize:      5000,
+		ConsumerGroups: []string{ConsumerGroupName},
+		Topic:          OutboxTopic,
+	}
+}
+
 // doCleanup triggers the physical deletion of acknowledged outbox records.
 func doCleanup(ctx context.Context, outbox store.OutboxStore, logger *slog.Logger) {
-	// [STRATEGY] Batch remove messages older than 3 days acknowledged by ConsumerGroupName
-	n, err := outbox.Cleanup(ctx, &model.OutboxCleanupOptions{
-		RetentionDays: 3,
-		BatchSize:     5000,
-		ConsumerGroup: ConsumerGroupName,
-		Topic:         OutboxTopic,
-	})
+	n, err := outbox.Cleanup(ctx, outboxCleanupOptions())
 	if err != nil {
 		logger.Error("outbox cleanup failed", "error", err)
 

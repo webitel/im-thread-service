@@ -32,6 +32,8 @@ var _ Outboxer = (*MessageReaction)(nil)
 // message. It fans out to every thread participant so both sides converge on
 // the same reaction set. A removal carries an empty Emoji and Action=removed.
 type MessageReaction struct {
+	Journaled
+
 	MessageID  uuid.UUID       `json:"message_id"`
 	ThreadID   uuid.UUID       `json:"thread_id"`
 	DomainID   int32           `json:"domain_id"`
@@ -49,9 +51,8 @@ type MessageReaction struct {
 	// Reactions is the full per-emoji aggregate on the message AFTER this change,
 	// so a client can replace its reaction state authoritatively rather than
 	// applying just the (Emoji, Action) delta.
-	Reactions []ReactionAggregate `json:"reactions,omitempty"`
-
-	ExternalMetadata map[string]string `json:"-"`
+	Reactions        []ReactionAggregate `json:"reactions,omitempty"`
+	ExternalMetadata map[string]string   `json:"-"`
 }
 
 func (m *MessageReaction) AddMetadata(key, value string) {
@@ -65,6 +66,7 @@ func (m *MessageReaction) AddMetadata(key, value string) {
 func (*MessageReaction) EventType() string                { return MessageReactionEvent }
 func (m *MessageReaction) Version() string                { return MessageVersionV1 }
 func (m *MessageReaction) RecipientID() uuid.UUID         { return m.ThreadID }
+func (m *MessageReaction) JournalThreadID() uuid.UUID     { return m.ThreadID }
 func (m *MessageReaction) ToOutbox() (OutboxEvent, error) { return m.serialize(m.Version()) }
 
 func (m *MessageReaction) serialize(version string) (OutboxEvent, error) {

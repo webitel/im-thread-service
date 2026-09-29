@@ -281,6 +281,7 @@ func (s *ThreadOutConverter) ConvertToThread(source *model.Thread) *impb.Thread 
 		Variables:   vars,
 		UnreadCount: int32(source.UnreadCount),
 		Tags:        s.convertThreadTags(source.Tags),
+		ReadStates:  convertMemberReadStates(source.ReadStates),
 	}
 
 	if source.BotControllerID != nil {
@@ -309,6 +310,25 @@ func (s *ThreadOutConverter) convertThreadMembers(members []*model.ThreadDialog,
 			AutoLeave:          member.AutoLeave,
 			IsActiveController: botControllerID != nil && member.ID == *botControllerID,
 		}
+	}
+
+	return out
+}
+
+// convertMemberReadStates maps the per-member delivery/read horizons onto the
+// shared proto MemberReadState — the same type GetThreadUpdates returns.
+func convertMemberReadStates(states []model.MemberReadState) []*impb.MemberReadState {
+	if len(states) == 0 {
+		return nil
+	}
+
+	out := make([]*impb.MemberReadState, 0, len(states))
+	for _, st := range states {
+		out = append(out, &impb.MemberReadState{
+			MemberId:         st.MemberID.String(),
+			DeliveredUpToSeq: st.DeliveredUpToSeq,
+			ReadUpToSeq:      st.ReadUpToSeq,
+		})
 	}
 
 	return out

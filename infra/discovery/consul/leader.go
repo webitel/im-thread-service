@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"sync/atomic"
 	"time"
 
 	"github.com/hashicorp/consul/api"
@@ -141,11 +142,17 @@ func (le *LeaderElector) attemptLeadership(ctx context.Context, onStart func(ctx
 
 	// [START_WORKER]
 	// Execute leader-only tasks (e.g., Outbox Forwarder)
+	var startFailed atomic.Bool
+
 	go func() {
-		if err := onStart(leaderCtx); err != nil {
-			le.log.Error("leader task execution failed", "err", err)
-			cancelLeader()
+		err := onStart(leaderCtx)
+		if err == nil {
+			return
 		}
+
+		le.log.Error("leader task execution failed", "err", err)
+		startFailed.Store(true)
+		cancelLeader()
 	}()
 
 	// [WATCHDOG]
@@ -160,6 +167,11 @@ func (le *LeaderElector) attemptLeadership(ctx context.Context, onStart func(ctx
 	// the now-unused session.
 	le.releaseLock(sessionID)
 	close(renewDone)
+
+	// A failing onStart would otherwise re-acquire and fail again in a hot loop.
+	if startFailed.Load() {
+		le.wait(ctx, le.errCooldown)
+	}
 }
 
 func (le *LeaderElector) createSession() (string, error) {

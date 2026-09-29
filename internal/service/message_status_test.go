@@ -47,6 +47,10 @@ func (r *recordingMessageStatusStore) ReadUnread(context.Context, int32, uuid.UU
 	return make(map[uuid.UUID]int64), nil
 }
 
+func (r *recordingMessageStatusStore) ReadMemberStates(context.Context, int32, uuid.UUID, []uuid.UUID) (map[uuid.UUID][]model.MemberReadState, error) {
+	return make(map[uuid.UUID][]model.MemberReadState), nil
+}
+
 func (r *recordingMessageStatusStore) UnreadSummary(context.Context, int32, uuid.UUID) (model.UnreadSummary, error) {
 	return model.UnreadSummary{}, nil
 }

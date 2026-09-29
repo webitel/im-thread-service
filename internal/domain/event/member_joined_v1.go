@@ -13,12 +13,16 @@ const (
 )
 
 type MemberJoined struct {
+	Journaled
+
 	MessageID  uuid.UUID      `json:"message_id"`
 	ThreadID   uuid.UUID      `json:"thread_id"`
 	DomainID   int32          `json:"domain_id"`
 	ContactID  uuid.UUID      `json:"contact_id"`
 	OccurredAt time.Time      `json:"occurred_at"`
 	System     *SystemPayload `json:"system,omitempty"`
+	// Participants are the thread's current members, so delivery fans the event out.
+	Participants []uuid.UUID `json:"participants,omitempty"`
 }
 
 func (e *MemberJoined) serialize(data any, version string) (OutboxEvent, error) {
@@ -42,6 +46,11 @@ func (e *MemberJoined) EventType() string { return MemberJoinedEvent }
 func (e *MemberJoined) Version() string { return MessageVersionV1 }
 
 func (e *MemberJoined) RecipientID() uuid.UUID { return e.ThreadID }
+
+func (e *MemberJoined) JournalThreadID() uuid.UUID { return e.ThreadID }
+
+// JournalSubject is marked too: a contact who just left is no longer an active member.
+func (e *MemberJoined) JournalSubject() uuid.UUID { return e.ContactID }
 
 func (e *MemberJoined) MustBeThreadEvent() {}
 

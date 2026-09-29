@@ -23,6 +23,14 @@ type Config struct {
 	LeaderElection LeaderElectionConfig `mapstructure:"leader_election"`
 	Typing         TypingConfig         `mapstructure:"typing"`
 	Reactions      ReactionsConfig      `mapstructure:"reactions"`
+	Journal        JournalConfig        `mapstructure:"journal"`
+}
+
+// JournalConfig tunes the per-thread catch-up journal (thread_updates).
+type JournalConfig struct {
+	// RetentionTTL bounds the catch-up window; clients offline longer must resync.
+	// Periodic leader-only cleanup trims entries older than this.
+	RetentionTTL time.Duration `mapstructure:"retention_ttl"`
 }
 
 // TypingConfig tunes the ephemeral typing indicator and its live-preview
@@ -185,6 +193,9 @@ func registerServiceFlags() {
 		"maximum typing-indicator lifetime (upper clamp, e.g. for bots)")
 	pflag.Int("typing.max_preview_bytes", 1024,
 		"maximum size of the typing preview draft, in bytes")
+
+	pflag.Duration("journal.retention_ttl", 48*time.Hour,
+		"catch-up journal retention window; a client offline longer than this must resync from history")
 }
 
 func (c *Config) validate() error {

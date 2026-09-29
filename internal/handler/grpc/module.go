@@ -14,6 +14,7 @@ var Module = fx.Module("message_grpc",
 		NewMessageService,
 		NewMessageStatusServer,
 		NewMessageHistoryServer,
+		NewUpdatesServer,
 		NewThreadService,
 		NewThreadPermissionServer,
 		NewThreadTagServer,
@@ -26,6 +27,7 @@ var Module = fx.Module("message_grpc",
 	fx.Invoke(RegisterMessageServer),
 	fx.Invoke(RegisterMessageStatusServer),
 	fx.Invoke(RegisterMessageHistoryServer),
+	fx.Invoke(RegisterUpdatesServer),
 	fx.Invoke(RegisterThreadServer),
 	fx.Invoke(RegisterThreadPermissionServer),
 	fx.Invoke(RegisterThreadTagServer),
@@ -44,6 +46,10 @@ func RegisterMessageStatusServer(srv *grpcsrv.Server, svc *MessageStatusServer) 
 
 func RegisterMessageHistoryServer(srv *grpcsrv.Server, svc *MessageHistoryServer) {
 	impb.RegisterMessageHistoryServer(srv.Server, svc)
+}
+
+func RegisterUpdatesServer(srv *grpcsrv.Server, svc *UpdatesServer) {
+	impb.RegisterUpdatesServer(srv.Server, svc)
 }
 
 func RegisterThreadServer(srv *grpcsrv.Server, svc *ThreadManagementServer) {
