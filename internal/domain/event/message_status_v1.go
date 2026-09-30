@@ -11,12 +11,13 @@ import (
 const (
 	MessageStatusChangedEvent = "im.message.status"
 
-	// StatusRead is the Status value of a read receipt.
-	StatusRead = "read"
+	// Status values of a receipt.
+	StatusRead      = "read"
+	StatusDelivered = "delivered"
+	StatusFailed    = "failed"
 )
 
-// Reads are journaled so every device of the reader catches up its unread count; delivered
-// and failed are not (far more frequent, and the next read or message carries the horizons).
+// Every status is journaled, so a device that was offline catches up ticks, unread counts and failures.
 var _ JournalEvent = (*MessageStatusChanged)(nil)
 
 // MessageStatusChanged: per-recipient delivery status change (delivered/read/failed).
@@ -27,8 +28,10 @@ type MessageStatusChanged struct {
 	DomainID int32     `json:"domain_id"`
 	// MemberID is the recipient contact id (thread_dialog.member_id)
 	// whose statuses changed.
-	MemberID   uuid.UUID   `json:"member_id"`
-	MessageIDs []uuid.UUID `json:"message_ids"`
+	MemberID uuid.UUID `json:"member_id"`
+	// Member is that recipient's membership, resolved into a full member by im-delivery.
+	Member     *ThreadMember `json:"member,omitempty"`
+	MessageIDs []uuid.UUID   `json:"message_ids"`
 	// UpToSeq: recipient's delivered/read watermark; authoritative per-member horizon.
 	UpToSeq int64 `json:"up_to_seq"`
 	// Status is the new delivery state: delivered|read|failed.
@@ -56,9 +59,6 @@ func (m *MessageStatusChanged) Version() string        { return MessageVersionV1
 func (m *MessageStatusChanged) RecipientID() uuid.UUID { return m.ThreadID }
 
 func (m *MessageStatusChanged) JournalThreadID() uuid.UUID { return m.ThreadID }
-
-// SkipJournal keeps delivered/failed out of the journal; only reads are replayed.
-func (m *MessageStatusChanged) SkipJournal() bool { return m.Status != StatusRead }
 
 func (m *MessageStatusChanged) ToOutbox() (OutboxEvent, error) {
 	payload, err := json.Marshal(m)

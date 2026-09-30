@@ -88,7 +88,8 @@ func (s *messageStatusStore) MarkDelivered(ctx context.Context, receipts []*mode
 	}
 
 	// Advance delivered horizon for all receipts (all are now watermark form).
-	if err := s.advanceDeliveredHorizon(ctx, receipts); err != nil {
+	moved, err := s.advanceDeliveredHorizon(ctx, receipts)
+	if err != nil {
 		return nil, err
 	}
 
@@ -97,6 +98,10 @@ func (s *messageStatusStore) MarkDelivered(ctx context.Context, receipts []*mode
 
 	allChanges := make([]*model.StatusChange, 0, len(receipts))
 	for _, r := range receipts {
+		if !moved[horizonKey{r.ThreadID, r.MemberID}] {
+			continue
+		}
+
 		allChanges = append(allChanges, &model.StatusChange{
 			DomainID:      r.DomainID,
 			ThreadID:      r.ThreadID,
@@ -134,7 +139,8 @@ func (s *messageStatusStore) MarkRead(ctx context.Context, receipts []*model.Rea
 	}
 
 	// Advance each member's read horizon and refresh the denormalized unread counter.
-	if err := s.advanceReadHorizon(ctx, receipts); err != nil {
+	moved, err := s.advanceReadHorizon(ctx, receipts)
+	if err != nil {
 		return nil, err
 	}
 
@@ -143,6 +149,10 @@ func (s *messageStatusStore) MarkRead(ctx context.Context, receipts []*model.Rea
 
 	allChanges := make([]*model.StatusChange, 0, len(receipts))
 	for _, r := range receipts {
+		if !moved[horizonKey{r.ThreadID, r.MemberID}] {
+			continue
+		}
+
 		allChanges = append(allChanges, &model.StatusChange{
 			DomainID:      r.DomainID,
 			ThreadID:      r.ThreadID,
@@ -353,9 +363,9 @@ func (s *messageStatusStore) UnreadSummary(ctx context.Context, domainID int32, 
 // refreshes the denormalized unread_count from the new horizon: content messages
 // after it that the member did not send. Uses seq for watermarks but resolves from
 // message_id for legacy receipts. Runs in the same transaction as MarkRead.
-func (s *messageStatusStore) advanceReadHorizon(ctx context.Context, receipts []*model.ReadReceipt) error {
+func (s *messageStatusStore) advanceReadHorizon(ctx context.Context, receipts []*model.ReadReceipt) (map[horizonKey]bool, error) {
 	if len(receipts) == 0 {
-		return nil
+		return make(map[horizonKey]bool), nil
 	}
 
 	var (
@@ -399,6 +409,8 @@ func (s *messageStatusStore) advanceReadHorizon(ctx context.Context, receipts []
 		  and td.member_id = r.member_id
 		  and td.deleted_at is null
 		  and r.up_to_seq is not null
+		  and r.up_to_seq > coalesce(td.last_read_seq, 0)
+		returning td.thread_id, td.member_id
 	`
 
 	args := pgx.NamedArgs{
@@ -409,13 +421,14 @@ func (s *messageStatusStore) advanceReadHorizon(ctx context.Context, receipts []
 		"SystemType": int(model.MessageTypeSystem),
 	}
 
-	if _, err := s.db.Exec(ctx, query, args); err != nil {
-		return errors.Internal("advancing read horizon", errors.WithCause(err), errors.WithID("postgres.message_status.advance_read_horizon"))
+	moved, err := s.movedHorizons(ctx, query, args, "postgres.message_status.advance_read_horizon")
+	if err != nil {
+		return nil, err
 	}
 
 	// A read horizon crossing a message's seq means it reached the member — any
 	// prior delivery failure for it is now recovered, so drop the error row.
-	return s.clearRecoveredErrors(ctx, threadIDs, memberIDs, upToSeqs)
+	return moved, s.clearRecoveredErrors(ctx, threadIDs, memberIDs, upToSeqs)
 }
 
 // clampReadSeqToThread caps a client-given seq at the thread's newest message, so a read
@@ -466,11 +479,41 @@ func (s *messageStatusStore) clampReadSeqToThread(ctx context.Context, receipts 
 	return nil
 }
 
+// horizonKey is one member's horizon in one thread.
+type horizonKey struct{ thread, member uuid.UUID }
+
+// movedHorizons runs a horizon update and reports which horizons actually moved forward;
+// a receipt at or behind the horizon changes nothing and emits no status event.
+func (s *messageStatusStore) movedHorizons(ctx context.Context, query string, args pgx.NamedArgs, errID string) (map[horizonKey]bool, error) {
+	rows, err := s.db.Query(ctx, query, args)
+	if err != nil {
+		return nil, errors.Internal("advancing horizon", errors.WithCause(err), errors.WithID(errID))
+	}
+	defer rows.Close()
+
+	moved := make(map[horizonKey]bool)
+
+	for rows.Next() {
+		var k horizonKey
+		if err := rows.Scan(&k.thread, &k.member); err != nil {
+			return nil, errors.Internal("scanning horizon", errors.WithCause(err), errors.WithID(errID))
+		}
+
+		moved[k] = true
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, errors.Internal("advancing horizon", errors.WithCause(err), errors.WithID(errID))
+	}
+
+	return moved, nil
+}
+
 // advanceDeliveredHorizon moves each member's delivered horizon (thread_dialog.last_delivered_seq)
 // forward monotonically. Unlike read, it does not recompute unread_count.
-func (s *messageStatusStore) advanceDeliveredHorizon(ctx context.Context, receipts []*model.StatusReceipt) error {
+func (s *messageStatusStore) advanceDeliveredHorizon(ctx context.Context, receipts []*model.StatusReceipt) (map[horizonKey]bool, error) {
 	if len(receipts) == 0 {
-		return nil
+		return make(map[horizonKey]bool), nil
 	}
 
 	var (
@@ -499,6 +542,8 @@ func (s *messageStatusStore) advanceDeliveredHorizon(ctx context.Context, receip
 		  and td.member_id = r.member_id
 		  and td.deleted_at is null
 		  and r.up_to_seq is not null
+		  and r.up_to_seq > coalesce(td.last_delivered_seq, 0)
+		returning td.thread_id, td.member_id
 	`
 
 	args := pgx.NamedArgs{
@@ -507,13 +552,14 @@ func (s *messageStatusStore) advanceDeliveredHorizon(ctx context.Context, receip
 		"UpToSeqs":  upToSeqs,
 	}
 
-	if _, err := s.db.Exec(ctx, query, args); err != nil {
-		return errors.Internal("advancing delivered horizon", errors.WithCause(err), errors.WithID("postgres.message_status.advance_delivered_horizon"))
+	moved, err := s.movedHorizons(ctx, query, args, "postgres.message_status.advance_delivered_horizon")
+	if err != nil {
+		return nil, err
 	}
 
 	// A delivered horizon crossing a message's seq means it reached the member —
 	// any prior delivery failure for it is now recovered, so drop the error row.
-	return s.clearRecoveredErrors(ctx, threadIDs, memberIDs, upToSeqs)
+	return moved, s.clearRecoveredErrors(ctx, threadIDs, memberIDs, upToSeqs)
 }
 
 // clearRecoveredErrors drops message_errors for messages now within the horizon;

@@ -303,3 +303,26 @@ func TestGetUpdates_ReadOnlyChange(t *testing.T) {
 	assert.Nil(t, resp.GetThreads()[0].GetDialog())
 	assert.Equal(t, "300", resp.GetCursor())
 }
+
+// A failed delivery comes back with its reason; the failed message itself is not reloaded as a change.
+func TestGetUpdates_Failures(t *testing.T) {
+	thread, msg, member := uuid.NewString(), uuid.NewString(), uuid.NewString()
+	failed := func(code string) journal.Event {
+		return journal.Event{Kind: journal.KindMessageFailed, Fields: map[string]string{
+			journal.FieldMsgID: msg, journal.FieldActor: member, journal.FieldErrCode: code, journal.FieldErrMsg: "blocked",
+		}}
+	}
+	updates := &fakeUpdates{
+		changes: &journal.ContactChanges{Cursor: "300", After: 200, Threads: []string{thread}},
+		events:  map[string][]journal.Event{thread: {failed("old"), failed("recipient_blocked")}},
+	}
+
+	resp, err := NewUpdatesServer(&fakeHistory{}, updates, &fakeThreads{}).GetUpdates(context.Background(), updatesReq("200"))
+	require.NoError(t, err)
+
+	entry := resp.GetThreads()[0]
+	require.Len(t, entry.GetFailures(), 1, "one entry per message and member, the latest reason")
+	assert.Equal(t, "recipient_blocked", entry.GetFailures()[0].GetError().GetCode())
+	assert.Equal(t, member, entry.GetFailures()[0].GetMemberId())
+	assert.Empty(t, entry.GetMessages())
+}

@@ -342,8 +342,8 @@ func TestPublish_StampsLiveCursor(t *testing.T) {
 	}
 }
 
-// A read reaches every member's GetUpdates; a delivered receipt stays live-only.
-func TestPublish_JournalsReadsOnly(t *testing.T) {
+// Delivered and read both reach every member's GetUpdates.
+func TestPublish_JournalsStatuses(t *testing.T) {
 	ctx := context.Background()
 	pool := itPool(t)
 	thread, reader := uuid.New(), uuid.New()
@@ -370,12 +370,12 @@ func TestPublish_JournalsReadsOnly(t *testing.T) {
 	}
 
 	var kinds []string
-	if err := pool.QueryRow(ctx, `select coalesce(array_agg(kind), '{}') from `+journalSchema+`.thread_updates`).Scan(&kinds); err != nil {
+	if err := pool.QueryRow(ctx, `select coalesce(array_agg(kind order by id), '{}') from `+journalSchema+`.thread_updates`).Scan(&kinds); err != nil {
 		t.Fatalf("journal: %v", err)
 	}
 
-	if len(kinds) != 1 || kinds[0] != journal.KindReadChanged {
-		t.Fatalf("journal kinds = %v, want only the read", kinds)
+	if len(kinds) != 2 || kinds[0] != journal.KindDeliveredChanged || kinds[1] != journal.KindReadChanged {
+		t.Fatalf("journal kinds = %v, want delivered then read", kinds)
 	}
 
 	var marks int
