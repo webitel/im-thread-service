@@ -69,9 +69,6 @@ func (o *outboxStore) Publish(ctx context.Context, topic string, evt event.Outbo
 	}
 
 	je, journaled := evt.(event.JournalEvent)
-	if s, ok := evt.(interface{ SkipJournal() bool }); ok && s.SkipJournal() {
-		journaled = false
-	}
 
 	if journaled {
 		cursor, err := o.liveCursor(ctx, tx)

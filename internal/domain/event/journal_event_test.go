@@ -30,10 +30,3 @@ func TestJournalEventMembership(t *testing.T) {
 		})
 	}
 }
-
-// Only reads reach the journal; delivered and failed stay live-only.
-func TestMessageStatusChanged_SkipJournal(t *testing.T) {
-	assert.False(t, (&MessageStatusChanged{Status: StatusRead}).SkipJournal())
-	assert.True(t, (&MessageStatusChanged{Status: "delivered"}).SkipJournal())
-	assert.True(t, (&MessageStatusChanged{Status: "failed"}).SkipJournal())
-}

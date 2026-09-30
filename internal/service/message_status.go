@@ -106,13 +106,14 @@ func dispatchStatusChangeEvents(ctx context.Context, uow store.UnitOfWork, chang
 		return nil
 	}
 
-	participants, err := threadParticipants(ctx, uow, events)
+	participants, members, err := threadParticipants(ctx, uow, events)
 	if err != nil {
 		return err
 	}
 
 	for _, e := range events {
 		e.Participants = participants[e.ThreadID]
+		e.Member = members[memberKey{e.ThreadID, e.MemberID}]
 
 		topic := fmt.Sprintf("im_message.%s.message.status.%s", e.RecipientID(), e.Version())
 
@@ -126,7 +127,10 @@ func dispatchStatusChangeEvents(ctx context.Context, uow store.UnitOfWork, chang
 
 // threadParticipants resolves member contact ids for every distinct thread
 // mentioned by the events.
-func threadParticipants(ctx context.Context, uow store.UnitOfWork, events []*event.MessageStatusChanged) (map[uuid.UUID][]uuid.UUID, error) {
+// memberKey is one contact's membership in one thread.
+type memberKey struct{ thread, contact uuid.UUID }
+
+func threadParticipants(ctx context.Context, uow store.UnitOfWork, events []*event.MessageStatusChanged) (map[uuid.UUID][]uuid.UUID, map[memberKey]*event.ThreadMember, error) {
 	threadIDs := make([]uuid.UUID, 0, len(events))
 	seen := make(map[uuid.UUID]struct{}, len(events))
 
@@ -143,10 +147,11 @@ func threadParticipants(ctx context.Context, uow store.UnitOfWork, events []*eve
 		ThreadIDs: threadIDs,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("resolving thread participants: %w", err)
+		return nil, nil, fmt.Errorf("resolving thread participants: %w", err)
 	}
 
 	participants := make(map[uuid.UUID][]uuid.UUID, len(threadIDs))
+	members := make(map[memberKey]*event.ThreadMember, len(dialogs))
 
 	for _, d := range dialogs {
 		if d == nil {
@@ -154,9 +159,14 @@ func threadParticipants(ctx context.Context, uow store.UnitOfWork, events []*eve
 		}
 
 		participants[d.ThreadID] = append(participants[d.ThreadID], d.ContactID)
+
+		id := d.ID
+		members[memberKey{d.ThreadID, d.ContactID}] = &event.ThreadMember{
+			ID: &id, ContactID: d.ContactID, Role: int(d.ThreadRole), IsBot: d.IsBot,
+		}
 	}
 
-	return participants, nil
+	return participants, members, nil
 }
 
 func groupStatusChanges(changes []*model.StatusChange) []*event.MessageStatusChanged {

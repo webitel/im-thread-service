@@ -433,6 +433,12 @@ func (s *MessageService) Read(ctx context.Context, in *dto.ReadMessageRequest) e
 			return fmt.Errorf("read_message: %w", err)
 		}
 
+		// The horizon did not move: the thread is already read that far.
+		if len(changes) == 0 {
+			return errors.New("already read up to this message",
+				errors.WithCode(codes.FailedPrecondition), errors.WithID("service.message.read.already_read"))
+		}
+
 		return dispatchStatusChangeEvents(txCtx, uow, changes)
 	})
 }
