@@ -109,10 +109,6 @@ func (s *MessageHistoryService) SearchMessages(ctx context.Context, req *dto.Sea
 		return nil, empty, errors.InvalidArgument("caller identity is required", errors.WithID("service.message_history.search_messages"))
 	}
 
-	if req.Cursor != nil && req.Cursor.Around {
-		return nil, empty, errors.InvalidArgument("cursor.around is not supported by message search", errors.WithID("service.message_history.search_messages"))
-	}
-
 	query := queryobject.NewMessageSearchQuery().
 		WithFields(req.Fields).
 		WithTermFilter(term).
@@ -143,13 +139,6 @@ func (s *MessageHistoryService) SearchMessages(ctx context.Context, req *dto.Sea
 }
 
 func (s *MessageHistoryService) SearchLeftThreads(ctx context.Context, req *dto.LeftThreadsMessageHistoryInputDTO) (model.MessageSlice, queryobject.PageInfo[queryobject.MessageHistoryCursor], error) {
-	if req.Cursor != nil && req.Cursor.Around {
-		return nil, queryobject.PageInfo[queryobject.MessageHistoryCursor]{}, errors.InvalidArgument(
-			"cursor.around is not supported by left threads history",
-			errors.WithID("service.message_history.search_left_threads"),
-		)
-	}
-
 	fields := req.Fields
 	if len(fields) > 0 && !slices.Contains(fields, "member") {
 		fields = append(fields, "member")
