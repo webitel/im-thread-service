@@ -1,6 +1,7 @@
 package queryobject
 
 import (
+	"bytes"
 	"slices"
 
 	sq "github.com/Masterminds/squirrel"
@@ -196,6 +197,10 @@ func (q *MessageHistoryQuery) WithCursor(cursor *dto.HistoryMessageCursor) *Mess
 		return q
 	}
 
+	if cursor.Around && cfg.HasCursor {
+		cfg.Direction = DirectionAround
+	}
+
 	q.paginatorCfg = cfg
 
 	return q
@@ -249,6 +254,15 @@ func (q *MessageHistoryQuery) ToSQL() (string, []any, error) {
 		q.paginatorCfg.Direction = DirectionAfter
 	}
 
+	if q.paginatorCfg.Direction == DirectionAround {
+		fields := q.fields
+		if !slices.Contains(fields, "id") {
+			fields = append(slices.Clone(fields), "id")
+		}
+
+		return q.pag.ApplyAround(selectMessageFields(q.base, fields, q.callerID), q.paginatorCfg)
+	}
+
 	withColumns := selectMessageFields(q.base, q.fields, q.callerID)
 
 	decorated, err := q.pag.Apply(withColumns, q.paginatorCfg)
@@ -263,7 +277,17 @@ func (q *MessageHistoryQuery) BuildPageInfo(
 	rows *[]*model.Message,
 	extract CursorExtractor[*model.Message, MessageHistoryCursor],
 ) (PageInfo[MessageHistoryCursor], error) {
+	if q.paginatorCfg.Direction == DirectionAround {
+		return BuildAroundPageInfo(rows, q.paginatorCfg, extract, newerThan(q.paginatorCfg.Cursor.ID))
+	}
+
 	return BuildPageInfo(rows, q.paginatorCfg, extract)
+}
+
+func newerThan(id uuid.UUID) func(*model.Message) bool {
+	return func(m *model.Message) bool {
+		return bytes.Compare(m.ID[:], id[:]) > 0
+	}
 }
 
 func (q *MessageHistoryQuery) limitOrDefault() int {
