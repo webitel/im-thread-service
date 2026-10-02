@@ -176,6 +176,10 @@ func (s *Server) Port() int {
 	return s.port
 }
 
+func (s *Server) Listener() net.Listener {
+	return s.listener
+}
+
 func publicAddr() string {
 	interfaces, err := net.Interfaces()
 	if err != nil {
