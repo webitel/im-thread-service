@@ -46,6 +46,7 @@ func MapSearchMessageHistoryRequest2HistoryMessageInputDTO(mhr *impb.SearchMessa
 			id, _ := uuid.Parse(mhr.GetCursor().GetId())
 			cursor.ID = id
 			cursor.Direction = mhr.GetCursor().GetBefore()
+			cursor.Around = mhr.GetCursor().GetAround()
 		}
 	}
 
@@ -81,6 +82,7 @@ func MapSearchMessagesRequest2SearchMessagesInputDTO(mr *impb.SearchMessagesRequ
 			id, _ := uuid.Parse(mr.GetCursor().GetId())
 			cursor.ID = id
 			cursor.Direction = mr.GetCursor().GetBefore()
+			cursor.Around = mr.GetCursor().GetAround()
 		}
 	}
 
@@ -114,6 +116,7 @@ func MapSearchLeftThreadsMessageHistoryRequest2LeftThreadsMessageHistoryInputDTO
 			id, _ := uuid.Parse(mhr.GetCursor().GetId())
 			cursor.ID = id
 			cursor.Direction = mhr.GetCursor().GetBefore()
+			cursor.Around = mhr.GetCursor().GetAround()
 		}
 	}
 
