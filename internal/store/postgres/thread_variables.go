@@ -61,9 +61,10 @@ func (s *threadVariablesStore) Set(ctx context.Context, variables *model.SetThre
 func prepareThreadVariablesSetQuery(variables *model.SetThreadVariablesCommand) (string, pgx.NamedArgs) {
 	query := `
 		with members_list as (
-			select array_agg(member_id) as members
+			select array_agg(distinct member_id) as members
 			from "im_thread"."thread_dialog"
 			where thread_id = @ThreadID
+				and deleted_at is null
 		),
 		upsert_action as (
 			insert into "im_thread"."thread_variables" ("thread_id", "variables")
@@ -234,9 +235,10 @@ func prepareThreadVariablesFLushQuery(flushCmd model.FlushVariablesCommand) (str
 				tv.thread_id,
 				tv.variables,
 				(
-					select array_agg(td.member_id)
+					select array_agg(distinct td.member_id)
 					from im_thread.thread_dialog td
 					where td.thread_id = tv.thread_id
+						and td.deleted_at is null
 				) as thread_members
 			from im_thread.thread_variables tv
 			where tv.thread_id = @ThreadID
