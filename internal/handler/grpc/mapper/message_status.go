@@ -25,8 +25,19 @@ func MapToDeliveryReceipts(in []*impb.DeliveryReceipt) ([]*model.StatusReceipt, 
 			return nil, err
 		}
 
-		messageID, err := parseReceiptUUID(r.GetMessageId(), "message_id", i)
+		// A socket ACK names the delivered-up-to point (up_to_message_id or up_to_seq);
+		// a provider/bot receipt names the message itself.
+		messageID, err := parseOptionalReceiptUUID(r.GetMessageId(), "message_id", i)
 		if err != nil {
+			return nil, err
+		}
+
+		upToMessageID, err := parseOptionalReceiptUUID(r.GetUpToMessageId(), "up_to_message_id", i)
+		if err != nil {
+			return nil, err
+		}
+
+		if err := requireReceiptPoint(messageID, upToMessageID, r.GetUpToSeq(), i); err != nil {
 			return nil, err
 		}
 
@@ -34,8 +45,6 @@ func MapToDeliveryReceipts(in []*impb.DeliveryReceipt) ([]*model.StatusReceipt, 
 		if err != nil {
 			return nil, err
 		}
-
-		upToMessageID, _ := uuid.Parse(r.GetUpToMessageId())
 
 		out = append(out, &model.StatusReceipt{
 			DomainID:      r.GetDomainId(),
@@ -70,8 +79,12 @@ func MapToReadReceipts(in []*impb.ReadReceipt) ([]*model.ReadReceipt, error) {
 			return nil, err
 		}
 
-		upToMessageID, err := parseReceiptUUID(r.GetUpToMessageId(), "up_to_message_id", i)
+		upToMessageID, err := parseOptionalReceiptUUID(r.GetUpToMessageId(), "up_to_message_id", i)
 		if err != nil {
+			return nil, err
+		}
+
+		if err := requireReceiptPoint(uuid.Nil, upToMessageID, r.GetUpToSeq(), i); err != nil {
 			return nil, err
 		}
 
@@ -145,6 +158,27 @@ func parseReceiptUUID(raw, field string, index int) (uuid.UUID, error) {
 	}
 
 	return id, nil
+}
+
+// parseOptionalReceiptUUID accepts an empty id; a non-empty one must be a uuid.
+func parseOptionalReceiptUUID(raw, field string, index int) (uuid.UUID, error) {
+	if raw == "" {
+		return uuid.Nil, nil
+	}
+
+	return parseReceiptUUID(raw, field, index)
+}
+
+// requireReceiptPoint rejects a receipt that names no message and no seq.
+func requireReceiptPoint(messageID, upToMessageID uuid.UUID, upToSeq int64, index int) error {
+	if messageID != uuid.Nil || upToMessageID != uuid.Nil || upToSeq > 0 {
+		return nil
+	}
+
+	return errors.InvalidArgument(
+		fmt.Sprintf("receipts[%d]: message_id, up_to_message_id or up_to_seq is required", index),
+		errors.WithID("handler.message_status.receipt"),
+	)
 }
 
 func unixMillisToTime(ms int64) time.Time {
