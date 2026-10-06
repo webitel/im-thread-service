@@ -193,15 +193,16 @@ func groupStatusChanges(changes []*model.StatusChange) []*event.MessageStatusCha
 		}
 
 		e := &event.MessageStatusChanged{
-			ThreadID:   c.ThreadID,
-			DomainID:   c.DomainID,
-			MemberID:   c.MemberID,
-			MessageIDs: []uuid.UUID{c.MessageID},
-			UpToSeq:    c.UpToSeq,
-			Status:     c.Status.String(),
-			Via:        via,
-			Error:      c.Error,
-			OccurredAt: c.UpdatedAt,
+			ThreadID:    c.ThreadID,
+			DomainID:    c.DomainID,
+			MemberID:    c.MemberID,
+			MessageIDs:  []uuid.UUID{c.MessageID},
+			UpToSeq:     c.UpToSeq,
+			UnreadCount: c.UnreadCount,
+			Status:      c.Status.String(),
+			Via:         via,
+			Error:       c.Error,
+			OccurredAt:  c.UpdatedAt,
 		}
 
 		// Failure events carry per-message error details, so they are not batched.
@@ -214,9 +215,10 @@ func groupStatusChanges(changes []*model.StatusChange) []*event.MessageStatusCha
 		k := key{c.ThreadID, c.MemberID, c.Status, via}
 		if existing, ok := grouped[k]; ok {
 			existing.MessageIDs = append(existing.MessageIDs, c.MessageID)
-			// The watermark is the furthest horizon in the batch.
+			// The watermark is the furthest horizon in the batch, with its unread count.
 			if c.UpToSeq > existing.UpToSeq {
 				existing.UpToSeq = c.UpToSeq
+				existing.UnreadCount = c.UnreadCount
 			}
 
 			if c.UpdatedAt.After(existing.OccurredAt) {

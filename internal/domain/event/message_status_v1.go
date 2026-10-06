@@ -34,6 +34,8 @@ type MessageStatusChanged struct {
 	MessageIDs []uuid.UUID   `json:"message_ids"`
 	// UpToSeq: recipient's delivered/read watermark; authoritative per-member horizon.
 	UpToSeq int64 `json:"up_to_seq"`
+	// UnreadCount is the reader's unread messages in the thread after a read; set for reads only.
+	UnreadCount *int64 `json:"unread_count,omitempty"`
 	// Status is the new delivery state: delivered|read|failed.
 	Status string `json:"status"`
 	// Via is the confirmation source: ws|push|provider|bot.
