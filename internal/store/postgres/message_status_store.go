@@ -98,7 +98,7 @@ func (s *messageStatusStore) MarkDelivered(ctx context.Context, receipts []*mode
 
 	allChanges := make([]*model.StatusChange, 0, len(receipts))
 	for _, r := range receipts {
-		if !moved[horizonKey{r.ThreadID, r.MemberID}] {
+		if _, ok := moved[horizonKey{r.ThreadID, r.MemberID}]; !ok {
 			continue
 		}
 
@@ -149,7 +149,8 @@ func (s *messageStatusStore) MarkRead(ctx context.Context, receipts []*model.Rea
 
 	allChanges := make([]*model.StatusChange, 0, len(receipts))
 	for _, r := range receipts {
-		if !moved[horizonKey{r.ThreadID, r.MemberID}] {
+		unread, ok := moved[horizonKey{r.ThreadID, r.MemberID}]
+		if !ok {
 			continue
 		}
 
@@ -159,6 +160,7 @@ func (s *messageStatusStore) MarkRead(ctx context.Context, receipts []*model.Rea
 			UpToMessageID: r.UpToMessageID,
 			UpToSeq:       r.UpToSeq,
 			MemberID:      r.MemberID,
+			UnreadCount:   &unread,
 			Status:        model.MessageDeliveryStatusRead,
 			Via:           &r.Via,
 			UpdatedAt:     now,
@@ -363,9 +365,9 @@ func (s *messageStatusStore) UnreadSummary(ctx context.Context, domainID int32, 
 // refreshes the denormalized unread_count from the new horizon: content messages
 // after it that the member did not send. Uses seq for watermarks but resolves from
 // message_id for legacy receipts. Runs in the same transaction as MarkRead.
-func (s *messageStatusStore) advanceReadHorizon(ctx context.Context, receipts []*model.ReadReceipt) (map[horizonKey]bool, error) {
+func (s *messageStatusStore) advanceReadHorizon(ctx context.Context, receipts []*model.ReadReceipt) (map[horizonKey]int64, error) {
 	if len(receipts) == 0 {
-		return make(map[horizonKey]bool), nil
+		return make(map[horizonKey]int64), nil
 	}
 
 	var (
@@ -410,7 +412,7 @@ func (s *messageStatusStore) advanceReadHorizon(ctx context.Context, receipts []
 		  and td.deleted_at is null
 		  and r.up_to_seq is not null
 		  and r.up_to_seq > coalesce(td.last_read_seq, 0)
-		returning td.thread_id, td.member_id
+		returning td.thread_id, td.member_id, td.unread_count
 	`
 
 	args := pgx.NamedArgs{
@@ -482,24 +484,28 @@ func (s *messageStatusStore) clampReadSeqToThread(ctx context.Context, receipts 
 // horizonKey is one member's horizon in one thread.
 type horizonKey struct{ thread, member uuid.UUID }
 
-// movedHorizons runs a horizon update and reports which horizons actually moved forward;
-// a receipt at or behind the horizon changes nothing and emits no status event.
-func (s *messageStatusStore) movedHorizons(ctx context.Context, query string, args pgx.NamedArgs, errID string) (map[horizonKey]bool, error) {
+// movedHorizons runs a horizon update and reports which horizons actually moved forward, with
+// the member's unread count after it; a receipt at or behind the horizon emits no status event.
+func (s *messageStatusStore) movedHorizons(ctx context.Context, query string, args pgx.NamedArgs, errID string) (map[horizonKey]int64, error) {
 	rows, err := s.db.Query(ctx, query, args)
 	if err != nil {
 		return nil, errors.Internal("advancing horizon", errors.WithCause(err), errors.WithID(errID))
 	}
 	defer rows.Close()
 
-	moved := make(map[horizonKey]bool)
+	moved := make(map[horizonKey]int64)
 
 	for rows.Next() {
-		var k horizonKey
-		if err := rows.Scan(&k.thread, &k.member); err != nil {
+		var (
+			k      horizonKey
+			unread int64
+		)
+
+		if err := rows.Scan(&k.thread, &k.member, &unread); err != nil {
 			return nil, errors.Internal("scanning horizon", errors.WithCause(err), errors.WithID(errID))
 		}
 
-		moved[k] = true
+		moved[k] = unread
 	}
 
 	if err := rows.Err(); err != nil {
@@ -511,9 +517,9 @@ func (s *messageStatusStore) movedHorizons(ctx context.Context, query string, ar
 
 // advanceDeliveredHorizon moves each member's delivered horizon (thread_dialog.last_delivered_seq)
 // forward monotonically. Unlike read, it does not recompute unread_count.
-func (s *messageStatusStore) advanceDeliveredHorizon(ctx context.Context, receipts []*model.StatusReceipt) (map[horizonKey]bool, error) {
+func (s *messageStatusStore) advanceDeliveredHorizon(ctx context.Context, receipts []*model.StatusReceipt) (map[horizonKey]int64, error) {
 	if len(receipts) == 0 {
-		return make(map[horizonKey]bool), nil
+		return make(map[horizonKey]int64), nil
 	}
 
 	var (
@@ -543,7 +549,7 @@ func (s *messageStatusStore) advanceDeliveredHorizon(ctx context.Context, receip
 		  and td.deleted_at is null
 		  and r.up_to_seq is not null
 		  and r.up_to_seq > coalesce(td.last_delivered_seq, 0)
-		returning td.thread_id, td.member_id
+		returning td.thread_id, td.member_id, td.unread_count
 	`
 
 	args := pgx.NamedArgs{

@@ -110,6 +110,8 @@ type StatusChange struct {
 	Via           *string               `db:"via"`
 	Error         map[string]any        `db:"error"`
 	UpdatedAt     time.Time             `db:"updated_at"`
+	// UnreadCount is the member's unread messages in the thread after a read; nil otherwise.
+	UnreadCount *int64 `db:"-"`
 }
 
 // UnreadSummary is a participant's unread totals across all their chats.
