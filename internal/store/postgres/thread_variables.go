@@ -150,13 +150,22 @@ func prepareThreadVariablesSearhcQuery(query model.GetThreadVariablesQuery) (str
 		sb.Where(sb.Any("thread_id", "=", query.ThreadIDs))
 	}
 
+	if query.DomainID > 0 {
+		sb.Where("thread_id in (select id from im_thread.thread where domain_id = " + sb.Var(query.DomainID) + ")")
+	}
+
+	if query.CallerID != uuid.Nil {
+		c := sb.Var(query.CallerID)
+		sb.Where("thread_id in (select acl.thread_id from im_thread.thread_dialog acl where acl.member_id = " + c + " and acl.deleted_at is null union select pv.thread_id from im_thread.thread_preview pv where pv.contact_id = " + c + " and pv.revoked_at is null and pv.expires_at > now())")
+	}
+
 	stmt, args := sb.Build()
 
 	return stmt, args, nil
 }
 
-func (s *threadVariablesStore) Locate(ctx context.Context, threadID uuid.UUID) (*model.ThreadVariables, error) {
-	sql, args := prepareThreadVariablesLocateQuery(threadID)
+func (s *threadVariablesStore) Locate(ctx context.Context, query model.LocateThreadVariablesQuery) (*model.ThreadVariables, error) {
+	sql, args := prepareThreadVariablesLocateQuery(query)
 
 	rows, err := s.db.Query(ctx, sql, args...)
 	if err != nil {
@@ -183,12 +192,17 @@ func (s *threadVariablesStore) Locate(ctx context.Context, threadID uuid.UUID) (
 	return vars, nil
 }
 
-func prepareThreadVariablesLocateQuery(threadID uuid.UUID) (string, []any) {
+func prepareThreadVariablesLocateQuery(query model.LocateThreadVariablesQuery) (string, []any) {
 	sb := threadVarsEntity.
 		SelectFrom("im_thread.thread_variables").
 		Select(threadVarsEntity.WithoutTag("select-ignore").Columns()...)
 
-	sb.Where(sb.Equal("thread_id", threadID))
+	sb.Where(sb.Equal("thread_id", query.ThreadID))
+
+	if query.DomainID > 0 {
+		sb.Where("thread_id in (select id from im_thread.thread where domain_id = " + sb.Var(query.DomainID) + ")")
+	}
+
 	sb.Limit(1)
 
 	return sb.Build()

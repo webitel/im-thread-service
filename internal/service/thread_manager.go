@@ -24,6 +24,10 @@ var (
 	memberRemovedSystemMessageType = "member_removed"
 )
 
+func errThreadNotReadable(id string) error {
+	return errors.Forbidden("thread does not exist or you are not a member", errors.WithID(id))
+}
+
 const (
 	memberTransferedSystemMessageType = "transferred"
 	memberTransferedLeaveReason       = "transferred"
@@ -86,6 +90,17 @@ func (t *ThreadManagementService) log() *slog.Logger {
 }
 
 func (t *ThreadManagementService) Get(ctx context.Context, req *dto.ThreadGetRequest) (*model.Thread, error) {
+	if req.CallerID != uuid.Nil {
+		ok, err := t.uow.ThreadPreviews().CanRead(ctx, req.ID, req.CallerID, req.DomainID)
+		if err != nil {
+			return nil, err
+		}
+
+		if !ok {
+			return nil, errThreadNotReadable("service.thread_manager.get.not_allowed")
+		}
+	}
+
 	query := queryobject.NewThreadQueryObject().
 		WithIDFilter(req.ID).
 		WithDomainIDFilter(req.DomainID).
@@ -93,6 +108,11 @@ func (t *ThreadManagementService) Get(ctx context.Context, req *dto.ThreadGetReq
 
 	thread, err := t.uow.ThreadStore().Get(ctx, query)
 	if err != nil {
+		// If CallerID is set and store returns NotFound, treat as forbidden
+		if req.CallerID != uuid.Nil && errors.Code(err) == codes.NotFound {
+			return nil, errThreadNotReadable("service.thread_manager.get.not_allowed")
+		}
+
 		t.log().Error("getting thread", "operation", "service.thread_manager.get", "id", req.ID, "err", err)
 
 		return nil, err
@@ -106,8 +126,8 @@ func (t *ThreadManagementService) Search(ctx context.Context, searchRequest *dto
 		return nil, errors.New("search request cannot be nil")
 	}
 
-	if len(searchRequest.Tags) > 0 && searchRequest.SelfID == uuid.Nil {
-		return nil, errors.InvalidArgument("self_id is required when tags is set", errors.WithID("service.thread_manager.search"))
+	if searchRequest.SelfID == uuid.Nil {
+		return nil, errors.InvalidArgument("self_id is required", errors.WithID("service.thread_manager.search"))
 	}
 
 	query := queryobject.NewThreadQueryObject().
@@ -299,6 +319,14 @@ func (t *ThreadManagementService) findAddMemberActors(ctx context.Context, threa
 }
 
 func (t *ThreadManagementService) AddMember(ctx context.Context, req *dto.AddMemberRequest) (uuid.UUID, error) {
+	return t.addMember(ctx, req, nil)
+}
+
+// addMember adds a member and publishes the member-added system message, member.joined
+// and the bot-control handover. beforeCreate, when set, runs inside the same transaction
+// right after the thread row lock and before the member row is created; an error from it
+// rolls the whole addition back.
+func (t *ThreadManagementService) addMember(ctx context.Context, req *dto.AddMemberRequest, beforeCreate func(ctx context.Context, uow store.UnitOfWork) error) (uuid.UUID, error) {
 	if req == nil {
 		return uuid.Nil, errors.New("add member request cannot be nil")
 	}
@@ -362,6 +390,12 @@ func (t *ThreadManagementService) AddMember(ctx context.Context, req *dto.AddMem
 		// Lock order thread -> thread_dialog, same as Send.
 		if err := uow.ThreadStore().LockForUpdate(ctx, req.ThreadID); err != nil {
 			return err
+		}
+
+		if beforeCreate != nil {
+			if err := beforeCreate(ctx, uow); err != nil {
+				return err
+			}
 		}
 
 		newMember, err = uow.ThreadDialogStore().Create(ctx, &model.ThreadDialogExtended{

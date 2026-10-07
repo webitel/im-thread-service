@@ -209,15 +209,19 @@ func (q *MessageHistoryQuery) WithCallerLimitation(callerID uuid.UUID, threadIDs
 	q.callerID = callerID
 
 	q.base = q.base.Where(
-		`
-		exists (
-			select 1
-			from im_thread.thread_dialog acl
-			where acl.thread_id = any(?::uuid[])
-			and acl.member_id = ?::uuid
-			and acl.deleted_at is null
-		)
-	`,
+		`(
+			exists (
+				select 1 from im_thread.thread_dialog acl
+				where acl.thread_id = any(?::uuid[]) and acl.member_id = ?::uuid and acl.deleted_at is null
+			)
+			or exists (
+				select 1 from im_thread.thread_preview pv
+				where pv.thread_id = any(?::uuid[]) and pv.contact_id = ?::uuid
+					and pv.revoked_at is null and pv.expires_at > now()
+			)
+		)`,
+		threadIDs,
+		callerID,
 		threadIDs,
 		callerID,
 	)

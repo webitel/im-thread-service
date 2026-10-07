@@ -16,12 +16,13 @@ import (
 
 type threadVariables struct {
 	store     store.ThreadVariablesStore
+	previews  store.ThreadPreviewStore
 	logger    *slog.Logger
 	publisher pubsub.EventPublisher
 }
 
-func NewThreadVariables(store store.ThreadVariablesStore, logger *slog.Logger, publisher pubsub.EventPublisher) *threadVariables {
-	return &threadVariables{store: store, logger: logger, publisher: publisher}
+func NewThreadVariables(varsStore store.ThreadVariablesStore, previews store.ThreadPreviewStore, logger *slog.Logger, publisher pubsub.EventPublisher) *threadVariables {
+	return &threadVariables{store: varsStore, previews: previews, logger: logger, publisher: publisher}
 }
 
 func (tv *threadVariables) Set(ctx context.Context, variables *model.SetThreadVariablesCommand) (*model.ThreadVariables, error) {
@@ -68,10 +69,21 @@ func (tv *threadVariables) Search(ctx context.Context, query model.GetThreadVari
 	return result, nil
 }
 
-func (tv *threadVariables) Locate(ctx context.Context, threadID uuid.UUID) (*model.ThreadVariables, error) {
+func (tv *threadVariables) Locate(ctx context.Context, query model.LocateThreadVariablesQuery) (*model.ThreadVariables, error) {
 	log := tv.logger.With("operation", "service.thread_variables.locate")
 
-	result, err := tv.store.Locate(ctx, threadID)
+	if query.CallerID != uuid.Nil {
+		ok, err := tv.previews.CanRead(ctx, query.ThreadID, query.CallerID, query.DomainID)
+		if err != nil {
+			return nil, err
+		}
+
+		if !ok {
+			return nil, errThreadNotReadable("service.thread_variables.locate.not_allowed")
+		}
+	}
+
+	result, err := tv.store.Locate(ctx, query)
 	if err != nil {
 		log.Error("sql store locate", "error", err)
 

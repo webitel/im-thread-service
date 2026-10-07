@@ -101,6 +101,10 @@ var serviceToHandlerBridgeModule = fx.Module(
 			return s
 		},
 
+		func(s *service.ThreadPreviewService) grpchandler.ThreadPreviewService {
+			return s
+		},
+
 		func(s *service.MessageService) grpchandler.MessageService {
 			return s
 		},
