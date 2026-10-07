@@ -75,27 +75,6 @@ func (s *MessageService) sendMessageToExternalProvider(ctx context.Context, mess
 	return s.providersAdapter.SendMessage(ctx, message)
 }
 
-// resolveToIsBot checks whether the target contact is a bot.
-// Returns false on error to remain non-blocking — the thread will be created without bot control.
-func (s *MessageService) resolveToIsBot(ctx context.Context, toID uuid.UUID, domainID int) bool {
-	if s.contactClient == nil {
-		s.logger.WarnContext(ctx, "resolveToIsBot: contactClient is nil, assuming false", "contact_id", toID)
-
-		return false
-	}
-
-	isBot, err := s.contactClient.IsBot(ctx, toID, domainID)
-	if err != nil {
-		s.logger.WarnContext(ctx, "failed to resolve is_bot for to peer, assuming false", "contact_id", toID, "err", err)
-
-		return false
-	}
-
-	s.logger.DebugContext(ctx, "resolveToIsBot result", "contact_id", toID, "domain_id", domainID, "is_bot", isBot)
-
-	return isBot
-}
-
 func (s *MessageService) seedThreadVariables(ctx context.Context, uow store.UnitOfWork, msg *model.Message, variables map[string]string) {
 	if len(variables) == 0 || msg == nil || msg.Member == nil || msg.Member.ID == uuid.Nil {
 		return
@@ -147,7 +126,6 @@ func (s *MessageService) SendText(ctx context.Context, in *dto.SendTextRequest) 
 		To:       &in.To,
 		DomainID: int(in.DomainID),
 		SendAs:   in.SendAs,
-		ToIsBot:  func() bool { return s.resolveToIsBot(ctx, in.To.ID, int(in.DomainID)) },
 	})
 	if err != nil {
 		log.Error(
@@ -308,7 +286,6 @@ func (s *MessageService) SendDocument(ctx context.Context, in *dto.SendDocumentR
 		To:       &in.To,
 		DomainID: int(in.DomainID),
 		SendAs:   in.SendAs,
-		ToIsBot:  func() bool { return s.resolveToIsBot(ctx, in.To.ID, int(in.DomainID)) },
 	})
 	if err != nil {
 		log.Error("resolving thread", "error", err, "from", in.From.ID.String(), "to", in.To.ID.String(), "to_type", in.To.Type.String())
@@ -1007,7 +984,6 @@ func (s *MessageService) prepareMessageForSending(ctx context.Context, msg *mode
 		From:     &msg.From,
 		To:       &msg.SendTo,
 		SendAs:   msg.SendAs,
-		ToIsBot:  func() bool { return s.resolveToIsBot(ctx, msg.SendTo.ID, int(msg.DomainID)) },
 	})
 	if err != nil {
 		return err
