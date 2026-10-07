@@ -13,9 +13,6 @@ type (
 		From     *shared.Peer
 		To       *shared.Peer
 		SendAs   *uuid.UUID
-		// ToIsBot is evaluated lazily — called only when creating a new thread.
-		// Pass nil to treat the peer as non-bot.
-		ToIsBot func() bool
 	}
 
 	SearchThreadDialogRequest struct {

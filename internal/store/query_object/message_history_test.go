@@ -1,6 +1,9 @@
 package queryobject
 
 import (
+	"fmt"
+	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -8,6 +11,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/webitel/im-thread-service/internal/domain/model"
+	"github.com/webitel/im-thread-service/internal/service/dto"
 )
 
 func TestSelectMessageFields_ReplyAudit(t *testing.T) {
@@ -197,4 +203,165 @@ func TestMessageHistoryQuery_WithCallerLimitation_NoPreviewWhenNilCaller(t *test
 
 	// When caller is nil, the method returns early, so no thread_preview clause should be added
 	assert.False(t, strings.Contains(sql, "thread_preview"))
+}
+
+func messageID(n int) uuid.UUID {
+	return uuid.MustParse(fmt.Sprintf("00000000-0000-0000-0000-%012d", n))
+}
+
+func aroundQuery(t *testing.T, anchor, size int) *MessageHistoryQuery {
+	t.Helper()
+
+	return NewMessageHistoryQuery().
+		WithFields([]string{"body"}).
+		WithCursor(&dto.HistoryMessageCursor{ID: messageID(anchor), Direction: true, Around: true}).
+		WithThreadIDsFilter(uuid.MustParse("11111111-1111-1111-1111-111111111111")).
+		WithLimit(size)
+}
+
+func TestMessageHistoryQuery_Around_SQL(t *testing.T) {
+	t.Parallel()
+
+	sql, args, err := aroundQuery(t, 50, 10).ToSQL()
+	require.NoError(t, err)
+
+	assert.Equal(t, normalizeSQL(
+		"(SELECT body, id FROM "+MessageHistoryView+" WHERE thread_id IN ($1) AND ((id <= $2)) ORDER BY id DESC LIMIT 6)"+
+			" UNION ALL "+
+			"(SELECT body, id FROM "+MessageHistoryView+" WHERE thread_id IN ($3) AND ((id > $4)) ORDER BY id ASC LIMIT 6)"+
+			" ORDER BY id DESC",
+	), normalizeSQL(sql))
+	assert.Equal(t, []any{
+		uuid.MustParse("11111111-1111-1111-1111-111111111111"), messageID(50),
+		uuid.MustParse("11111111-1111-1111-1111-111111111111"), messageID(50),
+	}, args)
+}
+
+func TestMessageHistoryQuery_Around_PageInfo(t *testing.T) {
+	t.Parallel()
+
+	q := aroundQuery(t, 50, 4)
+	_, _, err := q.ToSQL()
+	require.NoError(t, err)
+
+	rows := make([]*model.Message, 0, 6)
+	for _, n := range []int{53, 52, 51, 50, 49, 48} {
+		rows = append(rows, &model.Message{ID: messageID(n)})
+	}
+
+	info, err := q.BuildPageInfo(&rows, func(m *model.Message) (MessageHistoryCursor, error) {
+		return MessageHistoryCursor{ID: m.ID}, nil
+	})
+	require.NoError(t, err)
+
+	got := make([]uuid.UUID, 0, len(rows))
+	for _, m := range rows {
+		got = append(got, m.ID)
+	}
+
+	assert.Equal(t, []uuid.UUID{messageID(52), messageID(51), messageID(50), messageID(49)}, got)
+	assert.True(t, info.HasPrevPage)
+	assert.True(t, info.HasNextPage)
+	assert.Equal(t, messageID(52), info.PrevCursor.ID)
+	assert.Equal(t, messageID(49), info.NextCursor.ID)
+}
+
+func TestMessageHistoryQuery_Around_NilCursorFallsBackToKeyset(t *testing.T) {
+	t.Parallel()
+
+	q := NewMessageHistoryQuery().
+		WithFields([]string{"body"}).
+		WithCursor(&dto.HistoryMessageCursor{ID: uuid.Nil, Around: true}).
+		WithLimit(10)
+
+	sql, _, err := q.ToSQL()
+	require.NoError(t, err)
+
+	assert.NotContains(t, sql, "UNION")
+	assert.Equal(t, DirectionAfter, q.paginatorCfg.Direction)
+}
+
+func TestMessageHistoryQuery_Around_SelectsID(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		fields      []string
+		wantColumns string
+	}{
+		{name: "adds id when it is not requested", fields: []string{"body"}, wantColumns: "SELECT body, id FROM"},
+		{name: "keeps a requested id once", fields: []string{"id", "body"}, wantColumns: "SELECT id, body FROM"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			sql, _, err := NewMessageHistoryQuery().
+				WithFields(tt.fields).
+				WithCursor(&dto.HistoryMessageCursor{ID: messageID(50), Around: true}).
+				ToSQL()
+			require.NoError(t, err)
+
+			assert.Equal(t, 2, strings.Count(sql, tt.wantColumns))
+		})
+	}
+}
+
+func TestMessageHistoryQuery_Around_PlaceholdersWithAllFilters(t *testing.T) {
+	t.Parallel()
+
+	var (
+		caller = uuid.MustParse("33333333-3333-3333-3333-333333333333")
+		thread = uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	)
+
+	sql, args, err := NewMessageHistoryQuery().
+		WithFields([]string{"id", "reply_to"}).
+		WithCursor(&dto.HistoryMessageCursor{ID: messageID(50), Around: true}).
+		WithThreadIDsFilter(thread).
+		WithCallerLimitation(caller, uuid.UUIDs{thread}).
+		WithTypeFilter(1, 4).
+		WithSystemMessageAllowList([]string{"user_joined"}).
+		WithLimit(10).
+		ToSQL()
+	require.NoError(t, err)
+
+	branch := []any{caller, 2, 1, thread, uuid.UUIDs{thread}, caller, uuid.UUIDs{thread}, caller, 1, 4, 4, []string{"user_joined"}, messageID(50)}
+
+	assert.Equal(t, append(append([]any{}, branch...), branch...), args)
+
+	placeholders := regexp.MustCompile(`\$(\d+)`).FindAllStringSubmatch(sql, -1)
+	require.Len(t, placeholders, len(args))
+
+	for i, p := range placeholders {
+		assert.Equal(t, strconv.Itoa(i+1), p[1])
+	}
+}
+
+func TestMessageHistoryQuery_Around_LimitSetAfterCursor(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		size      int
+		wantLimit string
+	}{
+		{name: "explicit size", size: 4, wantLimit: "LIMIT 3"},
+		{name: "default size", size: 0, wantLimit: "LIMIT 11"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			sql, _, err := NewMessageHistoryQuery().
+				WithCursor(&dto.HistoryMessageCursor{ID: messageID(50), Around: true}).
+				WithLimit(tt.size).
+				ToSQL()
+			require.NoError(t, err)
+
+			assert.Equal(t, 2, strings.Count(sql, tt.wantLimit))
+		})
+	}
 }

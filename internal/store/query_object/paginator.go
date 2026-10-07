@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strings"
 
 	sq "github.com/Masterminds/squirrel"
@@ -16,6 +17,7 @@ type Direction string
 const (
 	DirectionAfter  Direction = "after"
 	DirectionBefore Direction = "before"
+	DirectionAround Direction = "around"
 )
 
 type Order string
@@ -199,6 +201,8 @@ func BuildPageInfo[Row, C any](
 	case DirectionBefore:
 		info.HasNextPage = cfg.HasCursor
 		info.HasPrevPage = hasExtra
+	case DirectionAround:
+		return PageInfo[C]{}, errors.New("paginator: around pages are built by BuildAroundPageInfo")
 	}
 
 	if info.HasNextPage {
@@ -238,6 +242,141 @@ func BuildPageInfo[Row, C any](
 	return info, nil
 }
 
+func (p *SquirrelPaginator[C]) ApplyAround(builder sq.SelectBuilder, cfg Config[C]) (string, []any, error) {
+	if err := ValidateConfig(cfg); err != nil {
+		return "", nil, err
+	}
+
+	if !cfg.HasCursor {
+		return "", nil, errors.New("paginator: around requires a cursor")
+	}
+
+	cursorValues, err := cfg.Mapper.ToValues(cfg.Cursor)
+	if err != nil {
+		return "", nil, fmt.Errorf("paginator: cursor mapper ToValues: %w", err)
+	}
+
+	nextPred, err := cursorPredicate(cfg.Columns, cursorValues, DirectionAfter, true)
+	if err != nil {
+		return "", nil, err
+	}
+
+	prevPred, err := cursorPredicate(cfg.Columns, cursorValues, DirectionBefore, false)
+	if err != nil {
+		return "", nil, err
+	}
+
+	nextLimit, prevLimit := aroundLimits(cfg.Limit)
+	builder = builder.PlaceholderFormat(sq.Question)
+
+	nextSQL, nextArgs, err := applyOrderBy(builder.Where(nextPred), cfg.Columns, DirectionAfter).Limit(nextLimit + 1).ToSql()
+	if err != nil {
+		return "", nil, fmt.Errorf("paginator: around next side: %w", err)
+	}
+
+	prevSQL, prevArgs, err := applyOrderBy(builder.Where(prevPred), cfg.Columns, DirectionBefore).Limit(prevLimit + 1).ToSql()
+	if err != nil {
+		return "", nil, fmt.Errorf("paginator: around prev side: %w", err)
+	}
+
+	orderBy := make([]string, 0, len(cfg.Columns))
+	for _, col := range cfg.Columns {
+		orderBy = append(orderBy, fmt.Sprintf("%s %s", col.Name, col.Order))
+	}
+
+	sql, err := sq.Dollar.ReplacePlaceholders("(" + nextSQL + ") UNION ALL (" + prevSQL + ") ORDER BY " + strings.Join(orderBy, ", "))
+	if err != nil {
+		return "", nil, fmt.Errorf("paginator: around placeholders: %w", err)
+	}
+
+	return sql, append(nextArgs, prevArgs...), nil
+}
+
+func BuildAroundPageInfo[Row, C any](
+	rows *[]Row,
+	cfg Config[C],
+	extract CursorExtractor[Row, C],
+	isPrev func(Row) bool,
+) (PageInfo[C], error) {
+	if err := ValidateConfig(cfg); err != nil {
+		return PageInfo[C]{}, err
+	}
+
+	nextLimit, prevLimit := aroundLimits(cfg.Limit)
+
+	split := slices.IndexFunc(*rows, func(r Row) bool { return !isPrev(r) })
+	if split < 0 {
+		split = len(*rows)
+	}
+
+	var (
+		info     PageInfo[C]
+		prevRows = (*rows)[:split]
+		nextRows = (*rows)[split:]
+	)
+
+	if uint64(len(prevRows)) > prevLimit {
+		prevRows = prevRows[uint64(len(prevRows))-prevLimit:]
+		info.HasPrevPage = true
+	}
+
+	if uint64(len(nextRows)) > nextLimit {
+		nextRows = nextRows[:nextLimit]
+		info.HasNextPage = true
+	}
+
+	window := make([]Row, 0, len(prevRows)+len(nextRows))
+	window = append(window, prevRows...)
+	window = append(window, nextRows...)
+	*rows = window
+
+	edgeCursor := func(i int) (C, error) {
+		if len(window) == 0 {
+			return cfg.Cursor, nil
+		}
+
+		return extract(window[i])
+	}
+
+	if info.HasNextPage {
+		cur, err := edgeCursor(len(window) - 1)
+		if err != nil {
+			return PageInfo[C]{}, fmt.Errorf("paginator: extract next cursor: %w", err)
+		}
+
+		token, err := cfg.Codec.Encode(cur)
+		if err != nil {
+			return PageInfo[C]{}, fmt.Errorf("paginator: encode next cursor: %w", err)
+		}
+
+		info.NextCursor = cur
+		info.NextToken = token
+	}
+
+	if info.HasPrevPage {
+		cur, err := edgeCursor(0)
+		if err != nil {
+			return PageInfo[C]{}, fmt.Errorf("paginator: extract prev cursor: %w", err)
+		}
+
+		token, err := cfg.Codec.Encode(cur)
+		if err != nil {
+			return PageInfo[C]{}, fmt.Errorf("paginator: encode prev cursor: %w", err)
+		}
+
+		info.PrevCursor = cur
+		info.PrevToken = token
+	}
+
+	return info, nil
+}
+
+func aroundLimits(limit uint64) (next, prev uint64) {
+	prev = limit / 2
+
+	return limit - prev, prev
+}
+
 func ValidateConfig[C any](cfg Config[C]) error {
 	if cfg.Limit == 0 {
 		return errors.New("paginator: Limit must be > 0")
@@ -257,7 +396,7 @@ func ValidateConfig[C any](cfg Config[C]) error {
 		}
 	}
 
-	if cfg.Direction != DirectionAfter && cfg.Direction != DirectionBefore && cfg.Direction != "" {
+	if cfg.Direction != DirectionAfter && cfg.Direction != DirectionBefore && cfg.Direction != DirectionAround && cfg.Direction != "" {
 		return fmt.Errorf("paginator: invalid Direction %q", cfg.Direction)
 	}
 
@@ -289,6 +428,10 @@ func applyOrderBy(builder sq.SelectBuilder, cols []Column, dir Direction) sq.Sel
 }
 
 func buildCursorPredicate(cols []Column, values CursorValues, dir Direction) (sq.Sqlizer, error) {
+	return cursorPredicate(cols, values, dir, false)
+}
+
+func cursorPredicate(cols []Column, values CursorValues, dir Direction, inclusive bool) (sq.Sqlizer, error) {
 	for _, col := range cols {
 		if _, ok := values[col.Name]; !ok {
 			return nil, fmt.Errorf("paginator: cursor is missing value for column %q", col.Name)
@@ -304,6 +447,10 @@ func buildCursorPredicate(cols []Column, values CursorValues, dir Direction) (sq
 		}
 
 		op := inequalityOp(cols[i].Order, dir)
+		if inclusive && i == len(cols)-1 {
+			op += "="
+		}
+
 		and = append(and, sq.Expr(
 			fmt.Sprintf("%s %s ?", cols[i].Name, op),
 			normaliseJSONNumber(values[cols[i].Name]),
