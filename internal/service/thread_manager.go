@@ -336,16 +336,8 @@ func (t *ThreadManagementService) AddMember(ctx context.Context, req *dto.AddMem
 		}
 	}
 
-	if t.contactInfo != nil && !req.IsBot {
-		t.log().InfoContext(ctx, "checking is_bot for contact", "contact_id", req.NewMemberContactID, "domain_id", domainID)
-
-		isBot, err := t.contactInfo.IsBot(ctx, req.NewMemberContactID, domainID)
-		if err != nil {
-			t.log().WarnContext(ctx, "failed to check is_bot for contact, assuming false", "contact_id", req.NewMemberContactID, "err", err)
-		} else {
-			t.log().InfoContext(ctx, "is_bot check result", "contact_id", req.NewMemberContactID, "is_bot", isBot)
-			req.IsBot = isBot
-		}
+	if !req.IsBot {
+		req.IsBot = t.peerIsBot(ctx, req.NewMemberContactID, domainID)
 	}
 
 	rolePermissions, err := getDefaultPermissionsByRole(req.NewMemberRole)
@@ -1537,7 +1529,7 @@ func (t *ThreadManagementService) EnsureDirectThread(ctx context.Context, req *d
 	}
 
 	if thread != nil {
-		if thread.BotControllerID == nil && req.ToIsBot != nil && req.ToIsBot() {
+		if thread.BotControllerID == nil && isBotMember(thread.Members, req.To.ID) {
 			if err = t.ensureBotControl(ctx, thread, req.DomainID); err != nil {
 				log.WarnContext(ctx, "failed to retroactively init bot control for existing thread", "thread_id", thread.ID, "err", err)
 			}
@@ -1553,6 +1545,16 @@ func (t *ThreadManagementService) EnsureDirectThread(ctx context.Context, req *d
 	}
 
 	return thread, nil
+}
+
+func isBotMember(members []*model.ThreadDialog, contactID uuid.UUID) bool {
+	for _, m := range members {
+		if m != nil && m.ContactID == contactID {
+			return m.IsBot
+		}
+	}
+
+	return false
 }
 
 // ensureBotControl initializes bot control for an existing thread that has none.
@@ -1637,6 +1639,8 @@ func (t *ThreadManagementService) orchestrateDirectThreadCreation(ctx context.Co
 		return nil, err
 	}
 
+	toIsBot := t.peerIsBot(ctx, req.To.ID, req.DomainID)
+
 	var createdThread *model.Thread
 
 	err = t.uow.WithinTransaction(ctx, func(ctx context.Context, uow store.UnitOfWork) error {
@@ -1646,17 +1650,6 @@ func (t *ThreadManagementService) orchestrateDirectThreadCreation(ctx context.Co
 		}
 
 		createdThread = savedThread
-
-		var toIsBot bool
-		if req.ToIsBot != nil {
-			toIsBot = req.ToIsBot()
-		}
-
-		t.log().DebugContext(ctx, "orchestrateDirectThreadCreation: resolved to_is_bot",
-			"to_contact_id", req.To.ID,
-			"to_is_bot", toIsBot,
-			"domain_id", req.DomainID,
-		)
 
 		members, err := t.initializeDirectThreadDialogs(ctx, uow, createdThread.ID, req.DomainID, req.From, req.To, toIsBot)
 		if err != nil {
@@ -1700,6 +1693,25 @@ func (t *ThreadManagementService) orchestrateDirectThreadCreation(ctx context.Co
 	}
 
 	return createdThread, nil
+}
+
+func (t *ThreadManagementService) peerIsBot(ctx context.Context, contactID uuid.UUID, domainID int) bool {
+	if t.contactInfo == nil {
+		t.log().WarnContext(ctx, "contactInfo is nil, assuming peer is not a bot", "contact_id", contactID)
+
+		return false
+	}
+
+	isBot, err := t.contactInfo.IsBot(ctx, contactID, domainID)
+	if err != nil {
+		t.log().WarnContext(ctx, "failed to resolve is_bot for peer, assuming false", "contact_id", contactID, "err", err)
+
+		return false
+	}
+
+	t.log().DebugContext(ctx, "resolved peer is_bot", "contact_id", contactID, "domain_id", domainID, "is_bot", isBot)
+
+	return isBot
 }
 
 func (t *ThreadManagementService) createDirectThread(ctx context.Context, uow store.UnitOfWork, domainID int, from, to *shared.Peer) (*model.Thread, error) {
