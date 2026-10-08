@@ -330,3 +330,22 @@ func TestMessageHistoryQuery_Around_LimitSetAfterCursor(t *testing.T) {
 		})
 	}
 }
+
+func TestSelectMessageFields_Failures(t *testing.T) {
+	t.Parallel()
+
+	base := sq.StatementBuilder.PlaceholderFormat(sq.Dollar).Select().From(MessageHistoryView)
+
+	sql, args, err := selectMessageFields(base, []string{"id", "failures"}, uuid.Nil).ToSql()
+	require.NoError(t, err)
+
+	assert.Empty(t, args)
+	assert.Contains(t, sql, CompactSQL("from "+MessageErrorsTable+" e where e.message_id = v_messages.id"))
+	assert.Contains(t, sql, CompactSQL(") as failures"))
+}
+
+func TestWithFields_DefaultsIncludeFailures(t *testing.T) {
+	t.Parallel()
+
+	assert.Contains(t, NewMessageHistoryQuery().WithFields(nil).fields, "failures")
+}

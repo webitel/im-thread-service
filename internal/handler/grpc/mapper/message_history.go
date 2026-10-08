@@ -213,6 +213,23 @@ func mapHistoryMessage(m *model.Message, callerID uuid.UUID) *impb.HistoryMessag
 	out.ReplyTo = mapReplyTo(m.ReplyTo)
 	out.ForwardOrigin = mapForwardOrigin(m.ForwardOrigin)
 	out.Reactions = mapReactions(m.Reactions, callerID)
+	out.Failures = mapDeliveryFailures(m.Failures)
+
+	return out
+}
+
+func mapDeliveryFailures(in []*model.DeliveryFailure) []*impb.DeliveryFailure {
+	if len(in) == 0 {
+		return nil
+	}
+
+	out := make([]*impb.DeliveryFailure, 0, len(in))
+	for _, f := range in {
+		out = append(out, &impb.DeliveryFailure{
+			MemberId: f.MemberID.String(),
+			Error:    &impb.DeliveryError{Code: f.Code, Message: f.Message},
+		})
+	}
 
 	return out
 }
