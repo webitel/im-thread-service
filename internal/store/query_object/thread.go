@@ -544,7 +544,16 @@ func (q *threadQueryObject) linkLastMessageLateral() {
 						where m.type = 4 and sm.message_id=m.id
 						limit 1
 					),
-					'interactive', m.interactive
+					'interactive', m.interactive,
+					'failures', (
+						select jsonb_agg(jsonb_build_object(
+							'member_id', e.member_id,
+							'code', coalesce(e.error->>'code', ''),
+							'message', coalesce(e.error->>'message', '')
+						) order by e.failed_at)
+						from im_message.message_errors e
+						where e.message_id = m.id
+					)
 				) as last_msg
 			from im_message.messages m
 			where m.thread_id = t.id

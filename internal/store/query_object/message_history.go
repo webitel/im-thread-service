@@ -37,6 +37,7 @@ var (
 		"deleted_at":       true,
 		"deleted_by":       true,
 		"revision_count":   true,
+		"failures":         true,
 	}
 	defaultFields = []string{
 		"id", "thread_id", "sender_id",
@@ -46,10 +47,27 @@ var (
 		"reply_to", "forward_origin",
 		"reactions",
 		"edited", "deleted_at", "deleted_by", "revision_count",
+		"failures",
 	}
 )
 
-const replyToField = "reply_to"
+const (
+	replyToField  = "reply_to"
+	failuresField = "failures"
+)
+
+// failuresColumn lists the members the message could not be delivered to; null when it reached everyone.
+var failuresColumn = CompactSQL(`
+	(
+		select jsonb_agg(jsonb_build_object(
+			'member_id', e.member_id,
+			'code', coalesce(e.error->>'code', ''),
+			'message', coalesce(e.error->>'message', '')
+		) order by e.failed_at)
+		from ` + MessageErrorsTable + ` e
+		where e.message_id = v_messages.id
+	) as failures
+`)
 
 func replyToColumn(callerID uuid.UUID) sq.Sqlizer {
 	return sq.Expr(CompactSQL(`
@@ -71,6 +89,12 @@ func selectMessageFields(base sq.SelectBuilder, fields []string, callerID uuid.U
 	for _, f := range fields {
 		if f == replyToField && callerID != uuid.Nil {
 			base = base.Column(replyToColumn(callerID))
+
+			continue
+		}
+
+		if f == failuresField {
+			base = base.Column(failuresColumn)
 
 			continue
 		}

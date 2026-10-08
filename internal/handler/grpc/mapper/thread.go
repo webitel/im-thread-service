@@ -260,6 +260,7 @@ func (s *ThreadOutConverter) ConvertToThread(source *model.Thread) *impb.Thread 
 			Contact:     mapContact(message.Contact),
 			System:      mapSystem(message.System),
 			Interactive: mapInteractive(message.Interactive),
+			Failures:    mapDeliveryFailures(message.Failures),
 		}
 	}
 

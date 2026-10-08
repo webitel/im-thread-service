@@ -104,7 +104,17 @@ type Message struct {
 
 	ForwardOrigin *ForwardOrigin `json:"forward_origin,omitempty" db:"forward_origin"`
 
+	// Failures are the members the message could not be delivered to; read side only.
+	Failures []*DeliveryFailure `json:"failures,omitempty" db:"failures"`
+
 	domainEvents []event.Outboxer
+}
+
+// DeliveryFailure is one member a message could not be delivered to, with the provider's reason.
+type DeliveryFailure struct {
+	MemberID uuid.UUID `json:"member_id"`
+	Code     string    `json:"code"`
+	Message  string    `json:"message"`
 }
 
 type MessageSkipReason int16
