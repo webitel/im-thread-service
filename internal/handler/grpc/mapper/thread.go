@@ -19,10 +19,16 @@ func (s *ThreadInConverter) ConvertGet(in *impb.GetThreadRequest) (*dto.ThreadGe
 		return nil, errors.InvalidArgument("invalid thread id format", errors.WithCause(err))
 	}
 
+	callerID, err := parseCallerID(in.GetCallerId())
+	if err != nil {
+		return nil, err
+	}
+
 	return &dto.ThreadGetRequest{
 		ID:       id,
 		DomainID: int(in.GetDomainId()),
 		Fields:   in.GetFields(),
+		CallerID: callerID,
 	}, nil
 }
 
@@ -49,7 +55,7 @@ func (s *ThreadInConverter) ConvertSearch(in *impb.ThreadSearchRequest) (*dto.Th
 
 	selfID, err := uuid.Parse(in.GetSelfId())
 	if err != nil {
-		return nil, err
+		return nil, errors.InvalidArgument("invalid self_id format", errors.WithCause(err))
 	}
 
 	return &dto.ThreadSearchRequest{
@@ -433,13 +439,38 @@ func MapSearchVariablesRequestToQuery(req *impb.SearchVariablesRequest) (model.G
 		}
 	}
 
+	callerID, err := parseCallerID(req.GetCallerId())
+	if err != nil {
+		return model.GetThreadVariablesQuery{}, err
+	}
+
 	return model.GetThreadVariablesQuery{
 		Pagination: model.Pagination{
 			Limit: int(req.GetSize()),
 			Page:  int(req.GetPage()),
 		},
-		Fields:    req.GetFields(),
+		Fields:   req.GetFields(),
 		ThreadIDs: threadIDs,
+		CallerID: callerID,
+		DomainID: int(req.GetDomainId()),
+	}, nil
+}
+
+func MapLocateVariablesRequestToQuery(req *impb.LocateVariablesRequest) (model.LocateThreadVariablesQuery, error) {
+	threadID, err := uuid.Parse(req.GetThreadId())
+	if err != nil {
+		return model.LocateThreadVariablesQuery{}, errors.InvalidArgument("invalid thread id format", errors.WithCause(err))
+	}
+
+	callerID, err := parseCallerID(req.GetCallerId())
+	if err != nil {
+		return model.LocateThreadVariablesQuery{}, err
+	}
+
+	return model.LocateThreadVariablesQuery{
+		ThreadID: threadID,
+		CallerID: callerID,
+		DomainID: int(req.GetDomainId()),
 	}, nil
 }
 

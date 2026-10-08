@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -22,8 +23,12 @@ var ErrReactionNotAllowed = errors.New("reaction not allowed")
 
 // ErrMessageNotVisible is returned by MessageRevisionStore.Search when the
 // message does not exist in the domain or the caller is not an active member
-// of its thread.
+// or active preview owner of its thread.
 var ErrMessageNotVisible = errors.New("message not visible to caller")
+
+// ErrPreviewNotActive is returned by ThreadPreviewStore when no active preview
+// (revoked_at is null and expires_at > now()) matches, or it is no longer active.
+var ErrPreviewNotActive = errors.New("thread preview is not active")
 
 type Store interface {
 	Messages() MessageStore
@@ -179,7 +184,7 @@ type MessageReactionStore interface {
 type ThreadVariablesStore interface {
 	Set(ctx context.Context, variables *model.SetThreadVariablesCommand) (*model.ThreadVariables, error)
 	Search(ctx context.Context, query model.GetThreadVariablesQuery) (model.Page[*model.ThreadVariables], error)
-	Locate(ctx context.Context, threadID uuid.UUID) (*model.ThreadVariables, error)
+	Locate(ctx context.Context, query model.LocateThreadVariablesQuery) (*model.ThreadVariables, error)
 	Flush(ctx context.Context, flushCmd model.FlushVariablesCommand) (*model.ThreadVariables, error)
 }
 
@@ -225,4 +230,19 @@ type ThreadTagStore interface {
 	// fetching up to size+1 rows so callers can derive a next-page flag (same convention
 	// as the rest of this service's offset pagination).
 	SearchTags(ctx context.Context, contactID uuid.UUID, page, size int) ([]string, error)
+}
+
+type ThreadPreviewStore interface {
+	// GetActiveForUpdate row-locks (FOR UPDATE) and returns the active preview of contactID
+	// in threadID; domainID > 0 also matches the domain. ErrPreviewNotActive when none.
+	GetActiveForUpdate(ctx context.Context, threadID, contactID uuid.UUID, domainID int) (*model.ThreadPreview, error)
+	// Upsert grants a preview expiring ttl from the DB's now(): it closes a lapsed unrevoked row
+	// as 'expired', then inserts a new row or, when an active one exists, moves its expires_at.
+	// Must run inside a transaction. FK violation → NotFound.
+	Upsert(ctx context.Context, preview *model.ThreadPreview, ttl time.Duration) (*model.ThreadPreview, error)
+	// Revoke stamps revoked_at = now() and the reason; ErrPreviewNotActive if already revoked.
+	Revoke(ctx context.Context, previewID uuid.UUID, reason model.PreviewRevokeReason) error
+	// CanRead reports whether callerID is an active member of threadID or owns an active
+	// preview of it; domainID > 0 also requires that domain.
+	CanRead(ctx context.Context, threadID, callerID uuid.UUID, domainID int) (bool, error)
 }

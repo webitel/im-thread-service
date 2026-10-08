@@ -34,7 +34,7 @@ type ThreadManagementService interface {
 type ThreadVariablesOperator interface {
 	Set(ctx context.Context, variables *model.SetThreadVariablesCommand) (*model.ThreadVariables, error)
 	Search(ctx context.Context, query model.GetThreadVariablesQuery) (model.Page[*model.ThreadVariables], error)
-	Locate(ctx context.Context, threadID uuid.UUID) (*model.ThreadVariables, error)
+	Locate(ctx context.Context, query model.LocateThreadVariablesQuery) (*model.ThreadVariables, error)
 	Flush(ctx context.Context, flushCmd model.FlushVariablesCommand) (*model.ThreadVariables, error)
 }
 
@@ -321,12 +321,12 @@ func (ts *ThreadManagementServer) SearchVariables(ctx context.Context, req *impb
 }
 
 func (ts *ThreadManagementServer) LocateVariables(ctx context.Context, req *impb.LocateVariablesRequest) (*impb.ThreadVariables, error) {
-	threadID, err := uuid.Parse(req.GetThreadId())
+	query, err := mapper.MapLocateVariablesRequestToQuery(req)
 	if err != nil {
-		return nil, errors.InvalidArgument("invalid thread id format", errors.WithCause(err))
+		return nil, err
 	}
 
-	vars, err := ts.threadVariables.Locate(ctx, threadID)
+	vars, err := ts.threadVariables.Locate(ctx, query)
 	if err != nil {
 		return nil, err
 	}
