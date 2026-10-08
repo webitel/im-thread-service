@@ -51,7 +51,9 @@ func (f *fakeUpdates) IsMember(_ context.Context, threadID, _ string, _ int32) (
 	return !f.notMember[threadID], nil
 }
 
-func (f *fakeUpdates) Members(context.Context, string) ([]journal.Member, error) { return f.members, nil }
+func (f *fakeUpdates) Members(context.Context, string) ([]journal.Member, error) {
+	return f.members, nil
+}
 
 func (f *fakeUpdates) Unread(context.Context, string, string) (int64, error) { return f.unread, nil }
 
