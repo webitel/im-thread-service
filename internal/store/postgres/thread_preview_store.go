@@ -191,6 +191,7 @@ func (s *threadPreviewStore) CanRead(ctx context.Context, threadID, callerID uui
 	}
 
 	var ok bool
+
 	err := s.db.QueryRow(ctx, query, args).Scan(&ok)
 	if err != nil {
 		return false, werrors.Internal(

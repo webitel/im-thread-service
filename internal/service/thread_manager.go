@@ -319,14 +319,14 @@ func (t *ThreadManagementService) findAddMemberActors(ctx context.Context, threa
 }
 
 func (t *ThreadManagementService) AddMember(ctx context.Context, req *dto.AddMemberRequest) (uuid.UUID, error) {
-	return t.addMember(ctx, req, nil)
+	return t.addMemberToChat(ctx, req, nil)
 }
 
 // addMember adds a member and publishes the member-added system message, member.joined
 // and the bot-control handover. beforeCreate, when set, runs inside the same transaction
 // right after the thread row lock and before the member row is created; an error from it
 // rolls the whole addition back.
-func (t *ThreadManagementService) addMember(ctx context.Context, req *dto.AddMemberRequest, beforeCreate func(ctx context.Context, uow store.UnitOfWork) error) (uuid.UUID, error) {
+func (t *ThreadManagementService) addMemberToChat(ctx context.Context, req *dto.AddMemberRequest, beforeCreate func(ctx context.Context, uow store.UnitOfWork) error) (uuid.UUID, error) {
 	if req == nil {
 		return uuid.Nil, errors.New("add member request cannot be nil")
 	}
