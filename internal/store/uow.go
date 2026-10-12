@@ -18,4 +18,5 @@ type UnitOfWork interface {
 	BotControl() BotControlStore
 	ThreadTagStore() ThreadTagStore
 	ThreadVariables() ThreadVariablesStore
+	ThreadPreviews() ThreadPreviewStore
 }

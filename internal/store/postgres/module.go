@@ -82,6 +82,11 @@ var Module = fx.Module("store",
 			NewThreadTagStore,
 			fx.As(new(store.ThreadTagStore)),
 		),
+
+		fx.Annotate(
+			NewThreadPreviewStore,
+			fx.As(new(store.ThreadPreviewStore)),
+		),
 	),
 )
 

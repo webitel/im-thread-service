@@ -170,6 +170,41 @@ func TestMessageHistoryQuery_WithSystemMessageAllowList_ComposesWithTypeFilter(t
 	assert.Equal(t, []string{"user_joined"}, args[3])
 }
 
+func TestMessageHistoryQuery_WithCallerLimitation_AllowsActivePreview(t *testing.T) {
+	t.Parallel()
+
+	caller := uuid.MustParse("33333333-3333-3333-3333-333333333333")
+	thread := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+
+	sql, _, err := NewMessageHistoryQuery().
+		WithCallerLimitation(caller, uuid.UUIDs{thread}).
+		ToSQL()
+
+	require.NoError(t, err)
+
+	// Check that the SQL contains the thread_preview branch with all required conditions
+	assertSQLContains(t, sql, "from im_thread.thread_preview pv")
+	assertSQLContains(t, sql, "pv.revoked_at is null")
+	assertSQLContains(t, sql, "pv.expires_at > now()")
+	// Also verify it includes the thread_dialog branch
+	assertSQLContains(t, sql, "from im_thread.thread_dialog acl")
+}
+
+func TestMessageHistoryQuery_WithCallerLimitation_NoPreviewWhenNilCaller(t *testing.T) {
+	t.Parallel()
+
+	thread := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+
+	sql, _, err := NewMessageHistoryQuery().
+		WithCallerLimitation(uuid.Nil, uuid.UUIDs{thread}).
+		ToSQL()
+
+	require.NoError(t, err)
+
+	// When caller is nil, the method returns early, so no thread_preview clause should be added
+	assert.False(t, strings.Contains(sql, "thread_preview"))
+}
+
 func messageID(n int) uuid.UUID {
 	return uuid.MustParse(fmt.Sprintf("00000000-0000-0000-0000-%012d", n))
 }
@@ -292,7 +327,7 @@ func TestMessageHistoryQuery_Around_PlaceholdersWithAllFilters(t *testing.T) {
 		ToSQL()
 	require.NoError(t, err)
 
-	branch := []any{caller, 2, 1, thread, uuid.UUIDs{thread}, caller, 1, 4, 4, []string{"user_joined"}, messageID(50)}
+	branch := []any{caller, 2, 1, thread, uuid.UUIDs{thread}, caller, uuid.UUIDs{thread}, caller, 1, 4, 4, []string{"user_joined"}, messageID(50)}
 
 	assert.Equal(t, append(append([]any{}, branch...), branch...), args)
 

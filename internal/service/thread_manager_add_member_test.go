@@ -29,6 +29,7 @@ type fakeUnitOfWork struct {
 	threadStore          store.ThreadStore
 	threadTagStore       store.ThreadTagStore
 	threadVariablesStore store.ThreadVariablesStore
+	threadPreviewStore   store.ThreadPreviewStore
 }
 
 func (f fakeUnitOfWork) WithinTransaction(ctx context.Context, fn func(context.Context, store.UnitOfWork) error) error {
@@ -146,6 +147,14 @@ func (f fakeUnitOfWork) ThreadVariables() store.ThreadVariablesStore {
 	return f.threadVariablesStore
 }
 
+func (f fakeUnitOfWork) ThreadPreviews() store.ThreadPreviewStore {
+	if f.threadPreviewStore == nil {
+		return &fakeThreadPreviewStore{}
+	}
+
+	return f.threadPreviewStore
+}
+
 type noopThreadVariablesStore struct{}
 
 func (noopThreadVariablesStore) Set(ctx context.Context, variables *model.SetThreadVariablesCommand) (*model.ThreadVariables, error) {
@@ -156,7 +165,7 @@ func (noopThreadVariablesStore) Search(ctx context.Context, query model.GetThrea
 	return model.Page[*model.ThreadVariables]{}, nil
 }
 
-func (noopThreadVariablesStore) Locate(ctx context.Context, threadID uuid.UUID) (*model.ThreadVariables, error) {
+func (noopThreadVariablesStore) Locate(ctx context.Context, query model.LocateThreadVariablesQuery) (*model.ThreadVariables, error) {
 	return nil, nil //nolint:nilnil // matches the store contract: a thread with no variables is (nil, nil)
 }
 
@@ -180,6 +189,71 @@ func (noopThreadTagStore) ListForContact(context.Context, uuid.UUID, []uuid.UUID
 
 func (noopThreadTagStore) SearchTags(context.Context, uuid.UUID, int, int) ([]string, error) {
 	return nil, nil
+}
+
+type fakeThreadPreviewStore struct {
+	active        *model.ThreadPreview
+	canRead       bool
+	created       *model.ThreadPreview
+	createdTTL    time.Duration
+	extendedID    uuid.UUID
+	extendedTTL   time.Duration
+	revokedID     uuid.UUID
+	revokedReason model.PreviewRevokeReason
+	getErr        error
+}
+
+func (f *fakeThreadPreviewStore) GetActiveForUpdate(ctx context.Context, threadID, contactID uuid.UUID, domainID int) (*model.ThreadPreview, error) {
+	if f.getErr != nil {
+		return nil, f.getErr
+	}
+
+	if f.active == nil {
+		return nil, store.ErrPreviewNotActive
+	}
+
+	return f.active, nil
+}
+
+// Upsert mirrors the SQL: extends f.active when set, otherwise records a new preview.
+func (f *fakeThreadPreviewStore) Upsert(ctx context.Context, preview *model.ThreadPreview, ttl time.Duration) (*model.ThreadPreview, error) {
+	if f.active != nil {
+		f.extendedID = f.active.ID
+		f.extendedTTL = ttl
+		f.active.ExpiresAt = time.Now().Add(ttl)
+
+		return f.active, nil
+	}
+
+	f.created = preview
+	f.createdTTL = ttl
+
+	if preview.ID == uuid.Nil {
+		preview.ID = uuid.New()
+	}
+
+	preview.ExpiresAt = time.Now().Add(ttl)
+
+	return preview, nil
+}
+
+func (f *fakeThreadPreviewStore) Revoke(ctx context.Context, previewID uuid.UUID, reason model.PreviewRevokeReason) error {
+	f.revokedID = previewID
+
+	f.revokedReason = reason
+	if f.active == nil || f.active.ID != previewID {
+		return store.ErrPreviewNotActive
+	}
+
+	revoked := time.Now()
+	f.active.RevokedAt = &revoked
+	f.active.RevokeReason = &reason
+
+	return nil
+}
+
+func (f *fakeThreadPreviewStore) CanRead(ctx context.Context, threadID, callerID uuid.UUID, domainID int) (bool, error) {
+	return f.canRead, nil
 }
 
 type fakeThreadDialogStore struct {
