@@ -512,6 +512,47 @@ func (m *messageStore) SaveDocuments(ctx context.Context, messageID uuid.UUID, d
 	return savedDocuments, nil
 }
 
+func (m *messageStore) FileIDsBoundToOtherThreads(ctx context.Context, fileIDs []int64, threadID uuid.UUID) ([]int64, error) {
+	if len(fileIDs) == 0 {
+		return nil, nil
+	}
+
+	const query = `
+		with used as (
+			select d.file_id, msg.thread_id
+			from im_message.message_documents d
+			join im_message.messages msg on msg.id = d.message_id
+			where d.file_id = any(@FileIDs::int[])
+			union all
+			select i.file_id, msg.thread_id
+			from im_message.message_images i
+			join im_message.messages msg on msg.id = i.message_id
+			where i.file_id = any(@FileIDs::int[])
+		)
+		select file_id
+		from used
+		group by file_id
+		having bool_and(thread_id <> @ThreadID)
+	`
+
+	args := pgx.NamedArgs{
+		"FileIDs":  fileIDs,
+		"ThreadID": threadID,
+	}
+
+	rows, err := m.db.Query(ctx, query, args)
+	if err != nil {
+		return nil, err
+	}
+
+	foreign, err := pgx.CollectRows(rows, pgx.RowTo[int64])
+	if err != nil {
+		return nil, err
+	}
+
+	return foreign, nil
+}
+
 func (m *messageStore) SaveMessageLocation(ctx context.Context, msg *model.Message) (*model.Message, error) {
 	if err := validateMessageForSave(msg, "postgres.message.save_message_location"); err != nil {
 		return nil, err

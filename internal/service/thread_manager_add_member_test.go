@@ -448,6 +448,10 @@ func (f *fakeMessageStore) SaveDocuments(ctx context.Context, messageID uuid.UUI
 	return docs, nil
 }
 
+func (f *fakeMessageStore) FileIDsBoundToOtherThreads(ctx context.Context, fileIDs []int64, threadID uuid.UUID) ([]int64, error) {
+	return nil, nil
+}
+
 func (f *fakeMessageStore) ReadMessage(ctx context.Context, read struct {
 	DomainID  int32
 	ThreadID  uuid.UUID

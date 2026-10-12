@@ -228,9 +228,11 @@ func (s *UpdatesServer) applyDiff(ctx context.Context, caller updatesCaller, ent
 
 		entry.Messages = append(entry.Messages, toUpdatedMessage(m))
 		referenced[m.GetSenderId()] = struct{}{}
-	}
 
-	entry.Failures = failures(events, referenced)
+		for _, f := range m.GetFailures() {
+			referenced[f.GetMemberId()] = struct{}{}
+		}
+	}
 
 	for _, e := range events {
 		if e.Kind != journal.KindMemberChanged {
@@ -250,41 +252,6 @@ func (s *UpdatesServer) applyDiff(ctx context.Context, caller updatesCaller, ent
 	entry.Members = historyFrom
 
 	return nil
-}
-
-// failures lists messages that could not reach a member, the latest reason per (message, member).
-func failures(events []journal.Event, referenced map[string]struct{}) []*impb.MessageFailure {
-	type key struct{ message, member string }
-
-	var (
-		out   []*impb.MessageFailure
-		index = make(map[key]int)
-	)
-
-	for _, e := range events {
-		if e.Kind != journal.KindMessageFailed {
-			continue
-		}
-
-		f := &impb.MessageFailure{
-			MessageId: e.Fields[journal.FieldMsgID],
-			MemberId:  e.Fields[journal.FieldActor],
-			Error:     &impb.MessageFailureError{Code: e.Fields[journal.FieldErrCode], Message: e.Fields[journal.FieldErrMsg]},
-		}
-
-		k := key{f.GetMessageId(), f.GetMemberId()}
-		if i, ok := index[k]; ok {
-			out[i] = f
-
-			continue
-		}
-
-		index[k] = len(out)
-		out = append(out, f)
-		referenced[f.GetMemberId()] = struct{}{}
-	}
-
-	return out
 }
 
 // attachDialog adds the thread itself and its top message for a thread new to the caller.
@@ -340,7 +307,7 @@ func (s *UpdatesServer) currentMessages(ctx context.Context, caller updatesCalle
 
 	for _, e := range events {
 		id := e.Fields[journal.FieldMsgID]
-		if id == "" || e.Kind == journal.KindMessageFailed {
+		if id == "" {
 			continue
 		}
 
@@ -440,6 +407,7 @@ func toUpdatedMessage(h *impb.HistoryMessage) *impb.UpdatedMessage {
 		System:        h.GetSystem(),
 		Reactions:     h.GetReactions(),
 		Internal:      h.GetInternal(),
+		Failures:      h.GetFailures(),
 	}
 
 	if h.GetRevisionCount() > 0 {

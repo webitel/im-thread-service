@@ -26,6 +26,7 @@ type fakeUpdates struct {
 	events    map[string][]journal.Event
 	notMember map[string]bool
 	unread    int64
+	members   []journal.Member
 }
 
 func (f *fakeUpdates) ContactChanges(context.Context, string, string) (*journal.ContactChanges, error) {
@@ -50,7 +51,9 @@ func (f *fakeUpdates) IsMember(_ context.Context, threadID, _ string, _ int32) (
 	return !f.notMember[threadID], nil
 }
 
-func (f *fakeUpdates) Members(context.Context, string) ([]journal.Member, error) { return nil, nil }
+func (f *fakeUpdates) Members(context.Context, string) ([]journal.Member, error) {
+	return f.members, nil
+}
 
 func (f *fakeUpdates) Unread(context.Context, string, string) (int64, error) { return f.unread, nil }
 
@@ -304,25 +307,43 @@ func TestGetUpdates_ReadOnlyChange(t *testing.T) {
 	assert.Equal(t, "300", resp.GetCursor())
 }
 
-// A failed delivery comes back with its reason; the failed message itself is not reloaded as a change.
+// A failed delivery reloads the message like a reaction does: it comes back in its current
+// state with the failures it still has, and the failed recipient is among the members.
 func TestGetUpdates_Failures(t *testing.T) {
-	thread, msg, member := uuid.NewString(), uuid.NewString(), uuid.NewString()
-	failed := func(code string) journal.Event {
+	thread, member := uuid.NewString(), uuid.New()
+	failedID, recoveredID := uuid.New(), uuid.New()
+
+	failed := func(msg uuid.UUID) journal.Event {
 		return journal.Event{Kind: journal.KindMessageFailed, Fields: map[string]string{
-			journal.FieldMsgID: msg, journal.FieldActor: member, journal.FieldErrCode: code, journal.FieldErrMsg: "blocked",
+			journal.FieldMsgID: msg.String(), journal.FieldActor: member.String(), journal.FieldErrCode: "403", journal.FieldErrMsg: "blocked",
 		}}
 	}
 	updates := &fakeUpdates{
 		changes: &journal.ContactChanges{Cursor: "300", After: 200, Threads: []string{thread}},
-		events:  map[string][]journal.Event{thread: {failed("old"), failed("recipient_blocked")}},
+		events:  map[string][]journal.Event{thread: {failed(failedID), failed(failedID), failed(recoveredID)}},
+		members: []journal.Member{{ID: "m1", ContactID: member.String()}},
 	}
+	history := &fakeHistory{byID: map[uuid.UUID]*model.Message{
+		failedID: {ID: failedID, Body: "hi", Failures: []*model.DeliveryFailure{
+			{MemberID: member, Code: "403", Message: "blocked"},
+		}},
+		// A later delivery cleared the failure before the client caught up.
+		recoveredID: {ID: recoveredID, Body: "retried"},
+	}}
 
-	resp, err := NewUpdatesServer(&fakeHistory{}, updates, &fakeThreads{}).GetUpdates(context.Background(), updatesReq("200"))
+	resp, err := NewUpdatesServer(history, updates, &fakeThreads{}).GetUpdates(context.Background(), updatesReq("200"))
 	require.NoError(t, err)
 
 	entry := resp.GetThreads()[0]
-	require.Len(t, entry.GetFailures(), 1, "one entry per message and member, the latest reason")
-	assert.Equal(t, "recipient_blocked", entry.GetFailures()[0].GetError().GetCode())
-	assert.Equal(t, member, entry.GetFailures()[0].GetMemberId())
-	assert.Empty(t, entry.GetMessages())
+	require.Len(t, entry.GetMessages(), 2, "each failed message once, in its current state")
+
+	got := entry.GetMessages()[0].GetFailures()
+	require.Len(t, got, 1)
+	assert.Equal(t, member.String(), got[0].GetMemberId())
+	assert.Equal(t, "403", got[0].GetError().GetCode())
+	assert.Equal(t, "blocked", got[0].GetError().GetMessage())
+	assert.Empty(t, entry.GetMessages()[1].GetFailures(), "a recovered failure is not reported")
+
+	require.Len(t, entry.GetMembers(), 1)
+	assert.Equal(t, "m1", entry.GetMembers()[0].GetId())
 }
