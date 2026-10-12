@@ -16,6 +16,11 @@ import (
 	"github.com/webitel/im-thread-service/internal/utils"
 )
 
+const (
+	requireChannelParam = "require_channel"
+	chatChannelName     = "chat"
+)
+
 type AttachmentProcessor interface {
 	GetID() int64
 	GetURL() string
@@ -120,6 +125,7 @@ func (p *storageProcessor) FetchFileLinksWithMetadata(ctx context.Context, domai
 				Action:   "download",
 				Source:   "file",
 				Metadata: true,
+				Query:    map[string]string{requireChannelParam: chatChannelName},
 			})
 			if err != nil {
 				if st, ok := status.FromError(err); ok {
