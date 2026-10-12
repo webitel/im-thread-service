@@ -36,6 +36,7 @@ func TestConvertGet_ValidCallerID(t *testing.T) {
 
 	out, err := (&ThreadInConverter{}).ConvertGet(in)
 	require.NoError(t, err)
+
 	parsedCaller, _ := uuid.Parse(callerID)
 	require.Equal(t, parsedCaller, out.CallerID)
 }
@@ -78,6 +79,7 @@ func TestMapSearchVariablesRequestToQuery_CopiesCallerAndDomain(t *testing.T) {
 
 	query, err := MapSearchVariablesRequestToQuery(req)
 	require.NoError(t, err)
+
 	parsedCaller, _ := uuid.Parse(callerID)
 	require.Equal(t, parsedCaller, query.CallerID)
 	require.Equal(t, 42, query.DomainID)
@@ -126,11 +128,11 @@ func TestConvertToThreadPreview_ValidPreview(t *testing.T) {
 
 	result := ConvertToThreadPreview(preview)
 	require.NotNil(t, result)
-	require.Equal(t, id.String(), result.Id)
-	require.Equal(t, threadID.String(), result.ThreadId)
-	require.Equal(t, contactID.String(), result.ContactId)
-	require.Equal(t, initiatorID.String(), result.InitiatorContactId)
-	require.Equal(t, int32(5), result.DomainId)
-	require.Equal(t, createdAt.UnixMilli(), result.CreatedAt)
-	require.Equal(t, expiresAt.UnixMilli(), result.ExpiresAt)
+	require.Equal(t, id.String(), result.GetId())
+	require.Equal(t, threadID.String(), result.GetThreadId())
+	require.Equal(t, contactID.String(), result.GetContactId())
+	require.Equal(t, initiatorID.String(), result.GetInitiatorContactId())
+	require.Equal(t, int32(5), result.GetDomainId())
+	require.Equal(t, createdAt.UnixMilli(), result.GetCreatedAt())
+	require.Equal(t, expiresAt.UnixMilli(), result.GetExpiresAt())
 }

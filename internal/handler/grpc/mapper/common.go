@@ -2,6 +2,7 @@ package mapper
 
 import (
 	"github.com/google/uuid"
+
 	"github.com/webitel/webitel-go-kit/pkg/errors"
 
 	impb "github.com/webitel/im-thread-service/gen/go/thread/v1"

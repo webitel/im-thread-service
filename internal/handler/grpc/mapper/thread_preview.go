@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
 	"github.com/webitel/webitel-go-kit/pkg/errors"
 
 	impb "github.com/webitel/im-thread-service/gen/go/thread/v1"
@@ -58,6 +59,7 @@ func ConvertRemoveFromPreviewRequest(in *impb.RemoveFromPreviewRequest) (*dto.Re
 		if err != nil {
 			return nil, errors.InvalidArgument("invalid initiator_contact_id format", errors.WithCause(err))
 		}
+
 		req.InitiatorContactID = initiatorID
 	}
 
@@ -97,12 +99,12 @@ func ConvertToThreadPreview(p *model.ThreadPreview) *impb.ThreadPreview {
 	}
 
 	return &impb.ThreadPreview{
-		Id:                  p.ID.String(),
-		ThreadId:            p.ThreadID.String(),
-		ContactId:           p.ContactID.String(),
-		InitiatorContactId:  p.InitiatorID.String(),
-		DomainId:            int32(p.DomainID),
-		CreatedAt:           p.CreatedAt.UnixMilli(),
-		ExpiresAt:           p.ExpiresAt.UnixMilli(),
+		Id:                 p.ID.String(),
+		ThreadId:           p.ThreadID.String(),
+		ContactId:          p.ContactID.String(),
+		InitiatorContactId: p.InitiatorID.String(),
+		DomainId:           int32(p.DomainID),
+		CreatedAt:          p.CreatedAt.UnixMilli(),
+		ExpiresAt:          p.ExpiresAt.UnixMilli(),
 	}
 }

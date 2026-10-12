@@ -450,10 +450,10 @@ func MapSearchVariablesRequestToQuery(req *impb.SearchVariablesRequest) (model.G
 			Limit: int(req.GetSize()),
 			Page:  int(req.GetPage()),
 		},
-		Fields:   req.GetFields(),
+		Fields:    req.GetFields(),
 		ThreadIDs: threadIDs,
-		CallerID: callerID,
-		DomainID: int(req.GetDomainId()),
+		CallerID:  callerID,
+		DomainID:  int(req.GetDomainId()),
 	}, nil
 }
 
