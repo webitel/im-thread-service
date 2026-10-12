@@ -1264,7 +1264,7 @@ func (s *MessageService) dispatchEvents(ctx context.Context, uow store.UnitOfWor
 func (s *MessageService) assertDocumentsBelongToThread(ctx context.Context, threadID uuid.UUID, docs []*dto.Document) error {
 	fileIDs := make([]int64, 0, len(docs))
 	for _, doc := range docs {
-		if doc.ID > 0 {
+		if doc != nil && doc.ID > 0 {
 			fileIDs = append(fileIDs, doc.ID)
 		}
 	}
