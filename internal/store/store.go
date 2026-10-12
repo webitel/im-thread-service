@@ -38,6 +38,13 @@ type MessageStore interface {
 	GetReplyPreview(ctx context.Context, id uuid.UUID, domainID int32) (*model.ReplyToPreview, error)
 	SaveDocuments(ctx context.Context, messageID uuid.UUID, docs []*model.MessageDocument) ([]*model.MessageDocument, error)
 
+	// FileIDsBoundToOtherThreads returns the subset of fileIDs that already
+	// appear in a message of some thread other than threadID and in none of
+	// threadID's messages. A file never used, or already used in threadID,
+	// is not returned, so a fresh upload and a resend within the same thread
+	// both pass.
+	FileIDsBoundToOtherThreads(ctx context.Context, fileIDs []int64, threadID uuid.UUID) ([]int64, error)
+
 	// CopyAttachments duplicates every document and image row of sourceID onto
 	// targetID. Nothing is re-uploaded: the copies reference the same stored
 	// files by file_id.

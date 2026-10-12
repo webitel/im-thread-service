@@ -298,6 +298,10 @@ func (s *MessageService) SendDocument(ctx context.Context, in *dto.SendDocumentR
 		return nil, err
 	}
 
+	if err := s.assertDocumentsBelongToThread(ctx, t.ID, in.Document.Documents); err != nil {
+		return nil, err
+	}
+
 	attachments := make([]AttachmentProcessor, len(in.Document.Documents))
 	for i, doc := range in.Document.Documents {
 		attachments[i] = doc
@@ -1252,6 +1256,33 @@ func (s *MessageService) dispatchEvents(ctx context.Context, uow store.UnitOfWor
 		if err := uow.Outbox().Publish(ctx, topic, event); err != nil {
 			return fmt.Errorf("outbox publish failed: %w", err)
 		}
+	}
+
+	return nil
+}
+
+func (s *MessageService) assertDocumentsBelongToThread(ctx context.Context, threadID uuid.UUID, docs []*dto.Document) error {
+	fileIDs := make([]int64, 0, len(docs))
+	for _, doc := range docs {
+		if doc.ID > 0 {
+			fileIDs = append(fileIDs, doc.ID)
+		}
+	}
+
+	if len(fileIDs) == 0 {
+		return nil
+	}
+
+	foreign, err := s.uow.Messages().FileIDsBoundToOtherThreads(ctx, fileIDs, threadID)
+	if err != nil {
+		return errors.Internal("verify document ownership", errors.WithCause(err), errors.WithID("service.message.send_document.verify_documents"))
+	}
+
+	if len(foreign) > 0 {
+		return errors.Forbidden(
+			fmt.Sprintf("files %v were not uploaded in this chat", foreign),
+			errors.WithID("service.message.send_document.foreign_documents"),
+		)
 	}
 
 	return nil
