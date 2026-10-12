@@ -322,7 +322,7 @@ func (t *ThreadManagementService) AddMember(ctx context.Context, req *dto.AddMem
 	return t.addMemberToChat(ctx, req, nil)
 }
 
-// addMember adds a member and publishes the member-added system message, member.joined
+// addMemberToChat adds a member and publishes the member-added system message, member.joined
 // and the bot-control handover. beforeCreate, when set, runs inside the same transaction
 // right after the thread row lock and before the member row is created; an error from it
 // rolls the whole addition back.

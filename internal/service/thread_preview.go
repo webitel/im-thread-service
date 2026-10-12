@@ -25,7 +25,7 @@ type (
 	}
 
 	previewMemberAdder interface {
-		addMember(ctx context.Context, req *dto.AddMemberRequest, beforeCreate func(context.Context, store.UnitOfWork) error) (uuid.UUID, error)
+		addMemberToChat(ctx context.Context, req *dto.AddMemberRequest, beforeCreate func(context.Context, store.UnitOfWork) error) (uuid.UUID, error)
 	}
 )
 
@@ -184,7 +184,7 @@ func (s *ThreadPreviewService) UpgradePreviewToFullMember(ctx context.Context, r
 		return uuid.Nil, errors.InvalidArgument("unknown member role", errors.WithID("service.thread_preview.upgrade.role"))
 	}
 
-	return s.members.addMember(ctx, &dto.AddMemberRequest{
+	return s.members.addMemberToChat(ctx, &dto.AddMemberRequest{
 		ThreadID:           req.ThreadID,
 		NewMemberContactID: req.ContactID,
 		InitiatorContactID: req.InitiatorContactID,
