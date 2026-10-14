@@ -274,6 +274,8 @@ func (s *messageStatusStore) ReadUnread(ctx context.Context, domainID int32, mem
 
 // ReadMemberStates returns per-member delivery/read horizons from thread_dialog;
 // shared with GetThreadUpdates for deriving inbox/outbox watermarks.
+// member_id is the membership (thread_dialog) id, the same id as Thread.members[].id
+// and a message's sender id, so clients can match a state to its member.
 func (s *messageStatusStore) ReadMemberStates(ctx context.Context, domainID int32, memberID uuid.UUID, threadIDs []uuid.UUID) (map[uuid.UUID][]model.MemberReadState, error) {
 	if memberID == uuid.Nil || len(threadIDs) == 0 {
 		return make(map[uuid.UUID][]model.MemberReadState), nil
@@ -282,7 +284,7 @@ func (s *messageStatusStore) ReadMemberStates(ctx context.Context, domainID int3
 	const query = `
 		select
 			td.thread_id,
-			td.member_id,
+			td.id as member_id,
 			greatest(coalesce(td.last_delivered_seq, 0), coalesce(td.last_read_seq, 0)) as delivered_up_to_seq,
 			coalesce(td.last_read_seq, 0) as read_up_to_seq
 		from im_thread.thread_dialog td
@@ -296,7 +298,7 @@ func (s *messageStatusStore) ReadMemberStates(ctx context.Context, domainID int3
 		        and self.member_id = @MemberID
 		        and self.deleted_at is null
 		  )
-		order by td.thread_id, td.member_id
+		order by td.thread_id, td.id
 	`
 
 	args := pgx.NamedArgs{
