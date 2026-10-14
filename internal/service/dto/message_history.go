@@ -85,6 +85,7 @@ type (
 		CreatedAt time.Time
 		ID        uuid.UUID
 		Direction bool
+		Around    bool
 	}
 
 	GetMessageRevisionsRequest struct {

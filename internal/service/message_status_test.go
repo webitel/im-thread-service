@@ -320,3 +320,19 @@ func TestInsertSentStatuses_SendAsOverridesSender(t *testing.T) {
 	// receives the message in the thread, so it stays a recipient.
 	require.Equal(t, []uuid.UUID{origin, recipient}, statusStore.insertedRecipients)
 }
+
+// A batch of reads reports the unread count that goes with its furthest horizon.
+func TestGroupStatusChanges_ReadCarriesUnreadOfFurthestHorizon(t *testing.T) {
+	thread, member := uuid.New(), uuid.New()
+	three, zero := int64(3), int64(0)
+
+	events := groupStatusChanges([]*model.StatusChange{
+		{ThreadID: thread, MemberID: member, Status: model.MessageDeliveryStatusRead, UpToSeq: 118, UnreadCount: &three},
+		{ThreadID: thread, MemberID: member, Status: model.MessageDeliveryStatusRead, UpToSeq: 121, UnreadCount: &zero},
+	})
+
+	require.Len(t, events, 1)
+	require.Equal(t, int64(121), events[0].UpToSeq)
+	require.NotNil(t, events[0].UnreadCount)
+	require.Equal(t, int64(0), *events[0].UnreadCount)
+}

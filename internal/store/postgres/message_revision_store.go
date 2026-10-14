@@ -54,13 +54,21 @@ func (s *messageRevisionStore) Search(ctx context.Context, messageID uuid.UUID, 
 			from im_message.messages m
 			where m.id = @MessageID
 			  and m.domain_id = @DomainID
-			  and exists (
+			  and (exists (
 				select 1
 				from im_thread.thread_dialog td
 				where td.thread_id = m.thread_id
 				  and td.member_id = @CallerID
 				  and td.deleted_at is null
-			  )
+				  and td.domain_id = m.domain_id
+			  ) or exists (
+				select 1 from im_thread.thread_preview pv
+				where pv.thread_id = m.thread_id
+				  and pv.contact_id = @CallerID
+				  and pv.domain_id = m.domain_id
+				  and pv.revoked_at is null
+				  and pv.expires_at > now()
+			  ))
 		),
 		rev as (
 			select

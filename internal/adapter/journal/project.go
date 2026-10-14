@@ -10,13 +10,15 @@ import (
 
 // Journal entry kinds: canonical strings for thread_updates.kind.
 const (
-	KindMessageNew      = "message.new"
-	KindMessageEdited   = "message.edited"
-	KindMessageDeleted  = "message.deleted"
-	KindMessageReaction = "message.reaction"
-	KindMemberChanged   = "member.changed"
-	KindThreadCreated   = "thread.created"
-	KindReadChanged     = "read.changed"
+	KindMessageNew       = "message.new"
+	KindMessageEdited    = "message.edited"
+	KindMessageDeleted   = "message.deleted"
+	KindMessageReaction  = "message.reaction"
+	KindMemberChanged    = "member.changed"
+	KindThreadCreated    = "thread.created"
+	KindReadChanged      = "read.changed"
+	KindDeliveredChanged = "delivered.changed"
+	KindMessageFailed    = "message.failed"
 )
 
 // Journal field keys. Entries keep only references; message content is read from
@@ -28,6 +30,8 @@ const (
 	FieldAction    = "action"
 	FieldContactID = "contact_id"
 	FieldUpToSeq   = "up_to_seq"
+	FieldErrCode   = "error_code"
+	FieldErrMsg    = "error_message"
 )
 
 // Member change actions stored under FieldAction.
@@ -45,13 +49,7 @@ func ProjectEvent(eventType string, payload []byte) (Update, bool, error) {
 			return Update{}, false, err
 		}
 
-		if e.SkipJournal() {
-			return Update{}, false, nil
-		}
-
-		return Update{ThreadID: e.ThreadID.String(), Kind: KindReadChanged, Fields: map[string]any{
-			FieldActor: e.MemberID.String(), FieldUpToSeq: strconv.FormatInt(e.UpToSeq, 10),
-		}}, true, nil
+		return statusUpdate(&e), true, nil
 	case event.ThreadCreatedEvent:
 		var e event.ThreadCreated
 		if err := json.Unmarshal(payload, &e); err != nil {
@@ -141,4 +139,32 @@ func memberContactFromMember(m *event.Member) string {
 	}
 
 	return m.Contact.ID
+}
+
+// statusUpdate journals a receipt: horizons for delivered/read, the message and reason for a failure.
+func statusUpdate(e *event.MessageStatusChanged) Update {
+	fields := map[string]any{FieldActor: e.MemberID.String(), FieldUpToSeq: strconv.FormatInt(e.UpToSeq, 10)}
+
+	switch e.Status {
+	case event.StatusFailed:
+		if len(e.MessageIDs) > 0 {
+			fields[FieldMsgID] = e.MessageIDs[0].String()
+		}
+
+		fields[FieldErrCode], fields[FieldErrMsg] = errorText(e.Error, "code"), errorText(e.Error, "message")
+
+		return Update{ThreadID: e.ThreadID.String(), Kind: KindMessageFailed, Fields: fields}
+	case event.StatusDelivered:
+		return Update{ThreadID: e.ThreadID.String(), Kind: KindDeliveredChanged, Fields: fields}
+	}
+
+	return Update{ThreadID: e.ThreadID.String(), Kind: KindReadChanged, Fields: fields}
+}
+
+func errorText(details map[string]any, key string) string {
+	if v, ok := details[key].(string); ok {
+		return v
+	}
+
+	return ""
 }

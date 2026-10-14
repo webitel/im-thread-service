@@ -1,6 +1,7 @@
 package queryobject
 
 import (
+	"bytes"
 	"slices"
 
 	sq "github.com/Masterminds/squirrel"
@@ -36,6 +37,7 @@ var (
 		"deleted_at":       true,
 		"deleted_by":       true,
 		"revision_count":   true,
+		"failures":         true,
 	}
 	defaultFields = []string{
 		"id", "thread_id", "sender_id",
@@ -45,10 +47,27 @@ var (
 		"reply_to", "forward_origin",
 		"reactions",
 		"edited", "deleted_at", "deleted_by", "revision_count",
+		"failures",
 	}
 )
 
-const replyToField = "reply_to"
+const (
+	replyToField  = "reply_to"
+	failuresField = "failures"
+)
+
+// failuresColumn lists the members the message could not be delivered to; null when it reached everyone.
+var failuresColumn = CompactSQL(`
+	(
+		select jsonb_agg(jsonb_build_object(
+			'member_id', e.member_id,
+			'code', coalesce(e.error->>'code', ''),
+			'message', coalesce(e.error->>'message', '')
+		) order by e.failed_at)
+		from ` + MessageErrorsTable + ` e
+		where e.message_id = v_messages.id
+	) as failures
+`)
 
 func replyToColumn(callerID uuid.UUID) sq.Sqlizer {
 	return sq.Expr(CompactSQL(`
@@ -70,6 +89,12 @@ func selectMessageFields(base sq.SelectBuilder, fields []string, callerID uuid.U
 	for _, f := range fields {
 		if f == replyToField && callerID != uuid.Nil {
 			base = base.Column(replyToColumn(callerID))
+
+			continue
+		}
+
+		if f == failuresField {
+			base = base.Column(failuresColumn)
 
 			continue
 		}
@@ -196,6 +221,10 @@ func (q *MessageHistoryQuery) WithCursor(cursor *dto.HistoryMessageCursor) *Mess
 		return q
 	}
 
+	if cursor.Around && cfg.HasCursor {
+		cfg.Direction = DirectionAround
+	}
+
 	q.paginatorCfg = cfg
 
 	return q
@@ -209,15 +238,19 @@ func (q *MessageHistoryQuery) WithCallerLimitation(callerID uuid.UUID, threadIDs
 	q.callerID = callerID
 
 	q.base = q.base.Where(
-		`
-		exists (
-			select 1
-			from im_thread.thread_dialog acl
-			where acl.thread_id = any(?::uuid[])
-			and acl.member_id = ?::uuid
-			and acl.deleted_at is null
-		)
-	`,
+		`(
+			exists (
+				select 1 from im_thread.thread_dialog acl
+				where acl.thread_id = any(?::uuid[]) and acl.member_id = ?::uuid and acl.deleted_at is null
+			)
+			or exists (
+				select 1 from im_thread.thread_preview pv
+				where pv.thread_id = any(?::uuid[]) and pv.contact_id = ?::uuid
+					and pv.revoked_at is null and pv.expires_at > now()
+			)
+		)`,
+		threadIDs,
+		callerID,
 		threadIDs,
 		callerID,
 	)
@@ -249,6 +282,15 @@ func (q *MessageHistoryQuery) ToSQL() (string, []any, error) {
 		q.paginatorCfg.Direction = DirectionAfter
 	}
 
+	if q.paginatorCfg.Direction == DirectionAround {
+		fields := q.fields
+		if !slices.Contains(fields, "id") {
+			fields = append(slices.Clone(fields), "id")
+		}
+
+		return q.pag.ApplyAround(selectMessageFields(q.base, fields, q.callerID), q.paginatorCfg)
+	}
+
 	withColumns := selectMessageFields(q.base, q.fields, q.callerID)
 
 	decorated, err := q.pag.Apply(withColumns, q.paginatorCfg)
@@ -263,7 +305,17 @@ func (q *MessageHistoryQuery) BuildPageInfo(
 	rows *[]*model.Message,
 	extract CursorExtractor[*model.Message, MessageHistoryCursor],
 ) (PageInfo[MessageHistoryCursor], error) {
+	if q.paginatorCfg.Direction == DirectionAround {
+		return BuildAroundPageInfo(rows, q.paginatorCfg, extract, newerThan(q.paginatorCfg.Cursor.ID))
+	}
+
 	return BuildPageInfo(rows, q.paginatorCfg, extract)
+}
+
+func newerThan(id uuid.UUID) func(*model.Message) bool {
+	return func(m *model.Message) bool {
+		return bytes.Compare(m.ID[:], id[:]) > 0
+	}
 }
 
 func (q *MessageHistoryQuery) limitOrDefault() int {

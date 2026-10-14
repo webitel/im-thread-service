@@ -13,9 +13,6 @@ type (
 		From     *shared.Peer
 		To       *shared.Peer
 		SendAs   *uuid.UUID
-		// ToIsBot is evaluated lazily — called only when creating a new thread.
-		// Pass nil to treat the peer as non-bot.
-		ToIsBot func() bool
 	}
 
 	SearchThreadDialogRequest struct {
@@ -35,6 +32,10 @@ type (
 		ID       uuid.UUID
 		DomainID int
 		Fields   []string
+		// CallerID is the contact requesting the thread. When set, the caller must be an
+		// active member of the thread or own an active preview of it; otherwise PermissionDenied.
+		// uuid.Nil = trusted internal call, no access check.
+		CallerID uuid.UUID
 	}
 
 	ThreadSearchRequest struct {

@@ -56,7 +56,6 @@ func (s *MessageService) ForwardMessages(ctx context.Context, in *dto.ForwardMes
 		To:       &in.To,
 		DomainID: int(in.DomainID),
 		SendAs:   in.SendAs,
-		ToIsBot:  func() bool { return s.resolveToIsBot(ctx, in.To.ID, int(in.DomainID)) },
 	})
 	if err != nil {
 		log.ErrorContext(ctx, "failed to ensure destination thread", "err", err)

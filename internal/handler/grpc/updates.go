@@ -228,6 +228,10 @@ func (s *UpdatesServer) applyDiff(ctx context.Context, caller updatesCaller, ent
 
 		entry.Messages = append(entry.Messages, toUpdatedMessage(m))
 		referenced[m.GetSenderId()] = struct{}{}
+
+		for _, f := range m.GetFailures() {
+			referenced[f.GetMemberId()] = struct{}{}
+		}
 	}
 
 	for _, e := range events {
@@ -403,6 +407,7 @@ func toUpdatedMessage(h *impb.HistoryMessage) *impb.UpdatedMessage {
 		System:        h.GetSystem(),
 		Reactions:     h.GetReactions(),
 		Internal:      h.GetInternal(),
+		Failures:      h.GetFailures(),
 	}
 
 	if h.GetRevisionCount() > 0 {

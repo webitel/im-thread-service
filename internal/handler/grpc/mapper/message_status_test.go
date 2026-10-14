@@ -146,3 +146,46 @@ func TestMapToFailureReceipts_NoErrorDetails(t *testing.T) {
 		t.Errorf("expected nil error details, got %+v", out[0].Error)
 	}
 }
+
+// A socket ACK names only the delivered-up-to point; it must not be rejected for a missing message_id.
+func TestMapToDeliveryReceipts_AckWithoutMessageID(t *testing.T) {
+	thread, member, upTo := uuid.New(), uuid.New(), uuid.New()
+
+	for name, r := range map[string]*impb.DeliveryReceipt{
+		"up_to_message_id": {ThreadId: thread.String(), MemberId: member.String(), UpToMessageId: upTo.String()},
+		"up_to_seq":        {ThreadId: thread.String(), MemberId: member.String(), UpToSeq: 121},
+	} {
+		got, err := MapToDeliveryReceipts([]*impb.DeliveryReceipt{r})
+		if err != nil {
+			t.Fatalf("%s: unexpected error: %v", name, err)
+		}
+
+		if got[0].MessageID != uuid.Nil || got[0].MemberID != member {
+			t.Errorf("%s: receipt = %+v", name, got[0])
+		}
+	}
+}
+
+func TestMapToDeliveryReceipts_NoPointRejected(t *testing.T) {
+	_, err := MapToDeliveryReceipts([]*impb.DeliveryReceipt{{ThreadId: uuid.New().String(), MemberId: uuid.New().String()}})
+	if err == nil {
+		t.Fatal("expected an error for a receipt without message_id, up_to_message_id or up_to_seq")
+	}
+
+	_, err = MapToDeliveryReceipts([]*impb.DeliveryReceipt{{ThreadId: uuid.New().String(), MemberId: uuid.New().String(), MessageId: "broken"}})
+	if err == nil {
+		t.Fatal("expected an error for a broken message_id")
+	}
+}
+
+// A read by seq alone is valid; a read naming nothing is not.
+func TestMapToReadReceipts_BySeq(t *testing.T) {
+	got, err := MapToReadReceipts([]*impb.ReadReceipt{{ThreadId: uuid.New().String(), MemberId: uuid.New().String(), UpToSeq: 9}})
+	if err != nil || got[0].UpToSeq != 9 || got[0].UpToMessageID != uuid.Nil {
+		t.Fatalf("got %+v, err %v", got, err)
+	}
+
+	if _, err := MapToReadReceipts([]*impb.ReadReceipt{{ThreadId: uuid.New().String(), MemberId: uuid.New().String()}}); err == nil {
+		t.Fatal("expected an error for a read without up_to_message_id or up_to_seq")
+	}
+}

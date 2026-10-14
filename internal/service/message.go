@@ -75,27 +75,6 @@ func (s *MessageService) sendMessageToExternalProvider(ctx context.Context, mess
 	return s.providersAdapter.SendMessage(ctx, message)
 }
 
-// resolveToIsBot checks whether the target contact is a bot.
-// Returns false on error to remain non-blocking — the thread will be created without bot control.
-func (s *MessageService) resolveToIsBot(ctx context.Context, toID uuid.UUID, domainID int) bool {
-	if s.contactClient == nil {
-		s.logger.WarnContext(ctx, "resolveToIsBot: contactClient is nil, assuming false", "contact_id", toID)
-
-		return false
-	}
-
-	isBot, err := s.contactClient.IsBot(ctx, toID, domainID)
-	if err != nil {
-		s.logger.WarnContext(ctx, "failed to resolve is_bot for to peer, assuming false", "contact_id", toID, "err", err)
-
-		return false
-	}
-
-	s.logger.DebugContext(ctx, "resolveToIsBot result", "contact_id", toID, "domain_id", domainID, "is_bot", isBot)
-
-	return isBot
-}
-
 func (s *MessageService) seedThreadVariables(ctx context.Context, uow store.UnitOfWork, msg *model.Message, variables map[string]string) {
 	if len(variables) == 0 || msg == nil || msg.Member == nil || msg.Member.ID == uuid.Nil {
 		return
@@ -147,7 +126,6 @@ func (s *MessageService) SendText(ctx context.Context, in *dto.SendTextRequest) 
 		To:       &in.To,
 		DomainID: int(in.DomainID),
 		SendAs:   in.SendAs,
-		ToIsBot:  func() bool { return s.resolveToIsBot(ctx, in.To.ID, int(in.DomainID)) },
 	})
 	if err != nil {
 		log.Error(
@@ -308,7 +286,6 @@ func (s *MessageService) SendDocument(ctx context.Context, in *dto.SendDocumentR
 		To:       &in.To,
 		DomainID: int(in.DomainID),
 		SendAs:   in.SendAs,
-		ToIsBot:  func() bool { return s.resolveToIsBot(ctx, in.To.ID, int(in.DomainID)) },
 	})
 	if err != nil {
 		log.Error("resolving thread", "error", err, "from", in.From.ID.String(), "to", in.To.ID.String(), "to_type", in.To.Type.String())
@@ -318,6 +295,10 @@ func (s *MessageService) SendDocument(ctx context.Context, in *dto.SendDocumentR
 
 	replyPreview, err := s.resolveReply(ctx, in.ReplyToMessageID, in.ReplyToExternalID, &in.From, t, int32(in.DomainID))
 	if err != nil {
+		return nil, err
+	}
+
+	if err := s.assertDocumentsBelongToThread(ctx, t.ID, in.Document.Documents); err != nil {
 		return nil, err
 	}
 
@@ -431,6 +412,12 @@ func (s *MessageService) Read(ctx context.Context, in *dto.ReadMessageRequest) e
 		changes, err := uow.MessageStatuses().MarkRead(txCtx, []*model.ReadReceipt{receipt})
 		if err != nil {
 			return fmt.Errorf("read_message: %w", err)
+		}
+
+		// The horizon did not move: the thread is already read that far.
+		if len(changes) == 0 {
+			return errors.New("already read up to this message",
+				errors.WithCode(codes.FailedPrecondition), errors.WithID("service.message.read.already_read"))
 		}
 
 		return dispatchStatusChangeEvents(txCtx, uow, changes)
@@ -1001,7 +988,6 @@ func (s *MessageService) prepareMessageForSending(ctx context.Context, msg *mode
 		From:     &msg.From,
 		To:       &msg.SendTo,
 		SendAs:   msg.SendAs,
-		ToIsBot:  func() bool { return s.resolveToIsBot(ctx, msg.SendTo.ID, int(msg.DomainID)) },
 	})
 	if err != nil {
 		return err
@@ -1270,6 +1256,33 @@ func (s *MessageService) dispatchEvents(ctx context.Context, uow store.UnitOfWor
 		if err := uow.Outbox().Publish(ctx, topic, event); err != nil {
 			return fmt.Errorf("outbox publish failed: %w", err)
 		}
+	}
+
+	return nil
+}
+
+func (s *MessageService) assertDocumentsBelongToThread(ctx context.Context, threadID uuid.UUID, docs []*dto.Document) error {
+	fileIDs := make([]int64, 0, len(docs))
+	for _, doc := range docs {
+		if doc != nil && doc.ID > 0 {
+			fileIDs = append(fileIDs, doc.ID)
+		}
+	}
+
+	if len(fileIDs) == 0 {
+		return nil
+	}
+
+	foreign, err := s.uow.Messages().FileIDsBoundToOtherThreads(ctx, fileIDs, threadID)
+	if err != nil {
+		return errors.Internal("verify document ownership", errors.WithCause(err), errors.WithID("service.message.send_document.verify_documents"))
+	}
+
+	if len(foreign) > 0 {
+		return errors.Forbidden(
+			fmt.Sprintf("files %v were not uploaded in this chat", foreign),
+			errors.WithID("service.message.send_document.foreign_documents"),
+		)
 	}
 
 	return nil

@@ -61,9 +61,10 @@ func (s *threadVariablesStore) Set(ctx context.Context, variables *model.SetThre
 func prepareThreadVariablesSetQuery(variables *model.SetThreadVariablesCommand) (string, pgx.NamedArgs) {
 	query := `
 		with members_list as (
-			select array_agg(member_id) as members
+			select array_agg(distinct member_id) as members
 			from "im_thread"."thread_dialog"
 			where thread_id = @ThreadID
+				and deleted_at is null
 		),
 		upsert_action as (
 			insert into "im_thread"."thread_variables" ("thread_id", "variables")
@@ -150,13 +151,22 @@ func prepareThreadVariablesSearhcQuery(query model.GetThreadVariablesQuery) (str
 		sb.Where(sb.Any("thread_id", "=", query.ThreadIDs))
 	}
 
+	if query.DomainID > 0 {
+		sb.Where("thread_id in (select id from im_thread.thread where domain_id = " + sb.Var(query.DomainID) + ")")
+	}
+
+	if query.CallerID != uuid.Nil {
+		c := sb.Var(query.CallerID)
+		sb.Where("thread_id in (select acl.thread_id from im_thread.thread_dialog acl where acl.member_id = " + c + " and acl.deleted_at is null union select pv.thread_id from im_thread.thread_preview pv where pv.contact_id = " + c + " and pv.revoked_at is null and pv.expires_at > now())")
+	}
+
 	stmt, args := sb.Build()
 
 	return stmt, args, nil
 }
 
-func (s *threadVariablesStore) Locate(ctx context.Context, threadID uuid.UUID) (*model.ThreadVariables, error) {
-	sql, args := prepareThreadVariablesLocateQuery(threadID)
+func (s *threadVariablesStore) Locate(ctx context.Context, query model.LocateThreadVariablesQuery) (*model.ThreadVariables, error) {
+	sql, args := prepareThreadVariablesLocateQuery(query)
 
 	rows, err := s.db.Query(ctx, sql, args...)
 	if err != nil {
@@ -183,12 +193,17 @@ func (s *threadVariablesStore) Locate(ctx context.Context, threadID uuid.UUID) (
 	return vars, nil
 }
 
-func prepareThreadVariablesLocateQuery(threadID uuid.UUID) (string, []any) {
+func prepareThreadVariablesLocateQuery(query model.LocateThreadVariablesQuery) (string, []any) {
 	sb := threadVarsEntity.
 		SelectFrom("im_thread.thread_variables").
 		Select(threadVarsEntity.WithoutTag("select-ignore").Columns()...)
 
-	sb.Where(sb.Equal("thread_id", threadID))
+	sb.Where(sb.Equal("thread_id", query.ThreadID))
+
+	if query.DomainID > 0 {
+		sb.Where("thread_id in (select id from im_thread.thread where domain_id = " + sb.Var(query.DomainID) + ")")
+	}
+
 	sb.Limit(1)
 
 	return sb.Build()
@@ -234,9 +249,10 @@ func prepareThreadVariablesFLushQuery(flushCmd model.FlushVariablesCommand) (str
 				tv.thread_id,
 				tv.variables,
 				(
-					select array_agg(td.member_id)
+					select array_agg(distinct td.member_id)
 					from im_thread.thread_dialog td
 					where td.thread_id = tv.thread_id
+						and td.deleted_at is null
 				) as thread_members
 			from im_thread.thread_variables tv
 			where tv.thread_id = @ThreadID

@@ -27,6 +27,17 @@ type GetThreadVariablesQuery struct {
 
 	Fields    []string
 	ThreadIDs uuid.UUIDs
+	// CallerID, when set, limits results to threads the caller may read
+	// (active member or active preview owner). uuid.Nil = trusted internal call.
+	CallerID uuid.UUID
+	// DomainID, when > 0, limits results to threads of that domain.
+	DomainID int
+}
+
+type LocateThreadVariablesQuery struct {
+	ThreadID uuid.UUID
+	CallerID uuid.UUID // uuid.Nil = trusted internal call, no access check
+	DomainID int       // > 0 limits the lookup to a thread of that domain
 }
 
 type VariableEntry struct {

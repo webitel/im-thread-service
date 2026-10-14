@@ -24,6 +24,10 @@ var (
 	memberRemovedSystemMessageType = "member_removed"
 )
 
+func errThreadNotReadable(id string) error {
+	return errors.Forbidden("thread does not exist or you are not a member", errors.WithID(id))
+}
+
 const (
 	memberTransferedSystemMessageType = "transferred"
 	memberTransferedLeaveReason       = "transferred"
@@ -86,6 +90,17 @@ func (t *ThreadManagementService) log() *slog.Logger {
 }
 
 func (t *ThreadManagementService) Get(ctx context.Context, req *dto.ThreadGetRequest) (*model.Thread, error) {
+	if req.CallerID != uuid.Nil {
+		ok, err := t.uow.ThreadPreviews().CanRead(ctx, req.ID, req.CallerID, req.DomainID)
+		if err != nil {
+			return nil, err
+		}
+
+		if !ok {
+			return nil, errThreadNotReadable("service.thread_manager.get.not_allowed")
+		}
+	}
+
 	query := queryobject.NewThreadQueryObject().
 		WithIDFilter(req.ID).
 		WithDomainIDFilter(req.DomainID).
@@ -93,6 +108,11 @@ func (t *ThreadManagementService) Get(ctx context.Context, req *dto.ThreadGetReq
 
 	thread, err := t.uow.ThreadStore().Get(ctx, query)
 	if err != nil {
+		// If CallerID is set and store returns NotFound, treat as forbidden
+		if req.CallerID != uuid.Nil && errors.Code(err) == codes.NotFound {
+			return nil, errThreadNotReadable("service.thread_manager.get.not_allowed")
+		}
+
 		t.log().Error("getting thread", "operation", "service.thread_manager.get", "id", req.ID, "err", err)
 
 		return nil, err
@@ -106,8 +126,8 @@ func (t *ThreadManagementService) Search(ctx context.Context, searchRequest *dto
 		return nil, errors.New("search request cannot be nil")
 	}
 
-	if len(searchRequest.Tags) > 0 && searchRequest.SelfID == uuid.Nil {
-		return nil, errors.InvalidArgument("self_id is required when tags is set", errors.WithID("service.thread_manager.search"))
+	if searchRequest.SelfID == uuid.Nil {
+		return nil, errors.InvalidArgument("self_id is required", errors.WithID("service.thread_manager.search"))
 	}
 
 	query := queryobject.NewThreadQueryObject().
@@ -299,6 +319,14 @@ func (t *ThreadManagementService) findAddMemberActors(ctx context.Context, threa
 }
 
 func (t *ThreadManagementService) AddMember(ctx context.Context, req *dto.AddMemberRequest) (uuid.UUID, error) {
+	return t.addMemberToChat(ctx, req, nil)
+}
+
+// addMemberToChat adds a member and publishes the member-added system message, member.joined
+// and the bot-control handover. beforeCreate, when set, runs inside the same transaction
+// right after the thread row lock and before the member row is created; an error from it
+// rolls the whole addition back.
+func (t *ThreadManagementService) addMemberToChat(ctx context.Context, req *dto.AddMemberRequest, beforeCreate func(ctx context.Context, uow store.UnitOfWork) error) (uuid.UUID, error) {
 	if req == nil {
 		return uuid.Nil, errors.New("add member request cannot be nil")
 	}
@@ -336,16 +364,8 @@ func (t *ThreadManagementService) AddMember(ctx context.Context, req *dto.AddMem
 		}
 	}
 
-	if t.contactInfo != nil && !req.IsBot {
-		t.log().InfoContext(ctx, "checking is_bot for contact", "contact_id", req.NewMemberContactID, "domain_id", domainID)
-
-		isBot, err := t.contactInfo.IsBot(ctx, req.NewMemberContactID, domainID)
-		if err != nil {
-			t.log().WarnContext(ctx, "failed to check is_bot for contact, assuming false", "contact_id", req.NewMemberContactID, "err", err)
-		} else {
-			t.log().InfoContext(ctx, "is_bot check result", "contact_id", req.NewMemberContactID, "is_bot", isBot)
-			req.IsBot = isBot
-		}
+	if !req.IsBot {
+		req.IsBot = t.peerIsBot(ctx, req.NewMemberContactID, domainID)
 	}
 
 	rolePermissions, err := getDefaultPermissionsByRole(req.NewMemberRole)
@@ -362,6 +382,12 @@ func (t *ThreadManagementService) AddMember(ctx context.Context, req *dto.AddMem
 		// Lock order thread -> thread_dialog, same as Send.
 		if err := uow.ThreadStore().LockForUpdate(ctx, req.ThreadID); err != nil {
 			return err
+		}
+
+		if beforeCreate != nil {
+			if err := beforeCreate(ctx, uow); err != nil {
+				return err
+			}
 		}
 
 		newMember, err = uow.ThreadDialogStore().Create(ctx, &model.ThreadDialogExtended{
@@ -1537,7 +1563,7 @@ func (t *ThreadManagementService) EnsureDirectThread(ctx context.Context, req *d
 	}
 
 	if thread != nil {
-		if thread.BotControllerID == nil && req.ToIsBot != nil && req.ToIsBot() {
+		if thread.BotControllerID == nil && isBotMember(thread.Members, req.To.ID) {
 			if err = t.ensureBotControl(ctx, thread, req.DomainID); err != nil {
 				log.WarnContext(ctx, "failed to retroactively init bot control for existing thread", "thread_id", thread.ID, "err", err)
 			}
@@ -1553,6 +1579,16 @@ func (t *ThreadManagementService) EnsureDirectThread(ctx context.Context, req *d
 	}
 
 	return thread, nil
+}
+
+func isBotMember(members []*model.ThreadDialog, contactID uuid.UUID) bool {
+	for _, m := range members {
+		if m != nil && m.ContactID == contactID {
+			return m.IsBot
+		}
+	}
+
+	return false
 }
 
 // ensureBotControl initializes bot control for an existing thread that has none.
@@ -1637,6 +1673,8 @@ func (t *ThreadManagementService) orchestrateDirectThreadCreation(ctx context.Co
 		return nil, err
 	}
 
+	toIsBot := t.peerIsBot(ctx, req.To.ID, req.DomainID)
+
 	var createdThread *model.Thread
 
 	err = t.uow.WithinTransaction(ctx, func(ctx context.Context, uow store.UnitOfWork) error {
@@ -1646,17 +1684,6 @@ func (t *ThreadManagementService) orchestrateDirectThreadCreation(ctx context.Co
 		}
 
 		createdThread = savedThread
-
-		var toIsBot bool
-		if req.ToIsBot != nil {
-			toIsBot = req.ToIsBot()
-		}
-
-		t.log().DebugContext(ctx, "orchestrateDirectThreadCreation: resolved to_is_bot",
-			"to_contact_id", req.To.ID,
-			"to_is_bot", toIsBot,
-			"domain_id", req.DomainID,
-		)
 
 		members, err := t.initializeDirectThreadDialogs(ctx, uow, createdThread.ID, req.DomainID, req.From, req.To, toIsBot)
 		if err != nil {
@@ -1700,6 +1727,25 @@ func (t *ThreadManagementService) orchestrateDirectThreadCreation(ctx context.Co
 	}
 
 	return createdThread, nil
+}
+
+func (t *ThreadManagementService) peerIsBot(ctx context.Context, contactID uuid.UUID, domainID int) bool {
+	if t.contactInfo == nil {
+		t.log().WarnContext(ctx, "contactInfo is nil, assuming peer is not a bot", "contact_id", contactID)
+
+		return false
+	}
+
+	isBot, err := t.contactInfo.IsBot(ctx, contactID, domainID)
+	if err != nil {
+		t.log().WarnContext(ctx, "failed to resolve is_bot for peer, assuming false", "contact_id", contactID, "err", err)
+
+		return false
+	}
+
+	t.log().DebugContext(ctx, "resolved peer is_bot", "contact_id", contactID, "domain_id", domainID, "is_bot", isBot)
+
+	return isBot
 }
 
 func (t *ThreadManagementService) createDirectThread(ctx context.Context, uow store.UnitOfWork, domainID int, from, to *shared.Peer) (*model.Thread, error) {

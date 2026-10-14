@@ -82,11 +82,6 @@ func TestProjectEvent(t *testing.T) {
 			wantFields: map[string]any{FieldContactID: actor.String(), FieldActor: actor.String(), FieldAction: ActionLeft},
 		},
 		{
-			name:      "status receipts are not journaled",
-			eventType: event.MessageStatusChangedEvent,
-			payload:   &event.MessageStatusChanged{ThreadID: threadID, UpToSeq: 3},
-		},
-		{
 			name:      "unknown events are not journaled",
 			eventType: "im.typing.started",
 			payload:   map[string]any{},
@@ -142,11 +137,28 @@ func TestProjectEvent_EveryJournalEventProjects(t *testing.T) {
 	}
 }
 
-func TestProjectEvent_DeliveredStatusNotJournaled(t *testing.T) {
-	ev, err := (&event.MessageStatusChanged{ThreadID: uuid.New(), Status: "delivered"}).ToOutbox()
-	require.NoError(t, err)
+// Every receipt is journaled: horizons for delivered/read, the message and reason for a failure.
+func TestProjectEvent_StatusKinds(t *testing.T) {
+	msg := uuid.New()
 
-	_, ok, err := ProjectEvent(ev.Metadata["event_type"], ev.Payload)
-	require.NoError(t, err)
-	assert.False(t, ok)
+	for status, want := range map[string]string{
+		event.StatusRead: KindReadChanged, event.StatusDelivered: KindDeliveredChanged, event.StatusFailed: KindMessageFailed,
+	} {
+		ev, err := (&event.MessageStatusChanged{
+			ThreadID: uuid.New(), MemberID: uuid.New(), Status: status, UpToSeq: 4, MessageIDs: []uuid.UUID{msg},
+			Error: map[string]any{"code": "131047", "message": "re-engagement window expired"},
+		}).ToOutbox()
+		require.NoError(t, err)
+
+		upd, ok, err := ProjectEvent(ev.Metadata["event_type"], ev.Payload)
+		require.NoError(t, err)
+		require.True(t, ok, status)
+		assert.Equal(t, want, upd.Kind, status)
+
+		if status == event.StatusFailed {
+			assert.Equal(t, msg.String(), upd.Fields[FieldMsgID])
+			assert.Equal(t, "131047", upd.Fields[FieldErrCode])
+			assert.Equal(t, "re-engagement window expired", upd.Fields[FieldErrMsg])
+		}
+	}
 }
