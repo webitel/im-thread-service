@@ -5,6 +5,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
+	"go.uber.org/fx"
 
 	"github.com/webitel/webitel-go-kit/infra/health"
 
@@ -12,12 +13,15 @@ import (
 )
 
 func registerHealth(
+	lc fx.Lifecycle,
 	h *health.Registry,
 	srv *grpcsrv.Server,
 	pool *pgxpool.Pool,
 	rdb *redis.Client,
 ) {
-	h.Critical("grpc", health.ListenerCheck(srv.Listener()))
-	h.Informational("postgres", pool.Ping)
-	h.Informational("redis", func(ctx context.Context) error { return rdb.Ping(ctx).Err() })
+	lc.Append(fx.StartHook(func() {
+		h.Critical("grpc", health.ListenerCheck(srv.Listener()))
+		h.Informational("postgres", pool.Ping)
+		h.Informational("redis", func(ctx context.Context) error { return rdb.Ping(ctx).Err() })
+	}))
 }
