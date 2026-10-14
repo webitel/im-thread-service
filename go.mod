@@ -22,7 +22,9 @@ require (
 	github.com/stretchr/testify v1.11.1
 	github.com/urfave/cli/v2 v2.27.7
 	github.com/webitel/storage v0.0.0-20260625115836-a6cac81e0a4c
-	github.com/webitel/webitel-go-kit/infra/discovery v0.0.0-20260623172444-1a81b7322f37
+	github.com/webitel/webitel-go-kit/infra/discovery v0.0.0-20261001011034-d631118fa669
+	github.com/webitel/webitel-go-kit/infra/health v0.2.0
+	github.com/webitel/webitel-go-kit/infra/health/fx v0.0.0-20261001011034-d631118fa669
 	github.com/webitel/webitel-go-kit/infra/otel v0.1.0
 	github.com/webitel/webitel-go-kit/infra/profiler v0.1.0
 	github.com/webitel/webitel-go-kit/infra/transport v0.0.0-20260623172444-1a81b7322f37
@@ -103,7 +105,7 @@ require (
 	github.com/pelletier/go-toml/v2 v2.4.2 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pressly/goose/v3 v3.27.1
-	github.com/rabbitmq/amqp091-go v1.12.0
+	github.com/rabbitmq/amqp091-go v1.12.0 // indirect
 	github.com/rivo/uniseg v0.4.7
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/sagikazarmark/locafero v0.12.0 // indirect

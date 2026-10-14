@@ -4,6 +4,7 @@ import (
 	"go.uber.org/fx"
 
 	"github.com/webitel/webitel-go-kit/infra/discovery"
+	healthfx "github.com/webitel/webitel-go-kit/infra/health/fx"
 	"github.com/webitel/webitel-go-kit/infra/profiler"
 
 	"github.com/webitel/im-thread-service/config"
@@ -37,6 +38,7 @@ func MainModule(cfg *config.Config) fx.Option {
 			ProvideRedisClient,
 			ProvideTypingRateLimiter,
 		),
+		healthfx.Module(healthfx.Config{HTTPAddr: cfg.Health.Addr}),
 		fx.Invoke(func(_ discovery.DiscoveryProvider) error { return nil }),
 		tls.Module,
 		pubsub.Module,
@@ -54,6 +56,9 @@ func MainModule(cfg *config.Config) fx.Option {
 		grpchandler.Module,
 		grpcsrv.Module,
 		profiler.Module,
+
+		fx.Invoke(registerHealth),
+		healthfx.Shutdown(),
 	)
 }
 

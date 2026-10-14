@@ -24,6 +24,12 @@ type Config struct {
 	Typing         TypingConfig         `mapstructure:"typing"`
 	Reactions      ReactionsConfig      `mapstructure:"reactions"`
 	Journal        JournalConfig        `mapstructure:"journal"`
+	Health         HealthConfig         `mapstructure:"health"`
+}
+
+// HealthConfig configures the HTTP health probe listener.
+type HealthConfig struct {
+	Addr string `mapstructure:"addr"`
 }
 
 // JournalConfig tunes the per-thread catch-up journal (thread_updates).
@@ -196,6 +202,9 @@ func registerServiceFlags() {
 
 	pflag.Duration("journal.retention_ttl", 48*time.Hour,
 		"catch-up journal retention window; a client offline longer than this must resync from history")
+
+	pflag.String("health.addr", "",
+		"HTTP health probe listen address (/livez, /readyz, /healthz); empty disables the listener")
 }
 
 func (c *Config) validate() error {
