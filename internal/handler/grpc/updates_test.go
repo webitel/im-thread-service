@@ -2,6 +2,7 @@ package grpc
 
 import (
 	"context"
+	"slices"
 	"testing"
 	"time"
 
@@ -15,6 +16,7 @@ import (
 	impb "github.com/webitel/im-thread-service/gen/go/thread/v1"
 	"github.com/webitel/im-thread-service/internal/adapter/journal"
 	"github.com/webitel/im-thread-service/internal/domain/model"
+	"github.com/webitel/im-thread-service/internal/domain/shared"
 	"github.com/webitel/im-thread-service/internal/service/dto"
 	queryobject "github.com/webitel/im-thread-service/internal/store/query_object"
 )
@@ -136,6 +138,7 @@ func TestGetUpdates_AllChangedThreads(t *testing.T) {
 	edited, created := uuid.New(), uuid.New()
 	deletedAt := time.Now()
 	gone := uuid.New()
+	deleterMember, deleterContact := uuid.New(), uuid.New()
 
 	updates := &fakeUpdates{
 		changes: &journal.ContactChanges{Cursor: "900", After: 100, Horizon: 900, Threads: []string{
@@ -151,11 +154,14 @@ func TestGetUpdates_AllChangedThreads(t *testing.T) {
 		},
 		notMember: map[string]bool{leftThread.String(): true},
 		unread:    2,
+		members:   []journal.Member{{ID: deleterMember.String(), ContactID: deleterContact.String(), Role: int32(model.RoleOwner)}},
 	}
 	history := &fakeHistory{
 		byID: map[uuid.UUID]*model.Message{
-			edited:  {ID: edited, Body: "final", Seq: 4, RevisionCount: 1, UpdatedAt: time.UnixMilli(9)},
-			gone:    {ID: gone, DeletedAt: &deletedAt},
+			edited: {ID: edited, Body: "final", Seq: 4, RevisionCount: 1, UpdatedAt: time.UnixMilli(9)},
+			gone: {ID: gone, DeletedAt: &deletedAt, DeletedBy: &model.ThreadDialog{
+				BaseModel: shared.BaseModel{ID: deleterMember}, ContactID: deleterContact, ThreadRole: model.RoleOwner,
+			}},
 			created: {ID: created, Body: "hello", Seq: 1},
 		},
 		newest: &model.Message{ID: created, Body: "hello", Seq: 1},
@@ -178,6 +184,14 @@ func TestGetUpdates_AllChangedThreads(t *testing.T) {
 	require.Len(t, old.GetMessages(), 1, "edit and reaction fold into one message")
 	assert.Equal(t, "final", old.GetMessages()[0].GetBody())
 	assert.Equal(t, []string{gone.String()}, old.GetDeletedMessageIds())
+	require.Len(t, old.GetDeletedMessages(), 1, "a deletion says when and by whom")
+	assert.Equal(t, gone.String(), old.GetDeletedMessages()[0].GetId())
+	assert.Equal(t, deletedAt.UnixMilli(), old.GetDeletedMessages()[0].GetDeletedAt())
+	assert.Equal(t, deleterMember.String(), old.GetDeletedMessages()[0].GetDeletedBy().GetId())
+	assert.Equal(t, deleterContact.String(), old.GetDeletedMessages()[0].GetDeletedBy().GetContactId())
+	assert.True(t, slices.ContainsFunc(old.GetMembers(), func(m *impb.ThreadMember) bool {
+		return m.GetContactId() == deleterContact.String()
+	}), "the deleter is among the members so the gateway can resolve it")
 	assert.Nil(t, old.GetDialog(), "the caller already knows this thread")
 	assert.Equal(t, int64(2), old.GetUnreadCount())
 

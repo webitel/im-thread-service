@@ -212,7 +212,7 @@ func isNewToCaller(events []journal.Event, contactID string) bool {
 }
 
 // applyDiff folds journal entries into the entry: live messages once in their current
-// state, deletions as ids, member changes in order.
+// state, deletions with when and by whom, member changes in order.
 func (s *UpdatesServer) applyDiff(ctx context.Context, caller updatesCaller, entry *impb.ThreadUpdates, events []journal.Event, referenced map[string]struct{}) error {
 	messages, historyFrom, err := s.currentMessages(ctx, caller, entry.GetThreadId(), events)
 	if err != nil {
@@ -222,6 +222,12 @@ func (s *UpdatesServer) applyDiff(ctx context.Context, caller updatesCaller, ent
 	for _, m := range messages {
 		if m.GetDeleted() {
 			entry.DeletedMessageIds = append(entry.DeletedMessageIds, m.GetId())
+			entry.DeletedMessages = append(entry.DeletedMessages, &impb.DeletedMessage{
+				Id:        m.GetId(),
+				DeletedAt: m.GetDeletedAt(),
+				DeletedBy: m.GetDeletedBy(),
+			})
+			referenced[m.GetDeletedBy().GetContactId()] = struct{}{}
 
 			continue
 		}
