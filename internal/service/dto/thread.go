@@ -49,6 +49,7 @@ type (
 		ContactIDs   uuid.UUIDs
 		Participants []ContactIdentity
 		Tags         []string
+		Unread       bool
 		Size         int
 		Sort         string
 		Page         int

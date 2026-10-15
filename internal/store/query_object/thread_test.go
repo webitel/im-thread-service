@@ -255,3 +255,36 @@ func TestThreadQuery_WithTagsFilter_NoTags_NoOp(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotContains(t, sql, "thread_tag")
 }
+
+func TestThreadQuery_WithUnreadFilter_RestrictsToSelfDialogWithUnread(t *testing.T) {
+	selfID := uuid.New()
+
+	query := NewThreadQueryObject().WithUnreadFilter(selfID, true)
+
+	sql, args, err := query.ToSQL()
+	require.NoError(t, err)
+
+	assertSQLContains(t, sql, "INNER JOIN im_thread.thread_dialog td on td.thread_id = t.id")
+	assertSQLContains(t, sql, "td.member_id =")
+	assertSQLContains(t, sql, "td.unread_count >")
+	assert.Contains(t, argValues(args), selfID.String())
+}
+
+func TestThreadQuery_WithUnreadFilter_NoOp(t *testing.T) {
+	tests := []struct {
+		name   string
+		selfID uuid.UUID
+		unread bool
+	}{
+		{name: "unread not requested", selfID: uuid.New(), unread: false},
+		{name: "nil self", selfID: uuid.Nil, unread: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			sql, _, err := NewThreadQueryObject().WithUnreadFilter(tt.selfID, tt.unread).ToSQL()
+			require.NoError(t, err)
+			assert.NotContains(t, sql, "unread_count")
+		})
+	}
+}
