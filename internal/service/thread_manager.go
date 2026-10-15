@@ -142,7 +142,8 @@ func (t *ThreadManagementService) Search(ctx context.Context, searchRequest *dto
 		WithSort(searchRequest.Sort).
 		WithoutDeletedAtFilter().
 		WithOffset(searchRequest.Page).
-		WithTagsFilter(searchRequest.SelfID, searchRequest.Tags...)
+		WithTagsFilter(searchRequest.SelfID, searchRequest.Tags...).
+		WithUnreadFilter(searchRequest.SelfID, searchRequest.Unread)
 
 	switch {
 	case len(searchRequest.ContactIDs) > 0:

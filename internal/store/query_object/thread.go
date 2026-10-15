@@ -358,6 +358,20 @@ func (q *threadQueryObject) WithTagsFilter(selfID uuid.UUID, tags ...string) *th
 	return q
 }
 
+// WithUnreadFilter narrows results to threads where the selfID contact has at least one unread message.
+// If selfID is Nil or unread is false, the filter is silently ignored.
+func (q *threadQueryObject) WithUnreadFilter(selfID uuid.UUID, unread bool) *threadQueryObject {
+	if selfID == uuid.Nil || !unread {
+		return q
+	}
+
+	q.EnsureJoins(threadLinkThreadDialog)
+	q.builder = q.builder.Where(squirrel.Eq{threadThreadDialogAlias + ".member_id": selfID})
+	q.builder = q.builder.Where(squirrel.Gt{threadThreadDialogAlias + ".unread_count": 0})
+
+	return q
+}
+
 func (q *threadQueryObject) WithParticipantsFilter(selfID uuid.UUID, domainIDs []int, participants ...dto.ContactIdentity) *threadQueryObject {
 	if selfID == uuid.Nil || len(participants) == 0 {
 		return q
