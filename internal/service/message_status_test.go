@@ -18,6 +18,7 @@ type recordingMessageStatusStore struct {
 	insertedMsg        *model.Message
 	insertedRecipients []uuid.UUID
 	deliveredReceipts  []*model.StatusReceipt
+	recountedThreads   []uuid.UUID
 
 	changes []*model.StatusChange
 }
@@ -57,6 +58,12 @@ func (r *recordingMessageStatusStore) UnreadSummary(context.Context, int32, uuid
 
 func (r *recordingMessageStatusStore) ReconcileUnread(context.Context, int32) (int64, error) {
 	return 0, nil
+}
+
+func (r *recordingMessageStatusStore) RecountUnread(_ context.Context, threadIDs []uuid.UUID) error {
+	r.recountedThreads = append(r.recountedThreads, threadIDs...)
+
+	return nil
 }
 
 func TestGroupStatusChanges_BatchesSameRecipientAndStatus(t *testing.T) {

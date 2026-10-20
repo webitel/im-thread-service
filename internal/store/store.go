@@ -119,6 +119,10 @@ type MessageStatusStore interface {
 	// unread messages and the total number of unread messages.
 	UnreadSummary(ctx context.Context, domainID int32, memberID uuid.UUID) (model.UnreadSummary, error)
 
+	// RecountUnread recomputes unread_count for the threads' active dialogs from
+	// their read horizons; called after deleting messages in the same transaction.
+	RecountUnread(ctx context.Context, threadIDs []uuid.UUID) error
+
 	// ReconcileUnread recomputes unread_count for every active dialog from the
 	// read horizon (optionally scoped to a domain). Drift safety net for a
 	// periodic job; returns the number of rows updated.

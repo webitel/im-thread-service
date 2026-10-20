@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"maps"
 	"slices"
 	"strconv"
 	"strings"
@@ -16,6 +17,7 @@ import (
 	"github.com/webitel/webitel-go-kit/pkg/errors"
 
 	"github.com/webitel/im-thread-service/config"
+	contactv1 "github.com/webitel/im-thread-service/gen/go/contact/v1"
 	imcontact "github.com/webitel/im-thread-service/infra/webitel/im-contact"
 	"github.com/webitel/im-thread-service/internal/domain/event"
 	"github.com/webitel/im-thread-service/internal/domain/model"
@@ -29,11 +31,17 @@ type ThreadManager interface {
 	EnsureDirectThread(ctx context.Context, req *dto.EnsureDirectThreadRequest) (*model.Thread, error)
 }
 
+// ContactDirectory is the slice of the contact service MessageService needs.
+type ContactDirectory interface {
+	GetIdentity(ctx context.Context, contactID uuid.UUID, domainID int) (*imcontact.Identity, error)
+	SearchContact(ctx context.Context, req *contactv1.SearchContactRequest) (*contactv1.ContactList, error)
+}
+
 type MessageService struct {
 	uow              store.UnitOfWork
 	logger           *slog.Logger
 	threader         ThreadManager
-	contactClient    *imcontact.Client
+	contactClient    ContactDirectory
 	mediaProcessor   MediaProcessor
 	providersAdapter ProvidersAdapter
 
@@ -806,7 +814,13 @@ func (s *MessageService) DeleteMessages(ctx context.Context, in *dto.DeleteMessa
 			}
 		}
 
-		return nil
+		// A deleted message no longer counts as unread for anyone.
+		// Sorted like the Publish locks above.
+		threadIDs := slices.SortedFunc(maps.Keys(membersByThread), func(a, b uuid.UUID) int {
+			return bytes.Compare(a[:], b[:])
+		})
+
+		return uow.MessageStatuses().RecountUnread(txCtx, threadIDs)
 	})
 	if err != nil {
 		log.ErrorContext(ctx, "transaction_failed", "err", err)
