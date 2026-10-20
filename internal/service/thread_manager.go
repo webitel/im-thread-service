@@ -1457,6 +1457,42 @@ func (t *ThreadManagementService) TakeOverFromBot(ctx context.Context, req *dto.
 	})
 }
 
+// SetCRMContact stores the CRM contact an operator selected for the thread and
+// notifies the members so their clients refresh the thread.
+func (t *ThreadManagementService) SetCRMContact(ctx context.Context, req *dto.SetCRMContactRequest) error {
+	const errID = "service.thread_manager.set_crm_contact"
+
+	if req == nil {
+		return errors.InvalidArgument("request cannot be nil", errors.WithID(errID))
+	}
+
+	if err := t.verifyOperator(ctx, req.ThreadID, req.InitiatorContactID, errID); err != nil {
+		return err
+	}
+
+	return t.uow.WithinTransaction(ctx, func(ctx context.Context, uow store.UnitOfWork) error {
+		if err := uow.ThreadStore().SetCRMContact(ctx, req.ThreadID, req.CRMContactID); err != nil {
+			return err
+		}
+
+		participants, err := t.threadParticipants(ctx, uow, req.ThreadID)
+		if err != nil {
+			return err
+		}
+
+		updated := &event.ThreadUpdated{
+			ThreadID:     req.ThreadID,
+			DomainID:     int32(req.DomainID),
+			UpdatedBy:    req.InitiatorContactID,
+			CRMContactID: req.CRMContactID,
+			OccurredAt:   time.Now().UTC(),
+			Participants: participants,
+		}
+
+		return uow.Outbox().Publish(ctx, updated.Topic(), updated)
+	})
+}
+
 func (t *ThreadManagementService) releaseControlToAgent(ctx context.Context, uow store.UnitOfWork, threadID uuid.UUID, domainID int) error {
 	releasedID, err := uow.BotControl().ClearController(ctx, threadID)
 	if err != nil {

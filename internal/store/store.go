@@ -154,6 +154,8 @@ type ThreadStore interface {
 	// LockForUpdate row-locks the thread; writers lock thread -> thread_dialog
 	// in send order to prevent deadlock, and reads see all earlier commits.
 	LockForUpdate(ctx context.Context, threadID uuid.UUID) error
+	// SetCRMContact sets the selected CRM contact; an empty id clears it.
+	SetCRMContact(ctx context.Context, threadID uuid.UUID, crmContactID string) error
 }
 
 type ThreadPermissionStore interface {

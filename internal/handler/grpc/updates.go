@@ -165,7 +165,7 @@ func (s *UpdatesServer) threadUpdates(ctx context.Context, caller updatesCaller,
 		return nil, 0, err
 	}
 
-	if isNewToCaller(events, caller.contactID) {
+	if needsDialog(events, caller.contactID) {
 		if err := s.attachDialog(ctx, caller, entry); err != nil {
 			return nil, 0, err
 		}
@@ -195,11 +195,11 @@ func (s *UpdatesServer) threadUpdates(ctx context.Context, caller updatesCaller,
 	return entry, len(events), nil
 }
 
-// isNewToCaller: the window holds the thread's first change or the caller joining it, so the
-// client has never seen this thread.
-func isNewToCaller(events []journal.Event, contactID string) bool {
+// needsDialog: the window holds the thread's first change or the caller joining it, so the
+// client has never seen this thread, or a change of thread attributes the cached copy lacks.
+func needsDialog(events []journal.Event, contactID string) bool {
 	for _, e := range events {
-		if e.Kind == journal.KindThreadCreated {
+		if e.Kind == journal.KindThreadCreated || e.Kind == journal.KindThreadUpdated {
 			return true
 		}
 

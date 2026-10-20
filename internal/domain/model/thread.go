@@ -60,6 +60,9 @@ type Thread struct {
 	BotControllerID *uuid.UUID `json:"bot_controller_id,omitempty" db:"bot_controller_id"`
 	OwnerBotID      *uuid.UUID `json:"owner_bot_id,omitempty" db:"owner_bot_id"`
 
+	// CRMContactID is the Webitel CRM contact an operator selected for the thread.
+	CRMContactID string `json:"crm_contact_id,omitempty" db:"crm_contact_id"`
+
 	// UnreadCount is the number of unread messages in this thread for the
 	// requesting participant. Enriched after the thread query; not scanned.
 	UnreadCount int64 `json:"unread_count" db:"-"`

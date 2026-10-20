@@ -204,8 +204,9 @@ func TestGetUpdates_AllChangedThreads(t *testing.T) {
 	assert.True(t, byID[leftThread.String()].GetLeft())
 }
 
-// A thread is new to the caller when it was created or they joined it inside the window.
-func TestIsNewToCaller(t *testing.T) {
+// The dialog is attached when the thread is new to the caller (created or joined inside the
+// window) or its attributes changed.
+func TestNeedsDialog(t *testing.T) {
 	me := uuid.NewString()
 	joined := journal.Event{Kind: journal.KindMemberChanged, Fields: map[string]string{
 		journal.FieldContactID: me, journal.FieldAction: journal.ActionJoined,
@@ -214,10 +215,11 @@ func TestIsNewToCaller(t *testing.T) {
 		journal.FieldContactID: uuid.NewString(), journal.FieldAction: journal.ActionJoined,
 	}}
 
-	assert.True(t, isNewToCaller([]journal.Event{joined}, me))
-	assert.False(t, isNewToCaller([]journal.Event{otherJoined}, me))
-	assert.True(t, isNewToCaller([]journal.Event{{Kind: journal.KindThreadCreated}}, me))
-	assert.False(t, isNewToCaller([]journal.Event{msgEvent(journal.KindMessageNew, uuid.New())}, me))
+	assert.True(t, needsDialog([]journal.Event{joined}, me))
+	assert.False(t, needsDialog([]journal.Event{otherJoined}, me))
+	assert.True(t, needsDialog([]journal.Event{{Kind: journal.KindThreadCreated}}, me))
+	assert.True(t, needsDialog([]journal.Event{{Kind: journal.KindThreadUpdated}}, me))
+	assert.False(t, needsDialog([]journal.Event{msgEvent(journal.KindMessageNew, uuid.New())}, me))
 }
 
 func TestGetUpdates_Resyncs(t *testing.T) {

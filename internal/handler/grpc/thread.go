@@ -29,6 +29,7 @@ type ThreadManagementService interface {
 	CompleteBotControl(context.Context, *dto.CompleteBotControlRequest) error
 	HandBackToBot(context.Context, *dto.HandBackToBotRequest) error
 	TakeOverFromBot(context.Context, *dto.TakeOverFromBotRequest) error
+	SetCRMContact(context.Context, *dto.SetCRMContactRequest) error
 }
 
 type ThreadVariablesOperator interface {
@@ -268,6 +269,29 @@ func (ts *ThreadManagementServer) HandBackToBot(ctx context.Context, req *impb.H
 	}
 
 	return &impb.HandBackToBotResponse{}, nil
+}
+
+func (ts *ThreadManagementServer) SetCrmContact(ctx context.Context, req *impb.SetCrmContactRequest) (*impb.SetCrmContactResponse, error) {
+	tid, err := uuid.Parse(req.GetThreadId())
+	if err != nil {
+		return nil, errors.InvalidArgument("invalid thread_id", errors.WithCause(err))
+	}
+
+	initiator, err := uuid.Parse(req.GetInitiatorContactId())
+	if err != nil {
+		return nil, errors.InvalidArgument("invalid initiator_contact_id", errors.WithCause(err))
+	}
+
+	if err = ts.threadManager.SetCRMContact(ctx, &dto.SetCRMContactRequest{
+		ThreadID:           tid,
+		InitiatorContactID: initiator,
+		DomainID:           int(req.GetDomainId()),
+		CRMContactID:       req.GetCrmContactId(),
+	}); err != nil {
+		return nil, err
+	}
+
+	return &impb.SetCrmContactResponse{CrmContactId: req.GetCrmContactId()}, nil
 }
 
 func (ts *ThreadManagementServer) TakeOverFromBot(ctx context.Context, req *impb.TakeOverFromBotRequest) (*impb.TakeOverFromBotResponse, error) {

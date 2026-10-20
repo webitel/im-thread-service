@@ -129,6 +129,14 @@ type TakeOverFromBotRequest struct {
 	DomainID           int
 }
 
+type SetCRMContactRequest struct {
+	ThreadID           uuid.UUID
+	InitiatorContactID uuid.UUID
+	DomainID           int
+	// CRMContactID is the Webitel CRM contact id; empty clears the selection.
+	CRMContactID string
+}
+
 type TransferThreadRequest struct {
 	ThreadID           uuid.UUID
 	NewMemberContactID uuid.UUID

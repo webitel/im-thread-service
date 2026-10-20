@@ -316,6 +316,9 @@ type fakeThreadStore struct {
 	getResult       *model.Thread
 	getError        error
 	lastQueryObject queryobject.QueryObject
+
+	setCRMContactErr   error
+	setCRMContactCalls []string
 }
 
 func (f *fakeThreadStore) ResolveThread(ctx context.Context, q model.ResolveThreadQuery) (*model.Thread, error) {
@@ -327,6 +330,12 @@ func (f *fakeThreadStore) Search(ctx context.Context, query queryobject.QueryObj
 }
 
 func (f *fakeThreadStore) LockForUpdate(context.Context, uuid.UUID) error { return nil }
+
+func (f *fakeThreadStore) SetCRMContact(_ context.Context, _ uuid.UUID, crmContactID string) error {
+	f.setCRMContactCalls = append(f.setCRMContactCalls, crmContactID)
+
+	return f.setCRMContactErr
+}
 
 func (f *fakeThreadStore) SearchLeft(ctx context.Context, query queryobject.QueryObject) ([]*model.Thread, error) {
 	panic("unimplemented")
