@@ -111,6 +111,10 @@ func (noopMessageStatusStore) ReconcileUnread(context.Context, int32) (int64, er
 	return 0, nil
 }
 
+func (noopMessageStatusStore) RecountUnread(context.Context, []uuid.UUID) error {
+	return nil
+}
+
 func (f fakeUnitOfWork) Outbox() store.OutboxStore {
 	return f.outboxStore
 }
