@@ -31,6 +31,7 @@ type (
 		Variables       *model.ThreadVariables `json:"variables,omitempty" db:"variables"`
 		BotControllerID *uuid.UUID             `json:"bot_controller_id,omitempty" db:"bot_controller_id"`
 		OwnerBotID      *uuid.UUID             `json:"owner_bot_id,omitempty" db:"owner_bot_id"`
+		CRMContactID    *string                `json:"crm_contact_id,omitempty" db:"crm_contact_id"`
 		// The real thread id for SearchLeft rows, where "id" above is a
 		// membership-period id instead. Absent (zero) from Search's SQL.
 		ThreadRefID uuid.UUID `json:"-" db:"thread_ref_id"`
@@ -96,6 +97,21 @@ func (s *threadStore) LockForUpdate(ctx context.Context, threadID uuid.UUID) err
 		}
 
 		return errors.Internal("locking thread", errors.WithCause(err), errors.WithID("postgres.thread_store.lock_for_update"))
+	}
+
+	return nil
+}
+
+func (s *threadStore) SetCRMContact(ctx context.Context, threadID uuid.UUID, crmContactID string) error {
+	const query = `update im_thread.thread set crm_contact_id = nullif(@CRMContactID, ''), updated_at = now() where id = @ThreadID`
+
+	tag, err := s.db.Exec(ctx, query, pgx.NamedArgs{"ThreadID": threadID, "CRMContactID": crmContactID})
+	if err != nil {
+		return errors.Internal("setting crm contact", errors.WithCause(err), errors.WithID("postgres.thread_store.set_crm_contact"))
+	}
+
+	if tag.RowsAffected() == 0 {
+		return errors.NotFound("thread not found", errors.WithID("postgres.thread_store.set_crm_contact"))
 	}
 
 	return nil
@@ -180,6 +196,10 @@ func mapThreadRecordToModel(record *threadRecord) (*model.Thread, error) {
 		Variables:       record.Variables,
 		BotControllerID: record.BotControllerID,
 		OwnerBotID:      record.OwnerBotID,
+	}
+
+	if record.CRMContactID != nil {
+		thread.CRMContactID = *record.CRMContactID
 	}
 
 	return thread, nil

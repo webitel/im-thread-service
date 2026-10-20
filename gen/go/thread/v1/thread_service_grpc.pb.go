@@ -30,6 +30,7 @@ const (
 	ThreadManagement_CompleteBotControl_FullMethodName = "/webitel.im.service.thread.v1.ThreadManagement/CompleteBotControl"
 	ThreadManagement_HandBackToBot_FullMethodName      = "/webitel.im.service.thread.v1.ThreadManagement/HandBackToBot"
 	ThreadManagement_TakeOverFromBot_FullMethodName    = "/webitel.im.service.thread.v1.ThreadManagement/TakeOverFromBot"
+	ThreadManagement_SetCrmContact_FullMethodName      = "/webitel.im.service.thread.v1.ThreadManagement/SetCrmContact"
 	ThreadManagement_SetVariables_FullMethodName       = "/webitel.im.service.thread.v1.ThreadManagement/SetVariables"
 	ThreadManagement_SearchVariables_FullMethodName    = "/webitel.im.service.thread.v1.ThreadManagement/SearchVariables"
 	ThreadManagement_LocateVariables_FullMethodName    = "/webitel.im.service.thread.v1.ThreadManagement/LocateVariables"
@@ -73,6 +74,8 @@ type ThreadManagementClient interface {
 	HandBackToBot(ctx context.Context, in *HandBackToBotRequest, opts ...grpc.CallOption) (*HandBackToBotResponse, error)
 	// Takes the conversation from the thread's bot back to the operator.
 	TakeOverFromBot(ctx context.Context, in *TakeOverFromBotRequest, opts ...grpc.CallOption) (*TakeOverFromBotResponse, error)
+	// Sets (or clears) the CRM contact an operator selected for the thread.
+	SetCrmContact(ctx context.Context, in *SetCrmContactRequest, opts ...grpc.CallOption) (*SetCrmContactResponse, error)
 	SetVariables(ctx context.Context, in *SetVariablesRequest, opts ...grpc.CallOption) (*ThreadVariables, error)
 	SearchVariables(ctx context.Context, in *SearchVariablesRequest, opts ...grpc.CallOption) (*SearchVariablesResponse, error)
 	LocateVariables(ctx context.Context, in *LocateVariablesRequest, opts ...grpc.CallOption) (*ThreadVariables, error)
@@ -197,6 +200,16 @@ func (c *threadManagementClient) TakeOverFromBot(ctx context.Context, in *TakeOv
 	return out, nil
 }
 
+func (c *threadManagementClient) SetCrmContact(ctx context.Context, in *SetCrmContactRequest, opts ...grpc.CallOption) (*SetCrmContactResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SetCrmContactResponse)
+	err := c.cc.Invoke(ctx, ThreadManagement_SetCrmContact_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *threadManagementClient) SetVariables(ctx context.Context, in *SetVariablesRequest, opts ...grpc.CallOption) (*ThreadVariables, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ThreadVariables)
@@ -274,6 +287,8 @@ type ThreadManagementServer interface {
 	HandBackToBot(context.Context, *HandBackToBotRequest) (*HandBackToBotResponse, error)
 	// Takes the conversation from the thread's bot back to the operator.
 	TakeOverFromBot(context.Context, *TakeOverFromBotRequest) (*TakeOverFromBotResponse, error)
+	// Sets (or clears) the CRM contact an operator selected for the thread.
+	SetCrmContact(context.Context, *SetCrmContactRequest) (*SetCrmContactResponse, error)
 	SetVariables(context.Context, *SetVariablesRequest) (*ThreadVariables, error)
 	SearchVariables(context.Context, *SearchVariablesRequest) (*SearchVariablesResponse, error)
 	LocateVariables(context.Context, *LocateVariablesRequest) (*ThreadVariables, error)
@@ -320,6 +335,9 @@ func (UnimplementedThreadManagementServer) HandBackToBot(context.Context, *HandB
 }
 func (UnimplementedThreadManagementServer) TakeOverFromBot(context.Context, *TakeOverFromBotRequest) (*TakeOverFromBotResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method TakeOverFromBot not implemented")
+}
+func (UnimplementedThreadManagementServer) SetCrmContact(context.Context, *SetCrmContactRequest) (*SetCrmContactResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SetCrmContact not implemented")
 }
 func (UnimplementedThreadManagementServer) SetVariables(context.Context, *SetVariablesRequest) (*ThreadVariables, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SetVariables not implemented")
@@ -552,6 +570,24 @@ func _ThreadManagement_TakeOverFromBot_Handler(srv interface{}, ctx context.Cont
 	return interceptor(ctx, in, info, handler)
 }
 
+func _ThreadManagement_SetCrmContact_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SetCrmContactRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ThreadManagementServer).SetCrmContact(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ThreadManagement_SetCrmContact_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ThreadManagementServer).SetCrmContact(ctx, req.(*SetCrmContactRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _ThreadManagement_SetVariables_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(SetVariablesRequest)
 	if err := dec(in); err != nil {
@@ -674,6 +710,10 @@ var ThreadManagement_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "TakeOverFromBot",
 			Handler:    _ThreadManagement_TakeOverFromBot_Handler,
+		},
+		{
+			MethodName: "SetCrmContact",
+			Handler:    _ThreadManagement_SetCrmContact_Handler,
 		},
 		{
 			MethodName: "SetVariables",

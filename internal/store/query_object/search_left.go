@@ -52,6 +52,7 @@ func (q *searchLeftQueryObject) DefaultFields() []string {
 	return []string{
 		"id", "domain_id", "created_at", "updated_at",
 		"kind", "owner", "subject", "description", "members", "last_msg",
+		"crm_contact_id",
 	}
 }
 
@@ -96,6 +97,11 @@ func (q *searchLeftQueryObject) FieldsMetadata() map[string]fieldMetadata {
 			sqlExpr:     "t.description",
 			aliasedExpr: "t.description as description",
 			sortable:    true,
+		},
+		"crm_contact_id": {
+			sqlExpr:     "t.crm_contact_id",
+			aliasedExpr: "t.crm_contact_id as crm_contact_id",
+			sortable:    false,
 		},
 		"members": {
 			sqlExpr:      "m.members_data",

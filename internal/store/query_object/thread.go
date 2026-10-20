@@ -55,6 +55,7 @@ func (q *threadQueryObject) DefaultFields() []string {
 	return []string{
 		"id", "domain_id", "created_at", "updated_at",
 		"kind", "owner", "subject", "description", "members", "bot_controller_id", "owner_bot_id",
+		"crm_contact_id",
 	}
 }
 
@@ -180,6 +181,13 @@ func (q *threadQueryObject) FieldsMetadata() map[string]fieldMetadata {
 			requiresJoin: 0,
 			sortable:     false,
 			filterExpr:   "t.owner_bot_id",
+		},
+		"crm_contact_id": {
+			sqlExpr:      "t.crm_contact_id",
+			aliasedExpr:  "t.crm_contact_id as crm_contact_id",
+			requiresJoin: 0,
+			sortable:     false,
+			filterExpr:   "t.crm_contact_id",
 		},
 	}
 }

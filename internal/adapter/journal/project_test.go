@@ -66,6 +66,14 @@ func TestProjectEvent(t *testing.T) {
 			},
 		},
 		{
+			name:       "thread updated keeps only the actor",
+			eventType:  event.ThreadUpdatedEvent,
+			payload:    &event.ThreadUpdated{ThreadID: threadID, UpdatedBy: actor, CRMContactID: "42"},
+			wantOK:     true,
+			wantKind:   KindThreadUpdated,
+			wantFields: map[string]any{FieldActor: actor.String()},
+		},
+		{
 			name:       "member joined",
 			eventType:  event.MemberJoinedEvent,
 			payload:    &event.MemberJoined{ThreadID: threadID, ContactID: actor},

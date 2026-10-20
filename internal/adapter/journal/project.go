@@ -16,6 +16,7 @@ const (
 	KindMessageReaction  = "message.reaction"
 	KindMemberChanged    = "member.changed"
 	KindThreadCreated    = "thread.created"
+	KindThreadUpdated    = "thread.updated"
 	KindReadChanged      = "read.changed"
 	KindDeliveredChanged = "delivered.changed"
 	KindMessageFailed    = "message.failed"
@@ -57,6 +58,13 @@ func ProjectEvent(eventType string, payload []byte) (Update, bool, error) {
 		}
 
 		return Update{ThreadID: e.ID.String(), Kind: KindThreadCreated, Fields: make(map[string]any)}, true, nil
+	case event.ThreadUpdatedEvent:
+		var e event.ThreadUpdated
+		if err := json.Unmarshal(payload, &e); err != nil {
+			return Update{}, false, err
+		}
+
+		return Update{ThreadID: e.ThreadID.String(), Kind: KindThreadUpdated, Fields: map[string]any{FieldActor: e.UpdatedBy.String()}}, true, nil
 	case event.MessageCreatedEvent:
 		var e event.MessageCreated
 		if err := json.Unmarshal(payload, &e); err != nil {

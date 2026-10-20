@@ -277,19 +277,20 @@ func (s *ThreadOutConverter) ConvertToThread(source *model.Thread) *impb.Thread 
 	}
 
 	thread := &impb.Thread{
-		Id:          source.ID.String(),
-		DomainId:    int32(source.DomainID),
-		CreatedAt:   source.CreatedAtUnix(),
-		UpdatedAt:   source.UpdatedAtUnix(),
-		Kind:        impb.ThreadKind(source.Kind),
-		Subject:     source.Subject,
-		Description: source.Description,
-		Members:     s.convertThreadMembers(source.Members, source.BotControllerID),
-		LastMsg:     lastMsg,
-		Variables:   vars,
-		UnreadCount: int32(source.UnreadCount),
-		Tags:        s.convertThreadTags(source.Tags),
-		ReadStates:  convertMemberReadStates(source.ReadStates),
+		Id:           source.ID.String(),
+		DomainId:     int32(source.DomainID),
+		CreatedAt:    source.CreatedAtUnix(),
+		UpdatedAt:    source.UpdatedAtUnix(),
+		Kind:         impb.ThreadKind(source.Kind),
+		Subject:      source.Subject,
+		Description:  source.Description,
+		Members:      s.convertThreadMembers(source.Members, source.BotControllerID),
+		LastMsg:      lastMsg,
+		Variables:    vars,
+		UnreadCount:  int32(source.UnreadCount),
+		Tags:         s.convertThreadTags(source.Tags),
+		ReadStates:   convertMemberReadStates(source.ReadStates),
+		CrmContactId: source.CRMContactID,
 	}
 
 	if source.BotControllerID != nil {
