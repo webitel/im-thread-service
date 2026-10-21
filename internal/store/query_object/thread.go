@@ -366,6 +366,24 @@ func (q *threadQueryObject) WithTagsFilter(selfID uuid.UUID, tags ...string) *th
 	return q
 }
 
+// WithExcludeTagsFilter drops threads the selfID contact has tagged with any of the tags.
+// If selfID is Nil or tags is empty, the filter is silently ignored.
+func (q *threadQueryObject) WithExcludeTagsFilter(selfID uuid.UUID, tags ...string) *threadQueryObject {
+	if selfID == uuid.Nil || len(tags) == 0 {
+		return q
+	}
+
+	q.builder = q.builder.Where(
+		fmt.Sprintf(`NOT EXISTS (
+			SELECT 1 FROM %s
+			WHERE thread_id = %s.id AND contact_id = ? AND tag = ANY(?)
+		)`, ThreadTagTable, threadAlias),
+		selfID, tags,
+	)
+
+	return q
+}
+
 // WithUnreadFilter narrows results to threads where the selfID contact has at least one unread message.
 // If selfID is Nil or unread is false, the filter is silently ignored.
 func (q *threadQueryObject) WithUnreadFilter(selfID uuid.UUID, unread bool) *threadQueryObject {

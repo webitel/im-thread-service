@@ -44,6 +44,7 @@ func TestGivePreview_CreatesPreviewWithoutMemberSideEffects(t *testing.T) {
 		uow:    uow,
 		logger: slog.Default(),
 		members: &ThreadManagementService{
+			tagHooks:       &fakeTagHooks{},
 			uow:            uow,
 			logger:         slog.Default(),
 			privacyChecker: fakePrivacyChecker{},
@@ -103,8 +104,9 @@ func TestGivePreview_ExtendsActivePreview(t *testing.T) {
 		uow:    uow,
 		logger: slog.Default(),
 		members: &ThreadManagementService{
-			uow:    uow,
-			logger: slog.Default(),
+			tagHooks: &fakeTagHooks{},
+			uow:      uow,
+			logger:   slog.Default(),
 		},
 	}
 
@@ -155,8 +157,9 @@ func TestGivePreview_RejectsExistingMember(t *testing.T) {
 		uow:    uow,
 		logger: slog.Default(),
 		members: &ThreadManagementService{
-			uow:    uow,
-			logger: slog.Default(),
+			tagHooks: &fakeTagHooks{},
+			uow:      uow,
+			logger:   slog.Default(),
 		},
 	}
 
@@ -324,6 +327,7 @@ func TestUpgradePreview_RevokesAndAddsMemberWithEvents(t *testing.T) {
 	}
 
 	members := &ThreadManagementService{
+		tagHooks:       &fakeTagHooks{},
 		uow:            uow,
 		logger:         slog.Default(),
 		privacyChecker: fakePrivacyChecker{},
@@ -375,8 +379,9 @@ func TestUpgradePreview_InactivePreviewChangesNothing(t *testing.T) {
 	}
 
 	members := &ThreadManagementService{
-		uow:    uow,
-		logger: slog.Default(),
+		tagHooks: &fakeTagHooks{},
+		uow:      uow,
+		logger:   slog.Default(),
 	}
 
 	svc := &ThreadPreviewService{
@@ -434,8 +439,9 @@ func TestGet_CallerWithoutAccessIsForbidden(t *testing.T) {
 	}
 
 	svc := &ThreadManagementService{
-		uow:    uow,
-		logger: slog.Default(),
+		tagHooks: &fakeTagHooks{},
+		uow:      uow,
+		logger:   slog.Default(),
 	}
 
 	req := &dto.ThreadGetRequest{
@@ -468,8 +474,9 @@ func TestGet_NoCallerSkipsAccessCheck(t *testing.T) {
 	}
 
 	svc := &ThreadManagementService{
-		uow:    uow,
-		logger: slog.Default(),
+		tagHooks: &fakeTagHooks{},
+		uow:      uow,
+		logger:   slog.Default(),
 	}
 
 	req := &dto.ThreadGetRequest{
@@ -487,7 +494,8 @@ func TestSearch_RejectsNilSelfID(t *testing.T) {
 	ctx := context.Background()
 
 	svc := &ThreadManagementService{
-		logger: slog.Default(),
+		tagHooks: &fakeTagHooks{},
+		logger:   slog.Default(),
 	}
 
 	req := &dto.ThreadSearchRequest{

@@ -27,6 +27,12 @@ import (
 	"github.com/webitel/im-thread-service/internal/store"
 )
 
+// ThreadTagHooks keeps the members' thread tags in step with messages and membership.
+type ThreadTagHooks interface {
+	OnMessage(ctx context.Context, uow store.UnitOfWork, msg *model.Message) error
+	OnMemberLeft(ctx context.Context, uow store.UnitOfWork, threadID, contactID uuid.UUID) error
+}
+
 type ThreadManager interface {
 	EnsureDirectThread(ctx context.Context, req *dto.EnsureDirectThreadRequest) (*model.Thread, error)
 }
@@ -51,6 +57,7 @@ type MessageService struct {
 	typingCfg   config.TypingConfig
 
 	commands *CommandDispatcher
+	tagHooks ThreadTagHooks
 }
 
 func NewMessageService(
@@ -64,6 +71,7 @@ func NewMessageService(
 	rateLimiter RateLimiter,
 	typingCfg config.TypingConfig,
 	commands *CommandDispatcher,
+	tagHooks ThreadTagHooks,
 ) *MessageService {
 	return &MessageService{
 		uow:              uow,
@@ -76,6 +84,7 @@ func NewMessageService(
 		rateLimiter:      rateLimiter,
 		typingCfg:        typingCfg,
 		commands:         commands,
+		tagHooks:         tagHooks,
 	}
 }
 
@@ -1160,19 +1169,9 @@ const statusViaBot = "bot"
 // no receipts of their own, so DELIVERED is their terminal state. The
 // promotion does publish a status event so timelines update live.
 func (s *MessageService) insertSentStatuses(ctx context.Context, uow store.UnitOfWork, msg *model.Message) error {
-	sender := msg.GetSender()
-
-	recipients := make([]uuid.UUID, 0, len(msg.To))
-
 	var botReceipts []*model.StatusReceipt
 
-	for _, member := range msg.To {
-		if member == nil || member.ContactID == sender {
-			continue
-		}
-
-		recipients = append(recipients, member.ContactID)
-
+	for _, member := range msg.Recipients() {
 		if member.IsBot {
 			botReceipts = append(botReceipts, &model.StatusReceipt{
 				DomainID:  msg.DomainID,
@@ -1184,7 +1183,11 @@ func (s *MessageService) insertSentStatuses(ctx context.Context, uow store.UnitO
 		}
 	}
 
-	if err := uow.MessageStatuses().InsertSent(ctx, msg, recipients); err != nil {
+	if err := uow.MessageStatuses().InsertSent(ctx, msg, msg.RecipientIDs()); err != nil {
+		return err
+	}
+
+	if err := s.tagHooks.OnMessage(ctx, uow, msg); err != nil {
 		return err
 	}
 

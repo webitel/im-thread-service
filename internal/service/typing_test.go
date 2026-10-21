@@ -81,6 +81,7 @@ func defaultTypingCfg() config.TypingConfig {
 
 func newTypingService(cfg config.TypingConfig, bus *fakeTypingBus, rl RateLimiter, members []*model.ThreadDialog) *MessageService {
 	return &MessageService{
+		tagHooks:    &fakeTagHooks{},
 		logger:      slog.New(slog.NewTextHandler(io.Discard, nil)),
 		uow:         fakeUnitOfWork{threadDialogStore: &fakeThreadDialogStore{quickViewResult: members}},
 		typingBus:   bus,

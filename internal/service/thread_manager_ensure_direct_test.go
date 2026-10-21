@@ -66,6 +66,7 @@ func TestEnsureDirectThread_NewThread(t *testing.T) {
 			outbox := &fakeOutboxStore{}
 
 			svc := &ThreadManagementService{
+				tagHooks: &fakeTagHooks{},
 				uow: fakeUnitOfWork{
 					threadStore:       &ensureDirectThreadStore{},
 					threadDialogStore: dialogs,
@@ -150,6 +151,7 @@ func TestEnsureDirectThread_ExistingThread(t *testing.T) {
 			existing.ID = uuid.New()
 
 			svc := &ThreadManagementService{
+				tagHooks: &fakeTagHooks{},
 				uow: fakeUnitOfWork{
 					threadStore:       &ensureDirectThreadStore{resolved: existing},
 					threadDialogStore: &fakeThreadDialogStore{},

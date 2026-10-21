@@ -30,6 +30,7 @@ func (fakeContactDirectory) SearchContact(context.Context, *contactv1.SearchCont
 
 func newDeleteTestService(msgStore *fakeMessageStore, statuses *recordingMessageStatusStore) *MessageService {
 	return &MessageService{
+		tagHooks:      &fakeTagHooks{},
 		logger:        slog.New(slog.NewTextHandler(io.Discard, nil)),
 		contactClient: fakeContactDirectory{},
 		uow: fakeUnitOfWork{

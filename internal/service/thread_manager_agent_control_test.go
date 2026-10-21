@@ -43,6 +43,7 @@ func TestAddMember_Operator(t *testing.T) {
 			outboxStore := &fakeOutboxStore{}
 
 			svc := &ThreadManagementService{
+				tagHooks: &fakeTagHooks{},
 				uow: fakeUnitOfWork{
 					threadDialogStore: &fakeThreadDialogStore{
 						quickViewResult: []*model.ThreadDialog{
@@ -122,6 +123,7 @@ func TestHandBackToBot(t *testing.T) {
 			outboxStore := &fakeOutboxStore{}
 
 			svc := &ThreadManagementService{
+				tagHooks: &fakeTagHooks{},
 				uow: fakeUnitOfWork{
 					threadDialogStore: &fakeThreadDialogStore{fullViewResult: members},
 					outboxStore:       outboxStore,
@@ -202,6 +204,7 @@ func TestRemoveMember_Operator(t *testing.T) {
 			outboxStore := &fakeOutboxStore{}
 
 			svc := &ThreadManagementService{
+				tagHooks: &fakeTagHooks{},
 				uow: fakeUnitOfWork{
 					threadDialogStore: &fakeThreadDialogStore{
 						targetPair: &model.ThreadDialogExtended{
@@ -247,6 +250,7 @@ func TestEnsureBotControl_OperatorPresent_KeepsControlReleased(t *testing.T) {
 	outboxStore := &fakeOutboxStore{}
 
 	svc := &ThreadManagementService{
+		tagHooks: &fakeTagHooks{},
 		uow: fakeUnitOfWork{
 			threadDialogStore: &fakeThreadDialogStore{},
 			outboxStore:       outboxStore,
@@ -306,6 +310,7 @@ func TestTakeOverFromBot(t *testing.T) {
 			outboxStore := &fakeOutboxStore{}
 
 			svc := &ThreadManagementService{
+				tagHooks: &fakeTagHooks{},
 				uow: fakeUnitOfWork{
 					threadDialogStore: &fakeThreadDialogStore{
 						fullViewResult: members,

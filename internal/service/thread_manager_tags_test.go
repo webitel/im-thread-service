@@ -32,7 +32,7 @@ func (s *stubTagStore) ListForContact(ctx context.Context, contactID uuid.UUID, 
 }
 
 func newTagService(stub *stubTagStore) *ThreadManagementService {
-	return NewThreadService(nil, fakeUnitOfWork{threadTagStore: stub}, nil, nil, nil)
+	return NewThreadService(nil, fakeUnitOfWork{threadTagStore: stub}, nil, nil, nil, &fakeTagHooks{})
 }
 
 func TestEnrichTags_SetsPerThreadTags(t *testing.T) {

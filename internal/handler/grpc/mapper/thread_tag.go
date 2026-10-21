@@ -67,6 +67,40 @@ func ConvertRemoveThreadTagRequest(req *impb.RemoveThreadTagRequest) (*dto.Remov
 	}, nil
 }
 
+func ConvertRemoveThreadTagByNameRequest(req *impb.RemoveThreadTagByNameRequest) (*dto.RemoveTagByNameRequest, error) {
+	if req == nil {
+		return nil, errors.InvalidArgument("request cannot be nil", errors.WithID("mapper.convert_remove_thread_tag_by_name_request"))
+	}
+
+	contactID, err := uuid.Parse(req.GetContactId())
+	if err != nil {
+		return nil, errors.InvalidArgument("invalid contact_id", errors.WithCause(err), errors.WithID("mapper.convert_remove_thread_tag_by_name_request"))
+	}
+
+	threadID, err := uuid.Parse(req.GetThreadId())
+	if err != nil {
+		return nil, errors.InvalidArgument("invalid thread_id", errors.WithCause(err), errors.WithID("mapper.convert_remove_thread_tag_by_name_request"))
+	}
+
+	return &dto.RemoveTagByNameRequest{
+		ContactID: contactID,
+		ThreadID:  threadID,
+		Tag:       req.GetTag(),
+	}, nil
+}
+
+func ConvertSnoozeTarget(threadID, contactID string) (thread, contact uuid.UUID, err error) {
+	if contact, err = uuid.Parse(contactID); err != nil {
+		return uuid.Nil, uuid.Nil, errors.InvalidArgument("invalid contact_id", errors.WithCause(err), errors.WithID("mapper.convert_snooze_target"))
+	}
+
+	if thread, err = uuid.Parse(threadID); err != nil {
+		return uuid.Nil, uuid.Nil, errors.InvalidArgument("invalid thread_id", errors.WithCause(err), errors.WithID("mapper.convert_snooze_target"))
+	}
+
+	return thread, contact, nil
+}
+
 func ConvertSearchThreadTagsRequest(req *impb.SearchThreadTagsRequest) (*dto.SearchTagsRequest, error) {
 	if req == nil {
 		return nil, errors.InvalidArgument("request cannot be nil", errors.WithID("mapper.convert_search_thread_tags_request"))

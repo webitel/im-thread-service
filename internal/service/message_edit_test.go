@@ -19,7 +19,8 @@ import (
 
 func newEditTestService(msgStore *fakeMessageStore, outbox *fakeOutboxStore) *MessageService {
 	return &MessageService{
-		logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+		tagHooks: &fakeTagHooks{},
+		logger:   slog.New(slog.NewTextHandler(io.Discard, nil)),
 		uow: fakeUnitOfWork{
 			messageStore:      msgStore,
 			outboxStore:       outbox,
@@ -56,7 +57,8 @@ func TestEditMessage(t *testing.T) {
 		}}
 
 		svc := &MessageService{
-			logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+			tagHooks: &fakeTagHooks{},
+			logger:   slog.New(slog.NewTextHandler(io.Discard, nil)),
 			uow: fakeUnitOfWork{
 				messageStore:      msgStore,
 				outboxStore:       outbox,

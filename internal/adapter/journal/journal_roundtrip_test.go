@@ -104,6 +104,34 @@ func TestJournal_ChangesSince(t *testing.T) {
 	assert.Len(t, limited, 2, "limit+1 rows so the caller sees the overflow")
 }
 
+// Another contact's tag changes are private: they neither reach the caller nor use up its limit.
+func TestJournal_ChangesSinceSkipsForeignTags(t *testing.T) {
+	ctx := context.Background()
+	j := newTestJournal(t, DefaultTTL, nil)
+	me, other, thread := uuid.NewString(), uuid.NewString(), uuid.NewString()
+
+	for range 3 {
+		require.NoError(t, j.Append(ctx, Update{ThreadID: thread, Kind: KindTagsChanged, Fields: map[string]any{FieldActor: other}}))
+	}
+
+	require.NoError(t, j.Append(ctx, Update{ThreadID: thread, Kind: KindTagsChanged, Fields: map[string]any{FieldActor: me}}))
+	appendMsg(t, j, thread, "m1")
+
+	horizon, err := j.SettledHorizon(ctx)
+	require.NoError(t, err)
+
+	mine, err := j.ChangesSince(ctx, thread, &ContactChanges{ContactID: me, Horizon: horizon}, 2)
+	require.NoError(t, err)
+	require.Len(t, mine, 2, "foreign tag entries must not count against the limit")
+	assert.Equal(t, KindTagsChanged, mine[0].Kind)
+	assert.Equal(t, me, mine[0].Fields[FieldActor])
+	assert.Equal(t, "m1", mine[1].Fields[FieldMsgID])
+
+	unscoped, err := j.ChangesSince(ctx, thread, &ContactChanges{Horizon: horizon}, MaxContactChanges)
+	require.NoError(t, err)
+	assert.Len(t, unscoped, 5, "without a contact the window is not filtered")
+}
+
 // The cursor is the contact's latest change: other contacts' traffic does not move it.
 func TestJournal_ContactCursorStableUntilChange(t *testing.T) {
 	ctx := context.Background()

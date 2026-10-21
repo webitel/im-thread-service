@@ -150,6 +150,7 @@ func TestAddMember_BotContact_PushesStackAndPublishesBotControlEvents(t *testing
 	}
 
 	svc := &ThreadManagementService{
+		tagHooks: &fakeTagHooks{},
 		uow: fakeUnitOfWork{
 			threadDialogStore: threadDialogStore,
 			messageStore:      &fakeMessageStore{},
@@ -208,6 +209,7 @@ func TestAddMember_BotContact_AutoLeaveFalse_WhenExplicitlySet(t *testing.T) {
 	}
 
 	svc := &ThreadManagementService{
+		tagHooks: &fakeTagHooks{},
 		uow: fakeUnitOfWork{
 			threadDialogStore: threadDialogStore,
 			messageStore:      &fakeMessageStore{},
@@ -260,6 +262,7 @@ func TestTransfer_BotContact_PushesStackAndPublishesBotControlEvents(t *testing.
 	}
 
 	svc := &ThreadManagementService{
+		tagHooks: &fakeTagHooks{},
 		uow: fakeUnitOfWork{
 			threadDialogStore: threadDialogStore,
 			messageStore:      &fakeMessageStore{},
@@ -318,6 +321,7 @@ func TestTransfer_ToHumanAgent_ReleasesBotControlWithoutGrant(t *testing.T) {
 	}
 
 	svc := &ThreadManagementService{
+		tagHooks: &fakeTagHooks{},
 		uow: fakeUnitOfWork{
 			threadDialogStore: threadDialogStore,
 			messageStore:      &fakeMessageStore{},
@@ -376,7 +380,10 @@ func TestRemoveMember_ActiveBot_PopsStackAndPublishesBotControlGrantedWithIsResu
 		},
 	}
 
+	tagHooks := &fakeTagHooks{}
+
 	svc := &ThreadManagementService{
+		tagHooks: tagHooks,
 		uow: fakeUnitOfWork{
 			threadDialogStore: threadDialogStore,
 			messageStore:      &fakeMessageStore{},
@@ -402,6 +409,8 @@ func TestRemoveMember_ActiveBot_PopsStackAndPublishesBotControlGrantedWithIsResu
 	require.Equal(t, newTopMemberID, granted.MemberID)
 	require.True(t, granted.IsResume, "returning control to previous bot must set is_resume=true")
 	require.Equal(t, newTop.Position, granted.Position)
+
+	require.Empty(t, tagHooks.left, "bots carry no tags to drop")
 }
 
 // TestRemoveMember_ControlReturnsToBot_GrantedCarriesLingeringOperators verifies that when
@@ -449,6 +458,7 @@ func TestRemoveMember_ControlReturnsToBot_GrantedCarriesLingeringOperators(t *te
 	}
 
 	svc := &ThreadManagementService{
+		tagHooks: &fakeTagHooks{},
 		uow: fakeUnitOfWork{
 			threadDialogStore: threadDialogStore,
 			messageStore:      &fakeMessageStore{},
@@ -512,6 +522,7 @@ func TestCompleteBotControl_PopsStackAndPublishesGrantedWithIsResume(t *testing.
 	}
 
 	svc := &ThreadManagementService{
+		tagHooks: &fakeTagHooks{},
 		uow: fakeUnitOfWork{
 			threadDialogStore: threadDialogStore,
 			messageStore:      &fakeMessageStore{},
@@ -582,6 +593,7 @@ func TestCompleteBotControl_TransientToOwner_NoGrant_KeepsController(t *testing.
 	}
 
 	svc := &ThreadManagementService{
+		tagHooks: &fakeTagHooks{},
 		uow: fakeUnitOfWork{
 			threadDialogStore: threadDialogStore,
 			messageStore:      &fakeMessageStore{},
@@ -634,6 +646,7 @@ func TestCompleteBotControl_EmptyStack_OnlyPublishesReleased(t *testing.T) {
 	}
 
 	svc := &ThreadManagementService{
+		tagHooks: &fakeTagHooks{},
 		uow: fakeUnitOfWork{
 			threadDialogStore: &fakeThreadDialogStore{},
 			messageStore:      &fakeMessageStore{},
@@ -674,6 +687,7 @@ func TestReleaseBotControl_SingleBot_PublishesReleasedOnly(t *testing.T) {
 	outboxStore := &fakeOutboxStore{}
 
 	svc := &ThreadManagementService{
+		tagHooks: &fakeTagHooks{},
 		uow: fakeUnitOfWork{
 			threadDialogStore: &fakeThreadDialogStore{},
 			messageStore:      &fakeMessageStore{},
@@ -728,6 +742,7 @@ func TestReleaseBotControl_BotBelow_ReturnsControlWithGranted(t *testing.T) {
 	outboxStore := &fakeOutboxStore{}
 
 	svc := &ThreadManagementService{
+		tagHooks: &fakeTagHooks{},
 		uow: fakeUnitOfWork{
 			threadDialogStore: &fakeThreadDialogStore{},
 			messageStore:      &fakeMessageStore{},
@@ -764,6 +779,7 @@ func TestReleaseBotControl_EmptyStack_NoOp(t *testing.T) {
 	outboxStore := &fakeOutboxStore{}
 
 	svc := &ThreadManagementService{
+		tagHooks: &fakeTagHooks{},
 		uow: fakeUnitOfWork{
 			threadDialogStore: &fakeThreadDialogStore{},
 			messageStore:      &fakeMessageStore{},
@@ -797,6 +813,7 @@ func TestReleaseBotControl_DivergedState_ClearsControllerAndPublishesReleased(t 
 	outboxStore := &fakeOutboxStore{}
 
 	svc := &ThreadManagementService{
+		tagHooks: &fakeTagHooks{},
 		uow: fakeUnitOfWork{
 			threadDialogStore: &fakeThreadDialogStore{},
 			messageStore:      &fakeMessageStore{},
@@ -849,6 +866,7 @@ func TestCompleteBotControl_OwnerBot_NoOp(t *testing.T) {
 	}
 
 	svc := &ThreadManagementService{
+		tagHooks: &fakeTagHooks{},
 		uow: fakeUnitOfWork{
 			threadDialogStore: &fakeThreadDialogStore{},
 			messageStore:      &fakeMessageStore{},
@@ -901,6 +919,7 @@ func TestCompleteBotControl_NonActiveBot_PopsWithoutGrant(t *testing.T) {
 	}
 
 	svc := &ThreadManagementService{
+		tagHooks: &fakeTagHooks{},
 		uow: fakeUnitOfWork{
 			threadDialogStore: &fakeThreadDialogStore{},
 			messageStore:      &fakeMessageStore{},
@@ -944,6 +963,7 @@ func TestCompleteBotControl_MemberNotOnStack_NoOp(t *testing.T) {
 	outboxStore := &fakeOutboxStore{}
 
 	svc := &ThreadManagementService{
+		tagHooks: &fakeTagHooks{},
 		uow: fakeUnitOfWork{
 			threadDialogStore: &fakeThreadDialogStore{},
 			messageStore:      &fakeMessageStore{},
@@ -971,6 +991,7 @@ func TestCompleteBotControl_TrulyEmptyStack_NoOp(t *testing.T) {
 	outboxStore := &fakeOutboxStore{}
 
 	svc := &ThreadManagementService{
+		tagHooks: &fakeTagHooks{},
 		uow: fakeUnitOfWork{
 			threadDialogStore: &fakeThreadDialogStore{},
 			messageStore:      &fakeMessageStore{},
@@ -1008,6 +1029,7 @@ func TestEnsureBotControl_ExistingStack_ReGrantsWithoutPush(t *testing.T) {
 	outboxStore := &fakeOutboxStore{}
 
 	svc := &ThreadManagementService{
+		tagHooks: &fakeTagHooks{},
 		uow: fakeUnitOfWork{
 			threadDialogStore: &fakeThreadDialogStore{},
 			messageStore:      &fakeMessageStore{},

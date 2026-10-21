@@ -58,6 +58,7 @@ func TestSetCRMContact(t *testing.T) {
 			outboxStore := &fakeOutboxStore{}
 
 			svc := &ThreadManagementService{
+				tagHooks: &fakeTagHooks{},
 				uow: fakeUnitOfWork{
 					threadStore:       threads,
 					threadDialogStore: &fakeThreadDialogStore{fullViewResult: members, quickViewResult: participants},
@@ -100,6 +101,6 @@ func TestSetCRMContact(t *testing.T) {
 func TestSetCRMContact_NilRequest(t *testing.T) {
 	t.Parallel()
 
-	err := (&ThreadManagementService{}).SetCRMContact(context.Background(), nil)
+	err := (&ThreadManagementService{tagHooks: &fakeTagHooks{}}).SetCRMContact(context.Background(), nil)
 	require.Equal(t, codes.InvalidArgument, errors.Code(err))
 }

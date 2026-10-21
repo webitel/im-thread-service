@@ -256,6 +256,60 @@ func TestThreadQuery_WithTagsFilter_NoTags_NoOp(t *testing.T) {
 	assert.NotContains(t, sql, "thread_tag")
 }
 
+func TestThreadQuery_WithExcludeTagsFilter_DropsThreadsWithAnyTag(t *testing.T) {
+	selfID := uuid.New()
+
+	query := NewThreadQueryObject().WithExcludeTagsFilter(selfID, "snoozed", "archived")
+
+	sql, args, err := query.ToSQL()
+	require.NoError(t, err)
+
+	assertSQLContains(t, sql, "NOT EXISTS (")
+	assertSQLContains(t, sql, "SELECT 1 FROM im_thread.thread_tag")
+	assertSQLContains(t, sql, "WHERE thread_id = t.id AND contact_id =")
+	assertSQLContains(t, sql, "AND tag = ANY(")
+
+	require.Len(t, args, 2)
+	assert.Equal(t, selfID, args[0])
+	assert.Equal(t, []string{"snoozed", "archived"}, args[1])
+}
+
+func TestThreadQuery_WithExcludeTagsFilter_NoOp(t *testing.T) {
+	tests := []struct {
+		name   string
+		selfID uuid.UUID
+		tags   []string
+	}{
+		{name: "nil self", selfID: uuid.Nil, tags: []string{"snoozed"}},
+		{name: "no tags", selfID: uuid.New()},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			sql, _, err := NewThreadQueryObject().WithExcludeTagsFilter(tt.selfID, tt.tags...).ToSQL()
+			require.NoError(t, err)
+			assert.NotContains(t, sql, "thread_tag")
+		})
+	}
+}
+
+func TestThreadQuery_TagsAndExcludeTags_Combine(t *testing.T) {
+	selfID := uuid.New()
+
+	query := NewThreadQueryObject().
+		WithTagsFilter(selfID, "work").
+		WithExcludeTagsFilter(selfID, "snoozed")
+
+	sql, args, err := query.ToSQL()
+	require.NoError(t, err)
+
+	assertSQLContains(t, sql, "HAVING COUNT(DISTINCT tag) =")
+	assertSQLContains(t, sql, "NOT EXISTS (")
+	require.Len(t, args, 5)
+	assert.Equal(t, []string{"work"}, args[1])
+	assert.Equal(t, []string{"snoozed"}, args[4])
+}
+
 func TestThreadQuery_WithUnreadFilter_RestrictsToSelfDialogWithUnread(t *testing.T) {
 	selfID := uuid.New()
 

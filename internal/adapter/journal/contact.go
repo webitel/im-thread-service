@@ -23,8 +23,10 @@ const Overlap = time.Minute
 
 // ContactChanges is every thread changed for a contact since a cursor.
 type ContactChanges struct {
-	Threads []string
-	Cursor  string
+	// ContactID is whose changes these are; ChangesSince serves other contacts' private entries to no one else.
+	ContactID string
+	Threads   []string
+	Cursor    string
 	// After and Horizon bound the transactions served: (After, Horizon]; changes written
 	// since Since (Overlap before the cursor's change) are replayed too.
 	After   int64
@@ -71,7 +73,7 @@ func (j *Journal) ContactChanges(ctx context.Context, contactID, cursor string) 
 		return nil, err
 	}
 
-	out := &ContactChanges{Cursor: strconv.FormatInt(max(after, latest), 10), After: after, Since: since, Horizon: horizon}
+	out := &ContactChanges{ContactID: contactID, Cursor: strconv.FormatInt(max(after, latest), 10), After: after, Since: since, Horizon: horizon}
 
 	for rows.Next() {
 		var t string
@@ -121,17 +123,19 @@ func (j *Journal) Unread(ctx context.Context, threadID, contactID string) (int64
 }
 
 // ChangesSince returns a thread's journal entries in the contact's window (see ContactChanges),
-// oldest first, at most limit+1 so the caller can tell it overflowed.
+// oldest first, at most limit+1 so the caller can tell it overflowed. Another contact's private
+// entries (tag changes) are left out, so they neither reach nor count against this contact.
 func (j *Journal) ChangesSince(ctx context.Context, threadID string, w *ContactChanges, limit int) ([]Event, error) {
 	query := fmt.Sprintf(`
 		select kind, fields
 		from %s
 		where thread_id = $1 and tx_id <= $3
 		  and (tx_id > $2 or created_at >= $5::timestamptz)
+		  and ($6::text is null or kind <> $7 or fields->>'%s' = $6::text)
 		order by tx_id, id
-		limit $4`, j.table)
+		limit $4`, j.table, FieldActor)
 
-	rows, err := j.db.Query(ctx, query, threadID, w.After, w.Horizon, limit+1, sinceArg(w.Since))
+	rows, err := j.db.Query(ctx, query, threadID, w.After, w.Horizon, limit+1, sinceArg(w.Since), contactArg(w.ContactID), KindTagsChanged)
 	if err != nil {
 		return nil, err
 	}
@@ -172,6 +176,14 @@ func (j *Journal) TrimHorizon(ctx context.Context) (int64, error) {
 	}
 
 	return tx, nil
+}
+
+func contactArg(contactID string) any {
+	if contactID == "" {
+		return nil
+	}
+
+	return contactID
 }
 
 // sinceArg is the overlap bound for SQL; an exact cursor replays nothing extra.
