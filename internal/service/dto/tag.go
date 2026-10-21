@@ -13,6 +13,12 @@ type RemoveTagRequest struct {
 	ContactID uuid.UUID
 }
 
+type RemoveTagByNameRequest struct {
+	ContactID uuid.UUID
+	ThreadID  uuid.UUID
+	Tag       string
+}
+
 type SearchTagsRequest struct {
 	ContactID uuid.UUID
 	Page      int

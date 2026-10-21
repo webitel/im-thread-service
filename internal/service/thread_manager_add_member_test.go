@@ -177,14 +177,43 @@ func (noopThreadVariablesStore) Flush(ctx context.Context, flushCmd model.FlushV
 	return nil, nil //nolint:nilnil // same contract: nothing flushed is (nil, nil)
 }
 
-type noopThreadTagStore struct{}
-
-func (noopThreadTagStore) Add(ctx context.Context, tag *model.ThreadTag) (*model.ThreadTag, error) {
-	return tag, nil
+type fakeTagHooks struct {
+	messages []*model.Message
+	left     []uuid.UUID
 }
 
-func (noopThreadTagStore) Remove(context.Context, uuid.UUID, uuid.UUID) error {
+func (f *fakeTagHooks) OnMessage(_ context.Context, _ store.UnitOfWork, msg *model.Message) error {
+	f.messages = append(f.messages, msg)
+
 	return nil
+}
+
+func (f *fakeTagHooks) OnMemberLeft(_ context.Context, _ store.UnitOfWork, _, contactID uuid.UUID) error {
+	f.left = append(f.left, contactID)
+
+	return nil
+}
+
+type noopThreadTagStore struct{}
+
+func (noopThreadTagStore) Add(ctx context.Context, tag *model.ThreadTag) (*model.ThreadTag, bool, error) {
+	return tag, true, nil
+}
+
+func (noopThreadTagStore) Remove(context.Context, uuid.UUID, uuid.UUID) (uuid.UUID, error) {
+	return uuid.Nil, nil
+}
+
+func (noopThreadTagStore) RemoveByName(context.Context, uuid.UUID, uuid.UUID, string) (bool, error) {
+	return false, nil
+}
+
+func (noopThreadTagStore) RemoveForContacts(context.Context, uuid.UUID, []uuid.UUID, []string) ([]uuid.UUID, error) {
+	return nil, nil
+}
+
+func (noopThreadTagStore) ListNames(context.Context, uuid.UUID, uuid.UUID) ([]string, error) {
+	return nil, nil
 }
 
 func (noopThreadTagStore) ListForContact(context.Context, uuid.UUID, []uuid.UUID) (map[uuid.UUID][]*model.ThreadTag, error) {
@@ -549,7 +578,8 @@ func TestFindAddMemberActors_ResolvesInitiatorAndTargetByContactID(t *testing.T)
 		},
 	}
 	svc := &ThreadManagementService{
-		uow: fakeUnitOfWork{threadDialogStore: threadDialogStore},
+		tagHooks: &fakeTagHooks{},
+		uow:      fakeUnitOfWork{threadDialogStore: threadDialogStore},
 	}
 
 	initiator, target, err := svc.findAddMemberActors(context.Background(), threadID, initiatorContactID, targetContactID)
@@ -583,7 +613,8 @@ func TestRemoveMember_ForwardsLeaveReasonToStoreDelete(t *testing.T) {
 	outboxStore := &fakeOutboxStore{}
 
 	svc := &ThreadManagementService{
-		uow: fakeUnitOfWork{threadDialogStore: threadDialogStore, messageStore: messageStore, outboxStore: outboxStore},
+		tagHooks: &fakeTagHooks{},
+		uow:      fakeUnitOfWork{threadDialogStore: threadDialogStore, messageStore: messageStore, outboxStore: outboxStore},
 	}
 
 	err := svc.RemoveMember(context.Background(), &dto.RemoveMemberRequest{
@@ -632,8 +663,10 @@ func TestRemoveMember_SendsSystemMessageAndRetainsRemovedRecipient(t *testing.T)
 	}
 	messageStore := &fakeMessageStore{}
 	outboxStore := &fakeOutboxStore{}
+	tagHooks := &fakeTagHooks{}
 
 	svc := &ThreadManagementService{
+		tagHooks: tagHooks,
 		uow: fakeUnitOfWork{
 			threadDialogStore: threadDialogStore,
 			messageStore:      messageStore,
@@ -665,6 +698,9 @@ func TestRemoveMember_SendsSystemMessageAndRetainsRemovedRecipient(t *testing.T)
 	require.GreaterOrEqual(t, len(outboxStore.published), 1)
 	require.NotNil(t, threadDialogStore.lastFilter)
 	require.Equal(t, []uuid.UUID{threadID}, threadDialogStore.lastFilter.ThreadIDs)
+	require.Equal(t, []uuid.UUID{targetContactID}, tagHooks.left, "the removed member's tags are dropped")
+	require.Len(t, tagHooks.messages, 1, "the member_removed system message runs the tag hooks")
+	require.Equal(t, model.MessageTypeSystem, tagHooks.messages[0].Type)
 }
 
 func TestAddMember_SetsInvitedByFromInitiatorDialogID(t *testing.T) {
@@ -694,6 +730,7 @@ func TestAddMember_SetsInvitedByFromInitiatorDialogID(t *testing.T) {
 	outboxStore := &fakeOutboxStore{}
 
 	svc := &ThreadManagementService{
+		tagHooks:       &fakeTagHooks{},
 		uow:            fakeUnitOfWork{threadDialogStore: threadDialogStore, messageStore: messageStore, outboxStore: outboxStore},
 		privacyChecker: fakePrivacyChecker{},
 	}
@@ -740,6 +777,7 @@ func TestTransfer_AddsMemberRemovesInitiatorAndSendsTransferSystemMessage(t *tes
 	outboxStore := &fakeOutboxStore{}
 
 	svc := &ThreadManagementService{
+		tagHooks:       &fakeTagHooks{},
 		uow:            fakeUnitOfWork{threadDialogStore: threadDialogStore, messageStore: messageStore, outboxStore: outboxStore},
 		privacyChecker: fakePrivacyChecker{},
 	}
@@ -787,6 +825,7 @@ func TestAddMember_SystemCall_RecordsSenderWithoutMembership(t *testing.T) {
 	outboxStore := &fakeOutboxStore{}
 
 	svc := &ThreadManagementService{
+		tagHooks:       &fakeTagHooks{},
 		uow:            fakeUnitOfWork{threadDialogStore: threadDialogStore, messageStore: messageStore, outboxStore: outboxStore},
 		privacyChecker: fakePrivacyChecker{},
 	}
@@ -833,7 +872,8 @@ func TestRemoveMember_SystemCall_RecordsSenderWithoutMembership(t *testing.T) {
 	outboxStore := &fakeOutboxStore{}
 
 	svc := &ThreadManagementService{
-		uow: fakeUnitOfWork{threadDialogStore: threadDialogStore, messageStore: messageStore, outboxStore: outboxStore},
+		tagHooks: &fakeTagHooks{},
+		uow:      fakeUnitOfWork{threadDialogStore: threadDialogStore, messageStore: messageStore, outboxStore: outboxStore},
 	}
 
 	err := svc.RemoveMember(context.Background(), &dto.RemoveMemberRequest{
@@ -850,7 +890,7 @@ func TestRemoveMember_SystemCall_RecordsSenderWithoutMembership(t *testing.T) {
 }
 
 func TestTransfer_ReturnsValidationErrorWhenInitiatorIsNil(t *testing.T) {
-	svc := &ThreadManagementService{}
+	svc := &ThreadManagementService{tagHooks: &fakeTagHooks{}}
 
 	_, err := svc.Transfer(context.Background(), &dto.TransferThreadRequest{
 		ThreadID:           uuid.New(),

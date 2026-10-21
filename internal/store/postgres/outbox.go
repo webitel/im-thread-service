@@ -148,7 +148,12 @@ func (o *outboxStore) appendJournal(ctx context.Context, tx pgx.Tx, ev event.Out
 
 // markContacts records that the thread changed in this transaction for every human member
 // (plus a contact who just left). Bots are skipped: they never catch up via GetUpdates.
+// An event with its own audience (private to some contacts) marks only that audience.
 func (o *outboxStore) markContacts(ctx context.Context, tx pgx.Tx, je event.JournalEvent) error {
+	if a, ok := je.(interface{ JournalAudience() []uuid.UUID }); ok {
+		return o.markAudience(ctx, tx, je.JournalThreadID(), a.JournalAudience())
+	}
+
 	var extra *uuid.UUID
 
 	if s, ok := je.(interface{ JournalSubject() uuid.UUID }); ok {
@@ -171,6 +176,26 @@ func (o *outboxStore) markContacts(ctx context.Context, tx pgx.Tx, je event.Jour
 
 	if _, err := tx.Exec(ctx, query, je.JournalThreadID(), extra); err != nil {
 		return errors.Internal("marking contact updates", errors.WithCause(err), errors.WithID("postgres.outbox.mark_contacts"))
+	}
+
+	return nil
+}
+
+// markAudience records the change for the given contacts only.
+func (o *outboxStore) markAudience(ctx context.Context, tx pgx.Tx, threadID uuid.UUID, contacts []uuid.UUID) error {
+	if len(contacts) == 0 {
+		return nil
+	}
+
+	query := fmt.Sprintf(`
+		insert into %s (contact_id, thread_id, tx_id, updated_at)
+		select c.contact_id, $1, pg_current_xact_id()::text::bigint, clock_timestamp()
+		from unnest($2::uuid[]) as c(contact_id)
+		order by c.contact_id
+		on conflict (contact_id, thread_id) do update set tx_id = excluded.tx_id, updated_at = excluded.updated_at`, o.marksTable)
+
+	if _, err := tx.Exec(ctx, query, threadID, contacts); err != nil {
+		return errors.Internal("marking audience updates", errors.WithCause(err), errors.WithID("postgres.outbox.mark_audience"))
 	}
 
 	return nil

@@ -22,11 +22,20 @@ func NewThreadTagStore(db Querier) *threadTagStore {
 	return &threadTagStore{db: db}
 }
 
-func (s *threadTagStore) Add(ctx context.Context, tag *model.ThreadTag) (*model.ThreadTag, error) {
+func (s *threadTagStore) Add(ctx context.Context, tag *model.ThreadTag) (*model.ThreadTag, bool, error) {
 	query := `
-		INSERT INTO im_thread.thread_tag (thread_id, contact_id, tag)
-		VALUES (@ThreadID, @ContactID, @Tag)
-		RETURNING id, thread_id, contact_id, tag, created_at
+		WITH inserted AS (
+			INSERT INTO im_thread.thread_tag (thread_id, contact_id, tag)
+			VALUES (@ThreadID, @ContactID, @Tag)
+			ON CONFLICT (thread_id, contact_id, tag) DO NOTHING
+			RETURNING id, thread_id, contact_id, tag, created_at
+		)
+		SELECT id, thread_id, contact_id, tag, created_at, true AS inserted FROM inserted
+		UNION ALL
+		SELECT id, thread_id, contact_id, tag, created_at, false
+		FROM im_thread.thread_tag
+		WHERE thread_id = @ThreadID AND contact_id = @ContactID AND tag = @Tag
+		  AND NOT EXISTS (SELECT 1 FROM inserted)
 	`
 
 	args := pgx.NamedArgs{
@@ -35,39 +44,32 @@ func (s *threadTagStore) Add(ctx context.Context, tag *model.ThreadTag) (*model.
 		"Tag":       tag.Tag,
 	}
 
-	rows, err := s.db.Query(ctx, query, args)
+	var (
+		result   model.ThreadTag
+		inserted bool
+	)
+
+	err := s.db.QueryRow(ctx, query, args).Scan(&result.ID, &result.ThreadID, &result.ContactID, &result.Tag, &result.CreatedAt, &inserted)
 	if err != nil {
-		return nil, errors.Internal(
+		if err := foreignKeyViolation(err, "thread not found"); err != nil {
+			return nil, false, errors.Wrap(err, errors.WithID("postgres.thread_tag.add"))
+		}
+
+		return nil, false, errors.Internal(
 			"error executing tag insert query",
 			errors.WithCause(err),
 			errors.WithID("postgres.thread_tag.add"),
 		)
 	}
 
-	result, err := pgx.CollectExactlyOneRow(rows, pgx.RowToAddrOfStructByNameLax[model.ThreadTag])
-	if err != nil {
-		if err := uniqueViolation(err, "tag already exists for this chat and contact"); err != nil {
-			return nil, errors.Wrap(err, errors.WithID("postgres.thread_tag.add"))
-		}
-
-		if err := foreignKeyViolation(err, "thread not found"); err != nil {
-			return nil, errors.Wrap(err, errors.WithID("postgres.thread_tag.add"))
-		}
-
-		return nil, errors.Internal(
-			"error collecting tag insert result",
-			errors.WithCause(err),
-			errors.WithID("postgres.thread_tag.add"),
-		)
-	}
-
-	return result, nil
+	return &result, inserted, nil
 }
 
-func (s *threadTagStore) Remove(ctx context.Context, tagID, contactID uuid.UUID) error {
+func (s *threadTagStore) Remove(ctx context.Context, tagID, contactID uuid.UUID) (uuid.UUID, error) {
 	query := `
 		DELETE FROM im_thread.thread_tag
 		WHERE id = @ID AND contact_id = @ContactID
+		RETURNING thread_id
 	`
 
 	args := pgx.NamedArgs{
@@ -75,23 +77,130 @@ func (s *threadTagStore) Remove(ctx context.Context, tagID, contactID uuid.UUID)
 		"ContactID": contactID,
 	}
 
-	cmd, err := s.db.Exec(ctx, query, args)
+	var threadID uuid.UUID
+
+	err := s.db.QueryRow(ctx, query, args).Scan(&threadID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return uuid.Nil, errors.NotFound(
+			"tag not found",
+			errors.WithID("postgres.thread_tag.remove"),
+		)
+	}
+
 	if err != nil {
-		return errors.Internal(
+		return uuid.Nil, errors.Internal(
 			"error executing tag delete query",
 			errors.WithCause(err),
 			errors.WithID("postgres.thread_tag.remove"),
 		)
 	}
 
-	if cmd.RowsAffected() == 0 {
-		return errors.NotFound(
-			"tag not found",
-			errors.WithID("postgres.thread_tag.remove"),
+	return threadID, nil
+}
+
+func (s *threadTagStore) RemoveByName(ctx context.Context, threadID, contactID uuid.UUID, tag string) (bool, error) {
+	query := `
+		DELETE FROM im_thread.thread_tag
+		WHERE thread_id = @ThreadID AND contact_id = @ContactID AND tag = @Tag
+	`
+
+	args := pgx.NamedArgs{
+		"ThreadID":  threadID,
+		"ContactID": contactID,
+		"Tag":       tag,
+	}
+
+	cmd, err := s.db.Exec(ctx, query, args)
+	if err != nil {
+		return false, errors.Internal(
+			"error executing tag delete by name query",
+			errors.WithCause(err),
+			errors.WithID("postgres.thread_tag.remove_by_name"),
 		)
 	}
 
-	return nil
+	return cmd.RowsAffected() > 0, nil
+}
+
+func (s *threadTagStore) RemoveForContacts(ctx context.Context, threadID uuid.UUID, contactIDs []uuid.UUID, tags []string) ([]uuid.UUID, error) {
+	if threadID == uuid.Nil || len(contactIDs) == 0 {
+		return nil, nil
+	}
+
+	query := `
+		WITH removed AS (
+			DELETE FROM im_thread.thread_tag
+			WHERE thread_id = @ThreadID
+			  AND contact_id = ANY(@ContactIDs)
+			  AND (cardinality(@Tags::text[]) = 0 OR tag = ANY(@Tags::text[]))
+			RETURNING contact_id
+		)
+		SELECT DISTINCT contact_id FROM removed
+	`
+
+	if tags == nil {
+		tags = make([]string, 0)
+	}
+
+	args := pgx.NamedArgs{
+		"ThreadID":   threadID,
+		"ContactIDs": contactIDs,
+		"Tags":       tags,
+	}
+
+	rows, err := s.db.Query(ctx, query, args)
+	if err != nil {
+		return nil, errors.Internal(
+			"error executing tag delete for contacts query",
+			errors.WithCause(err),
+			errors.WithID("postgres.thread_tag.remove_for_contacts"),
+		)
+	}
+
+	contacts, err := pgx.CollectRows(rows, pgx.RowTo[uuid.UUID])
+	if err != nil {
+		return nil, errors.Internal(
+			"error collecting removed tag contacts",
+			errors.WithCause(err),
+			errors.WithID("postgres.thread_tag.remove_for_contacts"),
+		)
+	}
+
+	return contacts, nil
+}
+
+func (s *threadTagStore) ListNames(ctx context.Context, threadID, contactID uuid.UUID) ([]string, error) {
+	query := `
+		SELECT tag
+		FROM im_thread.thread_tag
+		WHERE thread_id = @ThreadID AND contact_id = @ContactID
+		ORDER BY created_at, tag
+	`
+
+	args := pgx.NamedArgs{
+		"ThreadID":  threadID,
+		"ContactID": contactID,
+	}
+
+	rows, err := s.db.Query(ctx, query, args)
+	if err != nil {
+		return nil, errors.Internal(
+			"error executing tag names query",
+			errors.WithCause(err),
+			errors.WithID("postgres.thread_tag.list_names"),
+		)
+	}
+
+	tags, err := pgx.CollectRows(rows, pgx.RowTo[string])
+	if err != nil {
+		return nil, errors.Internal(
+			"error collecting tag names",
+			errors.WithCause(err),
+			errors.WithID("postgres.thread_tag.list_names"),
+		)
+	}
+
+	return tags, nil
 }
 
 func (s *threadTagStore) ListForContact(ctx context.Context, contactID uuid.UUID, threadIDs []uuid.UUID) (map[uuid.UUID][]*model.ThreadTag, error) {

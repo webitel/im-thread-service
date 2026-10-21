@@ -20,6 +20,7 @@ const (
 	KindReadChanged      = "read.changed"
 	KindDeliveredChanged = "delivered.changed"
 	KindMessageFailed    = "message.failed"
+	KindTagsChanged      = "tags.changed"
 )
 
 // Journal field keys. Entries keep only references; message content is read from
@@ -105,6 +106,14 @@ func ProjectEvent(eventType string, payload []byte) (Update, bool, error) {
 		}
 
 		return memberUpdate(e.ThreadID.String(), e.ContactID.String(), ActionJoined), true, nil
+
+	case event.ThreadTagsChangedEvent:
+		var e event.ThreadTagsChanged
+		if err := json.Unmarshal(payload, &e); err != nil {
+			return Update{}, false, err
+		}
+
+		return Update{ThreadID: e.ThreadID.String(), Kind: KindTagsChanged, Fields: map[string]any{FieldActor: e.ContactID.String()}}, true, nil
 
 	case event.MemberLeftEvent:
 		var e event.MemberLeft

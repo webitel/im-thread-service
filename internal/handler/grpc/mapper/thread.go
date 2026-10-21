@@ -72,6 +72,7 @@ func (s *ThreadInConverter) ConvertSearch(in *impb.ThreadSearchRequest) (*dto.Th
 		ContactIDs:   members,
 		Participants: convertParticipants(in.GetParticipants()),
 		Tags:         in.GetTags(),
+		ExcludeTags:  in.GetExcludeTags(),
 		Unread:       in.GetUnread(),
 	}, nil
 }

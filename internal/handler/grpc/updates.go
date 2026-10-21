@@ -27,6 +27,11 @@ type UpdatesReader interface {
 	Unread(ctx context.Context, threadID, contactID string) (int64, error)
 }
 
+// TagLister reads a contact's own tags on a thread.
+type TagLister interface {
+	ListTags(ctx context.Context, threadID, contactID uuid.UUID) ([]string, error)
+}
+
 // ThreadSearcher loads threads the way ThreadManagement/Search does.
 type ThreadSearcher interface {
 	Search(ctx context.Context, req *dto.ThreadSearchRequest) ([]*model.Thread, error)
@@ -38,11 +43,12 @@ type UpdatesServer struct {
 	history MessageHistoryService
 	updates UpdatesReader
 	threads ThreadSearcher
+	tags    TagLister
 	out     *mapper.ThreadOutConverter
 }
 
-func NewUpdatesServer(history MessageHistoryService, updates UpdatesReader, threads ThreadManagementService) *UpdatesServer {
-	return &UpdatesServer{history: history, updates: updates, threads: threads, out: &mapper.ThreadOutConverter{}}
+func NewUpdatesServer(history MessageHistoryService, updates UpdatesReader, threads ThreadManagementService, tags TagLister) *UpdatesServer {
+	return &UpdatesServer{history: history, updates: updates, threads: threads, tags: tags, out: &mapper.ThreadOutConverter{}}
 }
 
 // updatesCaller is who asks and how history visibility applies to them.
@@ -159,6 +165,12 @@ func (s *UpdatesServer) threadUpdates(ctx context.Context, caller updatesCaller,
 		return nil, 0, err
 	}
 
+	if hasKind(events, journal.KindTagsChanged) {
+		if entry.Tags, err = s.callerTags(ctx, caller, threadID); err != nil {
+			return nil, 0, err
+		}
+	}
+
 	referenced := make(map[string]struct{})
 
 	if err := s.applyDiff(ctx, caller, entry, events, referenced); err != nil {
@@ -193,6 +205,35 @@ func (s *UpdatesServer) threadUpdates(ctx context.Context, caller updatesCaller,
 	entry.Members = mergeMembers(members, entry.GetMembers())
 
 	return entry, len(events), nil
+}
+
+func (s *UpdatesServer) callerTags(ctx context.Context, caller updatesCaller, threadID string) (*impb.ThreadTags, error) {
+	thread, err := uuid.Parse(threadID)
+	if err != nil {
+		return nil, errors.Internal("invalid journal thread_id", errors.WithCause(err), errors.WithID("grpc.updates.tags"))
+	}
+
+	contact, err := uuid.Parse(caller.contactID)
+	if err != nil {
+		return nil, errors.InvalidArgument("invalid caller_id", errors.WithCause(err), errors.WithID("grpc.updates.tags"))
+	}
+
+	tags, err := s.tags.ListTags(ctx, thread, contact)
+	if err != nil {
+		return nil, err
+	}
+
+	return &impb.ThreadTags{Items: tags}, nil
+}
+
+func hasKind(events []journal.Event, kind string) bool {
+	for _, e := range events {
+		if e.Kind == kind {
+			return true
+		}
+	}
+
+	return false
 }
 
 // needsDialog: the window holds the thread's first change or the caller joining it, so the

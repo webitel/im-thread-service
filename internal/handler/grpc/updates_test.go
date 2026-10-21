@@ -59,6 +59,12 @@ func (f *fakeUpdates) Members(context.Context, string) ([]journal.Member, error)
 
 func (f *fakeUpdates) Unread(context.Context, string, string) (int64, error) { return f.unread, nil }
 
+type fakeTags struct{ tags []string }
+
+func (f *fakeTags) ListTags(context.Context, uuid.UUID, uuid.UUID) ([]string, error) {
+	return f.tags, nil
+}
+
 // fakeHistory returns stored messages by id, or the newest one when no ids are asked.
 type fakeHistory struct {
 	MessageHistoryService
@@ -108,7 +114,7 @@ func msgEvent(kind string, msgID uuid.UUID) journal.Event {
 }
 
 func TestGetUpdates_Errors(t *testing.T) {
-	srv := NewUpdatesServer(&fakeHistory{}, &fakeUpdates{}, &fakeThreads{})
+	srv := NewUpdatesServer(&fakeHistory{}, &fakeUpdates{}, &fakeThreads{}, &fakeTags{})
 
 	for name, req := range map[string]*impb.GetUpdatesRequest{
 		"malformed caller id": {CallerId: "x", DomainId: 1},
@@ -124,7 +130,7 @@ func TestGetUpdates_Errors(t *testing.T) {
 
 // First sync: the client gets its starting cursor and loads the thread list itself.
 func TestGetUpdates_FirstSyncResyncs(t *testing.T) {
-	resp, err := NewUpdatesServer(&fakeHistory{}, &fakeUpdates{cursor: "77"}, &fakeThreads{}).
+	resp, err := NewUpdatesServer(&fakeHistory{}, &fakeUpdates{cursor: "77"}, &fakeThreads{}, &fakeTags{}).
 		GetUpdates(context.Background(), updatesReq(""))
 	require.NoError(t, err)
 	assert.True(t, resp.GetResync())
@@ -170,7 +176,7 @@ func TestGetUpdates_AllChangedThreads(t *testing.T) {
 		ID: newThread, Subject: "new dialog", LastMessage: &model.Message{ID: created, Body: "hello"},
 	}}}
 
-	resp, err := NewUpdatesServer(history, updates, threads).GetUpdates(context.Background(), updatesReq("100"))
+	resp, err := NewUpdatesServer(history, updates, threads, &fakeTags{}).GetUpdates(context.Background(), updatesReq("100"))
 	require.NoError(t, err)
 	assert.Equal(t, "900", resp.GetCursor())
 	require.Len(t, resp.GetThreads(), 3)
@@ -242,7 +248,7 @@ func TestGetUpdates_Resyncs(t *testing.T) {
 
 	for name, updates := range tests {
 		t.Run(name, func(t *testing.T) {
-			resp, err := NewUpdatesServer(&fakeHistory{}, updates, &fakeThreads{}).GetUpdates(context.Background(), updatesReq("100"))
+			resp, err := NewUpdatesServer(&fakeHistory{}, updates, &fakeThreads{}, &fakeTags{}).GetUpdates(context.Background(), updatesReq("100"))
 			require.NoError(t, err)
 			assert.True(t, resp.GetResync())
 			assert.Equal(t, "5", resp.GetCursor())
@@ -284,7 +290,7 @@ func TestThreadSearch_ReturnsUpdatesCursor(t *testing.T) {
 func TestGetUpdates_TrimmedWithoutChangesKeepsCursor(t *testing.T) {
 	updates := &fakeUpdates{cursor: "100", trimmed: 500, changes: &journal.ContactChanges{Cursor: "100", After: 100}}
 
-	resp, err := NewUpdatesServer(&fakeHistory{}, updates, &fakeThreads{}).GetUpdates(context.Background(), updatesReq("100"))
+	resp, err := NewUpdatesServer(&fakeHistory{}, updates, &fakeThreads{}, &fakeTags{}).GetUpdates(context.Background(), updatesReq("100"))
 	require.NoError(t, err)
 	assert.False(t, resp.GetResync())
 	assert.Equal(t, "100", resp.GetCursor())
@@ -315,7 +321,7 @@ func TestGetUpdates_ReadOnlyChange(t *testing.T) {
 		unread: 0,
 	}
 
-	resp, err := NewUpdatesServer(&fakeHistory{}, updates, &fakeThreads{}).GetUpdates(context.Background(), updatesReq("200"))
+	resp, err := NewUpdatesServer(&fakeHistory{}, updates, &fakeThreads{}, &fakeTags{}).GetUpdates(context.Background(), updatesReq("200"))
 	require.NoError(t, err)
 	require.Len(t, resp.GetThreads(), 1)
 	assert.Empty(t, resp.GetThreads()[0].GetMessages())
@@ -347,7 +353,7 @@ func TestGetUpdates_Failures(t *testing.T) {
 		recoveredID: {ID: recoveredID, Body: "retried"},
 	}}
 
-	resp, err := NewUpdatesServer(history, updates, &fakeThreads{}).GetUpdates(context.Background(), updatesReq("200"))
+	resp, err := NewUpdatesServer(history, updates, &fakeThreads{}, &fakeTags{}).GetUpdates(context.Background(), updatesReq("200"))
 	require.NoError(t, err)
 
 	entry := resp.GetThreads()[0]
@@ -362,4 +368,57 @@ func TestGetUpdates_Failures(t *testing.T) {
 
 	require.Len(t, entry.GetMembers(), 1)
 	assert.Equal(t, "m1", entry.GetMembers()[0].GetId())
+}
+
+// The owner's tag change arrives with their current tags; other contacts' private entries are
+// filtered out by the journal itself (see journal.ChangesSince).
+func TestGetUpdates_Tags(t *testing.T) {
+	thread := uuid.NewString()
+	req := updatesReq("200")
+	updates := &fakeUpdates{
+		changes: &journal.ContactChanges{Cursor: "300", After: 200, Threads: []string{thread}},
+		events: map[string][]journal.Event{thread: {{
+			Kind: journal.KindTagsChanged, Fields: map[string]string{journal.FieldActor: req.GetCallerId()},
+		}}},
+	}
+
+	resp, err := NewUpdatesServer(&fakeHistory{}, updates, &fakeThreads{}, &fakeTags{tags: []string{"snoozed"}}).GetUpdates(context.Background(), req)
+	require.NoError(t, err)
+	require.Len(t, resp.GetThreads(), 1)
+	require.NotNil(t, resp.GetThreads()[0].GetTags())
+	assert.Equal(t, []string{"snoozed"}, resp.GetThreads()[0].GetTags().GetItems())
+}
+
+// Without a tag change in the window tags is absent, so the client keeps its copy.
+func TestGetUpdates_NoTagChange(t *testing.T) {
+	thread := uuid.NewString()
+	updates := &fakeUpdates{
+		changes: &journal.ContactChanges{Cursor: "300", After: 200, Threads: []string{thread}},
+		events: map[string][]journal.Event{thread: {{Kind: journal.KindReadChanged, Fields: map[string]string{
+			journal.FieldActor: uuid.NewString(), journal.FieldUpToSeq: "9",
+		}}}},
+	}
+
+	resp, err := NewUpdatesServer(&fakeHistory{}, updates, &fakeThreads{}, &fakeTags{tags: []string{"snoozed"}}).GetUpdates(context.Background(), updatesReq("200"))
+	require.NoError(t, err)
+	require.Len(t, resp.GetThreads(), 1)
+	assert.Nil(t, resp.GetThreads()[0].GetTags())
+}
+
+// Removing the last tag is sent as present-but-empty, unlike an untouched thread.
+func TestGetUpdates_AllTagsRemoved(t *testing.T) {
+	thread := uuid.NewString()
+	req := updatesReq("200")
+	updates := &fakeUpdates{
+		changes: &journal.ContactChanges{Cursor: "300", After: 200, Threads: []string{thread}},
+		events: map[string][]journal.Event{thread: {{
+			Kind: journal.KindTagsChanged, Fields: map[string]string{journal.FieldActor: req.GetCallerId()},
+		}}},
+	}
+
+	resp, err := NewUpdatesServer(&fakeHistory{}, updates, &fakeThreads{}, &fakeTags{}).GetUpdates(context.Background(), req)
+	require.NoError(t, err)
+	require.Len(t, resp.GetThreads(), 1)
+	require.NotNil(t, resp.GetThreads()[0].GetTags())
+	assert.Empty(t, resp.GetThreads()[0].GetTags().GetItems())
 }

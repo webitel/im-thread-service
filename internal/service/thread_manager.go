@@ -40,6 +40,7 @@ type (
 		privacyChecker ThreadPrivacyChecker
 		contactInfo    ContactInfoProvider
 		providers      ProvidersAdapter
+		tagHooks       ThreadTagHooks
 	}
 
 	ThreadPrivacyChecker interface {
@@ -67,6 +68,7 @@ func NewThreadService(
 	privacyChecker ThreadPrivacyChecker,
 	contactInfo ContactInfoProvider,
 	providers ProvidersAdapter,
+	tagHooks ThreadTagHooks,
 ) *ThreadManagementService {
 	if logger == nil {
 		logger = slog.Default()
@@ -78,6 +80,7 @@ func NewThreadService(
 		privacyChecker: privacyChecker,
 		contactInfo:    contactInfo,
 		providers:      providers,
+		tagHooks:       tagHooks,
 	}
 }
 
@@ -143,6 +146,7 @@ func (t *ThreadManagementService) Search(ctx context.Context, searchRequest *dto
 		WithoutDeletedAtFilter().
 		WithOffset(searchRequest.Page).
 		WithTagsFilter(searchRequest.SelfID, searchRequest.Tags...).
+		WithExcludeTagsFilter(searchRequest.SelfID, searchRequest.ExcludeTags...).
 		WithUnreadFilter(searchRequest.SelfID, searchRequest.Unread)
 
 	switch {
@@ -560,6 +564,10 @@ func (t *ThreadManagementService) Transfer(ctx context.Context, req *dto.Transfe
 			return err
 		}
 
+		if err = t.tagHooks.OnMemberLeft(ctx, uow, req.ThreadID, initiator.ContactID); err != nil {
+			return err
+		}
+
 		eventReceivers, err := uow.ThreadDialogStore().GetQuickView(ctx, &model.ThreadDialogStoreFilter{
 			ThreadIDs:      []uuid.UUID{req.ThreadID},
 			IncludeDeleted: false,
@@ -888,6 +896,11 @@ func (t *ThreadManagementService) sendThreadSystemMessage(ctx context.Context, u
 
 	savedMsg.To = msg.To
 	savedMsg.From = msg.From
+
+	if err = t.tagHooks.OnMessage(ctx, uow, savedMsg); err != nil {
+		return nil, err
+	}
+
 	savedMsg.WithCreatedEvent(ctx, uuid.NewString())
 	events := savedMsg.Events()
 
@@ -973,6 +986,10 @@ func (t *ThreadManagementService) RemoveMember(ctx context.Context, req *dto.Rem
 			}
 		} else {
 			if err = uow.ThreadDialogStore().Delete(ctx, target.ID, req.Reason); err != nil {
+				return err
+			}
+
+			if err = t.tagHooks.OnMemberLeft(ctx, uow, target.ThreadID, target.ContactID); err != nil {
 				return err
 			}
 

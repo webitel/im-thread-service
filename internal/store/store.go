@@ -232,10 +232,23 @@ type BotControlStore interface {
 }
 
 type ThreadTagStore interface {
-	Add(ctx context.Context, tag *model.ThreadTag) (*model.ThreadTag, error)
+	// Add is idempotent: tagging a thread with a tag it already has returns the existing tag
+	// with inserted=false.
+	Add(ctx context.Context, tag *model.ThreadTag) (result *model.ThreadTag, inserted bool, err error)
 
 	// Remove is scoped by contactID as well as tagID, so a contact can only delete their own tags.
-	Remove(ctx context.Context, tagID, contactID uuid.UUID) error
+	// It returns the thread the tag was on.
+	Remove(ctx context.Context, tagID, contactID uuid.UUID) (uuid.UUID, error)
+
+	// RemoveByName deletes the contact's tag on the thread and reports whether it existed.
+	RemoveByName(ctx context.Context, threadID, contactID uuid.UUID, tag string) (bool, error)
+
+	// RemoveForContacts deletes the contacts' tags on the thread (only the given tags when tags
+	// is non-empty) and returns the contacts that lost at least one tag.
+	RemoveForContacts(ctx context.Context, threadID uuid.UUID, contactIDs []uuid.UUID, tags []string) ([]uuid.UUID, error)
+
+	// ListNames returns the contact's tags on the thread, oldest first.
+	ListNames(ctx context.Context, threadID, contactID uuid.UUID) ([]string, error)
 
 	ListForContact(ctx context.Context, contactID uuid.UUID, threadIDs []uuid.UUID) (map[uuid.UUID][]*model.ThreadTag, error)
 

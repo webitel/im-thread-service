@@ -70,7 +70,8 @@ func newReactionTestService(
 	providers *fakeReactionProvidersAdapter,
 ) *MessageService {
 	return &MessageService{
-		logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+		tagHooks: &fakeTagHooks{},
+		logger:   slog.New(slog.NewTextHandler(io.Discard, nil)),
 		uow: fakeUnitOfWork{
 			messageReactionStore: reactions,
 			threadDialogStore:    dialogs,

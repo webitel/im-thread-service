@@ -15,7 +15,7 @@ func TestVerifyRemoveMemberInitiatorPermissions(t *testing.T) {
 	canRemove := &model.ThreadPermissions{CanRemoveMembers: true}
 	cannotRemove := &model.ThreadPermissions{CanRemoveMembers: false}
 
-	svc := &ThreadManagementService{}
+	svc := &ThreadManagementService{tagHooks: &fakeTagHooks{}}
 
 	tests := []struct {
 		name          string
