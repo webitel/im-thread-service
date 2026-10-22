@@ -107,6 +107,19 @@ func (s *ThreadInConverter) convertThreadKinds(kinds []impb.ThreadKind) []model.
 	return out
 }
 
+func (s *ThreadInConverter) ConvertCountersRequest(in *impb.GetCountersRequest) (*dto.ThreadCountersRequest, error) {
+	selfID, err := uuid.Parse(in.GetSelfId())
+	if err != nil {
+		return nil, errors.InvalidArgument("invalid self id", errors.WithCause(err), errors.WithID("mapper.convert_counters_request.self_id"))
+	}
+
+	return &dto.ThreadCountersRequest{
+		SelfID:   selfID,
+		DomainID: in.GetDomainId(),
+		Kinds:    s.convertThreadKinds(in.GetKinds()),
+	}, nil
+}
+
 func (s *ThreadInConverter) ConvertSearchLeft(in *impb.SearchLeftRequest) (*dto.SearchLeftRequest, error) {
 	memberID, err := uuid.Parse(in.GetMemberId())
 	if err != nil {

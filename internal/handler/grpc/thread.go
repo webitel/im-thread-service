@@ -23,6 +23,7 @@ type ThreadManagementService interface {
 	Search(ctx context.Context, searchRequest *dto.ThreadSearchRequest) ([]*model.Thread, error)
 	SearchLeft(ctx context.Context, req *dto.SearchLeftRequest) ([]*model.Thread, error)
 	GetUnreadSummary(ctx context.Context, req *dto.UnreadSummaryRequest) (model.UnreadSummary, error)
+	GetCounters(ctx context.Context, req *dto.ThreadCountersRequest) (model.ThreadCounters, error)
 	AddMember(context.Context, *dto.AddMemberRequest) (uuid.UUID, error)
 	RemoveMember(context.Context, *dto.RemoveMemberRequest) error
 	Transfer(context.Context, *dto.TransferThreadRequest) (uuid.UUID, error)
@@ -155,6 +156,28 @@ func (ts *ThreadManagementServer) GetUnreadSummary(ctx context.Context, req *imp
 		UnreadChats:    summary.Chats,
 		UnreadMessages: summary.Messages,
 	}, nil
+}
+
+func (ts *ThreadManagementServer) GetCounters(ctx context.Context, req *impb.GetCountersRequest) (*impb.GetCountersResponse, error) {
+	in, err := ts.inMapper.ConvertCountersRequest(req)
+	if err != nil {
+		return nil, err
+	}
+
+	counters, err := ts.threadManager.GetCounters(ctx, in)
+	if err != nil {
+		return nil, err
+	}
+
+	return &impb.GetCountersResponse{
+		All:     folderCountersToPb(counters.All),
+		Active:  folderCountersToPb(counters.Active),
+		Snoozed: folderCountersToPb(counters.Snoozed),
+	}, nil
+}
+
+func folderCountersToPb(c model.FolderCounters) *impb.ThreadCounters {
+	return &impb.ThreadCounters{Total: c.Total, UnreadChats: c.UnreadChats}
 }
 
 // Transfer implements [thread.ThreadManagementServer].
