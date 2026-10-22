@@ -160,6 +160,8 @@ type ThreadStore interface {
 	LockForUpdate(ctx context.Context, threadID uuid.UUID) error
 	// SetCRMContact sets the selected CRM contact; an empty id clears it.
 	SetCRMContact(ctx context.Context, threadID uuid.UUID, crmContactID string) error
+	// Counters counts the member's active chats per folder, split by the snoozed tag.
+	Counters(ctx context.Context, q model.ThreadCountersQuery) (model.ThreadCounters, error)
 }
 
 type ThreadPermissionStore interface {

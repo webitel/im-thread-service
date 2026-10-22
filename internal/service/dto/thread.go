@@ -77,6 +77,12 @@ type (
 		DomainID int32
 	}
 
+	ThreadCountersRequest struct {
+		SelfID   uuid.UUID
+		DomainID int32
+		Kinds    []model.ThreadKind
+	}
+
 	ThreadMembersResponse struct {
 		Members uuid.UUIDs `db:"members"`
 	}

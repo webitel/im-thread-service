@@ -352,6 +352,10 @@ type fakeThreadStore struct {
 
 	setCRMContactErr   error
 	setCRMContactCalls []string
+
+	counters      model.ThreadCounters
+	countersErr   error
+	countersQuery model.ThreadCountersQuery
 }
 
 func (f *fakeThreadStore) ResolveThread(ctx context.Context, q model.ResolveThreadQuery) (*model.Thread, error) {
@@ -363,6 +367,16 @@ func (f *fakeThreadStore) Search(ctx context.Context, query queryobject.QueryObj
 }
 
 func (f *fakeThreadStore) LockForUpdate(context.Context, uuid.UUID) error { return nil }
+
+func (f *fakeThreadStore) Counters(_ context.Context, q model.ThreadCountersQuery) (model.ThreadCounters, error) {
+	f.countersQuery = q
+
+	if f.countersErr != nil {
+		return model.ThreadCounters{}, f.countersErr
+	}
+
+	return f.counters, nil
+}
 
 func (f *fakeThreadStore) SetCRMContact(_ context.Context, _ uuid.UUID, crmContactID string) error {
 	f.setCRMContactCalls = append(f.setCRMContactCalls, crmContactID)

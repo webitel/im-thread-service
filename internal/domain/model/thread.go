@@ -28,7 +28,25 @@ func (q *ResolveThreadQuery) SendAsPtr() *uuid.UUID {
 	return nil
 }
 
+type ThreadCountersQuery struct {
+	DomainID   int32
+	MemberID   uuid.UUID
+	Kinds      []ThreadKind
+	SnoozedTag string
+}
+
 // #endregion
+
+type ThreadCounters struct {
+	All     FolderCounters
+	Active  FolderCounters
+	Snoozed FolderCounters
+}
+
+type FolderCounters struct {
+	Total       int32
+	UnreadChats int32
+}
 
 //go:generate stringer -type=ThreadKind
 type ThreadKind int

@@ -117,6 +117,51 @@ func (s *threadStore) SetCRMContact(ctx context.Context, threadID uuid.UUID, crm
 	return nil
 }
 
+func (s *threadStore) Counters(ctx context.Context, q model.ThreadCountersQuery) (model.ThreadCounters, error) {
+	const query = `
+		select
+			count(*) as all_total,
+			count(*) filter (where td.unread_count > 0) as all_unread,
+			count(*) filter (where s.thread_id is null) as active_total,
+			count(*) filter (where s.thread_id is null and td.unread_count > 0) as active_unread,
+			count(*) filter (where s.thread_id is not null) as snoozed_total,
+			count(*) filter (where s.thread_id is not null and td.unread_count > 0) as snoozed_unread
+		from im_thread.thread_dialog td
+		left join im_thread.thread_tag s
+			on s.thread_id = td.thread_id and s.contact_id = td.member_id and s.tag = @SnoozedTag
+		where td.member_id = @MemberID
+		  and td.domain_id = @DomainID
+		  and td.deleted_at is null
+		  and (cardinality(@Kinds::smallint[]) = 0 or exists (
+			select 1 from im_thread.thread t
+			where t.id = td.thread_id and t.kind = any(@Kinds::smallint[])
+		  ))
+	`
+
+	kinds := make([]int16, len(q.Kinds))
+	for i, k := range q.Kinds {
+		kinds[i] = int16(k)
+	}
+
+	var c model.ThreadCounters
+
+	err := s.db.QueryRow(ctx, query, pgx.NamedArgs{
+		"MemberID":   q.MemberID,
+		"DomainID":   q.DomainID,
+		"SnoozedTag": q.SnoozedTag,
+		"Kinds":      kinds,
+	}).Scan(
+		&c.All.Total, &c.All.UnreadChats,
+		&c.Active.Total, &c.Active.UnreadChats,
+		&c.Snoozed.Total, &c.Snoozed.UnreadChats,
+	)
+	if err != nil {
+		return model.ThreadCounters{}, errors.Internal("counting threads", errors.WithCause(err), errors.WithID("postgres.thread_store.counters"))
+	}
+
+	return c, nil
+}
+
 func (s *threadStore) Search(ctx context.Context, query queryobject.QueryObject) ([]*model.Thread, error) {
 	sql, args, err := query.ToSQL()
 	if err != nil {

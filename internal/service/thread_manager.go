@@ -260,6 +260,19 @@ func (t *ThreadManagementService) GetUnreadSummary(ctx context.Context, req *dto
 	return t.uow.MessageStatuses().UnreadSummary(ctx, req.DomainID, req.SelfID)
 }
 
+func (t *ThreadManagementService) GetCounters(ctx context.Context, req *dto.ThreadCountersRequest) (model.ThreadCounters, error) {
+	if req == nil || req.SelfID == uuid.Nil {
+		return model.ThreadCounters{}, errors.InvalidArgument("self id is required", errors.WithID("service.thread_manager.counters"))
+	}
+
+	return t.uow.ThreadStore().Counters(ctx, model.ThreadCountersQuery{
+		DomainID:   req.DomainID,
+		MemberID:   req.SelfID,
+		Kinds:      req.Kinds,
+		SnoozedTag: SnoozedTag,
+	})
+}
+
 func firstDomainID(ids []int) int32 {
 	if len(ids) > 0 {
 		return int32(ids[0])
