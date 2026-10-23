@@ -40,6 +40,7 @@ type (
 		privacyChecker ThreadPrivacyChecker
 		contactInfo    ContactInfoProvider
 		providers      ProvidersAdapter
+		refs           *ReferenceCache
 	}
 
 	ThreadPrivacyChecker interface {
@@ -67,6 +68,7 @@ func NewThreadService(
 	privacyChecker ThreadPrivacyChecker,
 	contactInfo ContactInfoProvider,
 	providers ProvidersAdapter,
+	refs *ReferenceCache,
 ) *ThreadManagementService {
 	if logger == nil {
 		logger = slog.Default()
@@ -78,6 +80,7 @@ func NewThreadService(
 		privacyChecker: privacyChecker,
 		contactInfo:    contactInfo,
 		providers:      providers,
+		refs:           refs,
 	}
 }
 
@@ -104,6 +107,7 @@ func (t *ThreadManagementService) Get(ctx context.Context, req *dto.ThreadGetReq
 	query := queryobject.NewThreadQueryObject().
 		WithIDFilter(req.ID).
 		WithDomainIDFilter(req.DomainID).
+		WithQueueOwner(req.CallerID).
 		WithFields(req.Fields)
 
 	thread, err := t.uow.ThreadStore().Get(ctx, query)
@@ -378,6 +382,8 @@ func (t *ThreadManagementService) addMemberToChat(ctx context.Context, req *dto.
 		systemMessages []*model.Message
 	)
 
+	t.refreshQueue(ctx, domainID, req.Queue)
+
 	err = t.uow.WithinTransaction(ctx, func(ctx context.Context, uow store.UnitOfWork) error {
 		// Lock order thread -> thread_dialog, same as Send.
 		if err := uow.ThreadStore().LockForUpdate(ctx, req.ThreadID); err != nil {
@@ -403,6 +409,7 @@ func (t *ThreadManagementService) addMemberToChat(ctx context.Context, req *dto.
 			Permissions: *rolePermissions,
 			IsBot:       req.IsBot,
 			AutoLeave:   req.IsBot && resolveAutoLeave(req.AutoLeave),
+			QueueID:     queueIDOf(req.Queue),
 			Settings: model.BaseThreadSetting{
 				Title: titleForTarget,
 			},
@@ -525,6 +532,9 @@ func (t *ThreadManagementService) Transfer(ctx context.Context, req *dto.Transfe
 		systemMessages []*model.Message
 	)
 
+	// The new agent receives the thread through req.Queue only; the initiator's queue is not inherited.
+	t.refreshQueue(ctx, initiator.DomainID, req.Queue)
+
 	err = t.uow.WithinTransaction(ctx, func(ctx context.Context, uow store.UnitOfWork) error {
 		// Lock order thread -> thread_dialog, same as Send.
 		if err := uow.ThreadStore().LockForUpdate(ctx, req.ThreadID); err != nil {
@@ -546,6 +556,7 @@ func (t *ThreadManagementService) Transfer(ctx context.Context, req *dto.Transfe
 			Permissions: *rolePermissions,
 			IsBot:       req.TargetIsBot,
 			AutoLeave:   req.TargetIsBot && resolveAutoLeave(req.AutoLeave),
+			QueueID:     queueIDOf(req.Queue),
 			Settings: model.BaseThreadSetting{
 				Title: initiator.Settings.Title,
 			},
@@ -1569,6 +1580,8 @@ func (t *ThreadManagementService) EnsureDirectThread(ctx context.Context, req *d
 			}
 		}
 
+		t.refreshSource(ctx, sourceRefFromPeers(req.DomainID, req.From, req.To))
+
 		return thread, nil
 	}
 
@@ -1674,6 +1687,8 @@ func (t *ThreadManagementService) orchestrateDirectThreadCreation(ctx context.Co
 	}
 
 	toIsBot := t.peerIsBot(ctx, req.To.ID, req.DomainID)
+
+	t.refreshSource(ctx, sourceRefFromPeers(req.DomainID, req.From, req.To))
 
 	var createdThread *model.Thread
 

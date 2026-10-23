@@ -9,6 +9,8 @@ const (
 	ThreadVariables     string = "im_thread.thread_variables"
 	ThreadTagTable      string = "im_thread.thread_tag"
 	ThreadPreviewTable  string = "im_thread.thread_preview"
+	SourceRefTable      string = "im_thread.source_ref"
+	QueueRefTable       string = "im_thread.queue_ref"
 	ContactTable        string = "im_contact.contact"
 	MessageErrorsTable  string = "im_message.message_errors"
 )

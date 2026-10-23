@@ -123,6 +123,15 @@ func (s *ThreadInConverter) ConvertSearchLeft(in *impb.SearchLeftRequest) (*dto.
 	}, nil
 }
 
+// convertQueueInfo maps an optional call_center queue; nil when absent or id is not set.
+func convertQueueInfo(q *impb.ThreadQueue) *model.QueueInfo {
+	if q == nil || q.GetId() <= 0 {
+		return nil
+	}
+
+	return &model.QueueInfo{ID: q.GetId(), Name: q.GetName()}
+}
+
 func (s *ThreadInConverter) ConvertAddMemberRequest(in *impb.AddMemberRequest) (*dto.AddMemberRequest, error) {
 	threadID, err := uuid.Parse(in.GetThreadId())
 	if err != nil {
@@ -140,6 +149,7 @@ func (s *ThreadInConverter) ConvertAddMemberRequest(in *impb.AddMemberRequest) (
 		NewMemberRole:      s.convertMemberRole(in.GetRole()),
 		DomainID:           int(in.GetDomainId()),
 		SystemCall:         in.GetSystemCall(),
+		Queue:              convertQueueInfo(in.GetQueue()),
 	}
 
 	if in.InitiatorContactId != nil {
@@ -181,6 +191,7 @@ func (s *ThreadInConverter) ConvertTransferThreadRequest(in *impb.TransferReques
 		NewMemberRole:      s.convertMemberRole(in.GetRole()),
 		InitiatorContactID: initiatorContactID,
 		TargetIsBot:        in.GetTargetIsBot(),
+		Queue:              convertQueueInfo(in.GetQueue()),
 	}
 
 	if in.AutoLeave != nil {
@@ -297,6 +308,21 @@ func (s *ThreadOutConverter) ConvertToThread(source *model.Thread) *impb.Thread 
 
 	if source.OwnerBotID != nil {
 		thread.OwnerBotMemberId = source.OwnerBotID.String()
+	}
+
+	if source.Source != nil {
+		thread.Source = &impb.ThreadSource{
+			Id:   source.Source.ID,
+			Name: source.Source.Name,
+			Type: source.Source.Type,
+		}
+	}
+
+	if source.Queue != nil {
+		thread.Queue = &impb.ThreadQueue{
+			Id:   source.Queue.ID,
+			Name: source.Queue.Name,
+		}
 	}
 
 	return thread

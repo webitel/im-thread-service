@@ -52,7 +52,7 @@ func (s *stubStatusStore) UnreadSummary(_ context.Context, _ int32, _ uuid.UUID)
 }
 
 func newUnreadService(stub *stubStatusStore) *ThreadManagementService {
-	return NewThreadService(nil, fakeUnitOfWork{messageStatusStore: stub}, nil, nil, nil)
+	return NewThreadService(nil, fakeUnitOfWork{messageStatusStore: stub}, nil, nil, nil, nil)
 }
 
 func TestEnrichUnread_SetsPerThreadCount(t *testing.T) {

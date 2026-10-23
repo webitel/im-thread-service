@@ -60,6 +60,11 @@ type Thread struct {
 	BotControllerID *uuid.UUID `json:"bot_controller_id,omitempty" db:"bot_controller_id"`
 	OwnerBotID      *uuid.UUID `json:"owner_bot_id,omitempty" db:"owner_bot_id"`
 
+	// Source is the provider gate of the thread. Nil when the gate has no reference row yet.
+	Source *ThreadSource `json:"source,omitempty" db:"source"`
+	// Queue is the call_center queue of the requesting agent. Nil when not set or the queue has no reference row.
+	Queue *ThreadQueue `json:"queue,omitempty" db:"queue"`
+
 	// UnreadCount is the number of unread messages in this thread for the
 	// requesting participant. Enriched after the thread query; not scanned.
 	UnreadCount int64 `json:"unread_count" db:"-"`
@@ -77,6 +82,19 @@ type Thread struct {
 	ReadStates []MemberReadState `json:"read_states,omitempty" db:"-"`
 
 	events []event.Base `db:"-"`
+}
+
+// ThreadSource is the display data of a provider gate (from im_thread.source_ref).
+type ThreadSource struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	Type string `json:"type"`
+}
+
+// ThreadQueue is the display data of a call_center queue (from im_thread.queue_ref).
+type ThreadQueue struct {
+	ID   int64  `json:"id"`
+	Name string `json:"name"`
 }
 
 // MemberReadState is one member's delivery/read horizon (per-thread message seq).

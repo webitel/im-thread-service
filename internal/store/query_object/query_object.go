@@ -23,6 +23,10 @@ type fieldMetadata struct {
 	requiresJoin int
 	sortable     bool
 	filterExpr   string
+	// nullsLast appends NULLS LAST to the ORDER BY clause.
+	nullsLast bool
+	// sortOnly marks a field that is allowed in sort but never selected.
+	sortOnly bool
 }
 
 type baseQueryObject[T Entity] struct {
@@ -51,7 +55,12 @@ func (q *baseQueryObject[T]) WithFields(fields []string) T {
 
 	validFields := make([]string, 0, len(fields))
 	for _, f := range fields {
-		if meta, ok := q.entity.FieldsMetadata()[f]; ok && !slices.Contains(validFields, f) {
+		meta, ok := q.entity.FieldsMetadata()[f]
+		if ok && meta.sortOnly {
+			continue
+		}
+
+		if ok && !slices.Contains(validFields, f) {
 			validFields = append(validFields, f)
 
 			q.entity.EnsureJoins(meta.requiresJoin)
@@ -130,7 +139,7 @@ func (q *baseQueryObject[T]) ToSQL() (string, []any, error) {
 
 	selectExprs := make([]string, 0, len(q.fields))
 	for _, field := range q.fields {
-		if meta, ok := q.entity.FieldsMetadata()[field]; ok {
+		if meta, ok := q.entity.FieldsMetadata()[field]; ok && !meta.sortOnly {
 			q.entity.EnsureJoins(meta.requiresJoin)
 			selectExprs = append(selectExprs, meta.aliasedExpr)
 		}
@@ -152,7 +161,15 @@ func (q *baseQueryObject[T]) ToSQL() (string, []any, error) {
 			orderDir = "DESC"
 		}
 
-		q.builder = q.builder.OrderBy(fmt.Sprintf("%s %s", meta.sqlExpr, orderDir))
+		// Joins for sort fields are decided late (e.g. after self-scoped filters), so ensure them here.
+		q.entity.EnsureJoins(meta.requiresJoin)
+
+		orderExpr := fmt.Sprintf("%s %s", meta.sqlExpr, orderDir)
+		if meta.nullsLast {
+			orderExpr += " NULLS LAST"
+		}
+
+		q.builder = q.builder.OrderBy(orderExpr)
 	}
 
 	sql, args, err := q.builder.ToSql()

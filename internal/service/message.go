@@ -111,8 +111,8 @@ func (s *MessageService) SendText(ctx context.Context, in *dto.SendTextRequest) 
 
 	{
 		toVia := "<nil>"
-		if in.To.Identity != nil && in.To.Identity.Via != nil {
-			toVia = *in.To.Identity.Via
+		if via := in.To.ResolveVia(); via != nil {
+			toVia = *via
 		}
 
 		log.Debug("incoming request",
@@ -1119,8 +1119,8 @@ func gateIDForPeer(peer *shared.Peer, members []*model.ThreadDialog) string {
 		return ""
 	}
 
-	if peer.Identity != nil && peer.Identity.Via != nil && *peer.Identity.Via != "" {
-		return *peer.Identity.Via
+	if via := peer.ResolveVia(); via != nil {
+		return *via
 	}
 
 	for _, m := range members {

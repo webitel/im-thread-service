@@ -253,3 +253,10 @@ type ThreadPreviewStore interface {
 	// preview of it; domainID > 0 also requires that domain.
 	CanRead(ctx context.Context, threadID, callerID uuid.UUID, domainID int) (bool, error)
 }
+
+// ReferenceStore keeps the local display directories (source_ref, queue_ref)
+// refreshed on write. Upserts are idempotent and touch updated_at only on change.
+type ReferenceStore interface {
+	UpsertSource(ctx context.Context, ref *model.SourceRef) error
+	UpsertQueue(ctx context.Context, ref *model.QueueRef) error
+}

@@ -19,4 +19,5 @@ type UnitOfWork interface {
 	ThreadTagStore() ThreadTagStore
 	ThreadVariables() ThreadVariablesStore
 	ThreadPreviews() ThreadPreviewStore
+	References() ReferenceStore
 }

@@ -29,4 +29,6 @@ type UpgradePreviewRequest struct {
 	InitiatorContactID uuid.UUID
 	DomainID           int
 	Role               model.ThreadRole
+	// Queue is the queue through which the member receives the thread; nil when unknown.
+	Queue *model.QueueInfo
 }

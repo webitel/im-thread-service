@@ -19,11 +19,21 @@ const (
 	PeerThread
 )
 
+// ViaInfo is the gate (im-providers) an identity came through.
+type ViaInfo struct {
+	// ID is the gate id.
+	ID string
+	// Name is the gate display name.
+	Name string
+	// Type is the provider type, e.g. facebook | whatsapp | telegram_bot.
+	Type string
+}
+
 type Identity struct {
 	Issuer   string
 	Name     string
 	ChatName string
-	Via      *string
+	ViaInfo  *ViaInfo
 }
 
 type Peer struct {
@@ -48,13 +58,25 @@ func (p Peer) ResolveThreadID() *uuid.UUID {
 	return &p.ID
 }
 
+// ResolveVia returns the gate id of the peer, or nil when it has none.
 func (p Peer) ResolveVia() *string {
+	identity := p.Identity
+	if identity == nil || identity.ViaInfo == nil || identity.ViaInfo.ID == "" {
+		return nil
+	}
+
+	gateID := identity.ViaInfo.ID
+
+	return &gateID
+}
+
+func (p Peer) ResolveViaInfo() *ViaInfo {
 	identity := p.Identity
 	if identity == nil {
 		return nil
 	}
 
-	return identity.Via
+	return identity.ViaInfo
 }
 
 type BaseModel struct {
