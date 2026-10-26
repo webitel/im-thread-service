@@ -32,6 +32,8 @@ type (
 		BotControllerID *uuid.UUID             `json:"bot_controller_id,omitempty" db:"bot_controller_id"`
 		OwnerBotID      *uuid.UUID             `json:"owner_bot_id,omitempty" db:"owner_bot_id"`
 		CRMContactID    *string                `json:"crm_contact_id,omitempty" db:"crm_contact_id"`
+		Source          *model.ThreadSource    `json:"source,omitempty" db:"source"`
+		Queue           *model.ThreadQueue     `json:"queue,omitempty" db:"queue"`
 		// The real thread id for SearchLeft rows, where "id" above is a
 		// membership-period id instead. Absent (zero) from Search's SQL.
 		ThreadRefID uuid.UUID `json:"-" db:"thread_ref_id"`
@@ -241,6 +243,8 @@ func mapThreadRecordToModel(record *threadRecord) (*model.Thread, error) {
 		Variables:       record.Variables,
 		BotControllerID: record.BotControllerID,
 		OwnerBotID:      record.OwnerBotID,
+		Source:          record.Source,
+		Queue:           record.Queue,
 	}
 
 	if record.CRMContactID != nil {

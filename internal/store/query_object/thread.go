@@ -17,6 +17,10 @@ const (
 	threadThreadDialogAlias       string = "td"
 	threadDirectSettingsAlias     string = "ds"
 	threadMembersFullLateralAlias string = "m"
+	threadSourceViaAlias          string = "srcv"
+	threadSourceRefAlias          string = "src"
+	threadQueueRefAlias           string = "qr"
+	threadQueueOwnerDialogAlias   string = "qtd"
 )
 
 const (
@@ -26,6 +30,8 @@ const (
 	threadLinkFullMembersLateral
 	threadLinkLastMessageLateral
 	threadLinkVariables
+	threadLinkSource
+	threadLinkQueue
 )
 
 const variablesBuild = `
@@ -40,6 +46,11 @@ type threadQueryObject struct {
 	*baseQueryObject[*threadQueryObject]
 
 	mustIncludeComputedSubject bool
+	// selfScoped is true when the query is bound to one caller's own thread_dialog row (td).
+	selfScoped bool
+	// queueOwnerID resolves queue from this contact's thread_dialog row without
+	// filtering threads by it (Get with caller_id).
+	queueOwnerID uuid.UUID
 }
 
 func NewThreadQueryObject() *threadQueryObject {
@@ -52,11 +63,18 @@ func NewThreadQueryObject() *threadQueryObject {
 }
 
 func (q *threadQueryObject) DefaultFields() []string {
-	return []string{
+	fields := []string{
 		"id", "domain_id", "created_at", "updated_at",
 		"kind", "owner", "subject", "description", "members", "bot_controller_id", "owner_bot_id",
 		"crm_contact_id",
 	}
+
+	// source and queue are per-caller/search-only; other callers (Get, bot control) keep the base set.
+	if q.selfScoped {
+		fields = append(fields, "source", "queue")
+	}
+
+	return fields
 }
 
 func (q *threadQueryObject) FieldsMetadata() map[string]fieldMetadata {
@@ -67,6 +85,33 @@ func (q *threadQueryObject) FieldsMetadata() map[string]fieldMetadata {
 			}
 
 			return 0
+		}
+
+		resolveQueueJoin = func() int {
+			if q.queueScoped() {
+				return threadLinkQueue
+			}
+
+			return 0
+		}
+
+		resolveQueueFieldExpression = func() string {
+			if !q.queueScoped() {
+				return "null::jsonb as queue"
+			}
+
+			return fmt.Sprintf(`
+				case when %[1]s.queue_id is null then null
+				else jsonb_build_object('id', %[1]s.queue_id, 'name', %[1]s.name) end as queue
+			`, threadQueueRefAlias)
+		}
+
+		resolveQueueSortExpression = func() string {
+			if !q.queueScoped() {
+				return "null::text"
+			}
+
+			return threadQueueRefAlias + ".name"
 		}
 
 		resolveSubjectFieldExpression = func() string {
@@ -182,6 +227,38 @@ func (q *threadQueryObject) FieldsMetadata() map[string]fieldMetadata {
 			sortable:     false,
 			filterExpr:   "t.owner_bot_id",
 		},
+		"source": {
+			sqlExpr:      threadSourceRefAlias + ".gate_id",
+			aliasedExpr:  "case when src.gate_id is null then null else jsonb_build_object('id', src.gate_id, 'name', src.name, 'type', src.type) end as source",
+			requiresJoin: threadLinkSource,
+			sortable:     false,
+			filterExpr:   "",
+		},
+		"source_name": {
+			sqlExpr:      threadSourceRefAlias + ".name",
+			aliasedExpr:  "",
+			requiresJoin: threadLinkSource,
+			sortable:     true,
+			filterExpr:   "",
+			nullsLast:    true,
+			sortOnly:     true,
+		},
+		"queue": {
+			sqlExpr:      threadQueueRefAlias + ".queue_id",
+			aliasedExpr:  resolveQueueFieldExpression(),
+			requiresJoin: resolveQueueJoin(),
+			sortable:     false,
+			filterExpr:   "",
+		},
+		"queue_name": {
+			sqlExpr:      resolveQueueSortExpression(),
+			aliasedExpr:  "",
+			requiresJoin: resolveQueueJoin(),
+			sortable:     true,
+			filterExpr:   "",
+			nullsLast:    true,
+			sortOnly:     true,
+		},
 		"crm_contact_id": {
 			sqlExpr:      "t.crm_contact_id",
 			aliasedExpr:  "t.crm_contact_id as crm_contact_id",
@@ -211,6 +288,14 @@ func (q *threadQueryObject) EnsureJoins(requiredJoin int) {
 
 	if requiredJoin&threadLinkVariables != 0 {
 		q.linkVariables()
+	}
+
+	if requiredJoin&threadLinkSource != 0 {
+		q.linkSource()
+	}
+
+	if requiredJoin&threadLinkQueue != 0 {
+		q.linkQueue()
 	}
 }
 
@@ -301,6 +386,7 @@ func (q *threadQueryObject) WithContactIDFilter(memberIDs ...uuid.UUID) *threadQ
 		q.builder = q.builder.Where(squirrel.Eq{threadThreadDialogAlias + ".member_id": memberIDs})
 
 		q.mustIncludeComputedSubject = true
+		q.selfScoped = true
 	}
 
 	return q
@@ -316,6 +402,7 @@ func (q *threadQueryObject) WithSharedMembersFilter(selfID uuid.UUID, memberIDs 
 	q.builder = q.builder.Where(squirrel.Eq{threadThreadDialogAlias + ".member_id": selfID})
 	q.builder = q.builder.Where(squirrel.Eq{threadThreadDialogAlias + ".deleted_at": nil})
 	q.mustIncludeComputedSubject = true
+	q.selfScoped = true
 
 	if len(memberIDs) == 0 {
 		return q
@@ -405,6 +492,7 @@ func (q *threadQueryObject) WithParticipantsFilter(selfID uuid.UUID, domainIDs [
 
 	q.EnsureJoins(threadLinkThreadDialog)
 	q.mustIncludeComputedSubject = true
+	q.selfScoped = true
 
 	prefixArgs := make([]any, 0, len(domainIDs)+2*len(participants))
 
@@ -616,4 +704,87 @@ func (q *threadQueryObject) linkVariables() {
 		im_thread.thread_variables v
 		on v.thread_id = t.id
 	`)
+}
+
+func (q *threadQueryObject) linkSource() {
+	if q.join&threadLinkSource != 0 {
+		return
+	}
+
+	q.join |= threadLinkSource
+
+	// The first non-bot dialog row with a via carries the provider gate of the thread.
+	q.builder = q.builder.LeftJoin(fmt.Sprintf(`
+		lateral (
+			select sd.via as gate_id
+			from %[1]s sd
+			where sd.domain_id = %[2]s.domain_id and sd.thread_id = %[2]s.id
+			  and sd.is_bot = false and sd.via is not null and sd.via <> ''
+			order by (sd.deleted_at is not null), sd.created_at
+			limit 1
+		) %[3]s on true
+	`, ThreadDialogTable, threadAlias, threadSourceViaAlias))
+
+	q.builder = q.builder.LeftJoin(fmt.Sprintf(
+		"%s %s on %s.gate_id = %s.gate_id and %s.deleted = false",
+		SourceRefTable,
+		threadSourceRefAlias,
+		threadSourceRefAlias,
+		threadSourceViaAlias,
+		threadSourceRefAlias,
+	))
+}
+
+// queueScoped reports whether queue can be resolved for one caller.
+func (q *threadQueryObject) queueScoped() bool {
+	return q.selfScoped || q.queueOwnerID != uuid.Nil
+}
+
+// WithQueueOwner makes queue resolve from callerID's own thread_dialog row
+// without narrowing the result: a caller that is not a member (e.g. a preview
+// owner) still gets the thread, with a null queue. Used by Get with caller_id;
+// self-scoped queries (Search) already resolve queue from td and need no owner.
+func (q *threadQueryObject) WithQueueOwner(callerID uuid.UUID) *threadQueryObject {
+	q.queueOwnerID = callerID
+
+	return q
+}
+
+func (q *threadQueryObject) linkQueue() {
+	if q.join&threadLinkQueue != 0 {
+		return
+	}
+
+	q.join |= threadLinkQueue
+
+	dialogAlias := threadThreadDialogAlias
+
+	if q.selfScoped {
+		q.linkThreadDialog()
+	} else {
+		// (domain_id, thread_id, member_id) is unique, so this joins at most one row.
+		dialogAlias = threadQueueOwnerDialogAlias
+		q.builder = q.builder.LeftJoin(fmt.Sprintf(
+			"%s %s on %s.thread_id = %s.id and %s.domain_id = %s.domain_id and %s.member_id = ? and %s.deleted_at is null",
+			ThreadDialogTable,
+			dialogAlias,
+			dialogAlias,
+			threadAlias,
+			dialogAlias,
+			threadAlias,
+			dialogAlias,
+			dialogAlias,
+		), q.queueOwnerID)
+	}
+
+	q.builder = q.builder.LeftJoin(fmt.Sprintf(
+		"%s %s on %s.domain_id = %s.domain_id and %s.queue_id = %s.queue_id and %s.deleted = false",
+		QueueRefTable,
+		threadQueueRefAlias,
+		threadQueueRefAlias,
+		threadAlias,
+		threadQueueRefAlias,
+		dialogAlias,
+		threadQueueRefAlias,
+	))
 }

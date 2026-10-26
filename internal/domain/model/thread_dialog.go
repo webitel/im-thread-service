@@ -45,6 +45,7 @@ type ThreadDialogExtended struct {
 	InvitedBy   *uuid.UUID `json:"invited_by" db:"invited_by"`
 	LeaveReason *string    `json:"leave_reason" db:"leave_reason"`
 	Via         *string    `json:"via,omitempty" db:"via"`
+	QueueID     *int64     `json:"queue_id,omitempty" db:"queue_id"`
 
 	IsBot     bool `json:"is_bot" db:"is_bot"`
 	AutoLeave bool `json:"auto_leave" db:"auto_leave"`

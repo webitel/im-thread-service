@@ -96,6 +96,8 @@ type AddMemberRequest struct {
 	DomainID           int
 	IsBot              bool
 	AutoLeave          *bool
+	// Queue is the call_center queue the member receives the thread through; nil when unknown.
+	Queue *model.QueueInfo
 	// SystemCall marks a trusted-orchestrator call: permission checks are skipped
 	// while InitiatorContactID is still recorded as the system message sender.
 	SystemCall bool
@@ -151,6 +153,8 @@ type TransferThreadRequest struct {
 	NewMemberRole      model.ThreadRole
 	TargetIsBot        bool
 	AutoLeave          *bool
+	// Queue is the queue through which the target agent receives the thread; nil when unknown.
+	Queue *model.QueueInfo
 }
 
 func NewSearchThreadRequest(domainID int, kind model.ThreadKind, from, to *shared.Peer) *SearchThreadDialogRequest {

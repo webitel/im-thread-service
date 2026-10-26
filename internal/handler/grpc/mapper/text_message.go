@@ -70,7 +70,7 @@ func MapPeerFromProto(pb *impb.Peer) shared.Peer {
 				Issuer:   id.GetIssuer(),
 				Name:     id.GetName(),
 				ChatName: id.GetChatName(),
-				Via:      id.Via,
+				ViaInfo:  mapViaInfoFromProto(id),
 			}
 		}
 	case *impb.Peer_GroupId:
@@ -85,6 +85,23 @@ func MapPeerFromProto(pb *impb.Peer) shared.Peer {
 	}
 
 	return p
+}
+
+// mapViaInfoFromProto merges via_ref with the deprecated via field, which old
+// clients still send with only the gate id. On conflict via_ref.id wins.
+func mapViaInfoFromProto(id *impb.Identity) *shared.ViaInfo {
+	ref := id.GetViaRef()
+	vi := &shared.ViaInfo{ID: ref.GetId(), Name: ref.GetName(), Type: ref.GetType()}
+
+	if legacy := id.GetVia(); vi.ID == "" && legacy != "" { //nolint:staticcheck // legacy fallback until all clients send via_ref
+		vi.ID = legacy
+	}
+
+	if vi.ID == "" && vi.Name == "" && vi.Type == "" {
+		return nil
+	}
+
+	return vi
 }
 
 func MapToSendTextResponse(out *dto.SendTextResponse) *impb.SendTextResponse {

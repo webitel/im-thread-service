@@ -90,6 +90,7 @@ func ConvertUpgradePreviewRequest(in *impb.UpgradePreviewToFullMemberRequest) (*
 		InitiatorContactID: initiatorID,
 		DomainID:           int(in.GetDomainId()),
 		Role:               converter.convertMemberRole(in.GetRole()),
+		Queue:              convertQueueInfo(in.GetQueue()),
 	}, nil
 }
 

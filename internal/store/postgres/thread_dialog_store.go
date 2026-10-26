@@ -41,6 +41,7 @@ type threadDialog struct {
 	CanChangeThreadInfo         bool             `db:"can_change_thread_info"`
 	CanDeleteMessages           bool             `db:"can_delete_messages"`
 	Via                         *string          `db:"via"`
+	QueueID                     *int64           `db:"queue_id"`
 	Title                       string           `db:"title"`
 	IsBot                       bool             `db:"is_bot"`
 	AutoLeave                   bool             `db:"auto_leave"`
@@ -62,8 +63,8 @@ func (t *threadDialogStore) Create(ctx context.Context, member *model.ThreadDial
 	query := `
 		WITH inserted_dialog AS
 		(
-			 INSERT INTO im_thread.thread_dialog(domain_id, member_id, thread_id, thread_role, invited_by, via, is_bot, auto_leave)
-			(SELECT domain_id, @MemberID, id, @ThreadRole, @InvitedBy, @Via, @IsBot, @AutoLeave FROM im_thread.thread WHERE id = @ThreadID LIMIT 1)
+			 INSERT INTO im_thread.thread_dialog(domain_id, member_id, thread_id, thread_role, invited_by, via, is_bot, auto_leave, queue_id)
+			(SELECT domain_id, @MemberID, id, @ThreadRole, @InvitedBy, @Via, @IsBot, @AutoLeave, @QueueID FROM im_thread.thread WHERE id = @ThreadID LIMIT 1)
 			RETURNING *
 		),
 		inserted_permissions AS
@@ -86,7 +87,7 @@ func (t *threadDialogStore) Create(ctx context.Context, member *model.ThreadDial
 		)
 
 		SELECT dial.id, dial.domain_id, dial.created_at, dial.updated_at, dial.invited_by, dial.leave_reason, dial.member_id, dial.thread_id, dial.thread_role,
-		dial.is_bot, dial.auto_leave,
+		dial.via, dial.queue_id, dial.is_bot, dial.auto_leave,
 		perm.can_send_messages, perm.can_add_members, perm.can_change_members_permissions, perm.can_remove_members, perm.can_change_thread_info, perm.can_delete_messages,
 		sett.title
 		FROM inserted_dialog dial
@@ -109,6 +110,7 @@ func (t *threadDialogStore) Create(ctx context.Context, member *model.ThreadDial
 		"Via":                         member.Via,
 		"IsBot":                       member.IsBot,
 		"AutoLeave":                   member.AutoLeave,
+		"QueueID":                     member.QueueID,
 	})
 	if err != nil {
 		return nil, errors.Internal("creating thread dialog", errors.WithCause(err), errors.WithID("postgres.thread_dialog_store.create"))
@@ -155,6 +157,7 @@ func mapToThreadDialogExtendedModel(dialog *threadDialog) (*model.ThreadDialogEx
 		ThreadID:    dialog.ThreadID,
 		ThreadRole:  dialog.Role,
 		Via:         dialog.Via,
+		QueueID:     dialog.QueueID,
 		Permissions: model.ThreadPermissions{
 			CanSendMessages:             dialog.CanSendMessages,
 			CanAddMembers:               dialog.CanAddMembers,

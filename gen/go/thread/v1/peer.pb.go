@@ -28,11 +28,16 @@ type Identity struct {
 
 	Issuer string `protobuf:"bytes,1,opt,name=issuer,proto3" json:"issuer,omitempty"`
 	// name is the real name, used everywhere inside Webitel (history, reports).
-	Name string  `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
-	Via  *string `protobuf:"bytes,3,opt,name=via,proto3,oneof" json:"via,omitempty"`
+	Name string `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	// Deprecated: use via_ref.id. Kept for clients that still send only the gate id.
+	//
+	// Deprecated: Marked as deprecated in service/thread/v1/peer.proto.
+	Via *string `protobuf:"bytes,3,opt,name=via,proto3,oneof" json:"via,omitempty"`
 	// chat_name is the name external clients see instead of the real one. Empty means
 	// "no separate public name" — channels then fall back to their own default.
 	ChatName string `protobuf:"bytes,4,opt,name=chat_name,json=chatName,proto3" json:"chat_name,omitempty"`
+	// Gate the identity came through, with its display data. Optional.
+	ViaRef *Via `protobuf:"bytes,5,opt,name=via_ref,json=viaRef,proto3" json:"via_ref,omitempty"`
 }
 
 func (x *Identity) Reset() {
@@ -81,6 +86,7 @@ func (x *Identity) GetName() string {
 	return ""
 }
 
+// Deprecated: Marked as deprecated in service/thread/v1/peer.proto.
 func (x *Identity) GetVia() string {
 	if x != nil && x.Via != nil {
 		return *x.Via
@@ -91,6 +97,80 @@ func (x *Identity) GetVia() string {
 func (x *Identity) GetChatName() string {
 	if x != nil {
 		return x.ChatName
+	}
+	return ""
+}
+
+func (x *Identity) GetViaRef() *Via {
+	if x != nil {
+		return x.ViaRef
+	}
+	return nil
+}
+
+// Via is the gate (im-providers) a message came through.
+type Via struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	// Gate id.
+	Id string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	// Gate display name.
+	Name string `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	// Provider type, e.g. facebook | whatsapp | telegram_bot.
+	Type string `protobuf:"bytes,3,opt,name=type,proto3" json:"type,omitempty"`
+}
+
+func (x *Via) Reset() {
+	*x = Via{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_service_thread_v1_peer_proto_msgTypes[1]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *Via) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Via) ProtoMessage() {}
+
+func (x *Via) ProtoReflect() protoreflect.Message {
+	mi := &file_service_thread_v1_peer_proto_msgTypes[1]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Via.ProtoReflect.Descriptor instead.
+func (*Via) Descriptor() ([]byte, []int) {
+	return file_service_thread_v1_peer_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *Via) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *Via) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *Via) GetType() string {
+	if x != nil {
+		return x.Type
 	}
 	return ""
 }
@@ -115,7 +195,7 @@ type Peer struct {
 func (x *Peer) Reset() {
 	*x = Peer{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_service_thread_v1_peer_proto_msgTypes[1]
+		mi := &file_service_thread_v1_peer_proto_msgTypes[2]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -128,7 +208,7 @@ func (x *Peer) String() string {
 func (*Peer) ProtoMessage() {}
 
 func (x *Peer) ProtoReflect() protoreflect.Message {
-	mi := &file_service_thread_v1_peer_proto_msgTypes[1]
+	mi := &file_service_thread_v1_peer_proto_msgTypes[2]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -141,7 +221,7 @@ func (x *Peer) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Peer.ProtoReflect.Descriptor instead.
 func (*Peer) Descriptor() ([]byte, []int) {
-	return file_service_thread_v1_peer_proto_rawDescGZIP(), []int{1}
+	return file_service_thread_v1_peer_proto_rawDescGZIP(), []int{2}
 }
 
 func (m *Peer) GetKind() isPeer_Kind {
@@ -226,14 +306,22 @@ var file_service_thread_v1_peer_proto_rawDesc = []byte{
 	0x77, 0x65, 0x62, 0x69, 0x74, 0x65, 0x6c, 0x2e, 0x69, 0x6d, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x69,
 	0x63, 0x65, 0x2e, 0x74, 0x68, 0x72, 0x65, 0x61, 0x64, 0x2e, 0x76, 0x31, 0x1a, 0x1b, 0x62, 0x75,
 	0x66, 0x2f, 0x76, 0x61, 0x6c, 0x69, 0x64, 0x61, 0x74, 0x65, 0x2f, 0x76, 0x61, 0x6c, 0x69, 0x64,
-	0x61, 0x74, 0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x22, 0x72, 0x0a, 0x08, 0x49, 0x64, 0x65,
-	0x6e, 0x74, 0x69, 0x74, 0x79, 0x12, 0x16, 0x0a, 0x06, 0x69, 0x73, 0x73, 0x75, 0x65, 0x72, 0x18,
-	0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x06, 0x69, 0x73, 0x73, 0x75, 0x65, 0x72, 0x12, 0x12, 0x0a,
-	0x04, 0x6e, 0x61, 0x6d, 0x65, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x04, 0x6e, 0x61, 0x6d,
-	0x65, 0x12, 0x15, 0x0a, 0x03, 0x76, 0x69, 0x61, 0x18, 0x03, 0x20, 0x01, 0x28, 0x09, 0x48, 0x00,
-	0x52, 0x03, 0x76, 0x69, 0x61, 0x88, 0x01, 0x01, 0x12, 0x1b, 0x0a, 0x09, 0x63, 0x68, 0x61, 0x74,
-	0x5f, 0x6e, 0x61, 0x6d, 0x65, 0x18, 0x04, 0x20, 0x01, 0x28, 0x09, 0x52, 0x08, 0x63, 0x68, 0x61,
-	0x74, 0x4e, 0x61, 0x6d, 0x65, 0x42, 0x06, 0x0a, 0x04, 0x5f, 0x76, 0x69, 0x61, 0x22, 0xf8, 0x01,
+	0x61, 0x74, 0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x22, 0xb2, 0x01, 0x0a, 0x08, 0x49, 0x64,
+	0x65, 0x6e, 0x74, 0x69, 0x74, 0x79, 0x12, 0x16, 0x0a, 0x06, 0x69, 0x73, 0x73, 0x75, 0x65, 0x72,
+	0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x06, 0x69, 0x73, 0x73, 0x75, 0x65, 0x72, 0x12, 0x12,
+	0x0a, 0x04, 0x6e, 0x61, 0x6d, 0x65, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x04, 0x6e, 0x61,
+	0x6d, 0x65, 0x12, 0x19, 0x0a, 0x03, 0x76, 0x69, 0x61, 0x18, 0x03, 0x20, 0x01, 0x28, 0x09, 0x42,
+	0x02, 0x18, 0x01, 0x48, 0x00, 0x52, 0x03, 0x76, 0x69, 0x61, 0x88, 0x01, 0x01, 0x12, 0x1b, 0x0a,
+	0x09, 0x63, 0x68, 0x61, 0x74, 0x5f, 0x6e, 0x61, 0x6d, 0x65, 0x18, 0x04, 0x20, 0x01, 0x28, 0x09,
+	0x52, 0x08, 0x63, 0x68, 0x61, 0x74, 0x4e, 0x61, 0x6d, 0x65, 0x12, 0x3a, 0x0a, 0x07, 0x76, 0x69,
+	0x61, 0x5f, 0x72, 0x65, 0x66, 0x18, 0x05, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x21, 0x2e, 0x77, 0x65,
+	0x62, 0x69, 0x74, 0x65, 0x6c, 0x2e, 0x69, 0x6d, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65,
+	0x2e, 0x74, 0x68, 0x72, 0x65, 0x61, 0x64, 0x2e, 0x76, 0x31, 0x2e, 0x56, 0x69, 0x61, 0x52, 0x06,
+	0x76, 0x69, 0x61, 0x52, 0x65, 0x66, 0x42, 0x06, 0x0a, 0x04, 0x5f, 0x76, 0x69, 0x61, 0x22, 0x3d,
+	0x0a, 0x03, 0x56, 0x69, 0x61, 0x12, 0x0e, 0x0a, 0x02, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28,
+	0x09, 0x52, 0x02, 0x69, 0x64, 0x12, 0x12, 0x0a, 0x04, 0x6e, 0x61, 0x6d, 0x65, 0x18, 0x02, 0x20,
+	0x01, 0x28, 0x09, 0x52, 0x04, 0x6e, 0x61, 0x6d, 0x65, 0x12, 0x12, 0x0a, 0x04, 0x74, 0x79, 0x70,
+	0x65, 0x18, 0x03, 0x20, 0x01, 0x28, 0x09, 0x52, 0x04, 0x74, 0x79, 0x70, 0x65, 0x22, 0xf8, 0x01,
 	0x0a, 0x04, 0x50, 0x65, 0x65, 0x72, 0x12, 0x29, 0x0a, 0x0a, 0x63, 0x6f, 0x6e, 0x74, 0x61, 0x63,
 	0x74, 0x5f, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x42, 0x08, 0xba, 0x48, 0x05, 0x72,
 	0x03, 0xb0, 0x01, 0x01, 0x48, 0x00, 0x52, 0x09, 0x63, 0x6f, 0x6e, 0x74, 0x61, 0x63, 0x74, 0x49,
@@ -280,18 +368,20 @@ func file_service_thread_v1_peer_proto_rawDescGZIP() []byte {
 	return file_service_thread_v1_peer_proto_rawDescData
 }
 
-var file_service_thread_v1_peer_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
+var file_service_thread_v1_peer_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
 var file_service_thread_v1_peer_proto_goTypes = []interface{}{
 	(*Identity)(nil), // 0: webitel.im.service.thread.v1.Identity
-	(*Peer)(nil),     // 1: webitel.im.service.thread.v1.Peer
+	(*Via)(nil),      // 1: webitel.im.service.thread.v1.Via
+	(*Peer)(nil),     // 2: webitel.im.service.thread.v1.Peer
 }
 var file_service_thread_v1_peer_proto_depIdxs = []int32{
-	0, // 0: webitel.im.service.thread.v1.Peer.identity:type_name -> webitel.im.service.thread.v1.Identity
-	1, // [1:1] is the sub-list for method output_type
-	1, // [1:1] is the sub-list for method input_type
-	1, // [1:1] is the sub-list for extension type_name
-	1, // [1:1] is the sub-list for extension extendee
-	0, // [0:1] is the sub-list for field type_name
+	1, // 0: webitel.im.service.thread.v1.Identity.via_ref:type_name -> webitel.im.service.thread.v1.Via
+	0, // 1: webitel.im.service.thread.v1.Peer.identity:type_name -> webitel.im.service.thread.v1.Identity
+	2, // [2:2] is the sub-list for method output_type
+	2, // [2:2] is the sub-list for method input_type
+	2, // [2:2] is the sub-list for extension type_name
+	2, // [2:2] is the sub-list for extension extendee
+	0, // [0:2] is the sub-list for field type_name
 }
 
 func init() { file_service_thread_v1_peer_proto_init() }
@@ -313,6 +403,18 @@ func file_service_thread_v1_peer_proto_init() {
 			}
 		}
 		file_service_thread_v1_peer_proto_msgTypes[1].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*Via); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_service_thread_v1_peer_proto_msgTypes[2].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*Peer); i {
 			case 0:
 				return &v.state
@@ -326,7 +428,7 @@ func file_service_thread_v1_peer_proto_init() {
 		}
 	}
 	file_service_thread_v1_peer_proto_msgTypes[0].OneofWrappers = []interface{}{}
-	file_service_thread_v1_peer_proto_msgTypes[1].OneofWrappers = []interface{}{
+	file_service_thread_v1_peer_proto_msgTypes[2].OneofWrappers = []interface{}{
 		(*Peer_ContactId)(nil),
 		(*Peer_GroupId)(nil),
 		(*Peer_ChannelId)(nil),
@@ -338,7 +440,7 @@ func file_service_thread_v1_peer_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: file_service_thread_v1_peer_proto_rawDesc,
 			NumEnums:      0,
-			NumMessages:   2,
+			NumMessages:   3,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

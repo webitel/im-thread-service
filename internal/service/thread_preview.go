@@ -190,6 +190,7 @@ func (s *ThreadPreviewService) UpgradePreviewToFullMember(ctx context.Context, r
 		InitiatorContactID: req.InitiatorContactID,
 		NewMemberRole:      req.Role,
 		DomainID:           req.DomainID,
+		Queue:              req.Queue,
 		SystemCall:         true, // trusted orchestrator: initiator role not checked
 	}, func(ctx context.Context, uow store.UnitOfWork) error {
 		p, err := uow.ThreadPreviews().GetActiveForUpdate(ctx, req.ThreadID, req.ContactID, req.DomainID)

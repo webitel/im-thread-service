@@ -194,7 +194,7 @@ func TestGateIDForPeer(t *testing.T) {
 	contactID := uuid.New()
 
 	t.Run("identity via preferred", func(t *testing.T) {
-		peer := &shared.Peer{ID: contactID, Identity: &shared.Identity{Via: &gate}}
+		peer := &shared.Peer{ID: contactID, Identity: &shared.Identity{ViaInfo: &shared.ViaInfo{ID: gate}}}
 		require.Equal(t, gate, gateIDForPeer(peer, nil))
 	})
 

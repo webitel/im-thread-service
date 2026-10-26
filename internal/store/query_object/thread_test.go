@@ -256,6 +256,154 @@ func TestThreadQuery_WithTagsFilter_NoTags_NoOp(t *testing.T) {
 	assert.NotContains(t, sql, "thread_tag")
 }
 
+func TestThreadQuery_WithFields_Source_JoinsSourceRef(t *testing.T) {
+	sql, _, err := NewThreadQueryObject().
+		WithFields([]string{"id", "source"}).
+		ToSQL()
+	require.NoError(t, err)
+
+	assertSQLContains(t, sql, "from im_thread.thread_dialog sd")
+	assertSQLContains(t, sql, "im_thread.source_ref src on src.gate_id = srcv.gate_id")
+	assertSQLContains(t, sql, "as source")
+}
+
+func TestThreadQuery_WithFields_WithoutSource_NoSourceRefJoin(t *testing.T) {
+	sql, _, err := NewThreadQueryObject().
+		WithFields([]string{"id"}).
+		ToSQL()
+	require.NoError(t, err)
+
+	assert.NotContains(t, sql, "source_ref")
+}
+
+func TestThreadQuery_Search_QueueSelectedAndSortedNullsLast(t *testing.T) {
+	selfID := uuid.New()
+
+	sql, _, err := NewThreadQueryObject().
+		WithSubject().
+		WithFields([]string{"id", "queue"}).
+		WithSort("-queue_name").
+		WithoutDeletedAtFilter().
+		WithContactIDFilter(selfID).
+		ToSQL()
+	require.NoError(t, err)
+
+	assertSQLContains(t, sql, "im_thread.queue_ref qr")
+	assertSQLContains(t, sql, "case when qr.queue_id is null then null")
+	assertSQLContains(t, sql, "jsonb_build_object('id', qr.queue_id")
+	assertSQLContains(t, sql, "ORDER BY qr.name DESC NULLS LAST")
+}
+
+func TestThreadQuery_Search_QueueAbsentWhenNoQueueRef(t *testing.T) {
+	// queue is null unless the caller's own dialog has a queue_id AND a non-deleted queue_ref row exists.
+	sql, _, err := NewThreadQueryObject().
+		WithFields([]string{"id", "queue"}).
+		WithContactIDFilter(uuid.New()).
+		ToSQL()
+	require.NoError(t, err)
+
+	assertSQLContains(t, sql, "qr.queue_id is null then null")
+	assertSQLContains(t, sql, "qr.queue_id = td.queue_id and qr.deleted = false")
+	assert.NotContains(t, sql, "'name', '')")
+}
+
+func TestThreadQuery_WithSort_SourceNameNullsLast(t *testing.T) {
+	sql, _, err := NewThreadQueryObject().
+		WithFields([]string{"id"}).
+		WithSort("+source_name").
+		ToSQL()
+	require.NoError(t, err)
+
+	assertSQLContains(t, sql, "ORDER BY src.name ASC NULLS LAST")
+	assertSQLContains(t, sql, "im_thread.source_ref src")
+}
+
+func TestThreadQuery_SortOnlyFields_NotSelected(t *testing.T) {
+	sql, _, err := NewThreadQueryObject().
+		WithFields([]string{"id", "source_name", "queue_name"}).
+		ToSQL()
+	require.NoError(t, err)
+
+	assert.NotContains(t, sql, "as source_name")
+	assert.NotContains(t, sql, "as queue_name")
+	// Only the valid selectable field ("id") is selected; the sort-only fields are ignored.
+	assertSQLContains(t, sql, "t.id as id")
+	assert.NotContains(t, sql, "as subject")
+}
+
+func TestThreadQuery_Unscoped_QueueIsNullAndNoQueueRefJoin(t *testing.T) {
+	sql, _, err := NewThreadQueryObject().
+		WithIDFilter(uuid.New()).
+		WithFields([]string{"queue"}).
+		ToSQL()
+	require.NoError(t, err)
+
+	assertSQLContains(t, sql, "null::jsonb as queue")
+	assert.NotContains(t, sql, "queue_ref")
+}
+
+func TestThreadQuery_Defaults_SelfScopedIncludesSourceAndQueue(t *testing.T) {
+	sql, _, err := NewThreadQueryObject().
+		WithContactIDFilter(uuid.New()).
+		ToSQL()
+	require.NoError(t, err)
+
+	assertSQLContains(t, sql, "as source")
+	assertSQLContains(t, sql, "as queue")
+}
+
+func TestThreadQuery_Defaults_UnscopedExcludesSourceAndQueue(t *testing.T) {
+	sql, _, err := NewThreadQueryObject().
+		WithIDFilter(uuid.New()).
+		ToSQL()
+	require.NoError(t, err)
+
+	assert.NotContains(t, sql, "source_ref")
+	assert.NotContains(t, sql, "as queue")
+}
+
+func TestThreadQuery_QueueOwner_ResolvesQueueWithoutFilteringThreads(t *testing.T) {
+	callerID := uuid.New()
+
+	sql, args, err := NewThreadQueryObject().
+		WithIDFilter(uuid.New()).
+		WithQueueOwner(callerID).
+		WithFields([]string{"id", "queue"}).
+		ToSQL()
+	require.NoError(t, err)
+
+	// The caller's row is left-joined, so a non-member (e.g. a preview owner) still gets the thread.
+	assertSQLContains(t, sql, "LEFT JOIN im_thread.thread_dialog qtd on qtd.thread_id = t.id")
+	assertSQLContains(t, sql, "qtd.deleted_at is null")
+	assertSQLContains(t, sql, "qr.queue_id = qtd.queue_id and qr.deleted = false")
+	assertSQLContains(t, sql, "case when qr.queue_id is null then null")
+	assert.NotContains(t, sql, "JOIN im_thread.thread_dialog td")
+	assert.Contains(t, args, callerID)
+}
+
+func TestThreadQuery_QueueOwner_NilKeepsQueueNull(t *testing.T) {
+	sql, _, err := NewThreadQueryObject().
+		WithIDFilter(uuid.New()).
+		WithQueueOwner(uuid.Nil).
+		WithFields([]string{"queue"}).
+		ToSQL()
+	require.NoError(t, err)
+
+	assertSQLContains(t, sql, "null::jsonb as queue")
+	assert.NotContains(t, sql, "queue_ref")
+}
+
+func TestThreadQuery_QueueOwner_DefaultsUnchanged(t *testing.T) {
+	sql, _, err := NewThreadQueryObject().
+		WithIDFilter(uuid.New()).
+		WithQueueOwner(uuid.New()).
+		ToSQL()
+	require.NoError(t, err)
+
+	assert.NotContains(t, sql, "as queue")
+	assert.NotContains(t, sql, "qtd")
+}
+
 func TestThreadQuery_WithExcludeTagsFilter_DropsThreadsWithAnyTag(t *testing.T) {
 	selfID := uuid.New()
 

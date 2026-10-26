@@ -32,6 +32,7 @@ type unitOfWork struct {
 	threadTagStore                  store.ThreadTagStore
 	threadVariablesStore            store.ThreadVariablesStore
 	threadPreviewStore              store.ThreadPreviewStore
+	referenceStore                  store.ReferenceStore
 }
 
 // NewPgxUnitOfWork returns a new unit of work, given a pgx pool.
@@ -171,6 +172,14 @@ func (u *unitOfWork) ThreadPreviews() store.ThreadPreviewStore {
 	}
 
 	return u.threadPreviewStore
+}
+
+func (u *unitOfWork) References() store.ReferenceStore {
+	if u.referenceStore == nil {
+		u.referenceStore = NewReferenceStore(u.querier)
+	}
+
+	return u.referenceStore
 }
 
 func (u *unitOfWork) DirectThreadDialogOrchestration() store.DirectThreadDialogOrchestration {

@@ -30,6 +30,7 @@ var Module = fx.Module(
 			fx.ParamTags(`group:"commands"`),
 		),
 		NewMessageStatusService,
+		NewReferenceCache,
 		NewThreadService,
 		NewThreadPermissionService,
 		NewThreadTagService,

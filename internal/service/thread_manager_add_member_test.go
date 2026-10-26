@@ -30,6 +30,7 @@ type fakeUnitOfWork struct {
 	threadTagStore       store.ThreadTagStore
 	threadVariablesStore store.ThreadVariablesStore
 	threadPreviewStore   store.ThreadPreviewStore
+	referenceStore       store.ReferenceStore
 }
 
 func (f fakeUnitOfWork) WithinTransaction(ctx context.Context, fn func(context.Context, store.UnitOfWork) error) error {
@@ -157,6 +158,41 @@ func (f fakeUnitOfWork) ThreadPreviews() store.ThreadPreviewStore {
 	}
 
 	return f.threadPreviewStore
+}
+
+func (f fakeUnitOfWork) References() store.ReferenceStore {
+	if f.referenceStore == nil {
+		return &fakeReferenceStore{}
+	}
+
+	return f.referenceStore
+}
+
+// fakeReferenceStore records every upsert so tests can assert on the write path.
+type fakeReferenceStore struct {
+	sources []*model.SourceRef
+	queues  []*model.QueueRef
+	err     error
+}
+
+func (f *fakeReferenceStore) UpsertSource(_ context.Context, ref *model.SourceRef) error {
+	if f.err != nil {
+		return f.err
+	}
+
+	f.sources = append(f.sources, ref)
+
+	return nil
+}
+
+func (f *fakeReferenceStore) UpsertQueue(_ context.Context, ref *model.QueueRef) error {
+	if f.err != nil {
+		return f.err
+	}
+
+	f.queues = append(f.queues, ref)
+
+	return nil
 }
 
 type noopThreadVariablesStore struct{}
