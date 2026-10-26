@@ -333,6 +333,9 @@ func (s *ThreadOutConverter) convertThreadMembers(members []*model.ThreadDialog,
 			AutoLeave:          member.AutoLeave,
 			IsActiveController: botControllerID != nil && member.ID == *botControllerID,
 		}
+		if member.Via != nil {
+			out[i].Via = *member.Via
+		}
 	}
 
 	return out

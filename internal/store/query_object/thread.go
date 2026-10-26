@@ -505,6 +505,7 @@ func (q *threadQueryObject) linkFullMembersLateral() {
 					'created_at', %[1]s.created_at,
 					'updated_at', %[1]s.updated_at,
 					'role', %[1]s.thread_role,
+					'via', %[1]s.via,
 					'is_bot', %[1]s.is_bot,
 					'auto_leave', %[1]s.auto_leave
 				)

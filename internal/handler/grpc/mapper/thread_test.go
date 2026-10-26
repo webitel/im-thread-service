@@ -136,3 +136,15 @@ func TestConvertToThreadPreview_ValidPreview(t *testing.T) {
 	require.Equal(t, createdAt.UnixMilli(), result.GetCreatedAt())
 	require.Equal(t, expiresAt.UnixMilli(), result.GetExpiresAt())
 }
+
+func TestConvertThreadMembers_Via(t *testing.T) {
+	gate := uuid.NewString()
+	external := &model.ThreadDialog{ContactID: uuid.New(), Via: &gate}
+	internal := &model.ThreadDialog{ContactID: uuid.New()}
+
+	out := (&ThreadOutConverter{}).convertThreadMembers([]*model.ThreadDialog{external, internal}, nil)
+
+	require.Len(t, out, 2)
+	require.Equal(t, gate, out[0].GetVia())
+	require.Empty(t, out[1].GetVia())
+}

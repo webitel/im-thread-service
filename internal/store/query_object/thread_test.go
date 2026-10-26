@@ -342,3 +342,15 @@ func TestThreadQuery_WithUnreadFilter_NoOp(t *testing.T) {
 		})
 	}
 }
+
+// The members payload feeds ThreadMember.via (the gate a chat came through, WS-68):
+// dropping the key here silently empties the field for Get and Search.
+func TestThreadQuery_FullMembersLateral_CarriesVia(t *testing.T) {
+	q := NewThreadQueryObject()
+	q.EnsureJoins(threadLinkFullMembersLateral)
+
+	sql, _, err := q.ToSQL()
+	require.NoError(t, err)
+
+	assertSQLContains(t, sql, "'via', td.via")
+}
