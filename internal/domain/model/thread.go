@@ -80,7 +80,8 @@ type Thread struct {
 
 	// CRMContactID is the Webitel CRM contact an operator selected for the thread.
 	CRMContactID string `json:"crm_contact_id,omitempty" db:"crm_contact_id"`
-	// Source is the provider gate of the thread. Nil when the gate has no reference row yet.
+	// Source is the provider gate of the thread. Nil when no member has a gate; Name/Type are empty
+	// while the gate has no reference row yet.
 	Source *ThreadSource `json:"source,omitempty" db:"source"`
 	// Queue is the call_center queue of the requesting agent. Nil when not set or the queue has no reference row.
 	Queue *ThreadQueue `json:"queue,omitempty" db:"queue"`
@@ -104,7 +105,7 @@ type Thread struct {
 	events []event.Base `db:"-"`
 }
 
-// ThreadSource is the display data of a provider gate (from im_thread.source_ref).
+// ThreadSource is the provider gate of a thread (id from thread_dialog.via, display data from im_thread.source_ref).
 type ThreadSource struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`

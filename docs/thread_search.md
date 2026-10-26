@@ -9,7 +9,7 @@ This endpoint is designed to retrieve a list of dialogues (threads) with support
     *   **Note:** If the array is empty, the backend returns a default set: `id`, `domain_id`, `created_at`, `updated_at`, `kind`, `owner`, `subject`, `description`, `member_ids`.
     *   To include the last message object, you must explicitly pass `"last_msg"` in the `fields` array.
     *   To retrieve detailed member information, pass `"members"`.
-    *   **`source`** (object, optional): the provider gate the thread came from: `{id, name, type}` where `id` is the gate id, `name` its display name and `type` the provider type (for example `telegram_bot`). The value comes from the `via` of the thread's non-bot member row; it is omitted when the gate has no reference row yet (see eventual consistency below).
+    *   **`source`** (object, optional): the provider gate the thread came from: `{id, name, type}` where `id` is the gate id, `name` its display name and `type` the provider type (for example `telegram_bot`). The `id` comes from the `via` of the thread's non-bot member row; `name` and `type` are empty while the gate has no reference row yet (see eventual consistency below). Omitted only when no member has a gate.
     *   **`queue`** (object, optional): the call_center queue through which the requesting agent (`self_id`) received the thread: `{id, name}`. It is omitted when the agent's own membership has no queue, or the queue has no reference row yet (`queue` is never returned as `{id, name: ""}`).
     *   `source` and `queue` are part of the default set of **Search only**. `Get` does not include them by default, but `source` can be requested explicitly via `fields`; `queue` is resolved by `Get` only when `caller_id` is set (the caller's own queue, null when the caller is not a member, e.g. a preview owner); without `caller_id` it is always null.
 
@@ -27,7 +27,7 @@ This endpoint is designed to retrieve a list of dialogues (threads) with support
 *   **NULLs last:** for `source_name` and `queue_name`, threads without a name sort last in both `+` and `-` directions (`NULLS LAST`).
 *   **Example:** For a standard chat list ordered from newest to oldest, use `"-last_msg_at"` or `"-updated_at"`.
 
-*   **Eventual consistency of names:** `source` and `queue` names are kept in local reference tables and refreshed when inbound messages carry gate info (`source`) or when an agent is assigned to the thread through a queue (`queue`). Threads created before this feature may have no reference row yet, so `source` and `queue` are omitted and their name sort keys place them last until the next refresh.
+*   **Eventual consistency of names:** `source` and `queue` names are kept in local reference tables and refreshed when inbound messages carry gate info (`source`) or when an agent is assigned to the thread through a queue (`queue`). Threads created before this feature may have no reference row yet, so `source` comes without a name, `queue` is omitted, and their name sort keys place them last until the next refresh.
 
 ### 4. Filtering and Search
 *   **`q`** (string): Full-text search (up to 256 characters), case-insensitive partial match (`ilike`). A thread matches when the term appears in any of:

@@ -264,6 +264,7 @@ func TestThreadQuery_WithFields_Source_JoinsSourceRef(t *testing.T) {
 
 	assertSQLContains(t, sql, "from im_thread.thread_dialog sd")
 	assertSQLContains(t, sql, "im_thread.source_ref src on src.gate_id = srcv.gate_id")
+	assertSQLContains(t, sql, "jsonb_build_object('id', srcv.gate_id, 'name', coalesce(src.name, '')")
 	assertSQLContains(t, sql, "as source")
 }
 
@@ -352,13 +353,13 @@ func TestThreadQuery_Defaults_SelfScopedIncludesSourceAndQueue(t *testing.T) {
 	assertSQLContains(t, sql, "as queue")
 }
 
-func TestThreadQuery_Defaults_UnscopedExcludesSourceAndQueue(t *testing.T) {
+func TestThreadQuery_Defaults_UnscopedIncludesSourceExcludesQueue(t *testing.T) {
 	sql, _, err := NewThreadQueryObject().
 		WithIDFilter(uuid.New()).
 		ToSQL()
 	require.NoError(t, err)
 
-	assert.NotContains(t, sql, "source_ref")
+	assertSQLContains(t, sql, "as source")
 	assert.NotContains(t, sql, "as queue")
 }
 

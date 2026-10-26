@@ -103,8 +103,10 @@ was regenerated from that local branch (`buf/`, `Makefile` unchanged).
   `query_object.go`). Sort-only keys are ignored in `fields`.
 - `source`: lateral picks the first non-bot `thread_dialog` row with a
   non-empty `via` (active rows first, then by `created_at`), then
-  `left join source_ref src … and src.deleted = false`. Returned only when a
-  ref row exists.
+  `left join source_ref src … and src.deleted = false`. Returned whenever the
+  thread has a gate: `id` comes from `thread_dialog.via`, `name`/`type` are
+  empty until the gate has a ref row. im-gateway-service resolves the thread
+  `channel` from this id and shows `source.name` as the channel name.
 - `queue`: only for self-scoped queries (`selfScoped` is set by
   `WithContactIDFilter`, `WithSharedMembersFilter`, `WithParticipantsFilter`,
   i.e. Search). `left join queue_ref qr on qr.domain_id = t.domain_id and
@@ -118,9 +120,9 @@ was regenerated from that local branch (`buf/`, `Makefile` unchanged).
   never multiplies rows, because `(domain_id, thread_id, member_id)` is unique.
 - Queries with no caller (`Get` without `caller_id`, bot control) select
   `null::jsonb as queue` without a join.
-- Defaults: `source` and `queue` are appended to `DefaultFields()` only when the
-  query is self-scoped (Search). Joins are added only when the fields or sort
-  keys are requested or defaulted.
+- Defaults: `source` is in `DefaultFields()` for every query (Search, Get, bot
+  control); `queue` is appended only when the query is self-scoped (Search).
+  Joins are added only when the fields or sort keys are requested or defaulted.
 - Sorting by `source_name` / `queue_name` uses `NULLS LAST` in both directions.
 
 ### gRPC mappers (`internal/handler/grpc/mapper`)
@@ -141,7 +143,7 @@ was regenerated from that local branch (`buf/`, `Makefile` unchanged).
 | 5 | Source refreshed via `refreshSource` in `EnsureDirectThread` (new and existing threads), outside the creation tx, Warn on failure; `MessageService` unchanged | Yes |
 | 6 | AddMember / Upgrade / Transfer with queue write `queue_id` in the member tx and refresh `queue_ref` via `refreshQueue` before it; NULL without queue; GivePreview untouched | Yes |
 | 7 | Ristretto cache consulted before upsert, written right after a successful standalone upsert, nil = always upsert | Yes (`TestRefreshSource_*`, `TestRefreshQueue_*`, `TestEnsureDirectThread_SourceRefreshIsIndependentOfThreadCreation`) |
-| 8 | Search returns `source` / `queue` only when a non-deleted ref row exists (queue only for the caller's own row); both in Search defaults only; lazy joins | Yes. Fixed after user review: `queue` was previously returned without a `queue_ref` row. Verified at SQL-string level only, no DB integration test |
+| 8 | `source` is returned whenever the thread has a gate (name/type from a non-deleted ref row, empty otherwise) and is a default field of every query; `queue` only when a non-deleted ref row exists, for the caller's own row, in Search defaults only; lazy joins | Yes. Fixed after user review: `queue` was previously returned without a `queue_ref` row. Verified at SQL-string level only, no DB integration test |
 | 9 | `±source_name` / `±queue_name` sort with `NULLS LAST`; sort-only | Yes |
 | 10 | `Get` never multiplies rows because of `queue`; with `caller_id` it returns the caller's queue (on request), without `caller_id` `queue` is NULL | Yes |
 | 11 | Mappers map `via_ref` (with legacy `via` fallback), `queue`, `Source` / `Queue`, with unit tests | Yes |
