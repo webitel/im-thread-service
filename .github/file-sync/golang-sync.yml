@@ -4,7 +4,7 @@ version: 1
 source:
   repository: webitel/reusable-configs
   config: golang/sync.yml
-  sha: dfbdf1fa6ebaa294eb5501ec8fa7de630ce029eb
+  sha: 3a0cade6e27cd187982389019949d1f33756de9b
 files:
   .editorconfig:
     source: golang/configs/.editorconfig
