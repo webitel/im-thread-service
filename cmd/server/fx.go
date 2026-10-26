@@ -106,6 +106,10 @@ var serviceToHandlerBridgeModule = fx.Module(
 			return s
 		},
 
+		func(s *service.ThreadTagService) grpchandler.TagLister {
+			return s
+		},
+
 		func(s *service.ThreadPreviewService) grpchandler.ThreadPreviewService {
 			return s
 		},

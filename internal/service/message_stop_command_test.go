@@ -109,7 +109,8 @@ func TestCloseCommand_Execute_ReleasesBotAndPersistsConfirmation(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 
 	sender := &MessageService{
-		logger: logger,
+		tagHooks: &fakeTagHooks{},
+		logger:   logger,
 		uow: fakeUnitOfWork{
 			messageStore: messageStore,
 			outboxStore:  outboxStore,

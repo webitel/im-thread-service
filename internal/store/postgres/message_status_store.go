@@ -274,6 +274,8 @@ func (s *messageStatusStore) ReadUnread(ctx context.Context, domainID int32, mem
 
 // ReadMemberStates returns per-member delivery/read horizons from thread_dialog;
 // shared with GetThreadUpdates for deriving inbox/outbox watermarks.
+// member_id is the membership (thread_dialog) id, the same id as Thread.members[].id
+// and a message's sender id, so clients can match a state to its member.
 func (s *messageStatusStore) ReadMemberStates(ctx context.Context, domainID int32, memberID uuid.UUID, threadIDs []uuid.UUID) (map[uuid.UUID][]model.MemberReadState, error) {
 	if memberID == uuid.Nil || len(threadIDs) == 0 {
 		return make(map[uuid.UUID][]model.MemberReadState), nil
@@ -282,7 +284,7 @@ func (s *messageStatusStore) ReadMemberStates(ctx context.Context, domainID int3
 	const query = `
 		select
 			td.thread_id,
-			td.member_id,
+			td.id as member_id,
 			greatest(coalesce(td.last_delivered_seq, 0), coalesce(td.last_read_seq, 0)) as delivered_up_to_seq,
 			coalesce(td.last_read_seq, 0) as read_up_to_seq
 		from im_thread.thread_dialog td
@@ -296,7 +298,7 @@ func (s *messageStatusStore) ReadMemberStates(ctx context.Context, domainID int3
 		        and self.member_id = @MemberID
 		        and self.deleted_at is null
 		  )
-		order by td.thread_id, td.member_id
+		order by td.thread_id, td.id
 	`
 
 	args := pgx.NamedArgs{
@@ -401,6 +403,7 @@ func (s *messageStatusStore) advanceReadHorizon(ctx context.Context, receipts []
 		        where m.thread_id = td.thread_id
 		          and m.sender_id <> td.member_id
 		          and m.type <> @SystemType
+		          and m.deleted_at is null
 		          and m.seq > case
 		                when td.last_read_seq is null or r.up_to_seq > td.last_read_seq
 		                then r.up_to_seq else td.last_read_seq end
@@ -797,6 +800,39 @@ func (s *messageStatusStore) resolveThreadIDsForDelivery(ctx context.Context, re
 	return nil
 }
 
+// RecountUnread recomputes unread_count for every active dialog of the threads
+// from its read horizon, so a deletion in the same transaction stops counting.
+func (s *messageStatusStore) RecountUnread(ctx context.Context, threadIDs []uuid.UUID) error {
+	if len(threadIDs) == 0 {
+		return nil
+	}
+
+	const query = `
+		update im_thread.thread_dialog td
+		set unread_count = coalesce((
+			select count(*)
+			from im_message.messages m
+			where m.thread_id = td.thread_id
+			  and m.sender_id <> td.member_id
+			  and m.type <> @SystemType
+			  and m.deleted_at is null
+			  and m.seq > coalesce(td.last_read_seq, 0)
+		), 0)
+		where td.thread_id = any(@ThreadIDs::uuid[])
+		  and td.deleted_at is null
+	`
+
+	_, err := s.db.Exec(ctx, query, pgx.NamedArgs{
+		"ThreadIDs":  threadIDs,
+		"SystemType": int(model.MessageTypeSystem),
+	})
+	if err != nil {
+		return errors.Internal("recounting unread counters", errors.WithCause(err), errors.WithID("postgres.message_status.recount_unread"))
+	}
+
+	return nil
+}
+
 // ReconcileUnread recomputes unread_count for every active dialog straight from
 // the read horizon (optionally scoped to a domain). A drift safety net for a
 // periodic job, not the hot path. Returns the number of rows updated.
@@ -809,6 +845,7 @@ func (s *messageStatusStore) ReconcileUnread(ctx context.Context, domainID int32
 			where m.thread_id = td.thread_id
 			  and m.sender_id <> td.member_id
 			  and m.type <> @SystemType
+			  and m.deleted_at is null
 			  and (td.last_read_message_id is null or m.id > td.last_read_message_id)
 		), 0)
 		where (@DomainID <= 0 or td.domain_id = @DomainID)

@@ -28,7 +28,25 @@ func (q *ResolveThreadQuery) SendAsPtr() *uuid.UUID {
 	return nil
 }
 
+type ThreadCountersQuery struct {
+	DomainID   int32
+	MemberID   uuid.UUID
+	Kinds      []ThreadKind
+	SnoozedTag string
+}
+
 // #endregion
+
+type ThreadCounters struct {
+	All     FolderCounters
+	Active  FolderCounters
+	Snoozed FolderCounters
+}
+
+type FolderCounters struct {
+	Total       int32
+	UnreadChats int32
+}
 
 //go:generate stringer -type=ThreadKind
 type ThreadKind int
@@ -60,6 +78,8 @@ type Thread struct {
 	BotControllerID *uuid.UUID `json:"bot_controller_id,omitempty" db:"bot_controller_id"`
 	OwnerBotID      *uuid.UUID `json:"owner_bot_id,omitempty" db:"owner_bot_id"`
 
+	// CRMContactID is the Webitel CRM contact an operator selected for the thread.
+	CRMContactID string `json:"crm_contact_id,omitempty" db:"crm_contact_id"`
 	// Source is the provider gate of the thread. Nil when the gate has no reference row yet.
 	Source *ThreadSource `json:"source,omitempty" db:"source"`
 	// Queue is the call_center queue of the requesting agent. Nil when not set or the queue has no reference row.

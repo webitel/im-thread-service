@@ -291,6 +291,60 @@ func TestPublish_MarksContactsForGetUpdates(t *testing.T) {
 	}
 }
 
+// A tag change is private: only its owner's GetUpdates sees the thread, though the
+// journal row sits on the thread like any other change.
+func TestPublish_TagsChangeMarksOnlyOwner(t *testing.T) {
+	ctx := context.Background()
+	pool := itPool(t)
+	thread := uuid.New()
+	setupJournalSchema(t, pool)
+
+	owner, peer := uuid.New(), uuid.New()
+
+	if _, err := pool.Exec(ctx, `INSERT INTO `+journalSchema+`.thread_dialog (thread_id, member_id) VALUES ($1, $2), ($1, $3)`,
+		thread, owner, peer); err != nil {
+		t.Fatalf("seed members: %v", err)
+	}
+
+	j := itJournal(pool)
+
+	start, err := j.SettledHorizon(ctx)
+	if err != nil {
+		t.Fatalf("horizon: %v", err)
+	}
+
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		t.Fatalf("begin: %v", err)
+	}
+
+	e := event.NewThreadTagsChanged(thread, owner, 1, []string{"snoozed"})
+	if err := itOutboxStore(tx).Publish(ctx, e.Topic(), e); err != nil {
+		t.Fatalf("publish: %v", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatalf("commit: %v", err)
+	}
+
+	cursor := strconv.FormatInt(start, 10)
+
+	got, err := j.ContactChanges(ctx, owner.String(), cursor)
+	if err != nil || len(got.Threads) != 1 {
+		t.Fatalf("owner: want the thread, got %+v %v", got, err)
+	}
+
+	events, err := j.ChangesSince(ctx, thread.String(), got, journal.MaxContactChanges)
+	if err != nil || len(events) != 1 || events[0].Kind != journal.KindTagsChanged || events[0].Fields[journal.FieldActor] != owner.String() {
+		t.Fatalf("owner: want one tags change by the owner, got %+v %v", events, err)
+	}
+
+	other, err := j.ContactChanges(ctx, peer.String(), cursor)
+	if err != nil || len(other.Threads) != 0 {
+		t.Fatalf("peer must not see the thread, got %+v %v", other, err)
+	}
+}
+
 // The live event carries its own transaction, which after commit is the recipients'
 // cursor: the same value history and thread reads hand out.
 func TestPublish_StampsLiveCursor(t *testing.T) {

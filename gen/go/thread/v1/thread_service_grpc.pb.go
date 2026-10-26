@@ -22,6 +22,7 @@ const (
 	ThreadManagement_Search_FullMethodName             = "/webitel.im.service.thread.v1.ThreadManagement/Search"
 	ThreadManagement_SearchLeft_FullMethodName         = "/webitel.im.service.thread.v1.ThreadManagement/SearchLeft"
 	ThreadManagement_GetUnreadSummary_FullMethodName   = "/webitel.im.service.thread.v1.ThreadManagement/GetUnreadSummary"
+	ThreadManagement_GetCounters_FullMethodName        = "/webitel.im.service.thread.v1.ThreadManagement/GetCounters"
 	ThreadManagement_Get_FullMethodName                = "/webitel.im.service.thread.v1.ThreadManagement/Get"
 	ThreadManagement_Create_FullMethodName             = "/webitel.im.service.thread.v1.ThreadManagement/Create"
 	ThreadManagement_AddMember_FullMethodName          = "/webitel.im.service.thread.v1.ThreadManagement/AddMember"
@@ -30,6 +31,7 @@ const (
 	ThreadManagement_CompleteBotControl_FullMethodName = "/webitel.im.service.thread.v1.ThreadManagement/CompleteBotControl"
 	ThreadManagement_HandBackToBot_FullMethodName      = "/webitel.im.service.thread.v1.ThreadManagement/HandBackToBot"
 	ThreadManagement_TakeOverFromBot_FullMethodName    = "/webitel.im.service.thread.v1.ThreadManagement/TakeOverFromBot"
+	ThreadManagement_SetCrmContact_FullMethodName      = "/webitel.im.service.thread.v1.ThreadManagement/SetCrmContact"
 	ThreadManagement_SetVariables_FullMethodName       = "/webitel.im.service.thread.v1.ThreadManagement/SetVariables"
 	ThreadManagement_SearchVariables_FullMethodName    = "/webitel.im.service.thread.v1.ThreadManagement/SearchVariables"
 	ThreadManagement_LocateVariables_FullMethodName    = "/webitel.im.service.thread.v1.ThreadManagement/LocateVariables"
@@ -52,6 +54,9 @@ type ThreadManagementClient interface {
 	// have unread messages and the total number of unread messages across all
 	// chats. Counts are individual to the participant's own read state.
 	GetUnreadSummary(ctx context.Context, in *GetUnreadSummaryRequest, opts ...grpc.CallOption) (*GetUnreadSummaryResponse, error)
+	// Returns a participant's chat counters: every active chat, the active chats
+	// outside Snoozed, and the snoozed chats, each with its unread chat count.
+	GetCounters(ctx context.Context, in *GetCountersRequest, opts ...grpc.CallOption) (*GetCountersResponse, error)
 	// Creates a new group thread.
 	// The creator becomes the owner of the thread.
 	// Returns a single thread by its identifier.
@@ -73,6 +78,8 @@ type ThreadManagementClient interface {
 	HandBackToBot(ctx context.Context, in *HandBackToBotRequest, opts ...grpc.CallOption) (*HandBackToBotResponse, error)
 	// Takes the conversation from the thread's bot back to the operator.
 	TakeOverFromBot(ctx context.Context, in *TakeOverFromBotRequest, opts ...grpc.CallOption) (*TakeOverFromBotResponse, error)
+	// Sets (or clears) the CRM contact an operator selected for the thread.
+	SetCrmContact(ctx context.Context, in *SetCrmContactRequest, opts ...grpc.CallOption) (*SetCrmContactResponse, error)
 	SetVariables(ctx context.Context, in *SetVariablesRequest, opts ...grpc.CallOption) (*ThreadVariables, error)
 	SearchVariables(ctx context.Context, in *SearchVariablesRequest, opts ...grpc.CallOption) (*SearchVariablesResponse, error)
 	LocateVariables(ctx context.Context, in *LocateVariablesRequest, opts ...grpc.CallOption) (*ThreadVariables, error)
@@ -111,6 +118,16 @@ func (c *threadManagementClient) GetUnreadSummary(ctx context.Context, in *GetUn
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(GetUnreadSummaryResponse)
 	err := c.cc.Invoke(ctx, ThreadManagement_GetUnreadSummary_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *threadManagementClient) GetCounters(ctx context.Context, in *GetCountersRequest, opts ...grpc.CallOption) (*GetCountersResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetCountersResponse)
+	err := c.cc.Invoke(ctx, ThreadManagement_GetCounters_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -197,6 +214,16 @@ func (c *threadManagementClient) TakeOverFromBot(ctx context.Context, in *TakeOv
 	return out, nil
 }
 
+func (c *threadManagementClient) SetCrmContact(ctx context.Context, in *SetCrmContactRequest, opts ...grpc.CallOption) (*SetCrmContactResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SetCrmContactResponse)
+	err := c.cc.Invoke(ctx, ThreadManagement_SetCrmContact_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *threadManagementClient) SetVariables(ctx context.Context, in *SetVariablesRequest, opts ...grpc.CallOption) (*ThreadVariables, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ThreadVariables)
@@ -253,6 +280,9 @@ type ThreadManagementServer interface {
 	// have unread messages and the total number of unread messages across all
 	// chats. Counts are individual to the participant's own read state.
 	GetUnreadSummary(context.Context, *GetUnreadSummaryRequest) (*GetUnreadSummaryResponse, error)
+	// Returns a participant's chat counters: every active chat, the active chats
+	// outside Snoozed, and the snoozed chats, each with its unread chat count.
+	GetCounters(context.Context, *GetCountersRequest) (*GetCountersResponse, error)
 	// Creates a new group thread.
 	// The creator becomes the owner of the thread.
 	// Returns a single thread by its identifier.
@@ -274,6 +304,8 @@ type ThreadManagementServer interface {
 	HandBackToBot(context.Context, *HandBackToBotRequest) (*HandBackToBotResponse, error)
 	// Takes the conversation from the thread's bot back to the operator.
 	TakeOverFromBot(context.Context, *TakeOverFromBotRequest) (*TakeOverFromBotResponse, error)
+	// Sets (or clears) the CRM contact an operator selected for the thread.
+	SetCrmContact(context.Context, *SetCrmContactRequest) (*SetCrmContactResponse, error)
 	SetVariables(context.Context, *SetVariablesRequest) (*ThreadVariables, error)
 	SearchVariables(context.Context, *SearchVariablesRequest) (*SearchVariablesResponse, error)
 	LocateVariables(context.Context, *LocateVariablesRequest) (*ThreadVariables, error)
@@ -296,6 +328,9 @@ func (UnimplementedThreadManagementServer) SearchLeft(context.Context, *SearchLe
 }
 func (UnimplementedThreadManagementServer) GetUnreadSummary(context.Context, *GetUnreadSummaryRequest) (*GetUnreadSummaryResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetUnreadSummary not implemented")
+}
+func (UnimplementedThreadManagementServer) GetCounters(context.Context, *GetCountersRequest) (*GetCountersResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetCounters not implemented")
 }
 func (UnimplementedThreadManagementServer) Get(context.Context, *GetThreadRequest) (*Thread, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Get not implemented")
@@ -320,6 +355,9 @@ func (UnimplementedThreadManagementServer) HandBackToBot(context.Context, *HandB
 }
 func (UnimplementedThreadManagementServer) TakeOverFromBot(context.Context, *TakeOverFromBotRequest) (*TakeOverFromBotResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method TakeOverFromBot not implemented")
+}
+func (UnimplementedThreadManagementServer) SetCrmContact(context.Context, *SetCrmContactRequest) (*SetCrmContactResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SetCrmContact not implemented")
 }
 func (UnimplementedThreadManagementServer) SetVariables(context.Context, *SetVariablesRequest) (*ThreadVariables, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SetVariables not implemented")
@@ -404,6 +442,24 @@ func _ThreadManagement_GetUnreadSummary_Handler(srv interface{}, ctx context.Con
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(ThreadManagementServer).GetUnreadSummary(ctx, req.(*GetUnreadSummaryRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ThreadManagement_GetCounters_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetCountersRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ThreadManagementServer).GetCounters(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ThreadManagement_GetCounters_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ThreadManagementServer).GetCounters(ctx, req.(*GetCountersRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -552,6 +608,24 @@ func _ThreadManagement_TakeOverFromBot_Handler(srv interface{}, ctx context.Cont
 	return interceptor(ctx, in, info, handler)
 }
 
+func _ThreadManagement_SetCrmContact_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SetCrmContactRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ThreadManagementServer).SetCrmContact(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ThreadManagement_SetCrmContact_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ThreadManagementServer).SetCrmContact(ctx, req.(*SetCrmContactRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _ThreadManagement_SetVariables_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(SetVariablesRequest)
 	if err := dec(in); err != nil {
@@ -644,6 +718,10 @@ var ThreadManagement_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _ThreadManagement_GetUnreadSummary_Handler,
 		},
 		{
+			MethodName: "GetCounters",
+			Handler:    _ThreadManagement_GetCounters_Handler,
+		},
+		{
 			MethodName: "Get",
 			Handler:    _ThreadManagement_Get_Handler,
 		},
@@ -674,6 +752,10 @@ var ThreadManagement_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "TakeOverFromBot",
 			Handler:    _ThreadManagement_TakeOverFromBot_Handler,
+		},
+		{
+			MethodName: "SetCrmContact",
+			Handler:    _ThreadManagement_SetCrmContact_Handler,
 		},
 		{
 			MethodName: "SetVariables",

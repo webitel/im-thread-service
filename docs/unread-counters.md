@@ -95,6 +95,10 @@ Unchanged from the first iteration — the horizon work is internal:
   requesting participant (`ThreadSearchRequest.self_id`).
 - `GetUnreadSummary` — service `{ self_id, domain_id }` → `{ unread_chats,
   unread_messages }`; gateway empty request, `GET /v1/threads/unread`.
+- `ThreadSearchRequest.unread` — field 14 (service), 11 (gateway); when true,
+  only threads where the caller's dialog has `unread_count > 0` are returned
+  (the "unread" filter of the active chats list), e.g.
+  `GET /v1/threads?unread=true`.
 
 ## Real-time
 

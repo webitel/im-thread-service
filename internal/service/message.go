@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"maps"
 	"slices"
 	"strconv"
 	"strings"
@@ -16,6 +17,7 @@ import (
 	"github.com/webitel/webitel-go-kit/pkg/errors"
 
 	"github.com/webitel/im-thread-service/config"
+	contactv1 "github.com/webitel/im-thread-service/gen/go/contact/v1"
 	imcontact "github.com/webitel/im-thread-service/infra/webitel/im-contact"
 	"github.com/webitel/im-thread-service/internal/domain/event"
 	"github.com/webitel/im-thread-service/internal/domain/model"
@@ -25,15 +27,27 @@ import (
 	"github.com/webitel/im-thread-service/internal/store"
 )
 
+// ThreadTagHooks keeps the members' thread tags in step with messages and membership.
+type ThreadTagHooks interface {
+	OnMessage(ctx context.Context, uow store.UnitOfWork, msg *model.Message) error
+	OnMemberLeft(ctx context.Context, uow store.UnitOfWork, threadID, contactID uuid.UUID) error
+}
+
 type ThreadManager interface {
 	EnsureDirectThread(ctx context.Context, req *dto.EnsureDirectThreadRequest) (*model.Thread, error)
+}
+
+// ContactDirectory is the slice of the contact service MessageService needs.
+type ContactDirectory interface {
+	GetIdentity(ctx context.Context, contactID uuid.UUID, domainID int) (*imcontact.Identity, error)
+	SearchContact(ctx context.Context, req *contactv1.SearchContactRequest) (*contactv1.ContactList, error)
 }
 
 type MessageService struct {
 	uow              store.UnitOfWork
 	logger           *slog.Logger
 	threader         ThreadManager
-	contactClient    *imcontact.Client
+	contactClient    ContactDirectory
 	mediaProcessor   MediaProcessor
 	providersAdapter ProvidersAdapter
 
@@ -43,6 +57,7 @@ type MessageService struct {
 	typingCfg   config.TypingConfig
 
 	commands *CommandDispatcher
+	tagHooks ThreadTagHooks
 }
 
 func NewMessageService(
@@ -56,6 +71,7 @@ func NewMessageService(
 	rateLimiter RateLimiter,
 	typingCfg config.TypingConfig,
 	commands *CommandDispatcher,
+	tagHooks ThreadTagHooks,
 ) *MessageService {
 	return &MessageService{
 		uow:              uow,
@@ -68,6 +84,7 @@ func NewMessageService(
 		rateLimiter:      rateLimiter,
 		typingCfg:        typingCfg,
 		commands:         commands,
+		tagHooks:         tagHooks,
 	}
 }
 
@@ -806,7 +823,13 @@ func (s *MessageService) DeleteMessages(ctx context.Context, in *dto.DeleteMessa
 			}
 		}
 
-		return nil
+		// A deleted message no longer counts as unread for anyone.
+		// Sorted like the Publish locks above.
+		threadIDs := slices.SortedFunc(maps.Keys(membersByThread), func(a, b uuid.UUID) int {
+			return bytes.Compare(a[:], b[:])
+		})
+
+		return uow.MessageStatuses().RecountUnread(txCtx, threadIDs)
 	})
 	if err != nil {
 		log.ErrorContext(ctx, "transaction_failed", "err", err)
@@ -1146,19 +1169,9 @@ const statusViaBot = "bot"
 // no receipts of their own, so DELIVERED is their terminal state. The
 // promotion does publish a status event so timelines update live.
 func (s *MessageService) insertSentStatuses(ctx context.Context, uow store.UnitOfWork, msg *model.Message) error {
-	sender := msg.GetSender()
-
-	recipients := make([]uuid.UUID, 0, len(msg.To))
-
 	var botReceipts []*model.StatusReceipt
 
-	for _, member := range msg.To {
-		if member == nil || member.ContactID == sender {
-			continue
-		}
-
-		recipients = append(recipients, member.ContactID)
-
+	for _, member := range msg.Recipients() {
 		if member.IsBot {
 			botReceipts = append(botReceipts, &model.StatusReceipt{
 				DomainID:  msg.DomainID,
@@ -1170,7 +1183,11 @@ func (s *MessageService) insertSentStatuses(ctx context.Context, uow store.UnitO
 		}
 	}
 
-	if err := uow.MessageStatuses().InsertSent(ctx, msg, recipients); err != nil {
+	if err := uow.MessageStatuses().InsertSent(ctx, msg, msg.RecipientIDs()); err != nil {
+		return err
+	}
+
+	if err := s.tagHooks.OnMessage(ctx, uow, msg); err != nil {
 		return err
 	}
 

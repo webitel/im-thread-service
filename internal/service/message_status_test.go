@@ -18,6 +18,7 @@ type recordingMessageStatusStore struct {
 	insertedMsg        *model.Message
 	insertedRecipients []uuid.UUID
 	deliveredReceipts  []*model.StatusReceipt
+	recountedThreads   []uuid.UUID
 
 	changes []*model.StatusChange
 }
@@ -57,6 +58,12 @@ func (r *recordingMessageStatusStore) UnreadSummary(context.Context, int32, uuid
 
 func (r *recordingMessageStatusStore) ReconcileUnread(context.Context, int32) (int64, error) {
 	return 0, nil
+}
+
+func (r *recordingMessageStatusStore) RecountUnread(_ context.Context, threadIDs []uuid.UUID) error {
+	r.recountedThreads = append(r.recountedThreads, threadIDs...)
+
+	return nil
 }
 
 func TestGroupStatusChanges_BatchesSameRecipientAndStatus(t *testing.T) {
@@ -199,11 +206,13 @@ func TestInsertSentStatuses_ExcludesEffectiveSender(t *testing.T) {
 		},
 	}
 
-	svc := &MessageService{}
+	tagHooks := &fakeTagHooks{}
+	svc := &MessageService{tagHooks: tagHooks}
 	require.NoError(t, svc.insertSentStatuses(context.Background(), uow, msg))
 
 	require.Equal(t, msg, statusStore.insertedMsg)
 	require.Equal(t, []uuid.UUID{recipient, bot}, statusStore.insertedRecipients)
+	require.Equal(t, []*model.Message{msg}, tagHooks.messages, "every sent message runs the tag hooks")
 }
 
 func TestInsertSentStatuses_BotPromotedToDelivered(t *testing.T) {
@@ -228,7 +237,7 @@ func TestInsertSentStatuses_BotPromotedToDelivered(t *testing.T) {
 		},
 	}
 
-	svc := &MessageService{}
+	svc := &MessageService{tagHooks: &fakeTagHooks{}}
 	require.NoError(t, svc.insertSentStatuses(context.Background(), uow, msg))
 
 	// Everyone but the sender gets SENT; only the bot is promoted.
@@ -263,7 +272,7 @@ func TestInsertSentStatuses_BotSenderNotPromoted(t *testing.T) {
 		},
 	}
 
-	svc := &MessageService{}
+	svc := &MessageService{tagHooks: &fakeTagHooks{}}
 	require.NoError(t, svc.insertSentStatuses(context.Background(), uow, msg))
 
 	// The bot is the sender here: no SENT row and no delivered promotion.
@@ -285,7 +294,7 @@ func TestInsertSentStatuses_NoBots_NoDeliveredCall(t *testing.T) {
 		},
 	}
 
-	svc := &MessageService{}
+	svc := &MessageService{tagHooks: &fakeTagHooks{}}
 	require.NoError(t, svc.insertSentStatuses(context.Background(), uow, msg))
 	require.Empty(t, statusStore.deliveredReceipts)
 }
@@ -313,7 +322,7 @@ func TestInsertSentStatuses_SendAsOverridesSender(t *testing.T) {
 		},
 	}
 
-	svc := &MessageService{}
+	svc := &MessageService{tagHooks: &fakeTagHooks{}}
 	require.NoError(t, svc.insertSentStatuses(context.Background(), uow, msg))
 
 	// The effective sender (send_as) is excluded; the origin operator still

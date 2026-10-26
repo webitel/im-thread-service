@@ -42,6 +42,7 @@ func TestAddMember_WithQueueWritesQueueIDAndRef(t *testing.T) {
 	refs := newTestReferenceCache()
 
 	svc := &ThreadManagementService{
+		tagHooks:       &fakeTagHooks{},
 		uow:            fakeUnitOfWork{threadDialogStore: dialogs, messageStore: &fakeMessageStore{}, outboxStore: &fakeOutboxStore{}, referenceStore: refStore},
 		privacyChecker: fakePrivacyChecker{},
 		refs:           refs,
@@ -70,6 +71,7 @@ func TestAddMember_WithoutQueueKeepsQueueIDNullAndWritesNoRef(t *testing.T) {
 	refStore := &fakeReferenceStore{}
 
 	svc := &ThreadManagementService{
+		tagHooks:       &fakeTagHooks{},
 		uow:            fakeUnitOfWork{threadDialogStore: dialogs, messageStore: &fakeMessageStore{}, outboxStore: &fakeOutboxStore{}, referenceStore: refStore},
 		privacyChecker: fakePrivacyChecker{},
 		refs:           newTestReferenceCache(),
@@ -95,6 +97,7 @@ func TestAddMember_QueueWithoutNameSetsQueueIDOnly(t *testing.T) {
 	refStore := &fakeReferenceStore{}
 
 	svc := &ThreadManagementService{
+		tagHooks:       &fakeTagHooks{},
 		uow:            fakeUnitOfWork{threadDialogStore: dialogs, messageStore: &fakeMessageStore{}, outboxStore: &fakeOutboxStore{}, referenceStore: refStore},
 		privacyChecker: fakePrivacyChecker{},
 		refs:           newTestReferenceCache(),
@@ -136,6 +139,7 @@ func TestTransfer_QueueOnlyFromRequest(t *testing.T) {
 			refStore := &fakeReferenceStore{}
 
 			svc := &ThreadManagementService{
+				tagHooks:       &fakeTagHooks{},
 				uow:            fakeUnitOfWork{threadDialogStore: dialogs, messageStore: &fakeMessageStore{}, outboxStore: &fakeOutboxStore{}, referenceStore: refStore},
 				privacyChecker: fakePrivacyChecker{},
 				refs:           newTestReferenceCache(),
@@ -179,6 +183,7 @@ func TestUpgradePreview_PassesQueueThroughToMember(t *testing.T) {
 	}
 
 	members := &ThreadManagementService{
+		tagHooks:       &fakeTagHooks{},
 		uow:            uow,
 		logger:         slog.Default(),
 		privacyChecker: fakePrivacyChecker{},

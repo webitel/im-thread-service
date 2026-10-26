@@ -34,6 +34,7 @@ var Module = fx.Module(
 		NewThreadService,
 		NewThreadPermissionService,
 		NewThreadTagService,
+		func(s *ThreadTagService) ThreadTagHooks { return s },
 		NewThreadPreviewService,
 		NewMessageHistory,
 		NewMediaProcessor,

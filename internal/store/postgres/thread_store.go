@@ -31,6 +31,7 @@ type (
 		Variables       *model.ThreadVariables `json:"variables,omitempty" db:"variables"`
 		BotControllerID *uuid.UUID             `json:"bot_controller_id,omitempty" db:"bot_controller_id"`
 		OwnerBotID      *uuid.UUID             `json:"owner_bot_id,omitempty" db:"owner_bot_id"`
+		CRMContactID    *string                `json:"crm_contact_id,omitempty" db:"crm_contact_id"`
 		Source          *model.ThreadSource    `json:"source,omitempty" db:"source"`
 		Queue           *model.ThreadQueue     `json:"queue,omitempty" db:"queue"`
 		// The real thread id for SearchLeft rows, where "id" above is a
@@ -101,6 +102,66 @@ func (s *threadStore) LockForUpdate(ctx context.Context, threadID uuid.UUID) err
 	}
 
 	return nil
+}
+
+func (s *threadStore) SetCRMContact(ctx context.Context, threadID uuid.UUID, crmContactID string) error {
+	const query = `update im_thread.thread set crm_contact_id = nullif(@CRMContactID, ''), updated_at = now() where id = @ThreadID`
+
+	tag, err := s.db.Exec(ctx, query, pgx.NamedArgs{"ThreadID": threadID, "CRMContactID": crmContactID})
+	if err != nil {
+		return errors.Internal("setting crm contact", errors.WithCause(err), errors.WithID("postgres.thread_store.set_crm_contact"))
+	}
+
+	if tag.RowsAffected() == 0 {
+		return errors.NotFound("thread not found", errors.WithID("postgres.thread_store.set_crm_contact"))
+	}
+
+	return nil
+}
+
+func (s *threadStore) Counters(ctx context.Context, q model.ThreadCountersQuery) (model.ThreadCounters, error) {
+	const query = `
+		select
+			count(*) as all_total,
+			count(*) filter (where td.unread_count > 0) as all_unread,
+			count(*) filter (where s.thread_id is null) as active_total,
+			count(*) filter (where s.thread_id is null and td.unread_count > 0) as active_unread,
+			count(*) filter (where s.thread_id is not null) as snoozed_total,
+			count(*) filter (where s.thread_id is not null and td.unread_count > 0) as snoozed_unread
+		from im_thread.thread_dialog td
+		left join im_thread.thread_tag s
+			on s.thread_id = td.thread_id and s.contact_id = td.member_id and s.tag = @SnoozedTag
+		where td.member_id = @MemberID
+		  and td.domain_id = @DomainID
+		  and td.deleted_at is null
+		  and (cardinality(@Kinds::smallint[]) = 0 or exists (
+			select 1 from im_thread.thread t
+			where t.id = td.thread_id and t.kind = any(@Kinds::smallint[])
+		  ))
+	`
+
+	kinds := make([]int16, len(q.Kinds))
+	for i, k := range q.Kinds {
+		kinds[i] = int16(k)
+	}
+
+	var c model.ThreadCounters
+
+	err := s.db.QueryRow(ctx, query, pgx.NamedArgs{
+		"MemberID":   q.MemberID,
+		"DomainID":   q.DomainID,
+		"SnoozedTag": q.SnoozedTag,
+		"Kinds":      kinds,
+	}).Scan(
+		&c.All.Total, &c.All.UnreadChats,
+		&c.Active.Total, &c.Active.UnreadChats,
+		&c.Snoozed.Total, &c.Snoozed.UnreadChats,
+	)
+	if err != nil {
+		return model.ThreadCounters{}, errors.Internal("counting threads", errors.WithCause(err), errors.WithID("postgres.thread_store.counters"))
+	}
+
+	return c, nil
 }
 
 func (s *threadStore) Search(ctx context.Context, query queryobject.QueryObject) ([]*model.Thread, error) {
@@ -184,6 +245,10 @@ func mapThreadRecordToModel(record *threadRecord) (*model.Thread, error) {
 		OwnerBotID:      record.OwnerBotID,
 		Source:          record.Source,
 		Queue:           record.Queue,
+	}
+
+	if record.CRMContactID != nil {
+		thread.CRMContactID = *record.CRMContactID
 	}
 
 	return thread, nil

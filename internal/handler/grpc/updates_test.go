@@ -2,6 +2,7 @@ package grpc
 
 import (
 	"context"
+	"slices"
 	"testing"
 	"time"
 
@@ -15,6 +16,7 @@ import (
 	impb "github.com/webitel/im-thread-service/gen/go/thread/v1"
 	"github.com/webitel/im-thread-service/internal/adapter/journal"
 	"github.com/webitel/im-thread-service/internal/domain/model"
+	"github.com/webitel/im-thread-service/internal/domain/shared"
 	"github.com/webitel/im-thread-service/internal/service/dto"
 	queryobject "github.com/webitel/im-thread-service/internal/store/query_object"
 )
@@ -56,6 +58,12 @@ func (f *fakeUpdates) Members(context.Context, string) ([]journal.Member, error)
 }
 
 func (f *fakeUpdates) Unread(context.Context, string, string) (int64, error) { return f.unread, nil }
+
+type fakeTags struct{ tags []string }
+
+func (f *fakeTags) ListTags(context.Context, uuid.UUID, uuid.UUID) ([]string, error) {
+	return f.tags, nil
+}
 
 // fakeHistory returns stored messages by id, or the newest one when no ids are asked.
 type fakeHistory struct {
@@ -106,7 +114,7 @@ func msgEvent(kind string, msgID uuid.UUID) journal.Event {
 }
 
 func TestGetUpdates_Errors(t *testing.T) {
-	srv := NewUpdatesServer(&fakeHistory{}, &fakeUpdates{}, &fakeThreads{})
+	srv := NewUpdatesServer(&fakeHistory{}, &fakeUpdates{}, &fakeThreads{}, &fakeTags{})
 
 	for name, req := range map[string]*impb.GetUpdatesRequest{
 		"malformed caller id": {CallerId: "x", DomainId: 1},
@@ -122,7 +130,7 @@ func TestGetUpdates_Errors(t *testing.T) {
 
 // First sync: the client gets its starting cursor and loads the thread list itself.
 func TestGetUpdates_FirstSyncResyncs(t *testing.T) {
-	resp, err := NewUpdatesServer(&fakeHistory{}, &fakeUpdates{cursor: "77"}, &fakeThreads{}).
+	resp, err := NewUpdatesServer(&fakeHistory{}, &fakeUpdates{cursor: "77"}, &fakeThreads{}, &fakeTags{}).
 		GetUpdates(context.Background(), updatesReq(""))
 	require.NoError(t, err)
 	assert.True(t, resp.GetResync())
@@ -136,6 +144,7 @@ func TestGetUpdates_AllChangedThreads(t *testing.T) {
 	edited, created := uuid.New(), uuid.New()
 	deletedAt := time.Now()
 	gone := uuid.New()
+	deleterMember, deleterContact := uuid.New(), uuid.New()
 
 	updates := &fakeUpdates{
 		changes: &journal.ContactChanges{Cursor: "900", After: 100, Horizon: 900, Threads: []string{
@@ -151,11 +160,14 @@ func TestGetUpdates_AllChangedThreads(t *testing.T) {
 		},
 		notMember: map[string]bool{leftThread.String(): true},
 		unread:    2,
+		members:   []journal.Member{{ID: deleterMember.String(), ContactID: deleterContact.String(), Role: int32(model.RoleOwner)}},
 	}
 	history := &fakeHistory{
 		byID: map[uuid.UUID]*model.Message{
-			edited:  {ID: edited, Body: "final", Seq: 4, RevisionCount: 1, UpdatedAt: time.UnixMilli(9)},
-			gone:    {ID: gone, DeletedAt: &deletedAt},
+			edited: {ID: edited, Body: "final", Seq: 4, RevisionCount: 1, UpdatedAt: time.UnixMilli(9)},
+			gone: {ID: gone, DeletedAt: &deletedAt, DeletedBy: &model.ThreadDialog{
+				BaseModel: shared.BaseModel{ID: deleterMember}, ContactID: deleterContact, ThreadRole: model.RoleOwner,
+			}},
 			created: {ID: created, Body: "hello", Seq: 1},
 		},
 		newest: &model.Message{ID: created, Body: "hello", Seq: 1},
@@ -164,7 +176,7 @@ func TestGetUpdates_AllChangedThreads(t *testing.T) {
 		ID: newThread, Subject: "new dialog", LastMessage: &model.Message{ID: created, Body: "hello"},
 	}}}
 
-	resp, err := NewUpdatesServer(history, updates, threads).GetUpdates(context.Background(), updatesReq("100"))
+	resp, err := NewUpdatesServer(history, updates, threads, &fakeTags{}).GetUpdates(context.Background(), updatesReq("100"))
 	require.NoError(t, err)
 	assert.Equal(t, "900", resp.GetCursor())
 	require.Len(t, resp.GetThreads(), 3)
@@ -178,6 +190,14 @@ func TestGetUpdates_AllChangedThreads(t *testing.T) {
 	require.Len(t, old.GetMessages(), 1, "edit and reaction fold into one message")
 	assert.Equal(t, "final", old.GetMessages()[0].GetBody())
 	assert.Equal(t, []string{gone.String()}, old.GetDeletedMessageIds())
+	require.Len(t, old.GetDeletedMessages(), 1, "a deletion says when and by whom")
+	assert.Equal(t, gone.String(), old.GetDeletedMessages()[0].GetId())
+	assert.Equal(t, deletedAt.UnixMilli(), old.GetDeletedMessages()[0].GetDeletedAt())
+	assert.Equal(t, deleterMember.String(), old.GetDeletedMessages()[0].GetDeletedBy().GetId())
+	assert.Equal(t, deleterContact.String(), old.GetDeletedMessages()[0].GetDeletedBy().GetContactId())
+	assert.True(t, slices.ContainsFunc(old.GetMembers(), func(m *impb.ThreadMember) bool {
+		return m.GetContactId() == deleterContact.String()
+	}), "the deleter is among the members so the gateway can resolve it")
 	assert.Nil(t, old.GetDialog(), "the caller already knows this thread")
 	assert.Equal(t, int64(2), old.GetUnreadCount())
 
@@ -190,8 +210,9 @@ func TestGetUpdates_AllChangedThreads(t *testing.T) {
 	assert.True(t, byID[leftThread.String()].GetLeft())
 }
 
-// A thread is new to the caller when it was created or they joined it inside the window.
-func TestIsNewToCaller(t *testing.T) {
+// The dialog is attached when the thread is new to the caller (created or joined inside the
+// window) or its attributes changed.
+func TestNeedsDialog(t *testing.T) {
 	me := uuid.NewString()
 	joined := journal.Event{Kind: journal.KindMemberChanged, Fields: map[string]string{
 		journal.FieldContactID: me, journal.FieldAction: journal.ActionJoined,
@@ -200,10 +221,11 @@ func TestIsNewToCaller(t *testing.T) {
 		journal.FieldContactID: uuid.NewString(), journal.FieldAction: journal.ActionJoined,
 	}}
 
-	assert.True(t, isNewToCaller([]journal.Event{joined}, me))
-	assert.False(t, isNewToCaller([]journal.Event{otherJoined}, me))
-	assert.True(t, isNewToCaller([]journal.Event{{Kind: journal.KindThreadCreated}}, me))
-	assert.False(t, isNewToCaller([]journal.Event{msgEvent(journal.KindMessageNew, uuid.New())}, me))
+	assert.True(t, needsDialog([]journal.Event{joined}, me))
+	assert.False(t, needsDialog([]journal.Event{otherJoined}, me))
+	assert.True(t, needsDialog([]journal.Event{{Kind: journal.KindThreadCreated}}, me))
+	assert.True(t, needsDialog([]journal.Event{{Kind: journal.KindThreadUpdated}}, me))
+	assert.False(t, needsDialog([]journal.Event{msgEvent(journal.KindMessageNew, uuid.New())}, me))
 }
 
 func TestGetUpdates_Resyncs(t *testing.T) {
@@ -226,7 +248,7 @@ func TestGetUpdates_Resyncs(t *testing.T) {
 
 	for name, updates := range tests {
 		t.Run(name, func(t *testing.T) {
-			resp, err := NewUpdatesServer(&fakeHistory{}, updates, &fakeThreads{}).GetUpdates(context.Background(), updatesReq("100"))
+			resp, err := NewUpdatesServer(&fakeHistory{}, updates, &fakeThreads{}, &fakeTags{}).GetUpdates(context.Background(), updatesReq("100"))
 			require.NoError(t, err)
 			assert.True(t, resp.GetResync())
 			assert.Equal(t, "5", resp.GetCursor())
@@ -268,7 +290,7 @@ func TestThreadSearch_ReturnsUpdatesCursor(t *testing.T) {
 func TestGetUpdates_TrimmedWithoutChangesKeepsCursor(t *testing.T) {
 	updates := &fakeUpdates{cursor: "100", trimmed: 500, changes: &journal.ContactChanges{Cursor: "100", After: 100}}
 
-	resp, err := NewUpdatesServer(&fakeHistory{}, updates, &fakeThreads{}).GetUpdates(context.Background(), updatesReq("100"))
+	resp, err := NewUpdatesServer(&fakeHistory{}, updates, &fakeThreads{}, &fakeTags{}).GetUpdates(context.Background(), updatesReq("100"))
 	require.NoError(t, err)
 	assert.False(t, resp.GetResync())
 	assert.Equal(t, "100", resp.GetCursor())
@@ -299,7 +321,7 @@ func TestGetUpdates_ReadOnlyChange(t *testing.T) {
 		unread: 0,
 	}
 
-	resp, err := NewUpdatesServer(&fakeHistory{}, updates, &fakeThreads{}).GetUpdates(context.Background(), updatesReq("200"))
+	resp, err := NewUpdatesServer(&fakeHistory{}, updates, &fakeThreads{}, &fakeTags{}).GetUpdates(context.Background(), updatesReq("200"))
 	require.NoError(t, err)
 	require.Len(t, resp.GetThreads(), 1)
 	assert.Empty(t, resp.GetThreads()[0].GetMessages())
@@ -331,7 +353,7 @@ func TestGetUpdates_Failures(t *testing.T) {
 		recoveredID: {ID: recoveredID, Body: "retried"},
 	}}
 
-	resp, err := NewUpdatesServer(history, updates, &fakeThreads{}).GetUpdates(context.Background(), updatesReq("200"))
+	resp, err := NewUpdatesServer(history, updates, &fakeThreads{}, &fakeTags{}).GetUpdates(context.Background(), updatesReq("200"))
 	require.NoError(t, err)
 
 	entry := resp.GetThreads()[0]
@@ -346,4 +368,57 @@ func TestGetUpdates_Failures(t *testing.T) {
 
 	require.Len(t, entry.GetMembers(), 1)
 	assert.Equal(t, "m1", entry.GetMembers()[0].GetId())
+}
+
+// The owner's tag change arrives with their current tags; other contacts' private entries are
+// filtered out by the journal itself (see journal.ChangesSince).
+func TestGetUpdates_Tags(t *testing.T) {
+	thread := uuid.NewString()
+	req := updatesReq("200")
+	updates := &fakeUpdates{
+		changes: &journal.ContactChanges{Cursor: "300", After: 200, Threads: []string{thread}},
+		events: map[string][]journal.Event{thread: {{
+			Kind: journal.KindTagsChanged, Fields: map[string]string{journal.FieldActor: req.GetCallerId()},
+		}}},
+	}
+
+	resp, err := NewUpdatesServer(&fakeHistory{}, updates, &fakeThreads{}, &fakeTags{tags: []string{"snoozed"}}).GetUpdates(context.Background(), req)
+	require.NoError(t, err)
+	require.Len(t, resp.GetThreads(), 1)
+	require.NotNil(t, resp.GetThreads()[0].GetTags())
+	assert.Equal(t, []string{"snoozed"}, resp.GetThreads()[0].GetTags().GetItems())
+}
+
+// Without a tag change in the window tags is absent, so the client keeps its copy.
+func TestGetUpdates_NoTagChange(t *testing.T) {
+	thread := uuid.NewString()
+	updates := &fakeUpdates{
+		changes: &journal.ContactChanges{Cursor: "300", After: 200, Threads: []string{thread}},
+		events: map[string][]journal.Event{thread: {{Kind: journal.KindReadChanged, Fields: map[string]string{
+			journal.FieldActor: uuid.NewString(), journal.FieldUpToSeq: "9",
+		}}}},
+	}
+
+	resp, err := NewUpdatesServer(&fakeHistory{}, updates, &fakeThreads{}, &fakeTags{tags: []string{"snoozed"}}).GetUpdates(context.Background(), updatesReq("200"))
+	require.NoError(t, err)
+	require.Len(t, resp.GetThreads(), 1)
+	assert.Nil(t, resp.GetThreads()[0].GetTags())
+}
+
+// Removing the last tag is sent as present-but-empty, unlike an untouched thread.
+func TestGetUpdates_AllTagsRemoved(t *testing.T) {
+	thread := uuid.NewString()
+	req := updatesReq("200")
+	updates := &fakeUpdates{
+		changes: &journal.ContactChanges{Cursor: "300", After: 200, Threads: []string{thread}},
+		events: map[string][]journal.Event{thread: {{
+			Kind: journal.KindTagsChanged, Fields: map[string]string{journal.FieldActor: req.GetCallerId()},
+		}}},
+	}
+
+	resp, err := NewUpdatesServer(&fakeHistory{}, updates, &fakeThreads{}, &fakeTags{}).GetUpdates(context.Background(), req)
+	require.NoError(t, err)
+	require.Len(t, resp.GetThreads(), 1)
+	require.NotNil(t, resp.GetThreads()[0].GetTags())
+	assert.Empty(t, resp.GetThreads()[0].GetTags().GetItems())
 }

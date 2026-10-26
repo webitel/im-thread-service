@@ -19,9 +19,12 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	ThreadTagManagement_AddTag_FullMethodName    = "/webitel.im.service.thread.v1.ThreadTagManagement/AddTag"
-	ThreadTagManagement_RemoveTag_FullMethodName = "/webitel.im.service.thread.v1.ThreadTagManagement/RemoveTag"
-	ThreadTagManagement_Search_FullMethodName    = "/webitel.im.service.thread.v1.ThreadTagManagement/Search"
+	ThreadTagManagement_AddTag_FullMethodName          = "/webitel.im.service.thread.v1.ThreadTagManagement/AddTag"
+	ThreadTagManagement_RemoveTag_FullMethodName       = "/webitel.im.service.thread.v1.ThreadTagManagement/RemoveTag"
+	ThreadTagManagement_RemoveTagByName_FullMethodName = "/webitel.im.service.thread.v1.ThreadTagManagement/RemoveTagByName"
+	ThreadTagManagement_Snooze_FullMethodName          = "/webitel.im.service.thread.v1.ThreadTagManagement/Snooze"
+	ThreadTagManagement_Unsnooze_FullMethodName        = "/webitel.im.service.thread.v1.ThreadTagManagement/Unsnooze"
+	ThreadTagManagement_Search_FullMethodName          = "/webitel.im.service.thread.v1.ThreadTagManagement/Search"
 )
 
 // ThreadTagManagementClient is the client API for ThreadTagManagement service.
@@ -30,6 +33,9 @@ const (
 type ThreadTagManagementClient interface {
 	AddTag(ctx context.Context, in *AddThreadTagRequest, opts ...grpc.CallOption) (*ChatTag, error)
 	RemoveTag(ctx context.Context, in *RemoveThreadTagRequest, opts ...grpc.CallOption) (*RemoveThreadTagResponse, error)
+	RemoveTagByName(ctx context.Context, in *RemoveThreadTagByNameRequest, opts ...grpc.CallOption) (*RemoveThreadTagResponse, error)
+	Snooze(ctx context.Context, in *SnoozeThreadRequest, opts ...grpc.CallOption) (*ChatTag, error)
+	Unsnooze(ctx context.Context, in *UnsnoozeThreadRequest, opts ...grpc.CallOption) (*RemoveThreadTagResponse, error)
 	Search(ctx context.Context, in *SearchThreadTagsRequest, opts ...grpc.CallOption) (*SearchThreadTagsResponse, error)
 }
 
@@ -61,6 +67,36 @@ func (c *threadTagManagementClient) RemoveTag(ctx context.Context, in *RemoveThr
 	return out, nil
 }
 
+func (c *threadTagManagementClient) RemoveTagByName(ctx context.Context, in *RemoveThreadTagByNameRequest, opts ...grpc.CallOption) (*RemoveThreadTagResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RemoveThreadTagResponse)
+	err := c.cc.Invoke(ctx, ThreadTagManagement_RemoveTagByName_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *threadTagManagementClient) Snooze(ctx context.Context, in *SnoozeThreadRequest, opts ...grpc.CallOption) (*ChatTag, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ChatTag)
+	err := c.cc.Invoke(ctx, ThreadTagManagement_Snooze_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *threadTagManagementClient) Unsnooze(ctx context.Context, in *UnsnoozeThreadRequest, opts ...grpc.CallOption) (*RemoveThreadTagResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RemoveThreadTagResponse)
+	err := c.cc.Invoke(ctx, ThreadTagManagement_Unsnooze_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *threadTagManagementClient) Search(ctx context.Context, in *SearchThreadTagsRequest, opts ...grpc.CallOption) (*SearchThreadTagsResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(SearchThreadTagsResponse)
@@ -77,6 +113,9 @@ func (c *threadTagManagementClient) Search(ctx context.Context, in *SearchThread
 type ThreadTagManagementServer interface {
 	AddTag(context.Context, *AddThreadTagRequest) (*ChatTag, error)
 	RemoveTag(context.Context, *RemoveThreadTagRequest) (*RemoveThreadTagResponse, error)
+	RemoveTagByName(context.Context, *RemoveThreadTagByNameRequest) (*RemoveThreadTagResponse, error)
+	Snooze(context.Context, *SnoozeThreadRequest) (*ChatTag, error)
+	Unsnooze(context.Context, *UnsnoozeThreadRequest) (*RemoveThreadTagResponse, error)
 	Search(context.Context, *SearchThreadTagsRequest) (*SearchThreadTagsResponse, error)
 	mustEmbedUnimplementedThreadTagManagementServer()
 }
@@ -93,6 +132,15 @@ func (UnimplementedThreadTagManagementServer) AddTag(context.Context, *AddThread
 }
 func (UnimplementedThreadTagManagementServer) RemoveTag(context.Context, *RemoveThreadTagRequest) (*RemoveThreadTagResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RemoveTag not implemented")
+}
+func (UnimplementedThreadTagManagementServer) RemoveTagByName(context.Context, *RemoveThreadTagByNameRequest) (*RemoveThreadTagResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RemoveTagByName not implemented")
+}
+func (UnimplementedThreadTagManagementServer) Snooze(context.Context, *SnoozeThreadRequest) (*ChatTag, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Snooze not implemented")
+}
+func (UnimplementedThreadTagManagementServer) Unsnooze(context.Context, *UnsnoozeThreadRequest) (*RemoveThreadTagResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Unsnooze not implemented")
 }
 func (UnimplementedThreadTagManagementServer) Search(context.Context, *SearchThreadTagsRequest) (*SearchThreadTagsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Search not implemented")
@@ -154,6 +202,60 @@ func _ThreadTagManagement_RemoveTag_Handler(srv interface{}, ctx context.Context
 	return interceptor(ctx, in, info, handler)
 }
 
+func _ThreadTagManagement_RemoveTagByName_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RemoveThreadTagByNameRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ThreadTagManagementServer).RemoveTagByName(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ThreadTagManagement_RemoveTagByName_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ThreadTagManagementServer).RemoveTagByName(ctx, req.(*RemoveThreadTagByNameRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ThreadTagManagement_Snooze_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SnoozeThreadRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ThreadTagManagementServer).Snooze(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ThreadTagManagement_Snooze_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ThreadTagManagementServer).Snooze(ctx, req.(*SnoozeThreadRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ThreadTagManagement_Unsnooze_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UnsnoozeThreadRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ThreadTagManagementServer).Unsnooze(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ThreadTagManagement_Unsnooze_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ThreadTagManagementServer).Unsnooze(ctx, req.(*UnsnoozeThreadRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _ThreadTagManagement_Search_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(SearchThreadTagsRequest)
 	if err := dec(in); err != nil {
@@ -186,6 +288,18 @@ var ThreadTagManagement_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "RemoveTag",
 			Handler:    _ThreadTagManagement_RemoveTag_Handler,
+		},
+		{
+			MethodName: "RemoveTagByName",
+			Handler:    _ThreadTagManagement_RemoveTagByName_Handler,
+		},
+		{
+			MethodName: "Snooze",
+			Handler:    _ThreadTagManagement_Snooze_Handler,
+		},
+		{
+			MethodName: "Unsnooze",
+			Handler:    _ThreadTagManagement_Unsnooze_Handler,
 		},
 		{
 			MethodName: "Search",

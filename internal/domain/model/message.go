@@ -259,6 +259,30 @@ func (m *Message) GetSender() uuid.UUID {
 	return m.From.ID
 }
 
+func (m *Message) Recipients() []*ThreadDialog {
+	sender := m.GetSender()
+	recipients := make([]*ThreadDialog, 0, len(m.To))
+
+	for _, member := range m.To {
+		if member != nil && member.ContactID != sender {
+			recipients = append(recipients, member)
+		}
+	}
+
+	return recipients
+}
+
+func (m *Message) RecipientIDs() []uuid.UUID {
+	recipients := m.Recipients()
+	ids := make([]uuid.UUID, 0, len(recipients))
+
+	for _, member := range recipients {
+		ids = append(ids, member.ContactID)
+	}
+
+	return ids
+}
+
 func (m *Message) GetOriginSender() *uuid.UUID {
 	if m.SendAs != nil && *m.SendAs != uuid.Nil {
 		originRef := m.From.ID

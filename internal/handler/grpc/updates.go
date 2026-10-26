@@ -27,6 +27,11 @@ type UpdatesReader interface {
 	Unread(ctx context.Context, threadID, contactID string) (int64, error)
 }
 
+// TagLister reads a contact's own tags on a thread.
+type TagLister interface {
+	ListTags(ctx context.Context, threadID, contactID uuid.UUID) ([]string, error)
+}
+
 // ThreadSearcher loads threads the way ThreadManagement/Search does.
 type ThreadSearcher interface {
 	Search(ctx context.Context, req *dto.ThreadSearchRequest) ([]*model.Thread, error)
@@ -38,11 +43,12 @@ type UpdatesServer struct {
 	history MessageHistoryService
 	updates UpdatesReader
 	threads ThreadSearcher
+	tags    TagLister
 	out     *mapper.ThreadOutConverter
 }
 
-func NewUpdatesServer(history MessageHistoryService, updates UpdatesReader, threads ThreadManagementService) *UpdatesServer {
-	return &UpdatesServer{history: history, updates: updates, threads: threads, out: &mapper.ThreadOutConverter{}}
+func NewUpdatesServer(history MessageHistoryService, updates UpdatesReader, threads ThreadManagementService, tags TagLister) *UpdatesServer {
+	return &UpdatesServer{history: history, updates: updates, threads: threads, tags: tags, out: &mapper.ThreadOutConverter{}}
 }
 
 // updatesCaller is who asks and how history visibility applies to them.
@@ -159,13 +165,19 @@ func (s *UpdatesServer) threadUpdates(ctx context.Context, caller updatesCaller,
 		return nil, 0, err
 	}
 
+	if hasKind(events, journal.KindTagsChanged) {
+		if entry.Tags, err = s.callerTags(ctx, caller, threadID); err != nil {
+			return nil, 0, err
+		}
+	}
+
 	referenced := make(map[string]struct{})
 
 	if err := s.applyDiff(ctx, caller, entry, events, referenced); err != nil {
 		return nil, 0, err
 	}
 
-	if isNewToCaller(events, caller.contactID) {
+	if needsDialog(events, caller.contactID) {
 		if err := s.attachDialog(ctx, caller, entry); err != nil {
 			return nil, 0, err
 		}
@@ -195,11 +207,40 @@ func (s *UpdatesServer) threadUpdates(ctx context.Context, caller updatesCaller,
 	return entry, len(events), nil
 }
 
-// isNewToCaller: the window holds the thread's first change or the caller joining it, so the
-// client has never seen this thread.
-func isNewToCaller(events []journal.Event, contactID string) bool {
+func (s *UpdatesServer) callerTags(ctx context.Context, caller updatesCaller, threadID string) (*impb.ThreadTags, error) {
+	thread, err := uuid.Parse(threadID)
+	if err != nil {
+		return nil, errors.Internal("invalid journal thread_id", errors.WithCause(err), errors.WithID("grpc.updates.tags"))
+	}
+
+	contact, err := uuid.Parse(caller.contactID)
+	if err != nil {
+		return nil, errors.InvalidArgument("invalid caller_id", errors.WithCause(err), errors.WithID("grpc.updates.tags"))
+	}
+
+	tags, err := s.tags.ListTags(ctx, thread, contact)
+	if err != nil {
+		return nil, err
+	}
+
+	return &impb.ThreadTags{Items: tags}, nil
+}
+
+func hasKind(events []journal.Event, kind string) bool {
 	for _, e := range events {
-		if e.Kind == journal.KindThreadCreated {
+		if e.Kind == kind {
+			return true
+		}
+	}
+
+	return false
+}
+
+// needsDialog: the window holds the thread's first change or the caller joining it, so the
+// client has never seen this thread, or a change of thread attributes the cached copy lacks.
+func needsDialog(events []journal.Event, contactID string) bool {
+	for _, e := range events {
+		if e.Kind == journal.KindThreadCreated || e.Kind == journal.KindThreadUpdated {
 			return true
 		}
 
@@ -212,7 +253,7 @@ func isNewToCaller(events []journal.Event, contactID string) bool {
 }
 
 // applyDiff folds journal entries into the entry: live messages once in their current
-// state, deletions as ids, member changes in order.
+// state, deletions with when and by whom, member changes in order.
 func (s *UpdatesServer) applyDiff(ctx context.Context, caller updatesCaller, entry *impb.ThreadUpdates, events []journal.Event, referenced map[string]struct{}) error {
 	messages, historyFrom, err := s.currentMessages(ctx, caller, entry.GetThreadId(), events)
 	if err != nil {
@@ -222,6 +263,12 @@ func (s *UpdatesServer) applyDiff(ctx context.Context, caller updatesCaller, ent
 	for _, m := range messages {
 		if m.GetDeleted() {
 			entry.DeletedMessageIds = append(entry.DeletedMessageIds, m.GetId())
+			entry.DeletedMessages = append(entry.DeletedMessages, &impb.DeletedMessage{
+				Id:        m.GetId(),
+				DeletedAt: m.GetDeletedAt(),
+				DeletedBy: m.GetDeletedBy(),
+			})
+			referenced[m.GetDeletedBy().GetContactId()] = struct{}{}
 
 			continue
 		}

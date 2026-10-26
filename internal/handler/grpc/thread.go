@@ -23,12 +23,14 @@ type ThreadManagementService interface {
 	Search(ctx context.Context, searchRequest *dto.ThreadSearchRequest) ([]*model.Thread, error)
 	SearchLeft(ctx context.Context, req *dto.SearchLeftRequest) ([]*model.Thread, error)
 	GetUnreadSummary(ctx context.Context, req *dto.UnreadSummaryRequest) (model.UnreadSummary, error)
+	GetCounters(ctx context.Context, req *dto.ThreadCountersRequest) (model.ThreadCounters, error)
 	AddMember(context.Context, *dto.AddMemberRequest) (uuid.UUID, error)
 	RemoveMember(context.Context, *dto.RemoveMemberRequest) error
 	Transfer(context.Context, *dto.TransferThreadRequest) (uuid.UUID, error)
 	CompleteBotControl(context.Context, *dto.CompleteBotControlRequest) error
 	HandBackToBot(context.Context, *dto.HandBackToBotRequest) error
 	TakeOverFromBot(context.Context, *dto.TakeOverFromBotRequest) error
+	SetCRMContact(context.Context, *dto.SetCRMContactRequest) error
 }
 
 type ThreadVariablesOperator interface {
@@ -156,6 +158,28 @@ func (ts *ThreadManagementServer) GetUnreadSummary(ctx context.Context, req *imp
 	}, nil
 }
 
+func (ts *ThreadManagementServer) GetCounters(ctx context.Context, req *impb.GetCountersRequest) (*impb.GetCountersResponse, error) {
+	in, err := ts.inMapper.ConvertCountersRequest(req)
+	if err != nil {
+		return nil, err
+	}
+
+	counters, err := ts.threadManager.GetCounters(ctx, in)
+	if err != nil {
+		return nil, err
+	}
+
+	return &impb.GetCountersResponse{
+		All:     folderCountersToPb(counters.All),
+		Active:  folderCountersToPb(counters.Active),
+		Snoozed: folderCountersToPb(counters.Snoozed),
+	}, nil
+}
+
+func folderCountersToPb(c model.FolderCounters) *impb.ThreadCounters {
+	return &impb.ThreadCounters{Total: c.Total, UnreadChats: c.UnreadChats}
+}
+
 // Transfer implements [thread.ThreadManagementServer].
 func (ts *ThreadManagementServer) Transfer(ctx context.Context, req *impb.TransferRequest) (*impb.TransferResponse, error) {
 	internalRequest, err := ts.inMapper.ConvertTransferThreadRequest(req)
@@ -268,6 +292,29 @@ func (ts *ThreadManagementServer) HandBackToBot(ctx context.Context, req *impb.H
 	}
 
 	return &impb.HandBackToBotResponse{}, nil
+}
+
+func (ts *ThreadManagementServer) SetCrmContact(ctx context.Context, req *impb.SetCrmContactRequest) (*impb.SetCrmContactResponse, error) {
+	tid, err := uuid.Parse(req.GetThreadId())
+	if err != nil {
+		return nil, errors.InvalidArgument("invalid thread_id", errors.WithCause(err))
+	}
+
+	initiator, err := uuid.Parse(req.GetInitiatorContactId())
+	if err != nil {
+		return nil, errors.InvalidArgument("invalid initiator_contact_id", errors.WithCause(err))
+	}
+
+	if err = ts.threadManager.SetCRMContact(ctx, &dto.SetCRMContactRequest{
+		ThreadID:           tid,
+		InitiatorContactID: initiator,
+		DomainID:           int(req.GetDomainId()),
+		CRMContactID:       req.GetCrmContactId(),
+	}); err != nil {
+		return nil, err
+	}
+
+	return &impb.SetCrmContactResponse{CrmContactId: req.GetCrmContactId()}, nil
 }
 
 func (ts *ThreadManagementServer) TakeOverFromBot(ctx context.Context, req *impb.TakeOverFromBotRequest) (*impb.TakeOverFromBotResponse, error) {

@@ -40,6 +40,7 @@ type (
 		privacyChecker ThreadPrivacyChecker
 		contactInfo    ContactInfoProvider
 		providers      ProvidersAdapter
+		tagHooks       ThreadTagHooks
 		refs           *ReferenceCache
 	}
 
@@ -68,6 +69,7 @@ func NewThreadService(
 	privacyChecker ThreadPrivacyChecker,
 	contactInfo ContactInfoProvider,
 	providers ProvidersAdapter,
+	tagHooks ThreadTagHooks,
 	refs *ReferenceCache,
 ) *ThreadManagementService {
 	if logger == nil {
@@ -80,6 +82,7 @@ func NewThreadService(
 		privacyChecker: privacyChecker,
 		contactInfo:    contactInfo,
 		providers:      providers,
+		tagHooks:       tagHooks,
 		refs:           refs,
 	}
 }
@@ -146,7 +149,9 @@ func (t *ThreadManagementService) Search(ctx context.Context, searchRequest *dto
 		WithSort(searchRequest.Sort).
 		WithoutDeletedAtFilter().
 		WithOffset(searchRequest.Page).
-		WithTagsFilter(searchRequest.SelfID, searchRequest.Tags...)
+		WithTagsFilter(searchRequest.SelfID, searchRequest.Tags...).
+		WithExcludeTagsFilter(searchRequest.SelfID, searchRequest.ExcludeTags...).
+		WithUnreadFilter(searchRequest.SelfID, searchRequest.Unread)
 
 	switch {
 	case len(searchRequest.ContactIDs) > 0:
@@ -257,6 +262,19 @@ func (t *ThreadManagementService) GetUnreadSummary(ctx context.Context, req *dto
 	}
 
 	return t.uow.MessageStatuses().UnreadSummary(ctx, req.DomainID, req.SelfID)
+}
+
+func (t *ThreadManagementService) GetCounters(ctx context.Context, req *dto.ThreadCountersRequest) (model.ThreadCounters, error) {
+	if req == nil || req.SelfID == uuid.Nil {
+		return model.ThreadCounters{}, errors.InvalidArgument("self id is required", errors.WithID("service.thread_manager.counters"))
+	}
+
+	return t.uow.ThreadStore().Counters(ctx, model.ThreadCountersQuery{
+		DomainID:   req.DomainID,
+		MemberID:   req.SelfID,
+		Kinds:      req.Kinds,
+		SnoozedTag: SnoozedTag,
+	})
 }
 
 func firstDomainID(ids []int) int32 {
@@ -567,6 +585,10 @@ func (t *ThreadManagementService) Transfer(ctx context.Context, req *dto.Transfe
 
 		transferReason := memberTransferedLeaveReason
 		if err = uow.ThreadDialogStore().Delete(ctx, initiator.ID, &transferReason); err != nil {
+			return err
+		}
+
+		if err = t.tagHooks.OnMemberLeft(ctx, uow, req.ThreadID, initiator.ContactID); err != nil {
 			return err
 		}
 
@@ -898,6 +920,11 @@ func (t *ThreadManagementService) sendThreadSystemMessage(ctx context.Context, u
 
 	savedMsg.To = msg.To
 	savedMsg.From = msg.From
+
+	if err = t.tagHooks.OnMessage(ctx, uow, savedMsg); err != nil {
+		return nil, err
+	}
+
 	savedMsg.WithCreatedEvent(ctx, uuid.NewString())
 	events := savedMsg.Events()
 
@@ -983,6 +1010,10 @@ func (t *ThreadManagementService) RemoveMember(ctx context.Context, req *dto.Rem
 			}
 		} else {
 			if err = uow.ThreadDialogStore().Delete(ctx, target.ID, req.Reason); err != nil {
+				return err
+			}
+
+			if err = t.tagHooks.OnMemberLeft(ctx, uow, target.ThreadID, target.ContactID); err != nil {
 				return err
 			}
 
@@ -1464,6 +1495,42 @@ func (t *ThreadManagementService) TakeOverFromBot(ctx context.Context, req *dto.
 
 	return t.uow.WithinTransaction(ctx, func(ctx context.Context, uow store.UnitOfWork) error {
 		return t.releaseControlToAgent(ctx, uow, req.ThreadID, req.DomainID)
+	})
+}
+
+// SetCRMContact stores the CRM contact an operator selected for the thread and
+// notifies the members so their clients refresh the thread.
+func (t *ThreadManagementService) SetCRMContact(ctx context.Context, req *dto.SetCRMContactRequest) error {
+	const errID = "service.thread_manager.set_crm_contact"
+
+	if req == nil {
+		return errors.InvalidArgument("request cannot be nil", errors.WithID(errID))
+	}
+
+	if err := t.verifyOperator(ctx, req.ThreadID, req.InitiatorContactID, errID); err != nil {
+		return err
+	}
+
+	return t.uow.WithinTransaction(ctx, func(ctx context.Context, uow store.UnitOfWork) error {
+		if err := uow.ThreadStore().SetCRMContact(ctx, req.ThreadID, req.CRMContactID); err != nil {
+			return err
+		}
+
+		participants, err := t.threadParticipants(ctx, uow, req.ThreadID)
+		if err != nil {
+			return err
+		}
+
+		updated := &event.ThreadUpdated{
+			ThreadID:     req.ThreadID,
+			DomainID:     int32(req.DomainID),
+			UpdatedBy:    req.InitiatorContactID,
+			CRMContactID: req.CRMContactID,
+			OccurredAt:   time.Now().UTC(),
+			Participants: participants,
+		}
+
+		return uow.Outbox().Publish(ctx, updated.Topic(), updated)
 	})
 }
 

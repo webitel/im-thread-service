@@ -58,7 +58,8 @@ func (f *fakeMessageExternalStore) UpdateDelivery(ctx context.Context, in *model
 
 func newReplyTestService(messageStore *fakeMessageStore, externalStore *fakeMessageExternalStore) *MessageService {
 	return &MessageService{
-		logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+		tagHooks: &fakeTagHooks{},
+		logger:   slog.New(slog.NewTextHandler(io.Discard, nil)),
 		uow: fakeUnitOfWork{
 			messageStore:         messageStore,
 			messageExternalStore: externalStore,

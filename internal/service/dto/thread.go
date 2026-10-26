@@ -49,6 +49,8 @@ type (
 		ContactIDs   uuid.UUIDs
 		Participants []ContactIdentity
 		Tags         []string
+		ExcludeTags  []string
+		Unread       bool
 		Size         int
 		Sort         string
 		Page         int
@@ -73,6 +75,12 @@ type (
 	UnreadSummaryRequest struct {
 		SelfID   uuid.UUID
 		DomainID int32
+	}
+
+	ThreadCountersRequest struct {
+		SelfID   uuid.UUID
+		DomainID int32
+		Kinds    []model.ThreadKind
 	}
 
 	ThreadMembersResponse struct {
@@ -128,6 +136,14 @@ type TakeOverFromBotRequest struct {
 	ThreadID           uuid.UUID
 	InitiatorContactID uuid.UUID
 	DomainID           int
+}
+
+type SetCRMContactRequest struct {
+	ThreadID           uuid.UUID
+	InitiatorContactID uuid.UUID
+	DomainID           int
+	// CRMContactID is the Webitel CRM contact id; empty clears the selection.
+	CRMContactID string
 }
 
 type TransferThreadRequest struct {

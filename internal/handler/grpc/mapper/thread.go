@@ -72,6 +72,8 @@ func (s *ThreadInConverter) ConvertSearch(in *impb.ThreadSearchRequest) (*dto.Th
 		ContactIDs:   members,
 		Participants: convertParticipants(in.GetParticipants()),
 		Tags:         in.GetTags(),
+		ExcludeTags:  in.GetExcludeTags(),
+		Unread:       in.GetUnread(),
 	}, nil
 }
 
@@ -103,6 +105,19 @@ func (s *ThreadInConverter) convertThreadKinds(kinds []impb.ThreadKind) []model.
 	}
 
 	return out
+}
+
+func (s *ThreadInConverter) ConvertCountersRequest(in *impb.GetCountersRequest) (*dto.ThreadCountersRequest, error) {
+	selfID, err := uuid.Parse(in.GetSelfId())
+	if err != nil {
+		return nil, errors.InvalidArgument("invalid self id", errors.WithCause(err), errors.WithID("mapper.convert_counters_request.self_id"))
+	}
+
+	return &dto.ThreadCountersRequest{
+		SelfID:   selfID,
+		DomainID: in.GetDomainId(),
+		Kinds:    s.convertThreadKinds(in.GetKinds()),
+	}, nil
 }
 
 func (s *ThreadInConverter) ConvertSearchLeft(in *impb.SearchLeftRequest) (*dto.SearchLeftRequest, error) {
@@ -287,19 +302,20 @@ func (s *ThreadOutConverter) ConvertToThread(source *model.Thread) *impb.Thread 
 	}
 
 	thread := &impb.Thread{
-		Id:          source.ID.String(),
-		DomainId:    int32(source.DomainID),
-		CreatedAt:   source.CreatedAtUnix(),
-		UpdatedAt:   source.UpdatedAtUnix(),
-		Kind:        impb.ThreadKind(source.Kind),
-		Subject:     source.Subject,
-		Description: source.Description,
-		Members:     s.convertThreadMembers(source.Members, source.BotControllerID),
-		LastMsg:     lastMsg,
-		Variables:   vars,
-		UnreadCount: int32(source.UnreadCount),
-		Tags:        s.convertThreadTags(source.Tags),
-		ReadStates:  convertMemberReadStates(source.ReadStates),
+		Id:           source.ID.String(),
+		DomainId:     int32(source.DomainID),
+		CreatedAt:    source.CreatedAtUnix(),
+		UpdatedAt:    source.UpdatedAtUnix(),
+		Kind:         impb.ThreadKind(source.Kind),
+		Subject:      source.Subject,
+		Description:  source.Description,
+		Members:      s.convertThreadMembers(source.Members, source.BotControllerID),
+		LastMsg:      lastMsg,
+		Variables:    vars,
+		UnreadCount:  int32(source.UnreadCount),
+		Tags:         s.convertThreadTags(source.Tags),
+		ReadStates:   convertMemberReadStates(source.ReadStates),
+		CrmContactId: source.CRMContactID,
 	}
 
 	if source.BotControllerID != nil {

@@ -66,6 +66,14 @@ func TestProjectEvent(t *testing.T) {
 			},
 		},
 		{
+			name:       "thread updated keeps only the actor",
+			eventType:  event.ThreadUpdatedEvent,
+			payload:    &event.ThreadUpdated{ThreadID: threadID, UpdatedBy: actor, CRMContactID: "42"},
+			wantOK:     true,
+			wantKind:   KindThreadUpdated,
+			wantFields: map[string]any{FieldActor: actor.String()},
+		},
+		{
 			name:       "member joined",
 			eventType:  event.MemberJoinedEvent,
 			payload:    &event.MemberJoined{ThreadID: threadID, ContactID: actor},
@@ -80,6 +88,14 @@ func TestProjectEvent(t *testing.T) {
 			wantOK:     true,
 			wantKind:   KindMemberChanged,
 			wantFields: map[string]any{FieldContactID: actor.String(), FieldActor: actor.String(), FieldAction: ActionLeft},
+		},
+		{
+			name:       "tags changed keeps only the owner",
+			eventType:  event.ThreadTagsChangedEvent,
+			payload:    event.NewThreadTagsChanged(threadID, actor, 1, []string{"snoozed"}),
+			wantOK:     true,
+			wantKind:   KindTagsChanged,
+			wantFields: map[string]any{FieldActor: actor.String()},
 		},
 		{
 			name:      "unknown events are not journaled",
@@ -124,6 +140,7 @@ func TestProjectEvent_EveryJournalEventProjects(t *testing.T) {
 		&event.MemberLeft{ThreadID: thread, ContactID: uuid.New()},
 		&event.ThreadCreated{ID: thread, Recipient: &event.Recipient{ID: uuid.New()}},
 		&event.MessageStatusChanged{ThreadID: thread, MemberID: uuid.New(), Status: event.StatusRead, UpToSeq: 4},
+		event.NewThreadTagsChanged(thread, uuid.New(), 1, nil),
 	}
 
 	for _, e := range events {

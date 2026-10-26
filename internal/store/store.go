@@ -119,6 +119,10 @@ type MessageStatusStore interface {
 	// unread messages and the total number of unread messages.
 	UnreadSummary(ctx context.Context, domainID int32, memberID uuid.UUID) (model.UnreadSummary, error)
 
+	// RecountUnread recomputes unread_count for the threads' active dialogs from
+	// their read horizons; called after deleting messages in the same transaction.
+	RecountUnread(ctx context.Context, threadIDs []uuid.UUID) error
+
 	// ReconcileUnread recomputes unread_count for every active dialog from the
 	// read horizon (optionally scoped to a domain). Drift safety net for a
 	// periodic job; returns the number of rows updated.
@@ -154,6 +158,10 @@ type ThreadStore interface {
 	// LockForUpdate row-locks the thread; writers lock thread -> thread_dialog
 	// in send order to prevent deadlock, and reads see all earlier commits.
 	LockForUpdate(ctx context.Context, threadID uuid.UUID) error
+	// SetCRMContact sets the selected CRM contact; an empty id clears it.
+	SetCRMContact(ctx context.Context, threadID uuid.UUID, crmContactID string) error
+	// Counters counts the member's active chats per folder, split by the snoozed tag.
+	Counters(ctx context.Context, q model.ThreadCountersQuery) (model.ThreadCounters, error)
 }
 
 type ThreadPermissionStore interface {
@@ -226,10 +234,23 @@ type BotControlStore interface {
 }
 
 type ThreadTagStore interface {
-	Add(ctx context.Context, tag *model.ThreadTag) (*model.ThreadTag, error)
+	// Add is idempotent: tagging a thread with a tag it already has returns the existing tag
+	// with inserted=false.
+	Add(ctx context.Context, tag *model.ThreadTag) (result *model.ThreadTag, inserted bool, err error)
 
 	// Remove is scoped by contactID as well as tagID, so a contact can only delete their own tags.
-	Remove(ctx context.Context, tagID, contactID uuid.UUID) error
+	// It returns the thread the tag was on.
+	Remove(ctx context.Context, tagID, contactID uuid.UUID) (uuid.UUID, error)
+
+	// RemoveByName deletes the contact's tag on the thread and reports whether it existed.
+	RemoveByName(ctx context.Context, threadID, contactID uuid.UUID, tag string) (bool, error)
+
+	// RemoveForContacts deletes the contacts' tags on the thread (only the given tags when tags
+	// is non-empty) and returns the contacts that lost at least one tag.
+	RemoveForContacts(ctx context.Context, threadID uuid.UUID, contactIDs []uuid.UUID, tags []string) ([]uuid.UUID, error)
+
+	// ListNames returns the contact's tags on the thread, oldest first.
+	ListNames(ctx context.Context, threadID, contactID uuid.UUID) ([]string, error)
 
 	ListForContact(ctx context.Context, contactID uuid.UUID, threadIDs []uuid.UUID) (map[uuid.UUID][]*model.ThreadTag, error)
 

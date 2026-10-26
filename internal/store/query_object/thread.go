@@ -66,6 +66,7 @@ func (q *threadQueryObject) DefaultFields() []string {
 	fields := []string{
 		"id", "domain_id", "created_at", "updated_at",
 		"kind", "owner", "subject", "description", "members", "bot_controller_id", "owner_bot_id",
+		"crm_contact_id",
 	}
 
 	// source and queue are per-caller/search-only; other callers (Get, bot control) keep the base set.
@@ -258,6 +259,13 @@ func (q *threadQueryObject) FieldsMetadata() map[string]fieldMetadata {
 			nullsLast:    true,
 			sortOnly:     true,
 		},
+		"crm_contact_id": {
+			sqlExpr:      "t.crm_contact_id",
+			aliasedExpr:  "t.crm_contact_id as crm_contact_id",
+			requiresJoin: 0,
+			sortable:     false,
+			filterExpr:   "t.crm_contact_id",
+		},
 	}
 }
 
@@ -441,6 +449,38 @@ func (q *threadQueryObject) WithTagsFilter(selfID uuid.UUID, tags ...string) *th
 		)`, threadAlias, ThreadTagTable),
 		selfID, tags, len(tags),
 	)
+
+	return q
+}
+
+// WithExcludeTagsFilter drops threads the selfID contact has tagged with any of the tags.
+// If selfID is Nil or tags is empty, the filter is silently ignored.
+func (q *threadQueryObject) WithExcludeTagsFilter(selfID uuid.UUID, tags ...string) *threadQueryObject {
+	if selfID == uuid.Nil || len(tags) == 0 {
+		return q
+	}
+
+	q.builder = q.builder.Where(
+		fmt.Sprintf(`NOT EXISTS (
+			SELECT 1 FROM %s
+			WHERE thread_id = %s.id AND contact_id = ? AND tag = ANY(?)
+		)`, ThreadTagTable, threadAlias),
+		selfID, tags,
+	)
+
+	return q
+}
+
+// WithUnreadFilter narrows results to threads where the selfID contact has at least one unread message.
+// If selfID is Nil or unread is false, the filter is silently ignored.
+func (q *threadQueryObject) WithUnreadFilter(selfID uuid.UUID, unread bool) *threadQueryObject {
+	if selfID == uuid.Nil || !unread {
+		return q
+	}
+
+	q.EnsureJoins(threadLinkThreadDialog)
+	q.builder = q.builder.Where(squirrel.Eq{threadThreadDialogAlias + ".member_id": selfID})
+	q.builder = q.builder.Where(squirrel.Gt{threadThreadDialogAlias + ".unread_count": 0})
 
 	return q
 }
