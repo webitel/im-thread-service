@@ -69,9 +69,11 @@ func (q *threadQueryObject) DefaultFields() []string {
 		"crm_contact_id",
 	}
 
-	// source and queue are per-caller/search-only; other callers (Get, bot control) keep the base set.
+	// source is part of every thread (the gateway resolves the thread channel from it);
+	// queue is per-caller and search-only, other callers (Get, bot control) do not get it by default.
+	fields = append(fields, "source")
 	if q.selfScoped {
-		fields = append(fields, "source", "queue")
+		fields = append(fields, "queue")
 	}
 
 	return fields
@@ -227,9 +229,11 @@ func (q *threadQueryObject) FieldsMetadata() map[string]fieldMetadata {
 			sortable:     false,
 			filterExpr:   "t.owner_bot_id",
 		},
+		// The gate id comes from thread_dialog.via, so source is returned even before the gate
+		// has a source_ref row; name/type are empty until then.
 		"source": {
-			sqlExpr:      threadSourceRefAlias + ".gate_id",
-			aliasedExpr:  "case when src.gate_id is null then null else jsonb_build_object('id', src.gate_id, 'name', src.name, 'type', src.type) end as source",
+			sqlExpr:      threadSourceViaAlias + ".gate_id",
+			aliasedExpr:  "case when srcv.gate_id is null then null else jsonb_build_object('id', srcv.gate_id, 'name', coalesce(src.name, ''), 'type', coalesce(src.type, '')) end as source",
 			requiresJoin: threadLinkSource,
 			sortable:     false,
 			filterExpr:   "",
