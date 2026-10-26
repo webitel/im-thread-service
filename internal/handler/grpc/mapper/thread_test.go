@@ -285,3 +285,15 @@ func TestConvertToThread_SourceAndQueue(t *testing.T) {
 	require.Nil(t, withoutFields.GetSource())
 	require.Nil(t, withoutFields.GetQueue())
 }
+
+func TestConvertThreadMembers_Via(t *testing.T) {
+	gate := uuid.NewString()
+	external := &model.ThreadDialog{ContactID: uuid.New(), Via: &gate}
+	internal := &model.ThreadDialog{ContactID: uuid.New()}
+
+	out := (&ThreadOutConverter{}).convertThreadMembers([]*model.ThreadDialog{external, internal}, nil)
+
+	require.Len(t, out, 2)
+	require.Equal(t, gate, out[0].GetVia())
+	require.Empty(t, out[1].GetVia())
+}
