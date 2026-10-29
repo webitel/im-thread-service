@@ -34,6 +34,9 @@ const (
 	threadLinkQueue
 )
 
+// sourceSelectExpr renders the source column; it needs the joins from sourceJoinClauses.
+const sourceSelectExpr = "case when srcv.gate_id is null then null else jsonb_build_object('id', srcv.gate_id, 'name', coalesce(src.name, ''), 'type', coalesce(src.type, '')) end as source"
+
 const variablesBuild = `
 	case when v.thread_id is null
 		then null
@@ -233,7 +236,7 @@ func (q *threadQueryObject) FieldsMetadata() map[string]fieldMetadata {
 		// has a source_ref row; name/type are empty until then.
 		"source": {
 			sqlExpr:      threadSourceViaAlias + ".gate_id",
-			aliasedExpr:  "case when srcv.gate_id is null then null else jsonb_build_object('id', srcv.gate_id, 'name', coalesce(src.name, ''), 'type', coalesce(src.type, '')) end as source",
+			aliasedExpr:  sourceSelectExpr,
 			requiresJoin: threadLinkSource,
 			sortable:     false,
 			filterExpr:   "",
@@ -717,8 +720,16 @@ func (q *threadQueryObject) linkSource() {
 
 	q.join |= threadLinkSource
 
+	viaLateral, refJoin := sourceJoinClauses(threadAlias)
+	q.builder = q.builder.LeftJoin(viaLateral).LeftJoin(refJoin)
+}
+
+// sourceJoinClauses returns the LEFT JOIN clauses that resolve a thread's
+// provider gate (alias srcv) and its display row (alias src). threadTableAlias
+// is the alias of im_thread.thread in the outer query.
+func sourceJoinClauses(threadTableAlias string) (viaLateral, refJoin string) {
 	// The first non-bot dialog row with a via carries the provider gate of the thread.
-	q.builder = q.builder.LeftJoin(fmt.Sprintf(`
+	viaLateral = fmt.Sprintf(`
 		lateral (
 			select sd.via as gate_id
 			from %[1]s sd
@@ -727,16 +738,18 @@ func (q *threadQueryObject) linkSource() {
 			order by (sd.deleted_at is not null), sd.created_at
 			limit 1
 		) %[3]s on true
-	`, ThreadDialogTable, threadAlias, threadSourceViaAlias))
+	`, ThreadDialogTable, threadTableAlias, threadSourceViaAlias)
 
-	q.builder = q.builder.LeftJoin(fmt.Sprintf(
+	refJoin = fmt.Sprintf(
 		"%s %s on %s.gate_id = %s.gate_id and %s.deleted = false",
 		SourceRefTable,
 		threadSourceRefAlias,
 		threadSourceRefAlias,
 		threadSourceViaAlias,
 		threadSourceRefAlias,
-	))
+	)
+
+	return viaLateral, refJoin
 }
 
 // queueScoped reports whether queue can be resolved for one caller.

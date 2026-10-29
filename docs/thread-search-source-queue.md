@@ -124,6 +124,13 @@ was regenerated from that local branch (`buf/`, `Makefile` unchanged).
   control); `queue` is appended only when the query is self-scoped (Search).
   Joins are added only when the fields or sort keys are requested or defaulted.
 - Sorting by `source_name` / `queue_name` uses `NULLS LAST` in both directions.
+- `SearchLeft` (`search_left.go`, left threads) returns the same `source` and
+  `queue` by default. The source lateral and `src` join come from the shared
+  `sourceJoinClauses` helper, so the SQL matches Search. `queue` is the queue
+  of that membership period's own row: the `membership_periods` CTE selects
+  `queue_id`, and `left join queue_ref qr … qr.queue_id = lm.queue_id` is used
+  instead of a `thread_dialog` join. Each item is one period, so each item gets
+  its own queue.
 
 ### gRPC mappers (`internal/handler/grpc/mapper`)
 

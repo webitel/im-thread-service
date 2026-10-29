@@ -12,6 +12,8 @@ import (
 const (
 	searchLeftLinkMembersLateral = 1 << iota
 	searchLeftLinkLastMessageLateral
+	searchLeftLinkSource
+	searchLeftLinkQueue
 )
 
 type searchLeftQueryObject struct {
@@ -31,7 +33,8 @@ func NewSearchLeftQueryObject(memberID uuid.UUID) *searchLeftQueryObject {
 				thread_id,
 				member_id,
 				created_at AS joined_at,
-				deleted_at AS left_at
+				deleted_at AS left_at,
+				queue_id
 			FROM %s
 			WHERE member_id = ?
 			  AND deleted_at IS NOT NULL
@@ -52,7 +55,7 @@ func (q *searchLeftQueryObject) DefaultFields() []string {
 	return []string{
 		"id", "domain_id", "created_at", "updated_at",
 		"kind", "owner", "subject", "description", "members", "last_msg",
-		"crm_contact_id",
+		"crm_contact_id", "source", "queue",
 	}
 }
 
@@ -115,6 +118,37 @@ func (q *searchLeftQueryObject) FieldsMetadata() map[string]fieldMetadata {
 			requiresJoin: searchLeftLinkLastMessageLateral,
 			sortable:     false,
 		},
+		"source": {
+			sqlExpr:      threadSourceViaAlias + ".gate_id",
+			aliasedExpr:  sourceSelectExpr,
+			requiresJoin: searchLeftLinkSource,
+			sortable:     false,
+		},
+		"source_name": {
+			sqlExpr:      threadSourceRefAlias + ".name",
+			aliasedExpr:  "",
+			requiresJoin: searchLeftLinkSource,
+			sortable:     true,
+			nullsLast:    true,
+			sortOnly:     true,
+		},
+		"queue": {
+			sqlExpr: threadQueueRefAlias + ".queue_id",
+			aliasedExpr: fmt.Sprintf(`
+				case when %[1]s.queue_id is null then null
+				else jsonb_build_object('id', %[1]s.queue_id, 'name', %[1]s.name) end as queue
+			`, threadQueueRefAlias),
+			requiresJoin: searchLeftLinkQueue,
+			sortable:     false,
+		},
+		"queue_name": {
+			sqlExpr:      threadQueueRefAlias + ".name",
+			aliasedExpr:  "",
+			requiresJoin: searchLeftLinkQueue,
+			sortable:     true,
+			nullsLast:    true,
+			sortOnly:     true,
+		},
 	}
 }
 
@@ -125,6 +159,14 @@ func (q *searchLeftQueryObject) EnsureJoins(requiredJoin int) {
 
 	if requiredJoin&searchLeftLinkLastMessageLateral != 0 {
 		q.linkLastMessageLateral()
+	}
+
+	if requiredJoin&searchLeftLinkSource != 0 {
+		q.linkSource()
+	}
+
+	if requiredJoin&searchLeftLinkQueue != 0 {
+		q.linkQueue()
 	}
 }
 
@@ -231,4 +273,33 @@ func (q *searchLeftQueryObject) linkLastMessageLateral() {
 			limit 1
 		) msg on true
 	`)
+}
+
+func (q *searchLeftQueryObject) linkSource() {
+	if q.join&searchLeftLinkSource != 0 {
+		return
+	}
+
+	q.join |= searchLeftLinkSource
+	viaLateral, refJoin := sourceJoinClauses(threadAlias)
+	q.builder = q.builder.LeftJoin(viaLateral).LeftJoin(refJoin)
+}
+
+func (q *searchLeftQueryObject) linkQueue() {
+	if q.join&searchLeftLinkQueue != 0 {
+		return
+	}
+
+	q.join |= searchLeftLinkQueue
+	// The queue is the one the member received this membership period through (lm.queue_id).
+	// The (domain_id, queue_id) PK join keeps at most one row.
+	q.builder = q.builder.LeftJoin(fmt.Sprintf(
+		"%s %s on %s.domain_id = %s.domain_id and %s.queue_id = lm.queue_id and %s.deleted = false",
+		QueueRefTable,
+		threadQueueRefAlias,
+		threadQueueRefAlias,
+		threadAlias,
+		threadQueueRefAlias,
+		threadQueueRefAlias,
+	))
 }
