@@ -278,6 +278,10 @@ func (t *ThreadManagementService) AddMember(ctx context.Context, req *dto.AddMem
 		}
 
 		if req.IsBot {
+			if err = t.adoptUntrackedBot(ctx, uow, req.ThreadID, newMember.ID); err != nil {
+				return err
+			}
+
 			t.log().DebugContext(ctx, "bot member added: pushing bot control stack",
 				"thread_id", req.ThreadID,
 				"member_id", newMember.ID,
@@ -410,6 +414,10 @@ func (t *ThreadManagementService) Transfer(ctx context.Context, req *dto.Transfe
 		}
 
 		if req.TargetIsBot {
+			if err = t.adoptUntrackedBot(ctx, uow, req.ThreadID, newMember.ID); err != nil {
+				return err
+			}
+
 			t.log().DebugContext(ctx, "transfer: target is bot, pushing bot control stack",
 				"thread_id", req.ThreadID,
 				"member_id", newMember.ID,
@@ -1216,6 +1224,39 @@ func (t *ThreadManagementService) EnsureDirectThread(ctx context.Context, req *d
 	}
 
 	return thread, nil
+}
+
+// adoptUntrackedBot runs before a bot is pushed onto the bot control stack. A thread can
+// hold a bot member stored as a regular one (thread_dialog.is_bot=false, e.g. threads
+// written straight to the database), which bot control never sees: the pushed bot would
+// become the permanent owner while that bot keeps receiving customer messages. When the
+// stack is empty, such a member (a bot by its contact) is marked as a bot and pushed
+// first, so the incoming bot suspends it and hands control back to it on completion.
+func (t *ThreadManagementService) adoptUntrackedBot(ctx context.Context, uow store.UnitOfWork, threadID, newMemberID uuid.UUID) error {
+	adoptedID, err := uow.ThreadDialogStore().AdoptUntrackedBot(ctx, threadID, newMemberID)
+	if err != nil {
+		return err
+	}
+
+	if adoptedID == uuid.Nil {
+		return nil
+	}
+
+	if _, err = uow.BotControl().Push(ctx, model.BotControlTransition{
+		ThreadID:    threadID,
+		NewMemberID: adoptedID,
+		Reason:      model.BotControlReasonInitial,
+	}); err != nil {
+		return errors.Internal("failed to push adopted bot", errors.WithCause(err))
+	}
+
+	t.log().InfoContext(ctx, "adopted untracked bot member as thread owner before push",
+		"thread_id", threadID,
+		"member_id", adoptedID,
+		"incoming_member_id", newMemberID,
+	)
+
+	return nil
 }
 
 // ensureBotControl initializes bot control for an existing thread that has none.

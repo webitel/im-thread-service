@@ -23,6 +23,8 @@ type fakeBotControlStore struct {
 	clearedMemberID *uuid.UUID // returned by ClearController
 
 	lastPushTransition model.BotControlTransition
+	pushTransitions    []model.BotControlTransition
+	memberContacts     map[uuid.UUID]uuid.UUID
 	lastPopMemberID    uuid.UUID
 	lastPopReason      model.BotControlReason
 	popCalls           int
@@ -34,10 +36,17 @@ type fakeBotControlStore struct {
 }
 
 func (f *fakeBotControlStore) Push(_ context.Context, transition model.BotControlTransition) (*model.BotControlPushResult, error) {
+	prev := f.prevEntry
+	if prev == nil && len(f.pushTransitions) > 0 {
+		top := f.pushTransitions[len(f.pushTransitions)-1].NewMemberID
+		prev = &model.BotControlStackEntry{ThreadID: transition.ThreadID, MemberID: &top, ContactID: f.memberContacts[top], Position: len(f.pushTransitions) - 1}
+	}
+
 	f.pushCalls++
 	f.lastPushTransition = transition
+	f.pushTransitions = append(f.pushTransitions, transition)
 
-	return &model.BotControlPushResult{Prev: f.prevEntry}, nil
+	return &model.BotControlPushResult{Prev: prev}, nil
 }
 
 func (f *fakeBotControlStore) Pop(_ context.Context, _, memberID uuid.UUID, reason model.BotControlReason, _ *uuid.UUID) (*model.BotControlStackEntry, error) {
