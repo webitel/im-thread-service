@@ -335,6 +335,16 @@ type fakeThreadDialogStore struct {
 	lastCreate      *model.ThreadDialogExtended
 	quickViewResult []*model.ThreadDialog
 	quickViewCalls  int
+	adoptResult     uuid.UUID
+	adoptCalls      int
+	adoptNewMember  uuid.UUID
+}
+
+func (f *fakeThreadDialogStore) AdoptUntrackedBot(ctx context.Context, threadID, newMemberID uuid.UUID) (uuid.UUID, error) {
+	f.adoptCalls++
+	f.adoptNewMember = newMemberID
+
+	return f.adoptResult, nil
 }
 
 func (f *fakeThreadDialogStore) Create(ctx context.Context, threadDialog *model.ThreadDialogExtended) (*model.ThreadDialogExtended, error) {
