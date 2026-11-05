@@ -210,6 +210,53 @@ func (t *threadDialogStore) Delete(ctx context.Context, memberID uuid.UUID, leav
 	return nil
 }
 
+func (t *threadDialogStore) AdoptUntrackedBot(ctx context.Context, threadID, newMemberID uuid.UUID) (uuid.UUID, error) {
+	if threadID == uuid.Nil {
+		return uuid.Nil, errors.New("threadID cannot be nil")
+	}
+
+	query := `WITH tracked AS (
+			SELECT 1
+			FROM im_thread.bot_control_stack
+			WHERE thread_id = @ThreadID
+			LIMIT 1
+		),
+		candidate AS (
+			SELECT d.id
+			FROM im_thread.thread_dialog d
+			JOIN im_contact.contact c ON c.id = d.member_id
+			WHERE d.thread_id = @ThreadID
+			  AND d.id <> @NewMemberID
+			  AND d.deleted_at IS NULL
+			  AND NOT d.is_bot
+			  AND c.is_bot
+			  AND NOT EXISTS (SELECT 1 FROM tracked)
+			ORDER BY d.created_at, d.id
+			LIMIT 1
+		)
+		UPDATE im_thread.thread_dialog d
+		SET is_bot = true, updated_at = NOW()
+		FROM candidate
+		WHERE d.id = candidate.id
+		RETURNING d.id`
+
+	var adopted uuid.UUID
+
+	err := t.db.QueryRow(ctx, query, pgx.NamedArgs{
+		"ThreadID":    threadID,
+		"NewMemberID": newMemberID,
+	}).Scan(&adopted)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return uuid.Nil, nil
+		}
+
+		return uuid.Nil, errors.Internal("adopting untracked bot", errors.WithCause(err), errors.WithID("thread_dialog_store.adopt_untracked_bot"))
+	}
+
+	return adopted, nil
+}
+
 func (t *threadDialogStore) GetQuickView(ctx context.Context, filter *model.ThreadDialogStoreFilter) ([]*model.ThreadDialog, error) {
 	if filter == nil {
 		return nil, errors.New("filter cannot be nil")
