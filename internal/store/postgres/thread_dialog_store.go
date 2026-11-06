@@ -84,7 +84,7 @@ func (t *threadDialogStore) Create(ctx context.Context, member *model.ThreadDial
 		)
 
 		SELECT dial.id, dial.domain_id, dial.created_at, dial.updated_at, dial.invited_by, dial.leave_reason, dial.member_id, dial.thread_id, dial.thread_role,
-		dial.is_bot, dial.auto_leave,
+		dial.via, dial.is_bot, dial.auto_leave,
 		perm.can_send_messages, perm.can_add_members, perm.can_change_members_permissions, perm.can_remove_members, perm.can_change_thread_info,
 		sett.title
 		FROM inserted_dialog dial
