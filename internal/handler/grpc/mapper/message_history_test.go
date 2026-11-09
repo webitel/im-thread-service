@@ -97,3 +97,28 @@ func TestMapSearchMessageHistoryRequest2HistoryMessageInputDTO_SystemMessageAllo
 		t.Fatalf("expected empty allow-list, got %#v", blockAll.SystemMessageAllowListTypes)
 	}
 }
+
+func TestMapSearchMessageHistoryRequest_SystemCall(t *testing.T) {
+	t.Parallel()
+
+	systemCall := true
+
+	tests := []struct {
+		name string
+		in   *impb.SearchMessageHistoryRequest
+		want bool
+	}{
+		{name: "unset", in: &impb.SearchMessageHistoryRequest{}, want: false},
+		{name: "set", in: &impb.SearchMessageHistoryRequest{SystemCall: &systemCall}, want: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			if got := MapSearchMessageHistoryRequest2HistoryMessageInputDTO(tt.in).SystemCall; got != tt.want {
+				t.Fatalf("SystemCall = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
