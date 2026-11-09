@@ -65,6 +65,7 @@ func (s *ThreadInConverter) ConvertSearch(in *impb.ThreadSearchRequest) (*dto.Th
 		SelfID:       selfID,
 		ContactIDs:   members,
 		Participants: convertParticipants(in.GetParticipants()),
+		SystemCall:   in.GetSystemCall(),
 	}, nil
 }
 

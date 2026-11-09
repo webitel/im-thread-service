@@ -134,8 +134,10 @@ func (f *fakeThreadStore) ResolveThread(ctx context.Context, q model.ResolveThre
 	panic("unimplemented")
 }
 
-func (f *fakeThreadStore) Search(ctx context.Context, query queryobject.QueryObject) ([]*model.Thread, error) {
-	panic("unimplemented")
+func (f *fakeThreadStore) Search(_ context.Context, query queryobject.QueryObject) ([]*model.Thread, error) {
+	f.lastQueryObject = query
+
+	return nil, nil
 }
 
 func (f *fakeThreadStore) SearchLeft(ctx context.Context, query queryobject.QueryObject) ([]*model.Thread, error) {

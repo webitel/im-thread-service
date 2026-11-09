@@ -289,6 +289,20 @@ func (q *threadQueryObject) WithSharedMembersFilter(selfID uuid.UUID, memberIDs 
 		return q
 	}
 
+	return q.withAllMembers(memberIDs)
+}
+
+// WithAllMembersFilter narrows results to threads where every contact in memberIDs is an active member,
+// regardless of the caller's own membership. Ignored when memberIDs is empty.
+func (q *threadQueryObject) WithAllMembersFilter(memberIDs ...uuid.UUID) *threadQueryObject {
+	if len(memberIDs) == 0 {
+		return q
+	}
+
+	return q.withAllMembers(memberIDs)
+}
+
+func (q *threadQueryObject) withAllMembers(memberIDs []uuid.UUID) *threadQueryObject {
 	placeholders := make([]string, len(memberIDs))
 
 	args := make([]any, 0, len(memberIDs)+1)
@@ -322,6 +336,23 @@ func (q *threadQueryObject) WithParticipantsFilter(selfID uuid.UUID, domainIDs [
 	q.EnsureJoins(threadLinkThreadDialog)
 	q.mustIncludeComputedSubject = true
 
+	q.builder = q.builder.Where(squirrel.Eq{threadThreadDialogAlias + ".member_id": selfID})
+	q.builder = q.builder.Where(squirrel.Eq{threadThreadDialogAlias + ".deleted_at": nil})
+
+	return q.withAllParticipants(domainIDs, participants)
+}
+
+// WithAllParticipantsFilter narrows results to threads where every (iss, sub) participant is an active
+// member, regardless of the caller's own membership. Ignored when participants is empty.
+func (q *threadQueryObject) WithAllParticipantsFilter(domainIDs []int, participants ...dto.ContactIdentity) *threadQueryObject {
+	if len(participants) == 0 {
+		return q
+	}
+
+	return q.withAllParticipants(domainIDs, participants)
+}
+
+func (q *threadQueryObject) withAllParticipants(domainIDs []int, participants []dto.ContactIdentity) *threadQueryObject {
 	prefixArgs := make([]any, 0, len(domainIDs)+2*len(participants))
 
 	domainPlaceholders := make([]string, len(domainIDs))
@@ -350,9 +381,6 @@ func (q *threadQueryObject) WithParticipantsFilter(selfID uuid.UUID, domainIDs [
 
 	q.builder = q.builder.Prefix(cte, prefixArgs...)
 
-	q.builder = q.builder.Where(squirrel.Eq{threadThreadDialogAlias + ".member_id": selfID})
-	q.builder = q.builder.Where(squirrel.Eq{threadThreadDialogAlias + ".deleted_at": nil})
-
 	q.builder = q.builder.Where(fmt.Sprintf(`%s.id IN (
 		SELECT td2.thread_id FROM %s td2
 		WHERE td2.member_id IN (SELECT id FROM participant_contacts)
@@ -360,6 +388,22 @@ func (q *threadQueryObject) WithParticipantsFilter(selfID uuid.UUID, domainIDs [
 		GROUP BY td2.thread_id
 		HAVING COUNT(DISTINCT td2.member_id) = (SELECT COUNT(*) FROM participant_contacts)
 	)`, threadAlias, ThreadDialogTable))
+
+	return q
+}
+
+// WithAnyDialogScope binds the thread_dialog join to a single active dialog per thread, so a search
+// that is not limited to the caller's own membership returns each thread once. The bot's dialog is
+// preferred, making a direct thread's computed subject the customer's name.
+func (q *threadQueryObject) WithAnyDialogScope() *threadQueryObject {
+	q.EnsureJoins(threadLinkThreadDialog)
+	q.builder = q.builder.Where(fmt.Sprintf(`%[1]s.id = (
+		SELECT d.id FROM %[2]s d
+		WHERE d.thread_id = %[3]s.id
+		  AND d.deleted_at IS NULL
+		ORDER BY d.is_bot DESC, d.created_at, d.id
+		LIMIT 1
+	)`, threadThreadDialogAlias, ThreadDialogTable, threadAlias))
 
 	return q
 }

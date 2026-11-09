@@ -47,6 +47,7 @@ type (
 		SelfID       uuid.UUID
 		ContactIDs   uuid.UUIDs
 		Participants []ContactIdentity
+		SystemCall   bool
 		Size         int
 		Sort         string
 		Page         int
