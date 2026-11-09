@@ -51,6 +51,7 @@ type (
 		Tags         []string
 		ExcludeTags  []string
 		Unread       bool
+		SystemCall   bool
 		Size         int
 		Sort         string
 		Page         int

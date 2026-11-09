@@ -137,6 +137,10 @@ func (t *ThreadManagementService) Search(ctx context.Context, searchRequest *dto
 		return nil, errors.InvalidArgument("self_id is required", errors.WithID("service.thread_manager.search"))
 	}
 
+	if searchRequest.SystemCall && len(searchRequest.DomainIDs) == 0 {
+		return nil, errors.InvalidArgument("domain is required", errors.WithID("service.thread_manager.search"))
+	}
+
 	query := queryobject.NewThreadQueryObject().
 		WithSubject().
 		WithFields(searchRequest.Fields).
@@ -153,15 +157,21 @@ func (t *ThreadManagementService) Search(ctx context.Context, searchRequest *dto
 		WithExcludeTagsFilter(searchRequest.SelfID, searchRequest.ExcludeTags...).
 		WithUnreadFilter(searchRequest.SelfID, searchRequest.Unread)
 
-	switch {
-	case len(searchRequest.ContactIDs) > 0:
-		query = query.WithSharedMembersFilter(searchRequest.SelfID, searchRequest.ContactIDs...)
-	case len(searchRequest.Participants) == 0:
-		query = query.WithContactIDFilter(searchRequest.SelfID)
-	}
+	if searchRequest.SystemCall {
+		query = query.WithAnyDialogScope().
+			WithAllMembersFilter(searchRequest.ContactIDs...).
+			WithAllParticipantsFilter(searchRequest.DomainIDs, searchRequest.Participants...)
+	} else {
+		switch {
+		case len(searchRequest.ContactIDs) > 0:
+			query = query.WithSharedMembersFilter(searchRequest.SelfID, searchRequest.ContactIDs...)
+		case len(searchRequest.Participants) == 0:
+			query = query.WithContactIDFilter(searchRequest.SelfID)
+		}
 
-	if len(searchRequest.Participants) > 0 {
-		query = query.WithParticipantsFilter(searchRequest.SelfID, searchRequest.DomainIDs, searchRequest.Participants...)
+		if len(searchRequest.Participants) > 0 {
+			query = query.WithParticipantsFilter(searchRequest.SelfID, searchRequest.DomainIDs, searchRequest.Participants...)
+		}
 	}
 
 	threads, err := t.uow.ThreadStore().Search(ctx, query)
