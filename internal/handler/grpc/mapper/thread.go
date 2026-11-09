@@ -74,6 +74,7 @@ func (s *ThreadInConverter) ConvertSearch(in *impb.ThreadSearchRequest) (*dto.Th
 		Tags:         in.GetTags(),
 		ExcludeTags:  in.GetExcludeTags(),
 		Unread:       in.GetUnread(),
+		SystemCall:   in.GetSystemCall(),
 	}, nil
 }
 
