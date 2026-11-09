@@ -84,6 +84,7 @@ func TestMessageHistoryService_Search_Access(t *testing.T) {
 
 			require.NoError(t, err)
 			require.Contains(t, store.sql, "domain_id")
+
 			if tt.wantCallerACL {
 				require.Contains(t, store.sql, "from im_thread.thread_dialog acl")
 			} else {
