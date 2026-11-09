@@ -25,6 +25,20 @@ func NewMessageHistory(messageHistoryStore store.MessageHistory) *MessageHistory
 }
 
 func (s *MessageHistoryService) Search(ctx context.Context, hmiDTO *dto.HistoryMessageInputDTO) (model.MessageSlice, queryobject.PageInfo[queryobject.MessageHistoryCursor], error) {
+	var empty queryobject.PageInfo[queryobject.MessageHistoryCursor]
+
+	if hmiDTO == nil {
+		return nil, empty, errors.InvalidArgument("search request is required", errors.WithID("service.message_history.search"))
+	}
+
+	if hmiDTO.SystemCall && hmiDTO.DomainID <= 0 {
+		return nil, empty, errors.InvalidArgument("domain is required", errors.WithID("service.message_history.search"))
+	}
+
+	if !hmiDTO.SystemCall && hmiDTO.CallerID == uuid.Nil {
+		return nil, empty, errors.InvalidArgument("caller identity is required", errors.WithID("service.message_history.search"))
+	}
+
 	query := queryobject.NewMessageHistoryQuery().
 		WithFields(hmiDTO.Fields).
 		WithCursor(hmiDTO.Cursor).
@@ -32,10 +46,13 @@ func (s *MessageHistoryService) Search(ctx context.Context, hmiDTO *dto.HistoryM
 		WithIDsFilter(hmiDTO.IDs...).
 		WithSenderIDsFilter(hmiDTO.SenderIDs...).
 		WithThreadIDsFilter(hmiDTO.ThreadIDs...).
-		WithCallerLimitation(hmiDTO.CallerID, hmiDTO.ThreadIDs).
 		WithLimit(hmiDTO.Size).
 		WithTypeFilter(hmiDTO.Types...).
 		WithSystemMessageAllowList(hmiDTO.SystemMessageAllowListTypes)
+
+	if !hmiDTO.SystemCall {
+		query = query.WithCallerLimitation(hmiDTO.CallerID, hmiDTO.ThreadIDs)
+	}
 
 	historyMessages, err := s.messageHistoryStore.Search(ctx, query)
 	if err != nil {

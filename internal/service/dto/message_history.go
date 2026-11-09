@@ -60,6 +60,8 @@ type (
 		Sort      string
 		Size      int
 		CallerID  uuid.UUID
+		// SystemCall skips the thread membership check; DomainID is then required.
+		SystemCall bool
 		// SystemMessageAllowListTypes: nil = not restricted (no-op); non-nil
 		// empty = block all system messages; non-nil non-empty = allow only
 		// those Message.System.Type subtypes. Deliberately a single nilable
