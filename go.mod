@@ -135,6 +135,6 @@ require (
 require (
 	github.com/forPelevin/gomoji v1.4.1
 	github.com/redis/go-redis/v9 v9.18.0
-	github.com/webitel/webitel-go-kit/appconfig v0.0.0-20260623172444-1a81b7322f37
+	github.com/webitel/webitel-go-kit/appconfig v0.1.1-0.20261110114623-1cd41cd688ca
 	github.com/webitel/webitel-go-kit/pkg/cache v0.0.0-20260706110827-c434ee012806
 )
