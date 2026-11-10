@@ -284,6 +284,8 @@ github.com/webitel/storage v0.0.0-20260625115836-a6cac81e0a4c h1:qaSNx6sxE5neRt6
 github.com/webitel/storage v0.0.0-20260625115836-a6cac81e0a4c/go.mod h1:YunGFFpZ7oVj/+M3CLmR3XMx3ENJE+MI9vZvi9JPyic=
 github.com/webitel/webitel-go-kit/appconfig v0.0.0-20260623172444-1a81b7322f37 h1:4XoMQ53MxxCXqHOJY08gi/DanMiXwWooCLz+nToUVBk=
 github.com/webitel/webitel-go-kit/appconfig v0.0.0-20260623172444-1a81b7322f37/go.mod h1:NUsijzMO1zB681559ejZHIcnAkeG7suicCgOiukaNMg=
+github.com/webitel/webitel-go-kit/appconfig v0.1.1-0.20261110114623-1cd41cd688ca h1:MVqYOcDixhZ4iZlR2Qak3ZqmCfEhca6qu2vSIjGLydc=
+github.com/webitel/webitel-go-kit/appconfig v0.1.1-0.20261110114623-1cd41cd688ca/go.mod h1:NUsijzMO1zB681559ejZHIcnAkeG7suicCgOiukaNMg=
 github.com/webitel/webitel-go-kit/infra/discovery v0.0.0-20261001011034-d631118fa669 h1:UxH1KJ6M3/gwNx94X/A2yv9wInKF2vmmXyHu7cWQCYc=
 github.com/webitel/webitel-go-kit/infra/discovery v0.0.0-20261001011034-d631118fa669/go.mod h1:IhUZHd7EYD1pCoX9dNNlkpF+/c3Q6ODgBcluGDMbJrU=
 github.com/webitel/webitel-go-kit/infra/health v0.2.0 h1:aIhAz9LCp42neoeiwq7sR56QvuUCnRudlgvwszzg9qo=
