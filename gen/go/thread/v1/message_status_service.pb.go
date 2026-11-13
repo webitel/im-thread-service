@@ -349,7 +349,7 @@ type FailureReceipt struct {
 	// Confirmation source: ws|push|provider|bot.
 	Via      string `protobuf:"bytes,5,opt,name=via,proto3" json:"via,omitempty"`
 	DomainId int32  `protobuf:"varint,6,opt,name=domain_id,json=domainId,proto3" json:"domain_id,omitempty"`
-	// Provider/channel error code (e.g. HTTP status, provider error code).
+	// Normalized error code; see DeliveryError for the allowed values.
 	ErrorCode string `protobuf:"bytes,7,opt,name=error_code,json=errorCode,proto3" json:"error_code,omitempty"`
 	// Human-readable error detail from the provider.
 	ErrorMessage string `protobuf:"bytes,8,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`

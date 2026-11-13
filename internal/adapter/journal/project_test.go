@@ -3,6 +3,7 @@ package journal
 import (
 	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -21,7 +22,7 @@ func mustJSON(t *testing.T, v any) []byte {
 }
 
 func TestProjectEvent(t *testing.T) {
-	msgID, threadID, actor := uuid.New(), uuid.New(), uuid.New()
+	msgID, threadID, actor, replacement := uuid.New(), uuid.New(), uuid.New(), uuid.New()
 
 	tests := []struct {
 		name       string
@@ -54,6 +55,20 @@ func TestProjectEvent(t *testing.T) {
 			wantOK:     true,
 			wantKind:   KindMessageDeleted,
 			wantFields: map[string]any{FieldMsgID: msgID.String(), FieldActor: actor.String()},
+		},
+		{
+			name:      "message replaced by its retry keeps the replacement and when",
+			eventType: event.MessageDeletedEvent,
+			payload: &event.MessageDeleted{
+				MessageID: msgID, ThreadID: threadID, ReplacedBy: &replacement, OccurredAt: time.UnixMilli(1700000000123),
+				DeletedBy: &event.Member{Contact: &event.MemberContact{ID: actor.String()}},
+			},
+			wantOK:   true,
+			wantKind: KindMessageDeleted,
+			wantFields: map[string]any{
+				FieldMsgID: msgID.String(), FieldActor: actor.String(),
+				FieldReplacedBy: replacement.String(), FieldDeletedAt: "1700000000123",
+			},
 		},
 		{
 			name:      "message reaction keeps the delta",

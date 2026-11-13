@@ -42,12 +42,46 @@ func (t MessageType) String() string {
 	return "text"
 }
 
+// Retryable reports whether a failed message of this type can be re-sent with
+// retry_of: only the Send* calls that accept it (text, document, location,
+// contact) can replace a failed message.
+func (t MessageType) Retryable() bool {
+	switch t {
+	case MessageTypeText, MessageTypeFile, MessageTypeLocation, MessageTypeContact:
+		return true
+	case MessageTypeUnknown, MessageTypeImage, MessageTypeSystem, MessageTypeInteractive:
+		return false
+	default:
+		return false
+	}
+}
+
+// RetryTarget is the current state of the message a Send* retry_of points at.
+type RetryTarget struct {
+	ID       uuid.UUID `db:"id"`
+	ThreadID uuid.UUID `db:"thread_id"`
+	// AuthorID is the real author: origin_sender for a send_as message, sender_id otherwise.
+	AuthorID uuid.UUID `db:"author_id"`
+	Deleted  bool      `db:"deleted"`
+	// Failed: a retryable message that failed for at least one recipient.
+	Failed bool `db:"failed"`
+
+	// RetriedBy is the message that already replaced this one, with its real
+	// author and thread; nil while it was not retried.
+	RetriedBy       *uuid.UUID `db:"retried_by"`
+	RetriedByAuthor *uuid.UUID `db:"retried_by_author"`
+	RetriedByThread *uuid.UUID `db:"retried_by_thread"`
+}
+
 type Message struct {
 	ID             uuid.UUID `json:"id" db:"id"`
 	SendAs         *uuid.UUID
 	IdempotencyKey string `json:"idempotency_key" db:"-"`
 
 	ExternalID string `json:"external_id,omitempty" db:"-"`
+
+	// RetryOf is the sender's failed message this one replaces (Send* retry_of).
+	RetryOf *uuid.UUID `json:"retry_of,omitempty" db:"-"`
 
 	ReplyToExternalID string          `json:"reply_to_external_id,omitempty" db:"-"`
 	ThreadID          uuid.UUID       `json:"thread_id" db:"thread_id"`
@@ -473,6 +507,16 @@ func (m *Message) WithEditedEvent(ctx context.Context) *Message {
 }
 
 func (m *Message) WithDeletedEvent(ctx context.Context, deleter *ContactIdentity) *Message {
+	return m.addDeletedEvent(ctx, deleter, nil)
+}
+
+// WithReplacedEvent announces the message deleted because replacementID, its
+// retry, took its place.
+func (m *Message) WithReplacedEvent(ctx context.Context, retrier *ContactIdentity, replacementID uuid.UUID) *Message {
+	return m.addDeletedEvent(ctx, retrier, &replacementID)
+}
+
+func (m *Message) addDeletedEvent(ctx context.Context, deleter *ContactIdentity, replacedBy *uuid.UUID) *Message {
 	if m == nil {
 		return m
 	}
@@ -486,6 +530,7 @@ func (m *Message) WithDeletedEvent(ctx context.Context, deleter *ContactIdentity
 		Type:       m.Type.String(),
 		CreatedAt:  m.CreatedAt,
 		OccurredAt: m.DeletedAtOrNow(),
+		ReplacedBy: replacedBy,
 	}
 
 	WithContextPropogatedMetadata(ctx, &e)

@@ -228,7 +228,13 @@ func mapDeliveryFailures(in []*model.DeliveryFailure) []*impb.DeliveryFailure {
 	for _, f := range in {
 		out = append(out, &impb.DeliveryFailure{
 			MemberId: f.MemberID.String(),
-			Error:    &impb.DeliveryError{Code: f.Code, Message: f.Message},
+			// Rows written before failures were sanitized may still hold raw
+			// provider codes and unredacted text; clients only know the
+			// normalized codes.
+			Error: &impb.DeliveryError{
+				Code:    model.NormalizeDeliveryErrorCode(f.Code),
+				Message: model.RedactSecrets(f.Message),
+			},
 		})
 	}
 

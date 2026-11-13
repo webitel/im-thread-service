@@ -50,8 +50,8 @@ func TestMapHistoryMessage_Failures(t *testing.T) {
 
 			if tt.want > 0 {
 				assert.Equal(t, member.String(), got[0].GetMemberId())
-				assert.Equal(t, "403", got[0].GetError().GetCode())
-				assert.Equal(t, "Forbidden: bot was blocked by the user", got[0].GetError().GetMessage())
+				assert.Equal(t, model.DeliveryErrorSendFailed, got[0].GetError().GetCode(), "a legacy raw code comes out normalized")
+				assert.Equal(t, "Forbidden: bot was blocked by the user", got[0].GetError().GetMessage(), "the raw text is kept")
 			}
 		})
 	}
@@ -70,6 +70,23 @@ func TestConvertToThread_LastMessageFailures(t *testing.T) {
 	got := new(ThreadOutConverter).ConvertToThread(&model.Thread{ID: uuid.New(), LastMessage: &last}).GetLastMsg().GetFailures()
 	require.Len(t, got, 1)
 	assert.Equal(t, member.String(), got[0].GetMemberId())
-	assert.Equal(t, "403", got[0].GetError().GetCode())
+	assert.Equal(t, model.DeliveryErrorSendFailed, got[0].GetError().GetCode(), "a legacy raw code comes out normalized")
 	assert.Equal(t, "blocked", got[0].GetError().GetMessage())
+}
+
+func TestMapDeliveryFailures_SanitizesLegacyRows(t *testing.T) {
+	t.Parallel()
+
+	member := uuid.New()
+
+	got := mapDeliveryFailures([]*model.DeliveryFailure{
+		{MemberID: member, Code: model.DeliveryErrorFileTooLarge, Message: "too big"},
+		{MemberID: member, Code: "131047", Message: `Post "https://api.telegram.org/bot1234567:test-token-legacy/sendMessage": EOF`},
+	})
+	require.Len(t, got, 2)
+
+	assert.Equal(t, model.DeliveryErrorFileTooLarge, got[0].GetError().GetCode())
+	assert.Equal(t, "too big", got[0].GetError().GetMessage())
+	assert.Equal(t, model.DeliveryErrorSendFailed, got[1].GetError().GetCode())
+	assert.Equal(t, `Post "https://api.telegram.org/bot[REDACTED]/sendMessage": EOF`, got[1].GetError().GetMessage())
 }

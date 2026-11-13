@@ -3,6 +3,7 @@ package grpc
 import (
 	"context"
 	stderrors "errors"
+	"strconv"
 
 	"github.com/google/uuid"
 
@@ -203,6 +204,7 @@ func (s *UpdatesServer) threadUpdates(ctx context.Context, caller updatesCaller,
 	}
 
 	entry.Members = mergeMembers(members, entry.GetMembers())
+	resolveDeleters(entry)
 
 	return entry, len(events), nil
 }
@@ -260,15 +262,19 @@ func (s *UpdatesServer) applyDiff(ctx context.Context, caller updatesCaller, ent
 		return err
 	}
 
+	replaced := replacedMessages(events)
+
 	for _, m := range messages {
 		if m.GetDeleted() {
 			entry.DeletedMessageIds = append(entry.DeletedMessageIds, m.GetId())
 			entry.DeletedMessages = append(entry.DeletedMessages, &impb.DeletedMessage{
-				Id:        m.GetId(),
-				DeletedAt: m.GetDeletedAt(),
-				DeletedBy: m.GetDeletedBy(),
+				Id:         m.GetId(),
+				DeletedAt:  m.GetDeletedAt(),
+				DeletedBy:  m.GetDeletedBy(),
+				ReplacedBy: replaced[m.GetId()].GetReplacedBy(),
 			})
 			referenced[m.GetDeletedBy().GetContactId()] = struct{}{}
+			delete(replaced, m.GetId())
 
 			continue
 		}
@@ -279,6 +285,20 @@ func (s *UpdatesServer) applyDiff(ctx context.Context, caller updatesCaller, ent
 		for _, f := range m.GetFailures() {
 			referenced[f.GetMemberId()] = struct{}{}
 		}
+	}
+
+	// History hides a failed send replaced by its retry, so its deletion comes
+	// from the journal entry alone, in journal order.
+	for _, e := range events {
+		d, ok := replaced[e.Fields[journal.FieldMsgID]]
+		if !ok {
+			continue
+		}
+
+		delete(replaced, d.GetId())
+		entry.DeletedMessageIds = append(entry.DeletedMessageIds, d.GetId())
+		entry.DeletedMessages = append(entry.DeletedMessages, d)
+		referenced[d.GetDeletedBy().GetContactId()] = struct{}{}
 	}
 
 	for _, e := range events {
@@ -299,6 +319,31 @@ func (s *UpdatesServer) applyDiff(ctx context.Context, caller updatesCaller, ent
 	entry.Members = historyFrom
 
 	return nil
+}
+
+// replacedMessages collects the deletions of failed sends replaced by their
+// retry, keyed by message id. deleted_by carries only the contact; the caller
+// resolves it through the entry's members like any other actor.
+func replacedMessages(events []journal.Event) map[string]*impb.DeletedMessage {
+	out := make(map[string]*impb.DeletedMessage)
+
+	for _, e := range events {
+		replacedBy := e.Fields[journal.FieldReplacedBy]
+		if e.Kind != journal.KindMessageDeleted || replacedBy == "" {
+			continue
+		}
+
+		d := &impb.DeletedMessage{Id: e.Fields[journal.FieldMsgID], ReplacedBy: replacedBy}
+		d.DeletedAt, _ = strconv.ParseInt(e.Fields[journal.FieldDeletedAt], 10, 64)
+
+		if actor := e.Fields[journal.FieldActor]; actor != "" {
+			d.DeletedBy = &impb.ThreadMember{ContactId: actor}
+		}
+
+		out[d.GetId()] = d
+	}
+
+	return out
 }
 
 // attachDialog adds the thread itself and its top message for a thread new to the caller.
@@ -419,6 +464,26 @@ func (s *UpdatesServer) threadMembers(ctx context.Context, threadID string, want
 	}
 
 	return out, nil
+}
+
+// resolveDeleters completes deleted_by that a journal entry gave only as a
+// contact with the membership the entry's members carry.
+func resolveDeleters(entry *impb.ThreadUpdates) {
+	byContact := make(map[string]*impb.ThreadMember, len(entry.GetMembers()))
+	for _, m := range entry.GetMembers() {
+		byContact[m.GetContactId()] = m
+	}
+
+	for _, d := range entry.GetDeletedMessages() {
+		by := d.GetDeletedBy()
+		if by == nil || by.GetId() != "" {
+			continue
+		}
+
+		if m, ok := byContact[by.GetContactId()]; ok {
+			d.DeletedBy = &impb.ThreadMember{Id: m.GetId(), ContactId: m.GetContactId(), IsBot: m.GetIsBot(), Role: m.GetRole()}
+		}
+	}
 }
 
 // actorFields hold the actor's contact id, per entry kind.

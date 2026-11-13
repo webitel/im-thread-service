@@ -362,12 +362,58 @@ func TestGetUpdates_Failures(t *testing.T) {
 	got := entry.GetMessages()[0].GetFailures()
 	require.Len(t, got, 1)
 	assert.Equal(t, member.String(), got[0].GetMemberId())
-	assert.Equal(t, "403", got[0].GetError().GetCode())
-	assert.Equal(t, "blocked", got[0].GetError().GetMessage())
+	assert.Equal(t, model.DeliveryErrorSendFailed, got[0].GetError().GetCode(), "a legacy raw code comes out normalized")
+	assert.Equal(t, "blocked", got[0].GetError().GetMessage(), "the raw text is kept")
 	assert.Empty(t, entry.GetMessages()[1].GetFailures(), "a recovered failure is not reported")
 
 	require.Len(t, entry.GetMembers(), 1)
 	assert.Equal(t, "m1", entry.GetMembers()[0].GetId())
+}
+
+// History hides a failed send replaced by its retry, so its deletion is built from the journal
+// entry: replaced_by, when, and the retrier resolved to their membership. An ordinary deletion
+// keeps an empty replaced_by.
+func TestGetUpdates_ReplacedByRetry(t *testing.T) {
+	thread := uuid.NewString()
+	original, retry, deleted := uuid.New(), uuid.New(), uuid.New()
+	sender := uuid.New()
+	deletedAt := time.UnixMilli(1700000000000)
+
+	updates := &fakeUpdates{
+		changes: &journal.ContactChanges{Cursor: "300", After: 200, Threads: []string{thread}},
+		events: map[string][]journal.Event{thread: {
+			msgEvent(journal.KindMessageDeleted, deleted),
+			msgEvent(journal.KindMessageNew, retry),
+			{Kind: journal.KindMessageDeleted, Fields: map[string]string{
+				journal.FieldMsgID: original.String(), journal.FieldActor: sender.String(),
+				journal.FieldReplacedBy: retry.String(), journal.FieldDeletedAt: "1700000000123",
+			}},
+		}},
+		members: []journal.Member{{ID: "m-sender", ContactID: sender.String(), Role: int32(model.RoleOwner)}},
+	}
+	history := &fakeHistory{byID: map[uuid.UUID]*model.Message{
+		retry:   {ID: retry, Body: "again", Seq: 5},
+		deleted: {ID: deleted, DeletedAt: &deletedAt, DeletedBy: &model.ThreadDialog{ContactID: sender}},
+	}}
+
+	resp, err := NewUpdatesServer(history, updates, &fakeThreads{}, &fakeTags{}).GetUpdates(context.Background(), updatesReq("200"))
+	require.NoError(t, err)
+
+	entry := resp.GetThreads()[0]
+	require.Len(t, entry.GetMessages(), 1)
+	assert.Equal(t, retry.String(), entry.GetMessages()[0].GetId())
+
+	assert.Equal(t, []string{deleted.String(), original.String()}, entry.GetDeletedMessageIds())
+	require.Len(t, entry.GetDeletedMessages(), 2)
+
+	plain, replaced := entry.GetDeletedMessages()[0], entry.GetDeletedMessages()[1]
+	assert.Empty(t, plain.GetReplacedBy(), "an ordinary delete has no replacement")
+
+	assert.Equal(t, original.String(), replaced.GetId())
+	assert.Equal(t, retry.String(), replaced.GetReplacedBy())
+	assert.Equal(t, int64(1700000000123), replaced.GetDeletedAt())
+	assert.Equal(t, sender.String(), replaced.GetDeletedBy().GetContactId())
+	assert.Equal(t, "m-sender", replaced.GetDeletedBy().GetId(), "the retrier resolves to their membership")
 }
 
 // The owner's tag change arrives with their current tags; other contacts' private entries are

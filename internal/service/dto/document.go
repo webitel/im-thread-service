@@ -73,6 +73,9 @@ type SendDocumentRequest struct {
 
 	// Variables are seeded onto the thread when this message creates it.
 	Variables map[string]string `json:"variables,omitempty"`
+
+	// RetryOf is the caller's failed message this send replaces.
+	RetryOf *uuid.UUID `json:"retry_of,omitempty"`
 }
 
 func (sendDocumentRequest *SendDocumentRequest) Validate() error {

@@ -18,6 +18,8 @@ type recordingMessageStatusStore struct {
 	insertedMsg        *model.Message
 	insertedRecipients []uuid.UUID
 	deliveredReceipts  []*model.StatusReceipt
+	failedReceipts     []*model.StatusReceipt
+	unreportedReceipts []*model.StatusReceipt
 	recountedThreads   []uuid.UUID
 
 	changes []*model.StatusChange
@@ -40,7 +42,15 @@ func (r *recordingMessageStatusStore) MarkRead(context.Context, []*model.ReadRec
 	return r.changes, nil
 }
 
-func (r *recordingMessageStatusStore) MarkFailed(context.Context, []*model.StatusReceipt) ([]*model.StatusChange, error) {
+func (r *recordingMessageStatusStore) MarkFailed(_ context.Context, receipts []*model.StatusReceipt) ([]*model.StatusChange, error) {
+	r.failedReceipts = append(r.failedReceipts, receipts...)
+
+	return r.changes, nil
+}
+
+func (r *recordingMessageStatusStore) MarkUnreportedFailed(_ context.Context, receipts []*model.StatusReceipt) ([]*model.StatusChange, error) {
+	r.unreportedReceipts = append(r.unreportedReceipts, receipts...)
+
 	return r.changes, nil
 }
 
@@ -344,4 +354,82 @@ func TestGroupStatusChanges_ReadCarriesUnreadOfFurthestHorizon(t *testing.T) {
 	require.Equal(t, int64(121), events[0].UpToSeq)
 	require.NotNil(t, events[0].UnreadCount)
 	require.Equal(t, int64(0), *events[0].UnreadCount)
+}
+
+func TestMessageStatusService_MarkUnreportedFailed(t *testing.T) {
+	var (
+		threadID  = uuid.New()
+		memberID  = uuid.New()
+		messageID = uuid.New()
+	)
+
+	t.Run("sanitizes the failure and publishes only the inserted rows", func(t *testing.T) {
+		statusStore := &recordingMessageStatusStore{
+			changes: []*model.StatusChange{{
+				ThreadID: threadID, MemberID: memberID, MessageID: messageID,
+				Status: model.MessageDeliveryStatusFailed, Via: ptr("provider"),
+				Error: map[string]any{"code": model.DeliveryErrorChannelUnavailable},
+			}},
+		}
+		outboxStore := &fakeOutboxStore{}
+
+		svc := NewMessageStatusService(fakeUnitOfWork{
+			messageStatusStore: statusStore,
+			outboxStore:        outboxStore,
+			threadDialogStore:  &fakeThreadDialogStore{},
+		}, slog.Default())
+
+		in := &model.StatusReceipt{
+			ThreadID: threadID, MemberID: memberID, MessageID: messageID, Via: "provider",
+			Error: map[string]any{"code": "403", "message": "POST https://api.telegram.org/bot123456:test-token-secret/sendMessage: Forbidden"},
+		}
+
+		updated, err := svc.MarkUnreportedFailed(context.Background(), []*model.StatusReceipt{in})
+		require.NoError(t, err)
+		require.EqualValues(t, 1, updated)
+
+		require.Len(t, statusStore.unreportedReceipts, 1)
+		require.Equal(t, map[string]any{
+			"code":          model.DeliveryErrorSendFailed,
+			"provider_code": "403",
+			"message":       "POST https://api.telegram.org/bot[REDACTED]/sendMessage: Forbidden",
+		}, statusStore.unreportedReceipts[0].Error)
+		require.Equal(t, "403", in.Error["code"], "the caller's receipt is not modified")
+
+		require.Len(t, outboxStore.published, 1)
+		statusEvent, ok := outboxStore.published[0].event.(*event.MessageStatusChanged)
+		require.True(t, ok)
+		require.Equal(t, "failed", statusEvent.Status)
+	})
+
+	t.Run("an already reported failure publishes nothing", func(t *testing.T) {
+		statusStore := &recordingMessageStatusStore{}
+		outboxStore := &fakeOutboxStore{}
+
+		svc := NewMessageStatusService(fakeUnitOfWork{messageStatusStore: statusStore, outboxStore: outboxStore}, slog.Default())
+
+		updated, err := svc.MarkUnreportedFailed(context.Background(), []*model.StatusReceipt{
+			{ThreadID: threadID, MemberID: memberID, MessageID: messageID, Error: map[string]any{"code": model.DeliveryErrorSendFailed}},
+		})
+		require.NoError(t, err)
+		require.Zero(t, updated)
+		require.Len(t, statusStore.unreportedReceipts, 1)
+		require.Empty(t, outboxStore.published)
+	})
+}
+
+func TestMessageStatusService_MarkFailed_NormalizesProviderReport(t *testing.T) {
+	statusStore := &recordingMessageStatusStore{}
+
+	svc := NewMessageStatusService(fakeUnitOfWork{messageStatusStore: statusStore, outboxStore: &fakeOutboxStore{}}, slog.Default())
+
+	_, err := svc.MarkFailed(context.Background(), []*model.StatusReceipt{
+		{MessageID: uuid.New(), MemberID: uuid.New(), Error: map[string]any{"code": "131047", "message": "Re-engagement message"}},
+		{MessageID: uuid.New(), MemberID: uuid.New(), Error: map[string]any{"code": model.DeliveryErrorFileTooLarge, "message": "too big"}},
+	})
+	require.NoError(t, err)
+
+	require.Len(t, statusStore.failedReceipts, 2)
+	require.Equal(t, map[string]any{"code": model.DeliveryErrorSendFailed, "provider_code": "131047", "message": "Re-engagement message"}, statusStore.failedReceipts[0].Error)
+	require.Equal(t, map[string]any{"code": model.DeliveryErrorFileTooLarge, "message": "too big"}, statusStore.failedReceipts[1].Error)
 }

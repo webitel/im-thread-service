@@ -73,6 +73,8 @@ func (s *MessageStatusService) MarkRead(ctx context.Context, receipts []*model.R
 }
 
 func (s *MessageStatusService) MarkFailed(ctx context.Context, receipts []*model.StatusReceipt) (int64, error) {
+	receipts = sanitizeFailureReceipts(receipts)
+
 	var updated int64
 
 	err := s.uow.WithinTransaction(ctx, func(txCtx context.Context, uow store.UnitOfWork) error {
@@ -92,6 +94,51 @@ func (s *MessageStatusService) MarkFailed(ctx context.Context, receipts []*model
 	}
 
 	return updated, nil
+}
+
+// MarkUnreportedFailed records failures nobody reported yet (e.g. im-providers
+// was unreachable) and publishes events only for the rows it inserted.
+func (s *MessageStatusService) MarkUnreportedFailed(ctx context.Context, receipts []*model.StatusReceipt) (int64, error) {
+	receipts = sanitizeFailureReceipts(receipts)
+
+	var updated int64
+
+	err := s.uow.WithinTransaction(ctx, func(txCtx context.Context, uow store.UnitOfWork) error {
+		changes, err := uow.MessageStatuses().MarkUnreportedFailed(txCtx, receipts)
+		if err != nil {
+			return err
+		}
+
+		updated = int64(len(changes))
+
+		return dispatchStatusChangeEvents(txCtx, uow, changes)
+	})
+	if err != nil {
+		s.logger.ErrorContext(ctx, "mark unreported failed failed", "err", err, "receipts", len(receipts))
+
+		return 0, err
+	}
+
+	return updated, nil
+}
+
+// sanitizeFailureReceipts normalizes the error code and redacts secrets from
+// the error text before failures are stored and fanned out, so live events and
+// history carry the same details. The callers' receipts are left untouched.
+func sanitizeFailureReceipts(receipts []*model.StatusReceipt) []*model.StatusReceipt {
+	out := make([]*model.StatusReceipt, 0, len(receipts))
+
+	for _, r := range receipts {
+		if r == nil {
+			continue
+		}
+
+		sanitized := *r
+		sanitized.Error = model.SanitizeDeliveryError(r.Error)
+		out = append(out, &sanitized)
+	}
+
+	return out
 }
 
 // dispatchStatusChangeEvents publishes message.status.v1 events for status

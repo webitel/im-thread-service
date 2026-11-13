@@ -13,6 +13,7 @@ const (
 	QueueRefTable       string = "im_thread.queue_ref"
 	ContactTable        string = "im_contact.contact"
 	MessageErrorsTable  string = "im_message.message_errors"
+	MessageRetriesTable string = "im_message.message_retries"
 )
 
 // Default values

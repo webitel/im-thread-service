@@ -84,7 +84,8 @@ func (s *MessageHistoryService) Search(ctx context.Context, hmiDTO *dto.HistoryM
 		WithThreadIDsFilter(hmiDTO.ThreadIDs...).
 		WithLimit(hmiDTO.Size).
 		WithTypeFilter(hmiDTO.Types...).
-		WithSystemMessageAllowList(hmiDTO.SystemMessageAllowListTypes)
+		WithSystemMessageAllowList(hmiDTO.SystemMessageAllowListTypes).
+		WithoutRetried()
 
 	if !hmiDTO.SystemCall {
 		query = query.WithCallerLimitation(hmiDTO.CallerID, hmiDTO.ThreadIDs)
@@ -170,7 +171,8 @@ func (s *MessageHistoryService) SearchLeftThreads(ctx context.Context, req *dto.
 		WithPeriodFilter(req.PeriodFrom, req.PeriodTo).
 		WithLimit(req.Size).
 		WithCursor(req.Cursor).
-		WithSystemMessageAllowList(req.SystemMessageAllowListTypes)
+		WithSystemMessageAllowList(req.SystemMessageAllowListTypes).
+		WithoutRetried()
 
 	historyMessages, err := s.messageHistoryStore.Search(ctx, query)
 	if err != nil {
