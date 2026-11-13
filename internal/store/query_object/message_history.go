@@ -230,6 +230,16 @@ func (q *MessageHistoryQuery) WithCursor(cursor *dto.HistoryMessageCursor) *Mess
 	return q
 }
 
+// WithoutRetried drops failed messages that were replaced by their retry: the
+// retry stands in for them, so they are neither shown nor tombstoned.
+func (q *MessageHistoryQuery) WithoutRetried() *MessageHistoryQuery {
+	q.base = q.base.Where(CompactSQL(`not exists (
+		select 1 from ` + MessageRetriesTable + ` rt where rt.message_id = v_messages.id
+	)`))
+
+	return q
+}
+
 func (q *MessageHistoryQuery) WithCallerLimitation(callerID uuid.UUID, threadIDs uuid.UUIDs) *MessageHistoryQuery {
 	if callerID == uuid.Nil {
 		return q

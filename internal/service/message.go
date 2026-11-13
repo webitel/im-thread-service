@@ -126,6 +126,17 @@ func (s *MessageService) SendText(ctx context.Context, in *dto.SendTextRequest) 
 
 	log := s.logger.With("operation", "message.SendText")
 
+	retry, err := s.planRetry(ctx, in.RetryOf, in.From, int32(in.DomainID))
+	if err != nil {
+		logSendError(ctx, log, "retry_of rejected", err)
+
+		return nil, err
+	}
+
+	if retry.replay() {
+		return &dto.SendTextResponse{ID: retry.replayID, To: in.To}, nil
+	}
+
 	{
 		toVia := "<nil>"
 		if via := in.To.ResolveVia(); via != nil {
@@ -156,6 +167,12 @@ func (s *MessageService) SendText(ctx context.Context, in *dto.SendTextRequest) 
 		return nil, err
 	}
 
+	if err = retry.checkThread(thread.ID); err != nil {
+		logSendError(ctx, log, "retry_of rejected", err)
+
+		return nil, err
+	}
+
 	for i, m := range thread.Members {
 		via := "<nil>"
 		if m.Via != nil {
@@ -169,12 +186,16 @@ func (s *MessageService) SendText(ctx context.Context, in *dto.SendTextRequest) 
 		)
 	}
 
-	if msg, handled, err := s.commands.Dispatch(ctx, thread, in); handled {
-		if err != nil {
-			return nil, err
-		}
+	// A retry re-sends a stored text that failed to deliver; it is not fresh
+	// input, so a body that looks like a command must not run it again.
+	if retry == nil {
+		if msg, handled, err := s.commands.Dispatch(ctx, thread, in); handled {
+			if err != nil {
+				return nil, err
+			}
 
-		return s.sendCommandMessage(ctx, in, msg)
+			return s.sendCommandMessage(ctx, in, msg)
+		}
 	}
 
 	replyPreview, err := s.resolveReply(ctx, in.ReplyToMessageID, in.ReplyToExternalID, &in.From, thread, int32(in.DomainID))
@@ -223,18 +244,27 @@ func (s *MessageService) SendText(ctx context.Context, in *dto.SendTextRequest) 
 			return err
 		}
 
+		if err = s.replaceRetried(ctx, uow, retry, saved); err != nil {
+			return err
+		}
+
 		msg = saved
 
 		return nil
 	})
 	if err != nil {
-		log.ErrorContext(
-			ctx,
-			"error saving text message",
-			slog.Any("error", err),
+		if replayID, ok := s.replayAfterRace(ctx, retry, err, int32(in.DomainID)); ok {
+			return &dto.SendTextResponse{ID: replayID, To: in.To}, nil
+		}
+
+		logSendError(ctx, log, "error saving text message", err,
 			slog.String("thread_id", thread.ID.String()),
 			slog.String("from", msg.From.ID.String()),
 		)
+
+		if errors.Code(err) == codes.InvalidArgument {
+			return nil, err
+		}
 
 		return nil, errors.Internal("error saving text message", errors.WithCause(err), errors.WithID("service.message.send_text"))
 	}
@@ -298,6 +328,17 @@ func (s *MessageService) SendDocument(ctx context.Context, in *dto.SendDocumentR
 		return nil, errors.InvalidArgument("send document request validation", errors.WithCause(err), errors.WithID("service.message.send_document"))
 	}
 
+	retry, err := s.planRetry(ctx, in.RetryOf, in.From, int32(in.DomainID))
+	if err != nil {
+		logSendError(ctx, log, "retry_of rejected", err)
+
+		return nil, err
+	}
+
+	if retry.replay() {
+		return &dto.SendDocumentResponse{ID: retry.replayID, To: in.To}, nil
+	}
+
 	t, err := s.threader.EnsureDirectThread(ctx, &dto.EnsureDirectThreadRequest{
 		From:     &in.From,
 		To:       &in.To,
@@ -306,6 +347,12 @@ func (s *MessageService) SendDocument(ctx context.Context, in *dto.SendDocumentR
 	})
 	if err != nil {
 		log.Error("resolving thread", "error", err, "from", in.From.ID.String(), "to", in.To.ID.String(), "to_type", in.To.Type.String())
+
+		return nil, err
+	}
+
+	if err = retry.checkThread(t.ID); err != nil {
+		logSendError(ctx, log, "retry_of rejected", err)
 
 		return nil, err
 	}
@@ -394,10 +441,14 @@ func (s *MessageService) SendDocument(ctx context.Context, in *dto.SendDocumentR
 			return errors.Internal("dispatch message events", errors.WithCause(err), errors.WithID("service.message.send_document"))
 		}
 
-		return nil
+		return s.replaceRetried(txCtx, uow, retry, msg)
 	})
 	if err != nil {
-		s.logger.ErrorContext(ctx, "send document failed", "err", err)
+		if replayID, ok := s.replayAfterRace(ctx, retry, err, int32(in.DomainID)); ok {
+			return &dto.SendDocumentResponse{ID: replayID, To: in.To}, nil
+		}
+
+		logSendError(ctx, log, "send document failed", err)
 
 		return nil, err
 	}
@@ -487,15 +538,32 @@ func (s *MessageService) UpdateMessageDelivery(ctx context.Context, in *model.Me
 func (s *MessageService) SendLocation(ctx context.Context, msg *model.Message) (*model.Message, error) {
 	log := s.logger.With("operation", "send_location")
 
-	if err := s.prepareMessageForSending(ctx, msg); err != nil {
+	retry, err := s.planRetry(ctx, msg.RetryOf, msg.From, msg.DomainID)
+	if err != nil {
+		logSendError(ctx, log, "retry_of rejected", err)
+
+		return nil, err
+	}
+
+	if retry.replay() {
+		return retry.replayedMessage(msg), nil
+	}
+
+	if err = s.prepareMessageForSending(ctx, msg); err != nil {
 		log.ErrorContext(ctx, "prepare_message_failed", "err", err)
+
+		return nil, err
+	}
+
+	if err = retry.checkThread(msg.ThreadID); err != nil {
+		logSendError(ctx, log, "retry_of rejected", err)
 
 		return nil, err
 	}
 
 	var savedMsg *model.Message
 
-	err := s.uow.WithinTransaction(ctx, func(txCtx context.Context, uow store.UnitOfWork) error {
+	err = s.uow.WithinTransaction(ctx, func(txCtx context.Context, uow store.UnitOfWork) error {
 		var err error
 		if savedMsg, err = uow.Messages().SaveMessageLocation(txCtx, msg); err != nil {
 			return err
@@ -517,33 +585,62 @@ func (s *MessageService) SendLocation(ctx context.Context, msg *model.Message) (
 
 		savedMsg.WithCreatedEvent(ctx, msg.IdempotencyKey)
 
-		return s.dispatchMessageEvents(txCtx, uow, savedMsg)
+		if err = s.dispatchMessageEvents(txCtx, uow, savedMsg); err != nil {
+			return err
+		}
+
+		return s.replaceRetried(txCtx, uow, retry, savedMsg)
 	})
 	if err != nil {
-		log.ErrorContext(ctx, "location_transaction_failed", "err", err)
+		if replayID, ok := s.replayAfterRace(ctx, retry, err, msg.DomainID); ok {
+			retry.replayID = replayID
+
+			return retry.replayedMessage(msg), nil
+		}
+
+		logSendError(ctx, log, "location_transaction_failed", err)
 
 		return nil, err
 	}
 
+	// The message is saved: a channel rejection reaches the client as a
+	// delivery failure on it (MarkFailed), not as an error of this call.
 	if err = s.sendMessageToExternalProvider(ctx, msg); err != nil {
 		log.Error("sending location message to external providers", "error", err)
 	}
 
-	return savedMsg, err
+	return savedMsg, nil
 }
 
 func (s *MessageService) SendContact(ctx context.Context, msg *model.Message) (*model.Message, error) {
 	log := s.logger.With("operation", "send_contact")
 
-	if err := s.prepareMessageForSending(ctx, msg); err != nil {
+	retry, err := s.planRetry(ctx, msg.RetryOf, msg.From, msg.DomainID)
+	if err != nil {
+		logSendError(ctx, log, "retry_of rejected", err)
+
+		return nil, err
+	}
+
+	if retry.replay() {
+		return retry.replayedMessage(msg), nil
+	}
+
+	if err = s.prepareMessageForSending(ctx, msg); err != nil {
 		log.ErrorContext(ctx, "prepare_message_failed", "err", err)
+
+		return nil, err
+	}
+
+	if err = retry.checkThread(msg.ThreadID); err != nil {
+		logSendError(ctx, log, "retry_of rejected", err)
 
 		return nil, err
 	}
 
 	var savedMsg *model.Message
 
-	err := s.uow.WithinTransaction(ctx, func(txCtx context.Context, uow store.UnitOfWork) error {
+	err = s.uow.WithinTransaction(ctx, func(txCtx context.Context, uow store.UnitOfWork) error {
 		var err error
 		if savedMsg, err = uow.Messages().SaveMessageContact(txCtx, msg); err != nil {
 			return err
@@ -565,19 +662,31 @@ func (s *MessageService) SendContact(ctx context.Context, msg *model.Message) (*
 
 		savedMsg.WithCreatedEvent(ctx, msg.IdempotencyKey)
 
-		return s.dispatchMessageEvents(txCtx, uow, savedMsg)
+		if err = s.dispatchMessageEvents(txCtx, uow, savedMsg); err != nil {
+			return err
+		}
+
+		return s.replaceRetried(txCtx, uow, retry, savedMsg)
 	})
 	if err != nil {
-		log.ErrorContext(ctx, "contact_transaction_failed", "err", err)
+		if replayID, ok := s.replayAfterRace(ctx, retry, err, msg.DomainID); ok {
+			retry.replayID = replayID
+
+			return retry.replayedMessage(msg), nil
+		}
+
+		logSendError(ctx, log, "contact_transaction_failed", err)
 
 		return nil, err
 	}
 
+	// The message is saved: a channel rejection reaches the client as a
+	// delivery failure on it (MarkFailed), not as an error of this call.
 	if err = s.sendMessageToExternalProvider(ctx, msg); err != nil {
 		log.Error("sending contact message to external providers", "error", err)
 	}
 
-	return savedMsg, err
+	return savedMsg, nil
 }
 
 func (s *MessageService) SendInteractive(ctx context.Context, msg *model.Message) (*model.Message, error) {

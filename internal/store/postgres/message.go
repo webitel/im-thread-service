@@ -408,6 +408,132 @@ func (m *messageStore) DeleteMessages(ctx context.Context, ids []uuid.UUID, dele
 	return splitDeleteOutcome(ids, classified), nil
 }
 
+// errNotRetryable is the single answer for every retry_of that cannot be
+// replaced, so a caller cannot probe other authors' messages through it.
+func errNotRetryable() error {
+	return errors.InvalidArgument(
+		"retry_of must be a live message of yours in this chat that failed to send",
+		errors.WithID("postgres.message.replace_failed.not_retryable"),
+	)
+}
+
+func (m *messageStore) ReplaceFailedMessage(ctx context.Context, originalID, replacementID, threadID, actorID uuid.UUID) (*model.Message, error) {
+	// The author is matched on coalesce(origin_sender, sender_id): with send_as,
+	// sender_id is the shared identity every agent sends as, origin_sender the
+	// agent who actually sent the message.
+	const query = `
+		with target as (
+			select m.id
+			from im_message.messages m
+			where m.id = @OriginalID
+			  and m.thread_id = @ThreadID
+			  and m.deleted_at is null
+			  and m.type = any(@RetryableTypes::smallint[])
+			  and coalesce(m.origin_sender, m.sender_id) = @ActorID
+			  and exists (select 1 from im_message.message_errors e where e.message_id = m.id)
+			for update of m
+		),
+		updated as (
+			update im_message.messages m
+			set deleted_at = now(),
+			    deleted_by = @ActorID,
+			    updated_at = now()
+			from target t
+			where m.id = t.id
+			returning
+				m.id, m.domain_id, m.thread_id, m.member_id, m.sender_id, m.type,
+				m.created_at, m.updated_at, m.deleted_at
+		),
+		retried as (
+			insert into im_message.message_retries (message_id, retried_by, domain_id)
+			select u.id, @ReplacementID, u.domain_id
+			from updated u
+		)
+		select
+			u.id, u.domain_id, u.thread_id, u.member_id, u.sender_id, u.type,
+			u.created_at, u.updated_at, u.deleted_at
+		from updated u
+	`
+
+	args := pgx.NamedArgs{
+		"OriginalID":     originalID,
+		"ReplacementID":  replacementID,
+		"ThreadID":       threadID,
+		"ActorID":        actorID,
+		"RetryableTypes": retryableTypes(),
+	}
+
+	rows, err := m.db.Query(ctx, query, args)
+	if err != nil {
+		return nil, errors.Internal("executing replace failed message query", errors.WithCause(err), errors.WithID("postgres.message.replace_failed.query"))
+	}
+
+	replaced, err := pgx.CollectRows(rows, pgx.RowToAddrOfStructByNameLax[model.Message])
+	if err != nil {
+		return nil, errors.Internal("collecting replaced message", errors.WithCause(err), errors.WithID("postgres.message.replace_failed.collecting"))
+	}
+
+	if len(replaced) == 0 {
+		return nil, errNotRetryable()
+	}
+
+	return replaced[0], nil
+}
+
+func (m *messageStore) GetRetryTarget(ctx context.Context, id uuid.UUID, domainID int32) (*model.RetryTarget, error) {
+	const query = `
+		select
+			m.id,
+			m.thread_id,
+			coalesce(m.origin_sender, m.sender_id) as author_id,
+			(m.deleted_at is not null) as deleted,
+			(m.type = any(@RetryableTypes::smallint[])
+				and exists (select 1 from im_message.message_errors e where e.message_id = m.id)) as failed,
+			rt.retried_by,
+			coalesce(r.origin_sender, r.sender_id) as retried_by_author,
+			r.thread_id as retried_by_thread
+		from im_message.messages m
+		left join im_message.message_retries rt on rt.message_id = m.id
+		left join im_message.messages r on r.id = rt.retried_by
+		where m.id = @ID
+		  and m.domain_id = @DomainID
+	`
+
+	args := pgx.NamedArgs{
+		"ID":             id,
+		"DomainID":       domainID,
+		"RetryableTypes": retryableTypes(),
+	}
+
+	rows, err := m.db.Query(ctx, query, args)
+	if err != nil {
+		return nil, errors.Internal("executing retry target query", errors.WithCause(err), errors.WithID("postgres.message.retry_target.query"))
+	}
+
+	target, err := pgx.CollectExactlyOneRow(rows, pgx.RowToAddrOfStructByNameLax[model.RetryTarget])
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil //nolint:nilnil // no such message: the caller treats it as not retryable
+		}
+
+		return nil, errors.Internal("collecting retry target", errors.WithCause(err), errors.WithID("postgres.message.retry_target.collecting"))
+	}
+
+	return target, nil
+}
+
+func retryableTypes() []int16 {
+	types := make([]int16, 0, 4)
+
+	for t := model.MessageTypeUnknown; t <= model.MessageTypeContact; t++ {
+		if t.Retryable() {
+			types = append(types, int16(t))
+		}
+	}
+
+	return types
+}
+
 // splitDeleteOutcome sorts the classified rows into the two halves of the
 // result: the query reports no reason for the rows it just deleted. Ids it
 // returned no row for never existed, so they complete the skipped half as

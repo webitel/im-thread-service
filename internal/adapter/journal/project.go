@@ -34,6 +34,11 @@ const (
 	FieldUpToSeq   = "up_to_seq"
 	FieldErrCode   = "error_code"
 	FieldErrMsg    = "error_message"
+	// FieldReplacedBy and FieldDeletedAt are set on a message.deleted entry of a
+	// failed send replaced by its retry: history no longer returns the original,
+	// so catch-up builds the deletion from the entry alone.
+	FieldReplacedBy = "replaced_by"
+	FieldDeletedAt  = "deleted_at"
 )
 
 // Member change actions stored under FieldAction.
@@ -88,7 +93,15 @@ func ProjectEvent(eventType string, payload []byte) (Update, bool, error) {
 			return Update{}, false, err
 		}
 
-		return messageUpdate(e.ThreadID.String(), KindMessageDeleted, e.MessageID.String(), memberContactFromMember(e.DeletedBy), nil), true, nil
+		var extra map[string]any
+		if e.ReplacedBy != nil {
+			extra = map[string]any{
+				FieldReplacedBy: e.ReplacedBy.String(),
+				FieldDeletedAt:  strconv.FormatInt(e.OccurredAt.UnixMilli(), 10),
+			}
+		}
+
+		return messageUpdate(e.ThreadID.String(), KindMessageDeleted, e.MessageID.String(), memberContactFromMember(e.DeletedBy), extra), true, nil
 
 	case event.MessageReactionEvent:
 		var e event.MessageReaction

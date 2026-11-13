@@ -13,6 +13,7 @@ import (
 
 	"github.com/webitel/im-thread-service/gen/go/storage"
 	storageclient "github.com/webitel/im-thread-service/infra/webitel/storage"
+	"github.com/webitel/im-thread-service/internal/domain/model"
 	"github.com/webitel/im-thread-service/internal/utils"
 )
 
@@ -240,7 +241,7 @@ func (p *storageProcessor) uploadFile(ctx context.Context, domainID int64, items
 				Channel:  storage.UploadFileChannel_ChatChannel,
 			})
 			if err != nil {
-				resultChan <- fmt.Errorf("[MEDIA_PROCESSOR] storage: upload failed for %s: %w", item.GetURL(), err)
+				resultChan <- fmt.Errorf("[MEDIA_PROCESSOR] storage: upload failed for %s: %w", model.RedactSecrets(item.GetURL()), err)
 
 				return
 			}

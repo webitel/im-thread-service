@@ -2,12 +2,18 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	stderrs "errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"strconv"
 	"sync"
 	"time"
+
+	"github.com/google/uuid"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"github.com/webitel/webitel-go-kit/pkg/errors"
 
@@ -26,11 +32,17 @@ type ProvidersAdapter interface {
 	SendReaction(ctx context.Context, reaction *model.Reaction, result *model.ReactionResult) error
 }
 
+// sendFailureRecorder records a send failure im-providers did not report itself.
+type sendFailureRecorder interface {
+	MarkUnreportedFailed(ctx context.Context, receipts []*model.StatusReceipt) (int64, error)
+}
+
 type baseRPCProvidersAdapter struct {
 	logger          *slog.Logger
 	providersClient *improviders.Client
 	externalIDs     store.MessageExternalStore
 	reactionCaps    ReactionCapabilities
+	failures        sendFailureRecorder
 }
 
 func newBaseRPCProvidersAdapter(
@@ -38,6 +50,7 @@ func newBaseRPCProvidersAdapter(
 	providersClient *improviders.Client,
 	externalIDs store.MessageExternalStore,
 	reactionCaps ReactionCapabilities,
+	statuses *MessageStatusService,
 ) *baseRPCProvidersAdapter {
 	log := logger.With("component", "base_rpc_providers_adapter")
 
@@ -46,6 +59,7 @@ func newBaseRPCProvidersAdapter(
 		providersClient: providersClient,
 		externalIDs:     externalIDs,
 		reactionCaps:    reactionCaps,
+		failures:        statuses,
 	}
 }
 
@@ -183,6 +197,8 @@ func (a *baseRPCProvidersAdapter) SendMessage(ctx context.Context, message *mode
 					Email:             message.Contact.Email,
 					ReplyToExternalId: replyToExternal,
 					SenderName:        senderName(message),
+					MessageId:         message.ID.String(),
+					ThreadId:          message.ThreadID.String(),
 				})
 			case model.MessageTypeInteractive:
 				if message.Interactive == nil {
@@ -226,6 +242,8 @@ func (a *baseRPCProvidersAdapter) SendMessage(ctx context.Context, message *mode
 					Address:           message.Location.Address,
 					ReplyToExternalId: replyToExternal,
 					SenderName:        senderName(message),
+					MessageId:         message.ID.String(),
+					ThreadId:          message.ThreadID.String(),
 				})
 			case model.MessageTypeSystem:
 				if message.System == nil {
@@ -254,6 +272,8 @@ func (a *baseRPCProvidersAdapter) SendMessage(ctx context.Context, message *mode
 				peerLog.Error("provider RPC failed",
 					slog.String("error", err.Error()),
 				)
+
+				a.recordSendFailure(ctx, message, externalPeer, err, peerLog)
 
 				errorsMu.Lock()
 
@@ -655,4 +675,101 @@ func extractFile[T AttachmentProcessor](first T) *provider.ProviderFile {
 		MimeType: first.GetMimeType(),
 		Size:     first.GetSize(),
 	}
+}
+
+// failureRecordTimeout bounds the fallback failure write; it runs detached from
+// the caller so a canceled send request still leaves the message marked failed.
+const failureRecordTimeout = 5 * time.Second
+
+// recordSendFailure marks the message failed for the peer when the provider RPC
+// itself errored. im-providers reports channel rejections before it returns, and
+// that richer report wins; this covers what it never got to report (unreachable,
+// gate not resolved). Only messages a client can retry are marked: a failure
+// nobody can act on would only leave a dead "not sent" badge.
+func (a *baseRPCProvidersAdapter) recordSendFailure(ctx context.Context, message *model.Message, peer *model.ExternalPeerPair, sendErr error, log *slog.Logger) {
+	if a.failures == nil || message.ID == uuid.Nil || message.ThreadID == uuid.Nil || !message.Type.Retryable() {
+		return
+	}
+
+	// A timed-out or canceled call may still have reached the channel; the
+	// outcome is unknown and im-providers reports the real one itself.
+	if providerOutcomeUnknown(sendErr) {
+		log.Warn("provider send outcome unknown, not marking it failed", slog.String("error", sendErr.Error()))
+
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), failureRecordTimeout)
+	defer cancel()
+
+	code, detail := classifyProviderRPCError(sendErr)
+
+	_, err := a.failures.MarkUnreportedFailed(ctx, []*model.StatusReceipt{{
+		DomainID:  message.DomainID,
+		ThreadID:  message.ThreadID,
+		MessageID: message.ID,
+		MemberID:  peer.ContactID,
+		Via:       "provider",
+		Error: map[string]any{
+			"code":    code,
+			"message": detail,
+		},
+	}})
+	if err != nil {
+		log.Error("recording provider send failure", slog.String("error", err.Error()))
+	}
+}
+
+// unreachableCodes mean im-providers could not take the send at all: the
+// channel never got it.
+var unreachableCodes = []codes.Code{codes.Unavailable, codes.ResourceExhausted}
+
+// providerOutcomeUnknown reports whether the provider call ended without a
+// verdict (deadline or cancellation) rather than with a rejection.
+func providerOutcomeUnknown(err error) bool {
+	if stderrs.Is(err, context.DeadlineExceeded) || stderrs.Is(err, context.Canceled) {
+		return true
+	}
+
+	st, ok := status.FromError(err)
+
+	return ok && (st.Code() == codes.DeadlineExceeded || st.Code() == codes.Canceled)
+}
+
+// classifyProviderRPCError maps an im-providers RPC error to a normalized
+// delivery error code (see DeliveryError in the history proto). Callers skip
+// errors providerOutcomeUnknown reports.
+func classifyProviderRPCError(err error) (code, detail string) {
+	st, ok := status.FromError(err)
+	if !ok {
+		return model.DeliveryErrorSendFailed, err.Error()
+	}
+
+	detail = remoteErrorDetail(st.Message())
+
+	switch {
+	case slices.Contains(unreachableCodes, st.Code()):
+		return model.DeliveryErrorChannelUnavailable, detail
+	case st.Code() == codes.Unimplemented:
+		// The channel cannot send this kind of message (e.g. a location to a
+		// messenger without location support).
+		return model.DeliveryErrorUnsupportedMedia, detail
+	default:
+		return model.DeliveryErrorSendFailed, detail
+	}
+}
+
+// remoteErrorDetail unwraps the JSON envelope webitel services put in a gRPC
+// status message ({"id":...,"detail":"..."}), so the stored failure carries
+// the provider's text rather than the envelope.
+func remoteErrorDetail(msg string) string {
+	var envelope struct {
+		Detail string `json:"detail"`
+	}
+
+	if err := json.Unmarshal([]byte(msg), &envelope); err != nil || envelope.Detail == "" {
+		return msg
+	}
+
+	return envelope.Detail
 }

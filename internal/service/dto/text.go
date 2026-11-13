@@ -23,6 +23,9 @@ type (
 		ForwardOrigin *model.ForwardOrigin `json:"forward_origin,omitempty"`
 		Entities      []shared.Entity      `json:"entities,omitempty"`
 		Variables     map[string]string    `json:"variables,omitempty"`
+
+		// RetryOf is the caller's failed message this send replaces.
+		RetryOf *uuid.UUID `json:"retry_of,omitempty"`
 	}
 
 	SendTextResponse struct {

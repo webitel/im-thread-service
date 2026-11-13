@@ -80,6 +80,19 @@ type MessageStore interface {
 	// rest, each with the reason. An all-skipped batch is not an error at this
 	// layer.
 	DeleteMessages(ctx context.Context, ids []uuid.UUID, deleterID uuid.UUID) (*model.MessageDeleteResult, error)
+
+	// ReplaceFailedMessage soft-deletes originalID on behalf of actorID and
+	// records replacementID as its retry. It only applies to a live, retryable
+	// message of threadID that actorID really authored (origin_sender for a
+	// send_as message) and that failed for at least one recipient; anything
+	// else returns InvalidArgument. The row is locked, so a concurrent second
+	// retry of the same message fails instead of replacing it twice.
+	ReplaceFailedMessage(ctx context.Context, originalID, replacementID, threadID, actorID uuid.UUID) (*model.Message, error)
+
+	// GetRetryTarget reads the state of a retry_of candidate without locking it,
+	// for the cheap check before a send has side effects; nil when no such
+	// message exists in the domain.
+	GetRetryTarget(ctx context.Context, id uuid.UUID, domainID int32) (*model.RetryTarget, error)
 }
 
 // MessageStatusStore tracks message delivery state. Read/delivered are
@@ -104,6 +117,10 @@ type MessageStatusStore interface {
 	// MarkFailed applies failure receipts (sent -> failed only) and returns
 	// the rows that actually changed.
 	MarkFailed(ctx context.Context, receipts []*model.StatusReceipt) ([]*model.StatusChange, error)
+
+	// MarkUnreportedFailed records failures only for recipients without an
+	// error row yet; an existing (channel-reported) failure is left untouched.
+	MarkUnreportedFailed(ctx context.Context, receipts []*model.StatusReceipt) ([]*model.StatusChange, error)
 
 	// ReadUnread returns the denormalized unread_count per thread for the
 	// member, read straight from thread_dialog (no message scan). Threads with

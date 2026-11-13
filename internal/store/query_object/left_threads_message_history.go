@@ -257,6 +257,17 @@ func (q *leftThreadsMessageHistoryQueryObject) WithSystemMessageAllowList(allowe
 	return q
 }
 
+// WithoutRetried drops failed messages that were replaced by their retry, as
+// MessageHistoryQuery.WithoutRetried does for live threads.
+func (q *leftThreadsMessageHistoryQueryObject) WithoutRetried() *leftThreadsMessageHistoryQueryObject {
+	q.builder = q.builder.Where(fmt.Sprintf(
+		"not exists (select 1 from %s rt where rt.message_id = %s.id)",
+		MessageRetriesTable, leftThreadsMsgAlias,
+	))
+
+	return q
+}
+
 func (q *leftThreadsMessageHistoryQueryObject) WithPeriodFilter(periodFrom, periodTo time.Time) *leftThreadsMessageHistoryQueryObject {
 	if !periodFrom.IsZero() {
 		q.builder = q.builder.Where(

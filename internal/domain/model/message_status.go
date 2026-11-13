@@ -1,6 +1,9 @@
 package model
 
 import (
+	"fmt"
+	"maps"
+	"regexp"
 	"time"
 
 	"github.com/google/uuid"
@@ -45,6 +48,83 @@ func (s MessageDeliveryStatus) Valid() bool {
 	default:
 		return false
 	}
+}
+
+// Normalized delivery error codes stored in message_errors.error->>'code'; the
+// full list (most of them set by im-providers) is documented on DeliveryError
+// in the message history proto.
+const (
+	DeliveryErrorFileTooLarge         = "file_too_large"
+	DeliveryErrorFileUnavailable      = "file_unavailable"
+	DeliveryErrorUnsupportedMedia     = "unsupported_media"
+	DeliveryErrorRecipientUnavailable = "recipient_unavailable"
+	DeliveryErrorChannelUnavailable   = "channel_unavailable"
+	DeliveryErrorSendFailed           = "send_failed"
+)
+
+// NormalizeDeliveryErrorCode maps a stored or reported error code onto the
+// normalized set; anything else (legacy raw provider codes such as "403" or
+// "131047", or no code at all) becomes send_failed.
+func NormalizeDeliveryErrorCode(code string) string {
+	switch code {
+	case DeliveryErrorFileTooLarge, DeliveryErrorFileUnavailable, DeliveryErrorUnsupportedMedia,
+		DeliveryErrorRecipientUnavailable, DeliveryErrorChannelUnavailable, DeliveryErrorSendFailed:
+		return code
+	default:
+		return DeliveryErrorSendFailed
+	}
+}
+
+// SanitizeDeliveryError prepares failure details for storage: the code is
+// normalized (a raw one is kept under provider_code) and secrets are redacted
+// from the message. The input map is not modified.
+func SanitizeDeliveryError(details map[string]any) map[string]any {
+	out := make(map[string]any, len(details)+1)
+	maps.Copy(out, details)
+
+	raw := ""
+	if v, ok := details["code"]; ok && v != nil {
+		raw = fmt.Sprint(v)
+	}
+
+	out["code"] = NormalizeDeliveryErrorCode(raw)
+	if raw != "" && raw != out["code"] {
+		out["provider_code"] = raw
+	}
+
+	if msg, ok := details["message"].(string); ok {
+		out["message"] = RedactSecrets(msg)
+	}
+
+	return out
+}
+
+const redacted = "[REDACTED]"
+
+var secretPatterns = []struct {
+	re   *regexp.Regexp
+	repl string
+}{
+	// Telegram Bot API carries the bot token in the URL path: /bot<id>:<secret>/method.
+	{regexp.MustCompile(`(?i)/bot\d+:[\w-]+`), "/bot" + redacted},
+	// A bare Telegram-style token outside a URL.
+	{regexp.MustCompile(`\b\d{6,}:[\w-]{30,}`), redacted},
+	// Credentials in a URL's userinfo: scheme://user:password@host.
+	{regexp.MustCompile(`(?i)\b([a-z][a-z0-9+.-]*://)[^/\s@]+@`), "${1}" + redacted + "@"},
+	// Credentials passed as query parameters.
+	{regexp.MustCompile(`(?i)([?&](?:access_token|token|api_key|apikey|key|secret|client_secret|password|signature|sig)=)[^&#\s"']+`), "${1}" + redacted},
+	// Authorization header values echoed back in an error.
+	{regexp.MustCompile(`(?i)\b(bearer|basic)\s+[\w.~+/=-]+`), "${1} " + redacted},
+}
+
+// RedactSecrets strips credentials that channel SDKs tend to echo in error
+// text (request URLs with tokens, userinfo, auth headers).
+func RedactSecrets(s string) string {
+	for _, p := range secretPatterns {
+		s = p.re.ReplaceAllString(s, p.repl)
+	}
+
+	return s
 }
 
 // MessageStatus is a single per-recipient delivery state row.

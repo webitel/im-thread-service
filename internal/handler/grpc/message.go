@@ -112,6 +112,7 @@ func (m *MessageServer) SendLocation(ctx context.Context, in *impb.SendLocationR
 
 		ExternalID:        in.GetExternalId(),
 		ReplyToExternalID: in.GetReplyToExternalId(),
+		RetryOf:           mapper.ParseOptionalUUID(in.GetRetryOf()),
 	}
 
 	saved, err := m.handler.SendLocation(ctx, msg)
@@ -148,6 +149,7 @@ func (m *MessageServer) SendContact(ctx context.Context, in *impb.SendContactReq
 
 		ExternalID:        in.GetExternalId(),
 		ReplyToExternalID: in.GetReplyToExternalId(),
+		RetryOf:           mapper.ParseOptionalUUID(in.GetRetryOf()),
 	}
 
 	saved, err := m.handler.SendContact(ctx, msg)

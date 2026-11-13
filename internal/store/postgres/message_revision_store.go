@@ -54,6 +54,11 @@ func (s *messageRevisionStore) Search(ctx context.Context, messageID uuid.UUID, 
 			from im_message.messages m
 			where m.id = @MessageID
 			  and m.domain_id = @DomainID
+			  -- A failed send replaced by its retry left the history; it has
+			  -- no change log of its own to show.
+			  and not exists (
+				select 1 from im_message.message_retries rt where rt.message_id = m.id
+			  )
 			  and (exists (
 				select 1
 				from im_thread.thread_dialog td

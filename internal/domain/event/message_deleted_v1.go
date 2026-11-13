@@ -27,6 +27,10 @@ type MessageDeleted struct {
 	CreatedAt        time.Time         `json:"created_at"`
 	OccurredAt       time.Time         `json:"occurred_at"`
 	ExternalMetadata map[string]string `json:"-"`
+
+	// ReplacedBy is set when the message was a failed send replaced by its
+	// retry: clients drop it without a "deleted" tombstone.
+	ReplacedBy *uuid.UUID `json:"replaced_by,omitempty"`
 }
 
 func (m *MessageDeleted) AddMetadata(key, value string) {

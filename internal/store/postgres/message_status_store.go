@@ -174,12 +174,17 @@ func (s *messageStatusStore) MarkRead(ctx context.Context, receipts []*model.Rea
 // with provider error details. Receipts are deduplicated by (message_id, member_id).
 // Returns StatusChange rows for failed receipts for fan-out to clients.
 func (s *messageStatusStore) MarkFailed(ctx context.Context, receipts []*model.StatusReceipt) ([]*model.StatusChange, error) {
-	receipts = dedupStatusReceipts(receipts)
-	if len(receipts) == 0 {
-		return nil, nil
-	}
+	return s.insertFailures(ctx, receipts, markFailedQuery, "postgres.message_status.mark_failed")
+}
 
-	const query = `
+// MarkUnreportedFailed records failures only for recipients that have no error
+// row yet, so a fallback report never overwrites the channel's own, more
+// precise one. Returns StatusChange rows for the rows actually inserted.
+func (s *messageStatusStore) MarkUnreportedFailed(ctx context.Context, receipts []*model.StatusReceipt) ([]*model.StatusChange, error) {
+	return s.insertFailures(ctx, receipts, markUnreportedFailedQuery, "postgres.message_status.mark_unreported_failed")
+}
+
+const insertFailuresQuery = `
 		insert into im_message.message_errors
 			(domain_id, thread_id, message_id, member_id, failed_at, error, via)
 		select m.domain_id, m.thread_id, m.id, u.member_id, u.confirmed_at, u.error, nullif(u.via, '')
@@ -191,13 +196,29 @@ func (s *messageStatusStore) MarkFailed(ctx context.Context, receipts []*model.S
 			select 1 from im_thread.thread_dialog td
 			where td.thread_id = m.thread_id and td.member_id = u.member_id
 		)
+`
+
+const failureReturning = `
+		returning domain_id, thread_id, message_id, member_id, 4::smallint as status, via, error, updated_at
+`
+
+const markFailedQuery = insertFailuresQuery + `
 		on conflict (message_id, member_id) do update set
 			failed_at = excluded.failed_at,
 			error = excluded.error,
 			via = coalesce(excluded.via, message_errors.via),
 			updated_at = now()
-		returning domain_id, thread_id, message_id, member_id, 4::smallint as status, via, error, updated_at
-	`
+` + failureReturning
+
+const markUnreportedFailedQuery = insertFailuresQuery + `
+		on conflict (message_id, member_id) do nothing
+` + failureReturning
+
+func (s *messageStatusStore) insertFailures(ctx context.Context, receipts []*model.StatusReceipt, query, opID string) ([]*model.StatusChange, error) {
+	receipts = dedupStatusReceipts(receipts)
+	if len(receipts) == 0 {
+		return nil, nil
+	}
 
 	var (
 		messageIDs   = make([]uuid.UUID, len(receipts))
@@ -223,7 +244,7 @@ func (s *messageStatusStore) MarkFailed(ctx context.Context, receipts []*model.S
 		"Vias":         vias,
 	}
 
-	return s.collectChanges(ctx, query, args, "postgres.message_status.mark_failed")
+	return s.collectChanges(ctx, query, args, opID)
 }
 
 // ReadUnread returns the denormalized unread_count per thread for the member,
@@ -377,6 +398,7 @@ func (s *messageStatusStore) advanceReadHorizon(ctx context.Context, receipts []
 		memberIDs = make([]uuid.UUID, len(receipts))
 		upToSeqs  = make([]*int64, len(receipts))
 		upToMsgs  = make([]uuid.UUID, len(receipts))
+		exact     = make([]bool, len(receipts))
 	)
 
 	for i, r := range receipts {
@@ -388,6 +410,7 @@ func (s *messageStatusStore) advanceReadHorizon(ctx context.Context, receipts []
 		}
 
 		upToMsgs[i] = r.UpToMessageID
+		exact[i] = isChannelReceipt(r.Via)
 	}
 
 	const query = `
@@ -431,9 +454,7 @@ func (s *messageStatusStore) advanceReadHorizon(ctx context.Context, receipts []
 		return nil, err
 	}
 
-	// A read horizon crossing a message's seq means it reached the member — any
-	// prior delivery failure for it is now recovered, so drop the error row.
-	return moved, s.clearRecoveredErrors(ctx, threadIDs, memberIDs, upToSeqs)
+	return moved, s.clearRecoveredErrors(ctx, threadIDs, memberIDs, upToSeqs, exact)
 }
 
 // clampReadSeqToThread caps a client-given seq at the thread's newest message, so a read
@@ -529,6 +550,7 @@ func (s *messageStatusStore) advanceDeliveredHorizon(ctx context.Context, receip
 		threadIDs = make([]uuid.UUID, len(receipts))
 		memberIDs = make([]uuid.UUID, len(receipts))
 		upToSeqs  = make([]*int64, len(receipts))
+		exact     = make([]bool, len(receipts))
 	)
 
 	for i, r := range receipts {
@@ -538,6 +560,8 @@ func (s *messageStatusStore) advanceDeliveredHorizon(ctx context.Context, receip
 		if r.UpToSeq != 0 {
 			upToSeqs[i] = &r.UpToSeq
 		}
+
+		exact[i] = isChannelReceipt(r.Via)
 	}
 
 	const query = `
@@ -566,34 +590,39 @@ func (s *messageStatusStore) advanceDeliveredHorizon(ctx context.Context, receip
 		return nil, err
 	}
 
-	// A delivered horizon crossing a message's seq means it reached the member —
-	// any prior delivery failure for it is now recovered, so drop the error row.
-	return moved, s.clearRecoveredErrors(ctx, threadIDs, memberIDs, upToSeqs)
+	return moved, s.clearRecoveredErrors(ctx, threadIDs, memberIDs, upToSeqs, exact)
 }
 
-// clearRecoveredErrors drops message_errors for messages now within the horizon;
-// later success supersedes earlier per-recipient delivery failure.
-func (s *messageStatusStore) clearRecoveredErrors(ctx context.Context, threadIDs, memberIDs []uuid.UUID, upToSeqs []*int64) error {
+// clearRecoveredErrors drops message_errors of messages a receipt proves reached
+// the member: a later success supersedes an earlier failure of the same message.
+// Whether a receipt is exact depends on its source (isChannelReceipt), for read
+// and delivered alike. A ws/push watermark means the member's client holds every
+// message up to it, so it recovers everything below. A provider/bot receipt
+// (exact) only confirms the message at its seq: channels deliver per message,
+// and a later message reaching the channel says nothing about an earlier one it
+// rejected.
+func (s *messageStatusStore) clearRecoveredErrors(ctx context.Context, threadIDs, memberIDs []uuid.UUID, upToSeqs []*int64, exact []bool) error {
 	if len(threadIDs) == 0 {
 		return nil
 	}
 
 	const query = `
 		delete from im_message.message_errors e
-		using unnest(@ThreadIDs::uuid[], @MemberIDs::uuid[], @UpToSeqs::bigint[])
-			as r(thread_id, member_id, up_to_seq),
+		using unnest(@ThreadIDs::uuid[], @MemberIDs::uuid[], @UpToSeqs::bigint[], @Exact::bool[])
+			as r(thread_id, member_id, up_to_seq, exact),
 		     im_message.messages m
 		where e.thread_id = r.thread_id
 		  and e.member_id = r.member_id
 		  and e.message_id = m.id
 		  and r.up_to_seq is not null
-		  and m.seq <= r.up_to_seq
+		  and (m.seq = r.up_to_seq or (not r.exact and m.seq < r.up_to_seq))
 	`
 
 	args := pgx.NamedArgs{
 		"ThreadIDs": threadIDs,
 		"MemberIDs": memberIDs,
 		"UpToSeqs":  upToSeqs,
+		"Exact":     exact,
 	}
 
 	if _, err := s.db.Exec(ctx, query, args); err != nil {
@@ -601,6 +630,12 @@ func (s *messageStatusStore) clearRecoveredErrors(ctx context.Context, threadIDs
 	}
 
 	return nil
+}
+
+// isChannelReceipt reports whether a receipt came from an external channel or a
+// bot, which confirm one message at a time rather than a client-side watermark.
+func isChannelReceipt(via string) bool {
+	return via == "provider" || via == "bot"
 }
 
 // resolveReadSeqFromMessageID fills in missing UpToSeq for read receipts by

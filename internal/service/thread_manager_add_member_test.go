@@ -96,6 +96,10 @@ func (noopMessageStatusStore) MarkFailed(context.Context, []*model.StatusReceipt
 	return nil, nil
 }
 
+func (noopMessageStatusStore) MarkUnreportedFailed(context.Context, []*model.StatusReceipt) ([]*model.StatusChange, error) {
+	return nil, nil
+}
+
 func (noopMessageStatusStore) ReadUnread(context.Context, int32, uuid.UUID, []uuid.UUID) (map[uuid.UUID]int64, error) {
 	return make(map[uuid.UUID]int64), nil
 }
@@ -482,6 +486,17 @@ type fakeMessageStore struct {
 	lastDeletedIDs       []uuid.UUID
 	lastDeleterID        uuid.UUID
 
+	replaceFailedErr     error
+	replaceFailedCalls   int
+	lastReplacedOriginal uuid.UUID
+	lastReplacement      uuid.UUID
+	lastReplaceThread    uuid.UUID
+	lastReplaceActor     uuid.UUID
+
+	retryTargets     map[uuid.UUID]*model.RetryTarget
+	retryTargetCalls int
+	replaceHook      func()
+
 	forwardSources    []*model.Message
 	forwardSkipped    []model.MessageSkip
 	forwardSourcesErr error
@@ -599,6 +614,32 @@ func (f *fakeMessageStore) DeleteMessages(ctx context.Context, ids []uuid.UUID, 
 	}
 
 	return f.deleteMessagesResult, nil
+}
+
+func (f *fakeMessageStore) ReplaceFailedMessage(_ context.Context, originalID, replacementID, threadID, actorID uuid.UUID) (*model.Message, error) {
+	f.replaceFailedCalls++
+	f.lastReplacedOriginal = originalID
+	f.lastReplacement = replacementID
+	f.lastReplaceThread = threadID
+	f.lastReplaceActor = actorID
+
+	if f.replaceHook != nil {
+		f.replaceHook()
+	}
+
+	if f.replaceFailedErr != nil {
+		return nil, f.replaceFailedErr
+	}
+
+	now := time.Now().UTC()
+
+	return &model.Message{ID: originalID, ThreadID: threadID, SenderID: actorID, Type: model.MessageTypeText, DeletedAt: &now}, nil
+}
+
+func (f *fakeMessageStore) GetRetryTarget(_ context.Context, id uuid.UUID, _ int32) (*model.RetryTarget, error) {
+	f.retryTargetCalls++
+
+	return f.retryTargets[id], nil
 }
 
 func (f *fakeMessageStore) SaveSystemMessage(ctx context.Context, msg *model.Message) (*model.Message, error) {

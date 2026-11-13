@@ -131,3 +131,14 @@ func TestSearchLeftQuery_SortOnlyFields_NotSelected(t *testing.T) {
 	assert.NotContains(t, sql, "as queue_name")
 	assertSQLContains(t, sql, "lm.id as id")
 }
+
+// Deleted messages, including originals replaced by a retry, must not become the
+// left thread's preview, matching the active thread list.
+func TestSearchLeftQuery_LastMessage_SkipsDeleted(t *testing.T) {
+	sql, _, err := NewSearchLeftQueryObject(uuid.New()).
+		WithFields([]string{"id", "last_msg"}).
+		ToSQL()
+	require.NoError(t, err)
+
+	assertSQLContains(t, sql, "msg_i.deleted_at is null")
+}

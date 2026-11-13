@@ -28,6 +28,7 @@ func MapToSendTextRequest(in *impb.SendTextRequest) *dto.SendTextRequest {
 		ForwardOrigin:     MapExternalForwardOrigin(in.GetForwardOrigin()),
 		Entities:          MapEntitiesFromProto(in.GetEntities()),
 		Variables:         in.GetVariables(),
+		RetryOf:           ParseOptionalUUID(in.GetRetryOf()),
 	}
 }
 

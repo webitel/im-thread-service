@@ -269,6 +269,7 @@ func (q *searchLeftQueryObject) linkLastMessageLateral() {
 			from im_message.messages msg_i
 			where msg_i.thread_id = t.id
 			  and msg_i.created_at between lm.joined_at and lm.left_at
+			  and msg_i.deleted_at is null
 			order by msg_i.created_at desc
 			limit 1
 		) msg on true
