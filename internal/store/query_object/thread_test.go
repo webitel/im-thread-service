@@ -579,3 +579,31 @@ func TestThreadQuery_WithAllParticipantsFilter(t *testing.T) {
 		})
 	}
 }
+
+func TestThreadQuery_WithOffset_UsesRequestedSize(t *testing.T) {
+	tests := []struct {
+		name   string
+		size   int
+		page   int
+		limit  string
+		offset string
+	}{
+		{name: "first page", size: 10, page: 1, limit: "LIMIT 11", offset: ""},
+		{name: "second page of 10", size: 10, page: 2, limit: "LIMIT 11", offset: "OFFSET 10"},
+		{name: "third page of 50", size: 50, page: 3, limit: "LIMIT 51", offset: "OFFSET 100"},
+		{name: "default size", size: 0, page: 2, limit: "LIMIT 21", offset: "OFFSET 20"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			sql, _, err := NewThreadQueryObject().WithLimit(tt.size).WithOffset(tt.page).ToSQL()
+			require.NoError(t, err)
+			assertSQLContains(t, sql, tt.limit)
+			if tt.offset == "" {
+				assert.NotContains(t, sql, "OFFSET")
+				return
+			}
+			assertSQLContains(t, sql, tt.offset)
+		})
+	}
+}
