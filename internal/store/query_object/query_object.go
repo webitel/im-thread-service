@@ -115,6 +115,7 @@ func (q *baseQueryObject[T]) WithLimit(limit int, quota ...int) T {
 		limit = quota[0]
 	}
 
+	q.limit = limit
 	q.builder = q.builder.Limit(uint64(limit) + 1)
 
 	return q.entity
