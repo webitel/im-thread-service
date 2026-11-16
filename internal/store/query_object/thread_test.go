@@ -599,10 +599,13 @@ func TestThreadQuery_WithOffset_UsesRequestedSize(t *testing.T) {
 			sql, _, err := NewThreadQueryObject().WithLimit(tt.size).WithOffset(tt.page).ToSQL()
 			require.NoError(t, err)
 			assertSQLContains(t, sql, tt.limit)
+
 			if tt.offset == "" {
 				assert.NotContains(t, sql, "OFFSET")
+
 				return
 			}
+
 			assertSQLContains(t, sql, tt.offset)
 		})
 	}
