@@ -310,6 +310,8 @@ func (ts *ThreadManagementServer) SetCrmContact(ctx context.Context, req *impb.S
 		InitiatorContactID: initiator,
 		DomainID:           int(req.GetDomainId()),
 		CRMContactID:       req.GetCrmContactId(),
+		Source:             model.CRMContactSource(req.GetSource()),
+		LinkIMContact:      req.GetLinkImContact(),
 	}); err != nil {
 		return nil, err
 	}

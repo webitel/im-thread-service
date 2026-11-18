@@ -468,3 +468,30 @@ func TestGetUpdates_AllTagsRemoved(t *testing.T) {
 	require.NotNil(t, resp.GetThreads()[0].GetTags())
 	assert.Empty(t, resp.GetThreads()[0].GetTags().GetItems())
 }
+
+// Identification changed the thread's candidates: the client is told to re-read them.
+func TestGetUpdates_ContactCandidatesChanged(t *testing.T) {
+	tests := []struct {
+		name   string
+		fields map[string]string
+		want   bool
+	}{
+		{name: "candidates changed", fields: map[string]string{journal.FieldActor: uuid.Nil.String(), journal.FieldCandidates: journal.FieldTrue}, want: true},
+		{name: "other thread change", fields: map[string]string{journal.FieldActor: uuid.NewString()}, want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			thread := uuid.NewString()
+			updates := &fakeUpdates{
+				changes: &journal.ContactChanges{Cursor: "300", After: 200, Threads: []string{thread}},
+				events:  map[string][]journal.Event{thread: {{Kind: journal.KindThreadUpdated, Fields: tt.fields}}},
+			}
+
+			resp, err := NewUpdatesServer(&fakeHistory{}, updates, &fakeThreads{}, &fakeTags{}).GetUpdates(context.Background(), updatesReq("200"))
+			require.NoError(t, err)
+			require.Len(t, resp.GetThreads(), 1)
+			assert.Equal(t, tt.want, resp.GetThreads()[0].GetContactCandidatesChanged())
+		})
+	}
+}

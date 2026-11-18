@@ -89,6 +89,14 @@ func TestProjectEvent(t *testing.T) {
 			wantFields: map[string]any{FieldActor: actor.String()},
 		},
 		{
+			name:       "thread updated with changed contact candidates",
+			eventType:  event.ThreadUpdatedEvent,
+			payload:    &event.ThreadUpdated{ThreadID: threadID, CRMContactID: "42", ContactCandidatesChanged: true},
+			wantOK:     true,
+			wantKind:   KindThreadUpdated,
+			wantFields: map[string]any{FieldCandidates: FieldTrue},
+		},
+		{
 			name:       "member joined",
 			eventType:  event.MemberJoinedEvent,
 			payload:    &event.MemberJoined{ThreadID: threadID, ContactID: actor},
@@ -132,6 +140,11 @@ func TestProjectEvent(t *testing.T) {
 			assert.Equal(t, tt.wantKind, upd.Kind)
 			assert.Equal(t, threadID.String(), upd.ThreadID)
 			assert.Equal(t, tt.wantFields, upd.Fields)
+
+			// Catch-up reads fields back as strings (Event.Fields): a value of
+			// another JSON type would break every read of the thread's journal.
+			var read map[string]string
+			require.NoError(t, json.Unmarshal(mustJSON(t, upd.Fields), &read))
 		})
 	}
 }
