@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/webitel/im-thread-service/internal/domain/event"
+	"github.com/webitel/im-thread-service/internal/domain/shared"
 )
 
 func mustJSON(t *testing.T, v any) []byte {
@@ -79,6 +80,17 @@ func TestProjectEvent(t *testing.T) {
 			wantFields: map[string]any{
 				FieldMsgID: msgID.String(), FieldActor: actor.String(), FieldEmoji: "👍", FieldAction: event.ReactionActionSet,
 			},
+		},
+		{
+			name:      "interactive callback keeps only references",
+			eventType: event.InteractiveCallbackEvent,
+			payload: &event.InteractiveCallbackPayload{
+				InReplyTo: msgID, ThreadID: threadID, ReactedBy: shared.Peer{ID: actor},
+				ButtonCode: "btn_code", CallbackData: "btn_data",
+			},
+			wantOK:     true,
+			wantKind:   KindMessageCallback,
+			wantFields: map[string]any{FieldMsgID: msgID.String(), FieldActor: actor.String()},
 		},
 		{
 			name:       "thread updated keeps only the actor",
@@ -169,6 +181,7 @@ func TestProjectEvent_EveryJournalEventProjects(t *testing.T) {
 		&event.ThreadCreated{ID: thread, Recipient: &event.Recipient{ID: uuid.New()}},
 		&event.MessageStatusChanged{ThreadID: thread, MemberID: uuid.New(), Status: event.StatusRead, UpToSeq: 4},
 		event.NewThreadTagsChanged(thread, uuid.New(), 1, nil),
+		&event.InteractiveCallbackPayload{InReplyTo: uuid.New(), ThreadID: thread, ReactedBy: shared.Peer{ID: uuid.New()}},
 	}
 
 	for _, e := range events {

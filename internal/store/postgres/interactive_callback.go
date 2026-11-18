@@ -79,9 +79,30 @@ func prepareInteractiveCallbackQuery(callback *model.InteractiveCallback) (strin
 			ic.*,
 			m.thread_id as thread_id,
 			m.domain_id as domain_id,
-			m.sender_id as receiver
+			m.sender_id as receiver,
+			rb.id as reacted_by_member_id,
+			coalesce(rb.thread_role, 0) as reacted_by_role,
+			coalesce(rb.is_bot, false) as reacted_by_is_bot,
+			rc.id as receiver_member_id,
+			coalesce(rc.thread_role, 0) as receiver_role,
+			coalesce(rc.is_bot, false) as receiver_is_bot
 		from inserted_callback ic
-		inner join im_message.messages m on m.id = ic.in_reply_to;
+		inner join im_message.messages m on m.id = ic.in_reply_to
+		left join lateral (
+			select td.id, td.thread_role, td.is_bot
+			from im_thread.thread_dialog td
+			where (td.member_id, td.thread_id) = (ic.reacted_by, m.thread_id)
+			order by td.deleted_at desc nulls first
+			limit 1
+		) rb on true
+		left join lateral (
+			select td.id, td.thread_role, td.is_bot
+			from im_thread.thread_dialog td
+			where (td.member_id, td.thread_id) = (m.sender_id, m.thread_id)
+			-- the membership that sent the message first, as in its message event
+			order by coalesce(td.id = m.member_id, false) desc, td.deleted_at desc nulls first
+			limit 1
+		) rc on true;
 	`
 
 	args := pgx.NamedArgs{

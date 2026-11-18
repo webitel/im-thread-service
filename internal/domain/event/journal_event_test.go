@@ -21,6 +21,7 @@ func TestJournalEventMembership(t *testing.T) {
 		{name: "member left", event: &MemberLeft{}, want: true},
 		{name: "thread created", event: &ThreadCreated{}, want: true},
 		{name: "message status changed", event: &MessageStatusChanged{}, want: true},
+		{name: "interactive callback", event: &InteractiveCallbackPayload{}, want: true},
 	}
 
 	for _, tt := range tests {

@@ -334,6 +334,7 @@ func mapReactedMetadata(in *model.InteractiveCallback) *impb.InteractiveCallback
 
 	return &impb.InteractiveCallback{
 		ReactedBy:    in.ReactedBy.String(),
+		InReplyTo:    in.InReplyTo.String(),
 		ButtonCode:   in.ButtonCode,
 		CallbackData: in.CallbackData,
 		ReactedAt:    in.ReactedAtUnix(),
