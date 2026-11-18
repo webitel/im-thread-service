@@ -61,9 +61,14 @@ var Module = fx.Module(
 			return journal.New(db, journal.WithTTL(cfg.Journal.RetentionTTL))
 		},
 		NewThreadVariables,
+		NewContactIdentificationService,
 	),
 
 	fx.Invoke(
 		pubsub.RegisterOutboxForwarder,
+		// Background identification work ends before the pool closes.
+		func(lc fx.Lifecycle, s *ContactIdentificationService) {
+			lc.Append(fx.Hook{OnStop: s.Shutdown})
+		},
 	),
 )

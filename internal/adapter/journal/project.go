@@ -5,6 +5,8 @@ import (
 	"maps"
 	"strconv"
 
+	"github.com/google/uuid"
+
 	"github.com/webitel/im-thread-service/internal/domain/event"
 )
 
@@ -31,14 +33,20 @@ const (
 	FieldEmoji     = "emoji"
 	FieldAction    = "action"
 	FieldContactID = "contact_id"
-	FieldUpToSeq   = "up_to_seq"
-	FieldErrCode   = "error_code"
-	FieldErrMsg    = "error_message"
+	// FieldCandidates marks a thread.updated entry whose CRM contact candidates
+	// changed. Its value is FieldTrue: readers decode fields as strings.
+	FieldCandidates = "contact_candidates_changed"
+	FieldUpToSeq    = "up_to_seq"
+	FieldErrCode    = "error_code"
+	FieldErrMsg     = "error_message"
 	// FieldReplacedBy and FieldDeletedAt are set on a message.deleted entry of a
 	// failed send replaced by its retry: history no longer returns the original,
 	// so catch-up builds the deletion from the entry alone.
 	FieldReplacedBy = "replaced_by"
 	FieldDeletedAt  = "deleted_at"
+
+	// FieldTrue is the value of a flag field.
+	FieldTrue = "true"
 )
 
 // Member change actions stored under FieldAction.
@@ -70,7 +78,17 @@ func ProjectEvent(eventType string, payload []byte) (Update, bool, error) {
 			return Update{}, false, err
 		}
 
-		return Update{ThreadID: e.ThreadID.String(), Kind: KindThreadUpdated, Fields: map[string]any{FieldActor: e.UpdatedBy.String()}}, true, nil
+		// Identification updates the thread with no actor: none is reported.
+		fields := make(map[string]any)
+		if e.UpdatedBy != uuid.Nil {
+			fields[FieldActor] = e.UpdatedBy.String()
+		}
+
+		if e.ContactCandidatesChanged {
+			fields[FieldCandidates] = FieldTrue
+		}
+
+		return Update{ThreadID: e.ThreadID.String(), Kind: KindThreadUpdated, Fields: fields}, true, nil
 	case event.MessageCreatedEvent:
 		var e event.MessageCreated
 		if err := json.Unmarshal(payload, &e); err != nil {

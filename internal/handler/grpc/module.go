@@ -20,6 +20,7 @@ var Module = fx.Module("message_grpc",
 		NewThreadPermissionServer,
 		NewThreadTagServer,
 		NewThreadPreviewServer,
+		NewContactIdentificationServer,
 
 		fx.Annotate(
 			service.NewThreadVariables,
@@ -34,6 +35,7 @@ var Module = fx.Module("message_grpc",
 	fx.Invoke(RegisterThreadPermissionServer),
 	fx.Invoke(RegisterThreadTagServer),
 	fx.Invoke(RegisterThreadPreviewServer),
+	fx.Invoke(RegisterContactIdentificationServer),
 )
 
 func RegisterMessageServer(

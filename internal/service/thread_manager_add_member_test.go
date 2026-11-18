@@ -31,6 +31,7 @@ type fakeUnitOfWork struct {
 	threadVariablesStore store.ThreadVariablesStore
 	threadPreviewStore   store.ThreadPreviewStore
 	referenceStore       store.ReferenceStore
+	candidateStore       store.ContactCandidateStore
 }
 
 func (f fakeUnitOfWork) WithinTransaction(ctx context.Context, fn func(context.Context, store.UnitOfWork) error) error {
@@ -162,6 +163,14 @@ func (f fakeUnitOfWork) ThreadPreviews() store.ThreadPreviewStore {
 	}
 
 	return f.threadPreviewStore
+}
+
+func (f fakeUnitOfWork) ContactCandidates() store.ContactCandidateStore {
+	if f.candidateStore == nil {
+		return &fakeContactCandidateStore{}
+	}
+
+	return f.candidateStore
 }
 
 func (f fakeUnitOfWork) References() store.ReferenceStore {
@@ -396,12 +405,20 @@ type publishedOutboxEvent struct {
 var _ store.ThreadStore = (*fakeThreadStore)(nil)
 
 type fakeThreadStore struct {
+	onLock func(*fakeThreadStore)
+	// onBindingRead runs before the n-th (1-based) binding read.
+	onBindingRead func(f *fakeThreadStore, n int)
+	bindingReads  int
+
 	getResult       *model.Thread
 	getError        error
 	lastQueryObject queryobject.QueryObject
 
-	setCRMContactErr   error
-	setCRMContactCalls []string
+	setCRMContactErr     error
+	setCRMContactCalls   []string
+	setCRMContactSources []model.CRMContactSource
+	binding              model.CRMContactBinding
+	bindingErr           error
 
 	counters      model.ThreadCounters
 	countersErr   error
@@ -418,7 +435,14 @@ func (f *fakeThreadStore) Search(_ context.Context, query queryobject.QueryObjec
 	return nil, nil
 }
 
-func (f *fakeThreadStore) LockForUpdate(context.Context, uuid.UUID) error { return nil }
+func (f *fakeThreadStore) LockForUpdate(context.Context, uuid.UUID) error {
+	// onLock simulates a writer that held the row lock first (an operator).
+	if f.onLock != nil {
+		f.onLock(f)
+	}
+
+	return nil
+}
 
 func (f *fakeThreadStore) Counters(_ context.Context, q model.ThreadCountersQuery) (model.ThreadCounters, error) {
 	f.countersQuery = q
@@ -430,10 +454,24 @@ func (f *fakeThreadStore) Counters(_ context.Context, q model.ThreadCountersQuer
 	return f.counters, nil
 }
 
-func (f *fakeThreadStore) SetCRMContact(_ context.Context, _ uuid.UUID, crmContactID string) error {
+func (f *fakeThreadStore) SetCRMContact(_ context.Context, _ uuid.UUID, crmContactID string, source model.CRMContactSource) error {
 	f.setCRMContactCalls = append(f.setCRMContactCalls, crmContactID)
+	f.setCRMContactSources = append(f.setCRMContactSources, source)
+
+	if f.setCRMContactErr == nil {
+		f.binding = model.CRMContactBinding{CRMContactID: crmContactID, Source: source}
+	}
 
 	return f.setCRMContactErr
+}
+
+func (f *fakeThreadStore) GetCRMContactBinding(context.Context, uuid.UUID, int) (model.CRMContactBinding, error) {
+	f.bindingReads++
+	if f.onBindingRead != nil {
+		f.onBindingRead(f, f.bindingReads)
+	}
+
+	return f.binding, f.bindingErr
 }
 
 func (f *fakeThreadStore) SearchLeft(ctx context.Context, query queryobject.QueryObject) ([]*model.Thread, error) {

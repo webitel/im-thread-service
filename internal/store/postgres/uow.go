@@ -33,6 +33,7 @@ type unitOfWork struct {
 	threadVariablesStore            store.ThreadVariablesStore
 	threadPreviewStore              store.ThreadPreviewStore
 	referenceStore                  store.ReferenceStore
+	contactCandidateStore           store.ContactCandidateStore
 }
 
 // NewPgxUnitOfWork returns a new unit of work, given a pgx pool.
@@ -238,4 +239,12 @@ func (u *unitOfWork) WithinTransaction(ctx context.Context, fn func(ctx context.
 	}
 
 	return nil
+}
+
+func (u *unitOfWork) ContactCandidates() store.ContactCandidateStore {
+	if u.contactCandidateStore == nil {
+		u.contactCandidateStore = NewContactCandidateStore(u.querier)
+	}
+
+	return u.contactCandidateStore
 }

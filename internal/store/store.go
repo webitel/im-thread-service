@@ -176,8 +176,13 @@ type ThreadStore interface {
 	// LockForUpdate row-locks the thread; writers lock thread -> thread_dialog
 	// in send order to prevent deadlock, and reads see all earlier commits.
 	LockForUpdate(ctx context.Context, threadID uuid.UUID) error
-	// SetCRMContact sets the selected CRM contact; an empty id clears it.
-	SetCRMContact(ctx context.Context, threadID uuid.UUID, crmContactID string) error
+	// SetCRMContact binds the CRM contact and records how it was chosen. An
+	// empty id clears the contact but keeps the source, so an operator's
+	// "no contact" is not replaced by identification.
+	SetCRMContact(ctx context.Context, threadID uuid.UUID, crmContactID string, source model.CRMContactSource) error
+	// GetCRMContactBinding returns the thread's CRM contact binding; NotFound
+	// when the thread does not exist in the domain.
+	GetCRMContactBinding(ctx context.Context, threadID uuid.UUID, domainID int) (model.CRMContactBinding, error)
 	// Counters counts the member's active chats per folder, split by the snoozed tag.
 	Counters(ctx context.Context, q model.ThreadCountersQuery) (model.ThreadCounters, error)
 }
@@ -298,4 +303,22 @@ type ThreadPreviewStore interface {
 type ReferenceStore interface {
 	UpsertSource(ctx context.Context, ref *model.SourceRef) error
 	UpsertQueue(ctx context.Context, ref *model.QueueRef) error
+}
+
+// ContactCandidateStore keeps the CRM contacts identified for a thread.
+type ContactCandidateStore interface {
+	// List returns the thread's candidates, verified first.
+	List(ctx context.Context, threadID uuid.UUID, domainID int) (model.ContactCandidates, error)
+	// Upsert stores new candidates and replaces the trust and reasons of known ones.
+	Upsert(ctx context.Context, candidates model.ContactCandidates) error
+	// SaveDuplicate records a set of verified candidates once.
+	SaveDuplicate(ctx context.Context, dup *model.ContactDuplicate) error
+	// ChannelCheckedAt returns when the CRM was observed by the newest stored
+	// search of the thread's channel identifiers; checked is false when they
+	// were never searched.
+	ChannelCheckedAt(ctx context.Context, threadID uuid.UUID) (at time.Time, checked bool, err error)
+	// MarkChannelChecked records a search of the channel identifiers that
+	// observed the CRM at observedAt; an older observation never replaces a
+	// newer one.
+	MarkChannelChecked(ctx context.Context, threadID uuid.UUID, domainID int, observedAt time.Time) error
 }
