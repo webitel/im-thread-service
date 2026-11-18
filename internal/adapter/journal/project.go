@@ -16,6 +16,7 @@ const (
 	KindMessageEdited    = "message.edited"
 	KindMessageDeleted   = "message.deleted"
 	KindMessageReaction  = "message.reaction"
+	KindMessageCallback  = "message.callback"
 	KindMemberChanged    = "member.changed"
 	KindThreadCreated    = "thread.created"
 	KindThreadUpdated    = "thread.updated"
@@ -129,6 +130,15 @@ func ProjectEvent(eventType string, payload []byte) (Update, bool, error) {
 
 		return messageUpdate(e.ThreadID.String(), KindMessageReaction, e.MessageID.String(), memberContact(e.Reactor),
 			map[string]any{FieldEmoji: e.Emoji, FieldAction: e.Action}), true, nil
+
+	case event.InteractiveCallbackEvent:
+		var e event.InteractiveCallbackPayload
+		if err := json.Unmarshal(payload, &e); err != nil {
+			return Update{}, false, err
+		}
+
+		// The pressed button itself is read from history (reacted_metadata) at catch-up.
+		return messageUpdate(e.ThreadID.String(), KindMessageCallback, e.InReplyTo.String(), e.ReactedBy.ID.String(), nil), true, nil
 
 	case event.MemberJoinedEvent:
 		var e event.MemberJoined

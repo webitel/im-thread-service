@@ -495,3 +495,36 @@ func TestGetUpdates_ContactCandidatesChanged(t *testing.T) {
 		})
 	}
 }
+
+// A pressed button is journaled against its message, so catch-up returns the
+// message in its current state with the press (reacted_metadata) on it.
+func TestGetUpdates_InteractiveCallback(t *testing.T) {
+	thread, msgID, reactor := uuid.NewString(), uuid.New(), uuid.New()
+	reactedAt := time.Date(2026, 11, 17, 14, 40, 55, 0, time.UTC)
+
+	updates := &fakeUpdates{
+		changes: &journal.ContactChanges{Cursor: "300", After: 200, Threads: []string{thread}},
+		events: map[string][]journal.Event{thread: {{Kind: journal.KindMessageCallback, Fields: map[string]string{
+			journal.FieldMsgID: msgID.String(), journal.FieldActor: reactor.String(),
+		}}}},
+	}
+	history := &fakeHistory{byID: map[uuid.UUID]*model.Message{
+		msgID: {ID: msgID, Body: "pick one", ReactedMetadata: &model.InteractiveCallback{
+			ReactedBy: reactor, InReplyTo: msgID, ButtonCode: "btn_code", CallbackData: "btn_data", ReactedAt: reactedAt,
+		}},
+	}}
+
+	resp, err := NewUpdatesServer(history, updates, &fakeThreads{}, &fakeTags{}).GetUpdates(context.Background(), updatesReq("200"))
+	require.NoError(t, err)
+
+	require.Len(t, resp.GetThreads(), 1)
+	require.Len(t, resp.GetThreads()[0].GetMessages(), 1)
+
+	got := resp.GetThreads()[0].GetMessages()[0].GetReactedMetadata()
+	require.NotNil(t, got, "the pressed button reaches catch-up")
+	assert.Equal(t, reactor.String(), got.GetReactedBy())
+	assert.Equal(t, msgID.String(), got.GetInReplyTo(), "catch-up names the message like the live event")
+	assert.Equal(t, "btn_code", got.GetButtonCode())
+	assert.Equal(t, "btn_data", got.GetCallbackData())
+	assert.Equal(t, reactedAt.UnixMilli(), got.GetReactedAt())
+}

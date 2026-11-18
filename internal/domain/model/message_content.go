@@ -134,6 +134,16 @@ type InteractiveCallback struct {
 	DomainID     int       `json:"domain_id" db:"domain_id"`
 	Receiver     uuid.UUID `json:"receiver" db:"receiver"`
 
+	// Thread memberships of the reactor and of the receiver (the message sender),
+	// so consumers can render both with the same member shape as other events.
+	// A nil member id means the contact has no membership row in the thread.
+	ReactedByMemberID *uuid.UUID `json:"-" db:"reacted_by_member_id"`
+	ReactedByRole     ThreadRole `json:"-" db:"reacted_by_role"`
+	ReactedByIsBot    bool       `json:"-" db:"reacted_by_is_bot"`
+	ReceiverMemberID  *uuid.UUID `json:"-" db:"receiver_member_id"`
+	ReceiverRole      ThreadRole `json:"-" db:"receiver_role"`
+	ReceiverIsBot     bool       `json:"-" db:"receiver_is_bot"`
+
 	events []event.Outboxer `json:"-"`
 }
 
@@ -150,12 +160,31 @@ func (c *InteractiveCallback) WithCreatedEvent(ctx context.Context) *Interactive
 		DomainID:     c.DomainID,
 		ThreadID:     c.ThreadID,
 		Receiver:     c.Receiver,
+
+		ReactedByMember: callbackMember(c.ReactedBy, c.ReactedByMemberID, c.ReactedByRole, c.ReactedByIsBot),
+		ReceiverMember:  callbackMember(c.Receiver, c.ReceiverMemberID, c.ReceiverRole, c.ReceiverIsBot),
 	}
 
 	WithContextPropogatedMetadata(ctx, e)
 	c.events = append(c.events, e)
 
 	return c
+}
+
+// callbackMember builds the event member for a callback participant; it is nil
+// when the contact is unknown.
+func callbackMember(contactID uuid.UUID, memberID *uuid.UUID, role ThreadRole, isBot bool) *event.ThreadMember {
+	if contactID == uuid.Nil {
+		return nil
+	}
+
+	m := &event.ThreadMember{ContactID: contactID, Role: int(role), IsBot: isBot}
+	if memberID != nil && *memberID != uuid.Nil {
+		id := *memberID
+		m.ID = &id
+	}
+
+	return m
 }
 
 func (c *InteractiveCallback) Events() []event.Outboxer { return slices.Clone(c.events) }

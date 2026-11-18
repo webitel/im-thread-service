@@ -534,6 +534,8 @@ func toUpdatedMessage(h *impb.HistoryMessage) *impb.UpdatedMessage {
 		Reactions:     h.GetReactions(),
 		Internal:      h.GetInternal(),
 		Failures:      h.GetFailures(),
+
+		ReactedMetadata: h.GetReactedMetadata(),
 	}
 
 	if h.GetRevisionCount() > 0 {
