@@ -194,6 +194,16 @@ func (q *searchLeftQueryObject) WithKindFilter(kinds ...model.ThreadKind) *searc
 	return q
 }
 
+// WithIDsFilter narrows results to the given threads, matched by the real thread id
+// rather than the membership-period id the rows carry as "id". Empty ids is a no-op.
+func (q *searchLeftQueryObject) WithIDsFilter(ids ...uuid.UUID) *searchLeftQueryObject {
+	if len(ids) != 0 {
+		q.builder = q.builder.Where(squirrel.Eq{threadAlias + ".id": ids})
+	}
+
+	return q
+}
+
 // WithTagsFilter narrows results to threads the memberID has tagged with every one of the tags (AND semantics).
 // If memberID is Nil or tags is empty, the filter is silently ignored.
 func (q *searchLeftQueryObject) WithTagsFilter(memberID uuid.UUID, tags ...string) *searchLeftQueryObject {

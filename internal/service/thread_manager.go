@@ -221,7 +221,7 @@ func (t *ThreadManagementService) enrichUnread(ctx context.Context, selfID uuid.
 // enrichTags fills Tags on each thread with the requesting contact's own
 // tags. Auxiliary like enrichUnread: a failure is logged and threads keep an
 // empty tag list rather than failing the whole search. Keyed by
-// TagLookupID, not ID (see model.Thread.TagLookupID).
+// ThreadID, not ID (see model.Thread.ThreadID).
 func (t *ThreadManagementService) enrichTags(ctx context.Context, callerID uuid.UUID, threads []*model.Thread) {
 	if callerID == uuid.Nil || len(threads) == 0 {
 		return
@@ -229,7 +229,7 @@ func (t *ThreadManagementService) enrichTags(ctx context.Context, callerID uuid.
 
 	threadIDs := make([]uuid.UUID, len(threads))
 	for i, th := range threads {
-		threadIDs[i] = th.TagLookupID
+		threadIDs[i] = th.ThreadID
 	}
 
 	tagsByThread, err := t.uow.ThreadTagStore().ListForContact(ctx, callerID, threadIDs)
@@ -240,7 +240,7 @@ func (t *ThreadManagementService) enrichTags(ctx context.Context, callerID uuid.
 	}
 
 	for _, th := range threads {
-		th.Tags = tagsByThread[th.TagLookupID]
+		th.Tags = tagsByThread[th.ThreadID]
 	}
 }
 
@@ -309,6 +309,7 @@ func (t *ThreadManagementService) SearchLeft(ctx context.Context, req *dto.Searc
 		WithDomainIDFilter(req.DomainID).
 		WithKindFilter(req.Kinds...).
 		WithTagsFilter(req.MemberID, req.Tags...).
+		WithIDsFilter(req.IDs...).
 		WithLimit(req.Size).
 		WithSort(req.Sort).
 		WithOffset(req.Page)

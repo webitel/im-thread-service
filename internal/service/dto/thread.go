@@ -68,6 +68,7 @@ type (
 		DomainID int
 		Kinds    []model.ThreadKind
 		Tags     []string
+		IDs      []uuid.UUID
 		Size     int
 		Sort     string
 		Page     int

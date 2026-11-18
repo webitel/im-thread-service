@@ -142,3 +142,23 @@ func TestSearchLeftQuery_LastMessage_SkipsDeleted(t *testing.T) {
 
 	assertSQLContains(t, sql, "msg_i.deleted_at is null")
 }
+
+func TestSearchLeftQuery_WithIDsFilter_FiltersByThreadID(t *testing.T) {
+	ids := []uuid.UUID{uuid.New(), uuid.New()}
+
+	sql, args, err := NewSearchLeftQueryObject(uuid.New()).WithIDsFilter(ids...).ToSQL()
+	require.NoError(t, err)
+
+	assertSQLContains(t, sql, "t.id IN (")
+	assert.NotContains(t, stripSpaces(sql), stripSpaces("lm.id IN ("))
+
+	values := argValues(args)
+	assert.Contains(t, values, ids[0].String())
+	assert.Contains(t, values, ids[1].String())
+}
+
+func TestSearchLeftQuery_WithIDsFilter_Empty_NoOp(t *testing.T) {
+	sql, _, err := NewSearchLeftQueryObject(uuid.New()).WithIDsFilter().ToSQL()
+	require.NoError(t, err)
+	assert.NotContains(t, stripSpaces(sql), stripSpaces("t.id IN ("))
+}
