@@ -179,6 +179,7 @@ func callbackMember(contactID uuid.UUID, memberID *uuid.UUID, role ThreadRole, i
 	}
 
 	m := &event.ThreadMember{ContactID: contactID, Role: int(role), IsBot: isBot}
+
 	if memberID != nil && *memberID != uuid.Nil {
 		id := *memberID
 		m.ID = &id

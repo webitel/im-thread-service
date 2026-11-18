@@ -98,6 +98,7 @@ func seedCallbackMessage(t *testing.T, pool *pgxpool.Pool, threadID, messageID, 
 
 	for _, d := range dialogs {
 		var deletedAt *time.Time
+
 		if d.deletedAgo > 0 {
 			at := time.Now().Add(-d.deletedAgo)
 			deletedAt = &at
