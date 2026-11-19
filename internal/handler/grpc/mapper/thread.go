@@ -127,12 +127,18 @@ func (s *ThreadInConverter) ConvertSearchLeft(in *impb.SearchLeftRequest) (*dto.
 		return nil, errors.InvalidArgument("invalid member_id format", errors.WithCause(err))
 	}
 
+	ids, err := convertToUUIDs(in.GetIds())
+	if err != nil {
+		return nil, errors.InvalidArgument("invalid ids format", errors.WithCause(err))
+	}
+
 	return &dto.SearchLeftRequest{
 		Fields:   in.GetFields(),
 		MemberID: memberID,
 		DomainID: int(in.GetDomainId()),
 		Kinds:    s.convertThreadKinds(in.GetKinds()),
 		Tags:     in.GetTags(),
+		IDs:      ids,
 		Size:     int(in.GetSize()),
 		Sort:     in.GetSort(),
 		Page:     int(in.GetPage()),
@@ -317,6 +323,10 @@ func (s *ThreadOutConverter) ConvertToThread(source *model.Thread) *impb.Thread 
 		Tags:         s.convertThreadTags(source.Tags),
 		ReadStates:   convertMemberReadStates(source.ReadStates),
 		CrmContactId: source.CRMContactID,
+	}
+
+	if source.ThreadID != uuid.Nil && source.ThreadID != source.ID {
+		thread.ThreadId = source.ThreadID.String()
 	}
 
 	if source.BotControllerID != nil {

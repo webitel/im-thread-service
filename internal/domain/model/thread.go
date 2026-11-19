@@ -93,10 +93,10 @@ type Thread struct {
 	// Tags are the requesting contact's own tags; enriched after the query, not scanned.
 	Tags []*ThreadTag `json:"tags,omitempty" db:"-"`
 
-	// TagLookupID is the id enrichment keys tags off. Usually equals ID, but
-	// for SearchLeft results ID holds the thread_dialog membership-period
-	// row id (not the thread id), so this carries the real thread id.
-	TagLookupID uuid.UUID `json:"-" db:"-"`
+	// ThreadID is the real thread id. Usually equals ID, but for SearchLeft
+	// results ID holds the thread_dialog membership-period row id. Zero when
+	// the thread was not read from the store.
+	ThreadID uuid.UUID `json:"-" db:"-"`
 
 	// ReadStates is the per-member delivery/read horizon snapshot. Enriched after
 	// the thread query (not scanned); shared with GetThreadUpdates.

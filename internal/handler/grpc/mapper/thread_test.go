@@ -297,3 +297,72 @@ func TestConvertThreadMembers_Via(t *testing.T) {
 	require.Equal(t, gate, out[0].GetVia())
 	require.Empty(t, out[1].GetVia())
 }
+
+func TestConvertToThread_ThreadID(t *testing.T) {
+	periodID := uuid.New()
+	threadID := uuid.New()
+	plainID := uuid.New()
+
+	tests := []struct {
+		name   string
+		thread *model.Thread
+		wantID string
+		wantTh string
+	}{
+		{
+			name:   "left thread carries period id and real thread id",
+			thread: &model.Thread{ID: periodID, ThreadID: threadID},
+			wantID: periodID.String(),
+			wantTh: threadID.String(),
+		},
+		{
+			name:   "regular thread leaves thread_id empty",
+			thread: &model.Thread{ID: plainID, ThreadID: plainID},
+			wantID: plainID.String(),
+		},
+		{
+			name:   "thread without ThreadID leaves thread_id empty",
+			thread: &model.Thread{ID: plainID},
+			wantID: plainID.String(),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := (&ThreadOutConverter{}).ConvertToThread(tt.thread)
+			require.Equal(t, tt.wantID, got.GetId())
+			require.Equal(t, tt.wantTh, got.GetThreadId())
+		})
+	}
+}
+
+func TestConvertSearchLeft_IDs(t *testing.T) {
+	memberID := uuid.NewString()
+	threadID := uuid.New()
+
+	tests := []struct {
+		name     string
+		ids      []string
+		want     []uuid.UUID
+		wantCode codes.Code
+	}{
+		{name: "parses ids", ids: []string{threadID.String()}, want: []uuid.UUID{threadID}},
+		{name: "no ids", ids: nil, want: nil},
+		{name: "invalid id", ids: []string{"not-a-uuid"}, wantCode: codes.InvalidArgument},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := (&ThreadInConverter{}).ConvertSearchLeft(&impb.SearchLeftRequest{MemberId: memberID, Ids: tt.ids})
+			if tt.wantCode != codes.OK {
+				require.Error(t, err)
+				require.Equal(t, tt.wantCode, errors.Code(err))
+
+				return
+			}
+
+			require.NoError(t, err)
+			require.ElementsMatch(t, tt.want, got.IDs)
+		})
+	}
+}

@@ -49,9 +49,9 @@ func TestEnrichTags_SetsPerThreadTags(t *testing.T) {
 	svc := newTagService(stub)
 
 	threads := []*model.Thread{
-		{ID: t1, TagLookupID: t1},
-		{ID: t2, TagLookupID: t2},
-		{ID: t3, TagLookupID: t3},
+		{ID: t1, ThreadID: t1},
+		{ID: t2, ThreadID: t2},
+		{ID: t3, ThreadID: t3},
 	}
 
 	callerID := uuid.New()
@@ -67,7 +67,7 @@ func TestEnrichTags_SetsPerThreadTags(t *testing.T) {
 
 // Guards against keying enrichment off Thread.ID again, which for
 // SearchLeft results is a membership-period id, not the thread id.
-func TestEnrichTags_KeysByTagLookupIDNotID(t *testing.T) {
+func TestEnrichTags_KeysByThreadIDNotID(t *testing.T) {
 	dialogID, threadID := uuid.New(), uuid.New()
 	tag := &model.ThreadTag{ID: uuid.New(), Tag: "left-thread-tag"}
 
@@ -76,11 +76,11 @@ func TestEnrichTags_KeysByTagLookupIDNotID(t *testing.T) {
 	}
 	svc := newTagService(stub)
 
-	threads := []*model.Thread{{ID: dialogID, TagLookupID: threadID}}
+	threads := []*model.Thread{{ID: dialogID, ThreadID: threadID}}
 
 	svc.enrichTags(context.Background(), uuid.New(), threads)
 
-	require.Equal(t, []uuid.UUID{threadID}, stub.gotThreadIDs, "must query by TagLookupID, not ID")
+	require.Equal(t, []uuid.UUID{threadID}, stub.gotThreadIDs, "must query by ThreadID, not ID")
 	require.Equal(t, []*model.ThreadTag{tag}, threads[0].Tags)
 }
 
@@ -89,7 +89,7 @@ func TestEnrichTags_NoCallerIDSkipsQuery(t *testing.T) {
 	svc := newTagService(stub)
 
 	id := uuid.New()
-	threads := []*model.Thread{{ID: id, TagLookupID: id}}
+	threads := []*model.Thread{{ID: id, ThreadID: id}}
 
 	svc.enrichTags(context.Background(), uuid.Nil, threads)
 
@@ -102,7 +102,7 @@ func TestEnrichTags_ErrorLeavesEmptyTags(t *testing.T) {
 	svc := newTagService(stub)
 
 	id := uuid.New()
-	threads := []*model.Thread{{ID: id, TagLookupID: id}}
+	threads := []*model.Thread{{ID: id, ThreadID: id}}
 
 	svc.enrichTags(context.Background(), uuid.New(), threads)
 

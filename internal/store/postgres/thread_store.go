@@ -254,14 +254,14 @@ func mapThreadRecordToModel(record *threadRecord) (*model.Thread, error) {
 		}
 	})
 
-	tagLookupID := record.ID
+	threadID := record.ID
 	if record.ThreadRefID != uuid.Nil {
-		tagLookupID = record.ThreadRefID
+		threadID = record.ThreadRefID
 	}
 
 	thread := &model.Thread{
 		ID:              record.ID,
-		TagLookupID:     tagLookupID,
+		ThreadID:        threadID,
 		DomainID:        record.DomainID,
 		CreatedAt:       record.CreatedAt,
 		UpdatedAt:       record.UpdatedAt,
