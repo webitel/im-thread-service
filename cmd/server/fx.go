@@ -12,6 +12,7 @@ import (
 	"github.com/webitel/im-thread-service/infra/pubsub"
 	grpcsrv "github.com/webitel/im-thread-service/infra/server/grpc"
 	"github.com/webitel/im-thread-service/infra/tls"
+	crmcontacts "github.com/webitel/im-thread-service/infra/webitel/contacts"
 	webiteldi "github.com/webitel/im-thread-service/infra/webitel/di"
 	imcontact "github.com/webitel/im-thread-service/infra/webitel/im-contact"
 	"github.com/webitel/im-thread-service/internal/adapter/journal"
@@ -80,6 +81,12 @@ var grpcClientsBridgeModule = fx.Module(
 		func(c *imcontact.Client) service.ContactInfoProvider {
 			return c
 		},
+		func(c *imcontact.Client) service.ChannelIdentities {
+			return c
+		},
+		func(c *crmcontacts.Client) service.CRMContacts {
+			return c
+		},
 	),
 )
 
@@ -95,6 +102,14 @@ var serviceToHandlerBridgeModule = fx.Module(
 		},
 
 		func(s *service.ThreadManagementService) grpchandler.ThreadManagementService {
+			return s
+		},
+
+		func(s *service.ContactIdentificationService) service.ThreadContactIdentifier {
+			return s
+		},
+
+		func(s *service.ContactIdentificationService) grpchandler.ContactIdentifier {
 			return s
 		},
 

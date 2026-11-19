@@ -66,9 +66,11 @@ func TestEnsureDirectThread_NewThread(t *testing.T) {
 			botControl := &fakeBotControlStore{}
 			dialogs := &fakeThreadDialogStore{}
 			outbox := &fakeOutboxStore{}
+			identifier := &fakeLinker{}
 
 			svc := &ThreadManagementService{
-				tagHooks: &fakeTagHooks{},
+				tagHooks:   &fakeTagHooks{},
+				contactIDs: identifier,
 				uow: fakeUnitOfWork{
 					threadStore:       &ensureDirectThreadStore{},
 					threadDialogStore: dialogs,
@@ -87,6 +89,7 @@ func TestEnsureDirectThread_NewThread(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, 1, contactInfo.calls)
 			require.Equal(t, tt.peerIsBot, dialogs.lastCreate.IsBot)
+			require.Equal(t, []uuid.UUID{thread.ID}, identifier.newThreads, "the new thread's contact is identified")
 
 			if !tt.peerIsBot {
 				require.Zero(t, botControl.pushCalls)

@@ -20,7 +20,9 @@ type ThreadUpdated struct {
 	DomainID     int32     `json:"domain_id"`
 	UpdatedBy    uuid.UUID `json:"updated_by"`
 	CRMContactID string    `json:"crm_contact_id"`
-	OccurredAt   time.Time `json:"occurred_at"`
+	// ContactCandidatesChanged tells clients to re-read the contact candidates.
+	ContactCandidatesChanged bool      `json:"contact_candidates_changed,omitempty"`
+	OccurredAt               time.Time `json:"occurred_at"`
 	// Participants are the thread's current members, so delivery fans the event out.
 	Participants []uuid.UUID `json:"participants,omitempty"`
 }

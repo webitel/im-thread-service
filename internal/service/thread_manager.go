@@ -42,6 +42,15 @@ type (
 		providers      ProvidersAdapter
 		tagHooks       ThreadTagHooks
 		refs           *ReferenceCache
+		contactIDs     ThreadContactIdentifier
+	}
+
+	// ThreadContactIdentifier is the contact identification a thread change
+	// starts: the channel search of a new thread and the enrichment link of
+	// the CRM contact an operator chose. Both run in the background.
+	ThreadContactIdentifier interface {
+		IdentifyNewThread(ctx context.Context, threadID uuid.UUID, domainID int)
+		LinkChosenContact(ctx context.Context, threadID uuid.UUID, domainID int, crmContactID string)
 	}
 
 	ThreadPrivacyChecker interface {
@@ -71,6 +80,7 @@ func NewThreadService(
 	providers ProvidersAdapter,
 	tagHooks ThreadTagHooks,
 	refs *ReferenceCache,
+	contactIDs ThreadContactIdentifier,
 ) *ThreadManagementService {
 	if logger == nil {
 		logger = slog.Default()
@@ -84,6 +94,7 @@ func NewThreadService(
 		providers:      providers,
 		tagHooks:       tagHooks,
 		refs:           refs,
+		contactIDs:     contactIDs,
 	}
 }
 
@@ -1517,8 +1528,9 @@ func (t *ThreadManagementService) TakeOverFromBot(ctx context.Context, req *dto.
 	})
 }
 
-// SetCRMContact stores the CRM contact an operator selected for the thread and
-// notifies the members so their clients refresh the thread.
+// SetCRMContact stores the CRM contact an operator chose for the thread,
+// notifies the members so their clients refresh the thread and, when asked,
+// links the thread's IM contact to that CRM contact.
 func (t *ThreadManagementService) SetCRMContact(ctx context.Context, req *dto.SetCRMContactRequest) error {
 	const errID = "service.thread_manager.set_crm_contact"
 
@@ -1526,12 +1538,21 @@ func (t *ThreadManagementService) SetCRMContact(ctx context.Context, req *dto.Se
 		return errors.InvalidArgument("request cannot be nil", errors.WithID(errID))
 	}
 
+	source := req.Source
+	if source == model.CRMContactSourceUnspecified {
+		source = model.CRMContactSourceSelected
+	}
+
+	if !source.IsManual() {
+		return errors.InvalidArgument("source must be selected, created or searched", errors.WithID(errID))
+	}
+
 	if err := t.verifyOperator(ctx, req.ThreadID, req.InitiatorContactID, errID); err != nil {
 		return err
 	}
 
-	return t.uow.WithinTransaction(ctx, func(ctx context.Context, uow store.UnitOfWork) error {
-		if err := uow.ThreadStore().SetCRMContact(ctx, req.ThreadID, req.CRMContactID); err != nil {
+	err := t.uow.WithinTransaction(ctx, func(ctx context.Context, uow store.UnitOfWork) error {
+		if err := uow.ThreadStore().SetCRMContact(ctx, req.ThreadID, req.CRMContactID, source); err != nil {
 			return err
 		}
 
@@ -1551,6 +1572,16 @@ func (t *ThreadManagementService) SetCRMContact(ctx context.Context, req *dto.Se
 
 		return uow.Outbox().Publish(ctx, updated.Topic(), updated)
 	})
+	if err != nil {
+		return err
+	}
+
+	// After commit: the operator's choice stands even if the CRM link fails.
+	if req.LinkIMContact && req.CRMContactID != "" && t.contactIDs != nil {
+		t.contactIDs.LinkChosenContact(ctx, req.ThreadID, req.DomainID, req.CRMContactID)
+	}
+
+	return nil
 }
 
 func (t *ThreadManagementService) releaseControlToAgent(ctx context.Context, uow store.UnitOfWork, threadID uuid.UUID, domainID int) error {
@@ -1858,6 +1889,11 @@ func (t *ThreadManagementService) orchestrateDirectThreadCreation(ctx context.Co
 	})
 	if err != nil {
 		return nil, err
+	}
+
+	// After commit, in the background: find the client's CRM contact.
+	if t.contactIDs != nil {
+		t.contactIDs.IdentifyNewThread(ctx, createdThread.ID, req.DomainID)
 	}
 
 	return createdThread, nil

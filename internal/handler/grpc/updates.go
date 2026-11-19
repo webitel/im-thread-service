@@ -172,6 +172,8 @@ func (s *UpdatesServer) threadUpdates(ctx context.Context, caller updatesCaller,
 		}
 	}
 
+	entry.ContactCandidatesChanged = candidatesChanged(events)
+
 	referenced := make(map[string]struct{})
 
 	if err := s.applyDiff(ctx, caller, entry, events, referenced); err != nil {
@@ -231,6 +233,18 @@ func (s *UpdatesServer) callerTags(ctx context.Context, caller updatesCaller, th
 func hasKind(events []journal.Event, kind string) bool {
 	for _, e := range events {
 		if e.Kind == kind {
+			return true
+		}
+	}
+
+	return false
+}
+
+// candidatesChanged: a thread.updated entry in the window says the thread's CRM
+// contact candidates changed, so the client re-reads them.
+func candidatesChanged(events []journal.Event) bool {
+	for _, e := range events {
+		if e.Kind == journal.KindThreadUpdated && e.Fields[journal.FieldCandidates] == journal.FieldTrue {
 			return true
 		}
 	}
@@ -520,6 +534,8 @@ func toUpdatedMessage(h *impb.HistoryMessage) *impb.UpdatedMessage {
 		Reactions:     h.GetReactions(),
 		Internal:      h.GetInternal(),
 		Failures:      h.GetFailures(),
+
+		ReactedMetadata: h.GetReactedMetadata(),
 	}
 
 	if h.GetRevisionCount() > 0 {

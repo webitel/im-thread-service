@@ -20,4 +20,5 @@ type UnitOfWork interface {
 	ThreadVariables() ThreadVariablesStore
 	ThreadPreviews() ThreadPreviewStore
 	References() ReferenceStore
+	ContactCandidates() ContactCandidateStore
 }

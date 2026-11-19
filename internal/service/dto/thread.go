@@ -146,6 +146,11 @@ type SetCRMContactRequest struct {
 	DomainID           int
 	// CRMContactID is the Webitel CRM contact id; empty clears the selection.
 	CRMContactID string
+	// Source is how the operator chose the contact; unspecified means selected.
+	Source model.CRMContactSource
+	// LinkIMContact also links the thread's IM contact to the chosen CRM
+	// contact. The gateway sets it only for callers who may write it.
+	LinkIMContact bool
 }
 
 type TransferThreadRequest struct {

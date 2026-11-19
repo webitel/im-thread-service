@@ -11,6 +11,8 @@ import (
 
 	"github.com/google/uuid"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"github.com/webitel/webitel-go-kit/infra/discovery"
 	rpc "github.com/webitel/webitel-go-kit/infra/transport/gRPC"
@@ -19,6 +21,7 @@ import (
 	contactv1 "github.com/webitel/im-thread-service/gen/go/contact/v1"
 	infratls "github.com/webitel/im-thread-service/infra/tls"
 	"github.com/webitel/im-thread-service/infra/webitel"
+	"github.com/webitel/im-thread-service/internal/domain/model"
 )
 
 const (
@@ -276,6 +279,45 @@ func (c *Client) GetIdentity(ctx context.Context, contactID uuid.UUID, domainID 
 	_ = c.identityCache.Set(ctx, key, identityCached{identity: identity})
 
 	return identity, nil
+}
+
+// ChannelIdentity locates the IM contact a thread's external member writes
+// as. Not cached: identification needs the current phone.
+// model.ErrChannelIdentityNotFound when the contact does not exist.
+func (c *Client) ChannelIdentity(ctx context.Context, contactID uuid.UUID, domainID int) (*model.ChannelIdentity, error) {
+	var item *contactv1.Contact
+
+	err := c.contactService.Execute(ctx, func(api contactv1.ContactsClient) error {
+		resp, err := api.Locate(ctx, &contactv1.LocateContactRequest{
+			Id:       contactID.String(),
+			DomainId: int64(domainID),
+		})
+		if err != nil {
+			return err
+		}
+
+		item = resp.GetItem()
+
+		return nil
+	})
+	if err != nil {
+		if status.Code(err) == codes.NotFound {
+			return nil, model.ErrChannelIdentityNotFound
+		}
+
+		return nil, fmt.Errorf("locating channel identity of %s: %w", contactID, err)
+	}
+
+	if item == nil {
+		return nil, model.ErrChannelIdentityNotFound
+	}
+
+	return &model.ChannelIdentity{
+		IMContactID: contactID,
+		Issuer:      item.GetIssId(),
+		Type:        item.GetType(),
+		Phone:       item.GetPhone(),
+	}, nil
 }
 
 func (c *Client) Close() error {

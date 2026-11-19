@@ -1,0 +1,42 @@
+version: v2
+managed:
+  enabled: true
+  disable:
+    - module: buf.build/googleapis/googleapis
+    - module: buf.build/grpc-ecosystem/grpc-gateway
+    - module: buf.build/webitel/chat
+  override:
+    # Webitel CRM contacts (webitel.go) client stubs: Contacts, IMClients.
+    - file_option: go_package
+      value: github.com/webitel/im-thread-service/gen/go/webitel/contacts;contacts
+
+plugins:
+  - remote: buf.build/protocolbuffers/go:v1.34.1
+    out: ../gen/go
+    opt:
+      - module=github.com/webitel/im-thread-service/gen/go
+
+  - remote: buf.build/grpc/go:v1.5.1
+    out: ../gen/go
+    opt:
+      - module=github.com/webitel/im-thread-service/gen/go
+
+inputs:
+  # Only Contacts and IMClients are called: their files and what they import.
+  - directory: ../../protos/webitel-go
+    paths:
+      - ../../protos/webitel-go/contacts/comments.proto
+      - ../../protos/webitel-go/contacts/contact.proto
+      - ../../protos/webitel-go/contacts/contact_group.proto
+      - ../../protos/webitel-go/contacts/contacts.proto
+      - ../../protos/webitel-go/contacts/emails.proto
+      - ../../protos/webitel-go/contacts/fields.proto
+      - ../../protos/webitel-go/contacts/imclients.proto
+      - ../../protos/webitel-go/contacts/labels.proto
+      - ../../protos/webitel-go/contacts/managers.proto
+      - ../../protos/webitel-go/contacts/media.proto
+      - ../../protos/webitel-go/contacts/phones.proto
+      - ../../protos/webitel-go/contacts/photos.proto
+      - ../../protos/webitel-go/contacts/timezones.proto
+      - ../../protos/webitel-go/contacts/upload.proto
+      - ../../protos/webitel-go/contacts/variables.proto

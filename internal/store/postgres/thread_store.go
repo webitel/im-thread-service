@@ -104,10 +104,15 @@ func (s *threadStore) LockForUpdate(ctx context.Context, threadID uuid.UUID) err
 	return nil
 }
 
-func (s *threadStore) SetCRMContact(ctx context.Context, threadID uuid.UUID, crmContactID string) error {
-	const query = `update im_thread.thread set crm_contact_id = nullif(@CRMContactID, ''), updated_at = now() where id = @ThreadID`
+func (s *threadStore) SetCRMContact(ctx context.Context, threadID uuid.UUID, crmContactID string, source model.CRMContactSource) error {
+	const query = `
+		update im_thread.thread
+		set crm_contact_id = nullif(@CRMContactID, ''),
+			crm_contact_source = nullif(@Source::smallint, 0),
+			updated_at = now()
+		where id = @ThreadID`
 
-	tag, err := s.db.Exec(ctx, query, pgx.NamedArgs{"ThreadID": threadID, "CRMContactID": crmContactID})
+	tag, err := s.db.Exec(ctx, query, pgx.NamedArgs{"ThreadID": threadID, "CRMContactID": crmContactID, "Source": int32(source)})
 	if err != nil {
 		return errors.Internal("setting crm contact", errors.WithCause(err), errors.WithID("postgres.thread_store.set_crm_contact"))
 	}
@@ -117,6 +122,31 @@ func (s *threadStore) SetCRMContact(ctx context.Context, threadID uuid.UUID, crm
 	}
 
 	return nil
+}
+
+func (s *threadStore) GetCRMContactBinding(ctx context.Context, threadID uuid.UUID, domainID int) (model.CRMContactBinding, error) {
+	const query = `
+		select coalesce(crm_contact_id, ''), coalesce(crm_contact_source, 0)
+		from im_thread.thread
+		where id = @ThreadID and domain_id = @DomainID`
+
+	var (
+		binding model.CRMContactBinding
+		source  int32
+	)
+
+	err := s.db.QueryRow(ctx, query, pgx.NamedArgs{"ThreadID": threadID, "DomainID": domainID}).Scan(&binding.CRMContactID, &source)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return binding, errors.NotFound("thread not found", errors.WithID("postgres.thread_store.get_crm_contact_binding"))
+	}
+
+	if err != nil {
+		return binding, errors.Internal("reading crm contact binding", errors.WithCause(err), errors.WithID("postgres.thread_store.get_crm_contact_binding"))
+	}
+
+	binding.Source = model.CRMContactSource(source)
+
+	return binding, nil
 }
 
 func (s *threadStore) Counters(ctx context.Context, q model.ThreadCountersQuery) (model.ThreadCounters, error) {

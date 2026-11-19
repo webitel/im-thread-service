@@ -19,6 +19,7 @@ import (
 
 	"github.com/webitel/im-thread-service/internal/adapter/journal"
 	"github.com/webitel/im-thread-service/internal/domain/event"
+	"github.com/webitel/im-thread-service/internal/domain/shared"
 )
 
 // Integration tests against live Postgres in a throwaway schema:
@@ -439,3 +440,71 @@ func TestPublish_JournalsStatuses(t *testing.T) {
 }
 
 func errDuplicate(msgID string) error { return fmt.Errorf("message %s served twice", msgID) }
+
+// A pressed button is journaled against its message and reaches every human
+// member's GetUpdates, with the live cursor stamped into the outbox payload.
+func TestPublish_JournalsInteractiveCallback(t *testing.T) {
+	ctx := context.Background()
+	pool := itPool(t)
+	thread, human, bot, msgID := uuid.New(), uuid.New(), uuid.New(), uuid.New()
+	setupJournalSchema(t, pool)
+
+	if _, err := pool.Exec(ctx, `INSERT INTO `+journalSchema+`.thread_dialog (thread_id, member_id, is_bot) VALUES ($1, $2, false), ($1, $3, true)`,
+		thread, human, bot); err != nil {
+		t.Fatalf("seed members: %v", err)
+	}
+
+	j := itJournal(pool)
+
+	start, err := j.SettledHorizon(ctx)
+	if err != nil {
+		t.Fatalf("horizon: %v", err)
+	}
+
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		t.Fatalf("begin: %v", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	e := &event.InteractiveCallbackPayload{
+		InReplyTo: msgID, ThreadID: thread, ReactedBy: shared.Peer{ID: human},
+		ButtonCode: "btn_code", CallbackData: "btn_data", Receiver: bot,
+	}
+	if err := itOutboxStore(tx).Publish(ctx, "t", e); err != nil {
+		t.Fatalf("publish: %v", err)
+	}
+
+	var payload string
+	if err := tx.QueryRow(ctx, `select payload::text from `+journalSchema+`.messages_outbox`).Scan(&payload); err != nil {
+		t.Fatalf("outbox row: %v", err)
+	}
+
+	if e.UpdatesCursor == "" || !strings.Contains(payload, `"updates_cursor":"`+e.UpdatesCursor+`"`) {
+		t.Fatalf("payload %s lacks updates_cursor %q", payload, e.UpdatesCursor)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatalf("commit: %v", err)
+	}
+
+	got, err := j.ContactChanges(ctx, human.String(), strconv.FormatInt(start, 10))
+	if err != nil || len(got.Threads) != 1 || got.Threads[0] != thread.String() {
+		t.Fatalf("human: want the thread once, got %+v %v", got, err)
+	}
+
+	events, err := j.ChangesSince(ctx, thread.String(), got, journal.MaxContactChanges)
+	if err != nil || len(events) != 1 {
+		t.Fatalf("want one journal entry, got %d %v", len(events), err)
+	}
+
+	// Bots are never marked: they do not catch up through GetUpdates.
+	if other, err := j.ContactChanges(ctx, bot.String(), strconv.FormatInt(start, 10)); err != nil || len(other.Threads) != 0 {
+		t.Fatalf("bot must not see the thread, got %+v %v", other, err)
+	}
+
+	if events[0].Kind != journal.KindMessageCallback || events[0].Fields[journal.FieldMsgID] != msgID.String() ||
+		events[0].Fields[journal.FieldActor] != human.String() {
+		t.Fatalf("journal entry = %+v, want message.callback on %s by %s", events[0], msgID, human)
+	}
+}

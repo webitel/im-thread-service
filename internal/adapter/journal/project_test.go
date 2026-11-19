@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/webitel/im-thread-service/internal/domain/event"
+	"github.com/webitel/im-thread-service/internal/domain/shared"
 )
 
 func mustJSON(t *testing.T, v any) []byte {
@@ -81,12 +82,31 @@ func TestProjectEvent(t *testing.T) {
 			},
 		},
 		{
+			name:      "interactive callback keeps only references",
+			eventType: event.InteractiveCallbackEvent,
+			payload: &event.InteractiveCallbackPayload{
+				InReplyTo: msgID, ThreadID: threadID, ReactedBy: shared.Peer{ID: actor},
+				ButtonCode: "btn_code", CallbackData: "btn_data",
+			},
+			wantOK:     true,
+			wantKind:   KindMessageCallback,
+			wantFields: map[string]any{FieldMsgID: msgID.String(), FieldActor: actor.String()},
+		},
+		{
 			name:       "thread updated keeps only the actor",
 			eventType:  event.ThreadUpdatedEvent,
 			payload:    &event.ThreadUpdated{ThreadID: threadID, UpdatedBy: actor, CRMContactID: "42"},
 			wantOK:     true,
 			wantKind:   KindThreadUpdated,
 			wantFields: map[string]any{FieldActor: actor.String()},
+		},
+		{
+			name:       "thread updated with changed contact candidates",
+			eventType:  event.ThreadUpdatedEvent,
+			payload:    &event.ThreadUpdated{ThreadID: threadID, CRMContactID: "42", ContactCandidatesChanged: true},
+			wantOK:     true,
+			wantKind:   KindThreadUpdated,
+			wantFields: map[string]any{FieldCandidates: FieldTrue},
 		},
 		{
 			name:       "member joined",
@@ -132,6 +152,11 @@ func TestProjectEvent(t *testing.T) {
 			assert.Equal(t, tt.wantKind, upd.Kind)
 			assert.Equal(t, threadID.String(), upd.ThreadID)
 			assert.Equal(t, tt.wantFields, upd.Fields)
+
+			// Catch-up reads fields back as strings (Event.Fields): a value of
+			// another JSON type would break every read of the thread's journal.
+			var read map[string]string
+			require.NoError(t, json.Unmarshal(mustJSON(t, upd.Fields), &read))
 		})
 	}
 }
@@ -156,6 +181,7 @@ func TestProjectEvent_EveryJournalEventProjects(t *testing.T) {
 		&event.ThreadCreated{ID: thread, Recipient: &event.Recipient{ID: uuid.New()}},
 		&event.MessageStatusChanged{ThreadID: thread, MemberID: uuid.New(), Status: event.StatusRead, UpToSeq: 4},
 		event.NewThreadTagsChanged(thread, uuid.New(), 1, nil),
+		&event.InteractiveCallbackPayload{InReplyTo: uuid.New(), ThreadID: thread, ReactedBy: shared.Peer{ID: uuid.New()}},
 	}
 
 	for _, e := range events {
